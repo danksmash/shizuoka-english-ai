@@ -11,11 +11,18 @@ import aungImg from '../assets/images/aung_mya.jpg';
 export const STUDENT_AVATAR_MAP: Record<string, string> = {
   oliver_uk: oliverImg,
   emma_usa: emmaImg,
+  liam_aus: liamImg,
   liam_australia: liamImg,
+  chloe_can: chloeImg,
   chloe_canada: chloeImg,
+  bence_hun: benceImg,
   bence_hungary: benceImg,
+  zofia_pol: zofiaImg,
   zofia_poland: zofiaImg,
+  rahul_ban: rahulImg,
   rahul_bangladesh: rahulImg,
+  linh_vie: linhImg,
   linh_vietnam: linhImg,
+  aung_mya: aungImg,
   aung_myanmar: aungImg,
 };
