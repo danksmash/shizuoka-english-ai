@@ -12,8 +12,8 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json());
 
-// Serve static images directly from public/images
-app.use('/images', express.static(path.join(process.cwd(), 'public', 'images')));
+// Serve static images directly from src/assets/images
+app.use('/images', express.static(path.join(process.cwd(), 'src', 'assets', 'images')));
 
 // Health & AI Engine Status endpoint
 app.get('/api/health', (req, res) => {

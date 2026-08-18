@@ -30,17 +30,7 @@ export const StudentAvatar: React.FC<StudentAvatarProps> = ({
 
   const containerSizeClass = size === 'custom' ? '' : sizeClasses[size] || sizeClasses.md;
 
-  const resolveImageUrl = (url?: string) => {
-    if (!url) return '';
-    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
-      return url;
-    }
-    const clean = url.startsWith('/') ? url.slice(1) : url;
-    const base = import.meta.env.BASE_URL || './';
-    return `${base}${clean}`;
-  };
-
-  const avatarSrc = STUDENT_AVATAR_MAP[student.id] || resolveImageUrl(student.avatarImage);
+  const avatarSrc = STUDENT_AVATAR_MAP[student.id] || student.avatarImage;
 
   return (
     <div
@@ -68,11 +58,6 @@ export const StudentAvatar: React.FC<StudentAvatarProps> = ({
           </span>
         </div>
       )}
-
-      {/* Floating Flag Badge */}
-      <span className="absolute bottom-1 right-1 text-xs sm:text-sm drop-shadow bg-white/85 rounded-full px-1 leading-tight pointer-events-none">
-        {student.flag}
-      </span>
     </div>
   );
 };
