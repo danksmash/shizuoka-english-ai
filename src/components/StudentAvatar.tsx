@@ -30,7 +30,7 @@ export const StudentAvatar: React.FC<StudentAvatarProps> = ({
 
   const containerSizeClass = size === 'custom' ? '' : sizeClasses[size] || sizeClasses.md;
 
-  const resolveImageUrl = (url: string) => {
+  const resolveImageUrl = (url?: string) => {
     if (!url) return '';
     if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
       return url;
@@ -44,28 +44,35 @@ export const StudentAvatar: React.FC<StudentAvatarProps> = ({
 
   return (
     <div
-      className={`relative overflow-hidden flex items-center justify-center select-none bg-slate-100 ${containerSizeClass} ${className} ${
-        isSpeaking ? 'scale-105 transition-transform duration-300' : ''
+      className={`relative overflow-hidden flex items-center justify-center select-none bg-amber-50 shadow-sm ${containerSizeClass} ${className} ${
+        isSpeaking ? 'ring-4 ring-amber-400 ring-offset-2 scale-105 transition-all duration-300' : ''
+      } ${
+        isListening ? 'ring-4 ring-emerald-400 ring-offset-2 animate-pulse' : ''
       }`}
     >
       {!imageError && avatarSrc ? (
         <img
           src={avatarSrc}
           alt={`${student.name} (${student.country})`}
-          className="w-full h-full object-cover object-center transition-transform"
+          className="w-full h-full object-cover object-center transition-transform hover:scale-105"
           loading="eager"
           decoding="async"
           referrerPolicy="no-referrer"
           onError={() => setImageError(true)}
         />
       ) : (
-        <div className="w-full h-full bg-gradient-to-tr from-blue-600 to-indigo-700 flex flex-col items-center justify-center text-white p-1 text-center">
+        <div className="w-full h-full bg-gradient-to-tr from-sky-600 to-indigo-700 flex flex-col items-center justify-center text-white p-1 text-center">
           <span className="text-xl sm:text-2xl leading-none">{student.flag}</span>
           <span className="text-[10px] font-black truncate max-w-full mt-0.5">
             {student.name.split(' ')[0]}
           </span>
         </div>
       )}
+
+      {/* Floating Flag Badge */}
+      <span className="absolute bottom-1 right-1 text-xs sm:text-sm drop-shadow bg-white/85 rounded-full px-1 leading-tight pointer-events-none">
+        {student.flag}
+      </span>
     </div>
   );
 };
