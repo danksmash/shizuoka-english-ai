@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AIStudentProfile } from '../types';
+import { STUDENT_AVATAR_MAP } from '../data/studentImages';
 
 interface StudentAvatarProps {
   student: AIStudentProfile;
@@ -39,15 +40,17 @@ export const StudentAvatar: React.FC<StudentAvatarProps> = ({
     return `${base}${clean}`;
   };
 
+  const avatarSrc = STUDENT_AVATAR_MAP[student.id] || resolveImageUrl(student.avatarImage);
+
   return (
     <div
       className={`relative overflow-hidden flex items-center justify-center select-none bg-slate-100 ${containerSizeClass} ${className} ${
         isSpeaking ? 'scale-105 transition-transform duration-300' : ''
       }`}
     >
-      {!imageError && student.avatarImage ? (
+      {!imageError && avatarSrc ? (
         <img
-          src={resolveImageUrl(student.avatarImage)}
+          src={avatarSrc}
           alt={`${student.name} (${student.country})`}
           className="w-full h-full object-cover object-center transition-transform"
           loading="eager"
