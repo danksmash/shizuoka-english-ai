@@ -32,11 +32,14 @@ export const DialogueView: React.FC<DialogueViewProps> = ({
       ref={scrollRef}
       className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 scroll-smooth"
     >
-      {/* Welcome Banner */}
-      <div className="text-center py-2">
+      {/* Welcome Banner & Privacy Guard */}
+      <div className="text-center py-2 flex flex-wrap items-center justify-center gap-2">
         <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 border border-slate-200 rounded-full text-xs font-semibold text-slate-600">
           <span>{aiStudent.flag}</span>
           <span>{aiStudent.name} との英語対話セッション (小学校５・６年生向け)</span>
+        </span>
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 border border-amber-200 rounded-full text-[11px] font-bold text-amber-800">
+          <span>🔒 個人情報（住所・電話・本名など）は入力しないでね</span>
         </span>
       </div>
 

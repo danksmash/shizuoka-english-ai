@@ -276,24 +276,36 @@ export default function App() {
 
   // Send message to AI Student
   const handleSendMessage = async (text: string) => {
-    if (!text.trim() || isAiResponding) return;
+    // 1. Guard: Check phase and active timer
+    if (phase !== 'dialogue' || remainingSeconds <= 0 || !text.trim() || isAiResponding) {
+      return;
+    }
 
     if (isRecording) {
       stopRecordingInternal();
+    }
+
+    const trimmed = text.trim();
+
+    // 2. Length check (Max 100 characters for Grade 5 dialogue)
+    if (trimmed.length > 100) {
+      setMicHintMessage('文が少し長いです！もう少し短い英語で話してみてね。');
+      setTimeout(() => setMicHintMessage(''), 4000);
+      return;
     }
 
     playChime('pop');
     setMicHintMessage('');
 
     // Detect vocabulary in child's speech too
-    extractAndAddVocab(text);
+    extractAndAddVocab(trimmed);
 
-    const words = countEnglishWords(text);
-    const childJapanese = translateChildUtterance(text.trim());
+    const words = countEnglishWords(trimmed);
+    const childJapanese = translateChildUtterance(trimmed);
     const childMsg: ChatMessage = {
       id: `child-${Date.now()}`,
       sender: 'child',
-      englishText: text.trim(),
+      englishText: trimmed,
       japaneseText: childJapanese,
       timestamp: Date.now(),
       wordCount: words,
@@ -322,7 +334,7 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: text.trim(),
+          message: trimmed,
           history: newHistory,
           topic: currentProf.selectedTopic,
           studentName: currentProf.name,
@@ -361,13 +373,13 @@ export default function App() {
         throw new Error('API response unsuccessful, switching to local engine');
       }
     } catch (e) {
-      console.warn('AI backend unavailable (e.g. GitHub Pages static mode), generating intelligent local response:', e);
+      console.warn('AI backend unavailable, generating local safe response:', e);
       const studentObj = currentAiStudentRef.current;
       const currentProf = profileRef.current;
       const localReply = generateLocalStudentDialogueReply(
         studentObj,
         currentProf.selectedTopic,
-        text,
+        trimmed,
         turnCountRef.current,
         currentProf.name
       );

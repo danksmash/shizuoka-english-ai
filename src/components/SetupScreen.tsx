@@ -77,17 +77,22 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
           </div>
         </div>
 
-        {/* Student Name Input */}
-        <div className="flex items-center gap-2 bg-slate-50 border border-slate-300 px-3.5 py-1.5 rounded-2xl w-full sm:w-auto shadow-2xs flex-shrink-0">
-          <User className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500 flex-shrink-0" />
-          <span className="text-xs sm:text-sm font-bold text-slate-700 whitespace-nowrap">お名前:</span>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="例: たろう"
-            className="bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 w-28 sm:w-32"
-          />
+        {/* Student Name Input & Privacy Reminder */}
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-900 bg-amber-50 border border-amber-300 px-3 py-1 rounded-xl">
+            <span>🔒 名前・住所・電話番号などの個人情報は入力しないでください</span>
+          </div>
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-300 px-3.5 py-1.5 rounded-2xl w-full sm:w-auto shadow-2xs flex-shrink-0">
+            <User className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500 flex-shrink-0" />
+            <span className="text-xs sm:text-sm font-bold text-slate-700 whitespace-nowrap">お名前:</span>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="ニックネーム等"
+              className="bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 w-28 sm:w-32"
+            />
+          </div>
         </div>
       </div>
 
@@ -315,6 +320,11 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
           <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-white" />
           <span>対話をスタートする！ (Start)</span>
         </button>
+      </div>
+
+      {/* Safety & Educational Disclosure Note */}
+      <div className="mt-2 text-center text-[11px] text-slate-500 font-medium">
+        <span>🏫 学校授業用 英語学習アプリ（小学校5・6年生対象） | AI対話エンジン: Anthropic API | ※ AIの回答は学習補助目的であり、常に完璧とは限りません。</span>
       </div>
     </div>
   );
