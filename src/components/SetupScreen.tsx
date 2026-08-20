@@ -80,7 +80,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
         {/* Student Name Input & Privacy Reminder */}
         <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
           <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-900 bg-amber-50 border border-amber-300 px-3 py-1 rounded-xl">
-            <span>🔒 名前・住所・電話番号などの個人情報は入力しないでください</span>
+            <span>🔒 名前・住所・電話番号などの個人情報は入力しないでください（入力内容は安全確認のためチェックされます）</span>
           </div>
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-300 px-3.5 py-1.5 rounded-2xl w-full sm:w-auto shadow-2xs flex-shrink-0">
             <User className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500 flex-shrink-0" />
@@ -324,7 +324,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
 
       {/* Safety & Educational Disclosure Note */}
       <div className="mt-2 text-center text-[11px] text-slate-500 font-medium">
-        <span>🏫 学校授業用 英語学習アプリ（小学校5・6年生対象） | AI対話エンジン: Anthropic API | ※ AIの回答は学習補助目的であり、常に完璧とは限りません。</span>
+        <span>本アプリは学校での英語学習を目的として設計されています。AI（Anthropic API）を利用した英語対話練習を行います。利用にあたっては学校・教育委員会のルールに従ってください。</span>
       </div>
     </div>
   );

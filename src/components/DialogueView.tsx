@@ -39,7 +39,7 @@ export const DialogueView: React.FC<DialogueViewProps> = ({
           <span>{aiStudent.name} との英語対話セッション (小学校５・６年生向け)</span>
         </span>
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 border border-amber-200 rounded-full text-[11px] font-bold text-amber-800">
-          <span>🔒 個人情報（住所・電話・本名など）は入力しないでね</span>
+          <span>🔒 名前・住所・電話番号などの個人情報は入力しないでください（入力内容は安全確認のためチェックされます）</span>
         </span>
       </div>
 

@@ -117,11 +117,6 @@ export default function App() {
   const speechRateRef = useRef<number>(speechRate);
   speechRateRef.current = speechRate;
 
-  // Pre-request hardware microphone permissions for the app session
-  useEffect(() => {
-    requestMicrophonePermission();
-  }, []);
-
   // Speak AI text with selected student's accent and voice
   const playAiVoice = useCallback(
     (text: string) => {

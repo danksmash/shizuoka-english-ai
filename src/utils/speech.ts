@@ -437,43 +437,49 @@ export function createSpeechRecognitionInstance(
     return null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  const recognition = new SpeechRec();
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) return null;
+    const recognition = new SpeechRec();
 
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.lang = 'en-US'; // Broadest accuracy for elementary English speech
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US'; // Broadest accuracy for elementary English speech
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  recognition.onresult = (event: any) => {
-    let interimTranscript = '';
-    let finalTranscript = '';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      let interimTranscript = '';
+      let finalTranscript = '';
 
-    for (let i = event.resultIndex; i < event.results.length; ++i) {
-      if (event.results[i].isFinal) {
-        finalTranscript += event.results[i][0].transcript;
-      } else {
-        interimTranscript += event.results[i][0].transcript;
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
       }
-    }
 
-    const currentText = finalTranscript || interimTranscript;
-    const isFinal = Boolean(finalTranscript);
-    onResult(currentText, isFinal);
-  };
+      const currentText = finalTranscript || interimTranscript;
+      const isFinal = Boolean(finalTranscript);
+      onResult(currentText, isFinal);
+    };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  recognition.onerror = (event: any) => {
-    console.warn('Speech recognition error:', event.error);
-    onError(event.error || '音声認識エラーが発生しました');
-  };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onerror = (event: any) => {
+      console.warn('Speech recognition error:', event.error);
+      onError(event.error || '音声認識エラーが発生しました');
+    };
 
-  recognition.onend = () => {
-    onEnd();
-  };
+    recognition.onend = () => {
+      onEnd();
+    };
 
-  return recognition;
+    return recognition;
+  } catch (e) {
+    console.warn('Could not initialize SpeechRecognition:', e);
+    return null;
+  }
 }
 
 /**
