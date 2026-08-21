@@ -292,6 +292,21 @@ export default function App() {
     playChime('pop');
     setMicHintMessage('');
 
+    // Detect spoken name if child introduced themselves
+    const spokenNameMatch = trimmed.match(/\b(?:my name is|i'm|i am|call me)\s+([A-Za-z]{2,15})\b/i);
+    if (spokenNameMatch) {
+      const candidate = spokenNameMatch[1].trim();
+      const capitalized = candidate.charAt(0).toUpperCase() + candidate.slice(1).toLowerCase();
+      const nonNameWords = [
+        'in', 'from', 'ten', 'eleven', 'twelve', 'fine', 'good', 'happy', 'ready',
+        'fifth', 'sixth', 'student', 'boy', 'girl', 'japanese', 'japan', 'not', 'very'
+      ];
+      if (!nonNameWords.includes(candidate.toLowerCase())) {
+        setProfile((prev) => ({ ...prev, name: capitalized }));
+        profileRef.current = { ...profileRef.current, name: capitalized };
+      }
+    }
+
     // Detect vocabulary in child's speech too
     extractAndAddVocab(trimmed);
 

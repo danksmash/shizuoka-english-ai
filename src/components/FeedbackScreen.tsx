@@ -61,7 +61,11 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
   };
 
   const handlePrint = () => {
-    window.print();
+    try {
+      window.print();
+    } catch (e) {
+      console.warn('Print not supported in this frame:', e);
+    }
   };
 
   return (

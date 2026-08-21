@@ -233,14 +233,18 @@ export function downloadDialogueLogHTML(
 </html>
   `;
 
-  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const safeName = (profile.name || 'student').replace(/[/\\?%*:|"<>]/g, '_');
-  a.href = url;
-  a.download = `Shizuoka_English_Dialogue_${safeName}_${new Date().toISOString().slice(0, 10)}.html`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  try {
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeName = (profile.name || 'student').replace(/[/\\?%*:|"<>]/g, '_');
+    a.href = url;
+    a.download = `Shizuoka_English_Dialogue_${safeName}_${new Date().toISOString().slice(0, 10)}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.warn('Failed to trigger download:', err);
+  }
 }

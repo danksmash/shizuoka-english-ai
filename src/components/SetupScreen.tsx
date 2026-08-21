@@ -77,10 +77,10 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
           </div>
         </div>
 
-        {/* Student Name Input & Privacy Reminder */}
+        {/* Student Name Input & Friendly Prompt */}
         <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-900 bg-amber-50 border border-amber-300 px-3 py-1 rounded-xl">
-            <span>🔒 名前・住所・電話番号などの個人情報は入力しないでください（入力内容は安全確認のためチェックされます）</span>
+          <div className="flex items-center gap-1.5 text-xs font-bold text-blue-900 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl">
+            <span>✨ Let's talk in English! 好きなことや趣味をAI留学生に英語で伝えてみよう！</span>
           </div>
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-300 px-3.5 py-1.5 rounded-2xl w-full sm:w-auto shadow-2xs flex-shrink-0">
             <User className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500 flex-shrink-0" />

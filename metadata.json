@@ -1,6 +1,10 @@
 {
-  "name": "AI留学生えいご対話 (Shizuoka Global Exchange)",
-  "description": "小学校５・６年生向け 静岡大学AI留学生（米国・豪州・カナダ・英国・欧州・アジア9カ国）との1対1英語対話練習＆視覚的語彙ビルダーアプリ",
-  "requestFramePermissions": ["microphone"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "name": "Remix AI留学生えいご対話 (Shizuoka Global Exchange)",
+  "description": "小学校5・6年生向け AI留学生（米国・豪州・カナダ・英国・欧州・アジア9カ国）との1対1英語対話練習＆視覚的語彙ビルダーアプリ",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

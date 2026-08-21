@@ -19,11 +19,10 @@ function getAudioContext(): AudioContext | null {
       }
     }
     if (audioCtx && audioCtx.state === 'suspended') {
-      audioCtx.resume();
+      audioCtx.resume().catch(() => {});
     }
     return audioCtx;
   } catch (e) {
-    console.warn('AudioContext not supported', e);
     return null;
   }
 }
@@ -407,15 +406,26 @@ export function getStudentFarewellMessage(studentId: string): { english: string;
  */
 export async function requestMicrophonePermission(): Promise<boolean> {
   try {
-    if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Stop tracks immediately so browser doesn't keep mic indicator on when not actively recording,
-      // but the permission grant remains permanently active in browser session.
-      stream.getTracks().forEach((track) => track.stop());
-      return true;
+    if (
+      typeof navigator !== 'undefined' &&
+      navigator.mediaDevices &&
+      typeof navigator.mediaDevices.getUserMedia === 'function'
+    ) {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
+      if (stream) {
+        // Stop tracks immediately so browser doesn't keep mic indicator on when not actively recording
+        stream.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch {
+            // Ignore
+          }
+        });
+        return true;
+      }
     }
-  } catch (e) {
-    console.warn('Microphone permission request:', e);
+  } catch {
+    // Graceful fallback for restricted iframes or missing devices
   }
   return false;
 }
@@ -449,20 +459,24 @@ export function createSpeechRecognitionInstance(
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onresult = (event: any) => {
-      let interimTranscript = '';
-      let finalTranscript = '';
+      try {
+        let interimTranscript = '';
+        let finalTranscript = '';
 
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
-        } else {
-          interimTranscript += event.results[i][0].transcript;
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+          }
         }
-      }
 
-      const currentText = finalTranscript || interimTranscript;
-      const isFinal = Boolean(finalTranscript);
-      onResult(currentText, isFinal);
+        const currentText = finalTranscript || interimTranscript;
+        const isFinal = Boolean(finalTranscript);
+        onResult(currentText, isFinal);
+      } catch (e) {
+        console.warn('Speech onresult error:', e);
+      }
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -476,8 +490,8 @@ export function createSpeechRecognitionInstance(
     };
 
     return recognition;
-  } catch (e) {
-    console.warn('Could not initialize SpeechRecognition:', e);
+  } catch (err) {
+    console.warn('SpeechRecognition instantiation error:', err);
     return null;
   }
 }
