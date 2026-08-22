@@ -506,3 +506,53 @@ export function countEnglishWords(text: string): number {
   return words.length;
 }
 
+/**
+ * Format speech recognition text: capitalization, proper nouns, and punctuation
+ */
+export function formatSpeechText(text: string): string {
+  if (!text) return '';
+  let trimmed = text.trim();
+  if (trimmed.length === 0) return '';
+
+  // Capitalize first letter
+  trimmed = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+
+  // Capitalize standalone 'i' to 'I'
+  trimmed = trimmed.replace(/\bi\b/g, 'I');
+
+  // Capitalize common proper nouns / country names / city names
+  const properNouns = [
+    'japan', 'shizuoka', 'hamamatsu', 'tokyo', 'mt. fuji',
+    'oliver', 'emma', 'liam', 'chloe', 'bence', 'zofia', 'rahul', 'linh', 'aung',
+    'uk', 'usa', 'australia', 'canada', 'hungary', 'poland', 'bangladesh', 'vietnam', 'myanmar'
+  ];
+  properNouns.forEach((noun) => {
+    const regex = new RegExp(`\\b${noun}\\b`, 'gi');
+    trimmed = trimmed.replace(regex, (match) => match.charAt(0).toUpperCase() + match.slice(1).toLowerCase());
+  });
+
+  // Ensure proper end punctuation (. or ?)
+  const lastChar = trimmed.slice(-1);
+  if (lastChar !== '.' && lastChar !== '?' && lastChar !== '!') {
+    const lower = trimmed.toLowerCase();
+    if (
+      lower.startsWith('what') ||
+      lower.startsWith('where') ||
+      lower.startsWith('who') ||
+      lower.startsWith('how') ||
+      lower.startsWith('do you') ||
+      lower.startsWith('can you') ||
+      lower.startsWith('is') ||
+      lower.startsWith('are') ||
+      lower.startsWith('what is')
+    ) {
+      trimmed += '?';
+    } else {
+      trimmed += '.';
+    }
+  }
+
+  return trimmed;
+}
+
+

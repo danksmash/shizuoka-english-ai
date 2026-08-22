@@ -10,7 +10,7 @@ import {
   MessageSquare,
   Printer,
   ChevronRight,
-  Download,
+  Copy,
 } from 'lucide-react';
 import { ChatMessage, FeedbackData, StudentProfile, VisualVocabularyItem } from '../types';
 import { getAIStudentById } from '../data/curriculum';
@@ -45,6 +45,7 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
   onRestart,
 }) => {
   const [playingWordId, setPlayingWordId] = useState<string | null>(null);
+  const [copySuccess, setCopySuccess] = useState<boolean>(false);
   const aiStudent = getAIStudentById(profile.selectedAiStudentId);
 
   const formatTime = (secs: number) => {
@@ -58,6 +59,24 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
     speakVocabularyWord(item.word, aiStudent.voiceLang, () => {
       setPlayingWordId(null);
     });
+  };
+
+  const handleCopyReport = () => {
+    const transcriptText = messages
+      .map((m) => `${m.sender === 'ai' ? aiStudent.name : (profile.name || 'Student')}: ${m.englishText} (${m.japaneseText || ''})`)
+      .join('\n');
+    const feedbackText = feedback
+      ? `【よい点】\n${feedback.goodPoints.join('\n')}\n\n【次へのアドバイス】\n${feedback.improvementAdvice.title}: ${feedback.improvementAdvice.detail}\n\n【総合コメント】\n${feedback.overallComment}`
+      : '';
+    const fullText = `--- AI留学生えいご対話レポート ---\n生徒: ${profile.name}\n留学生: ${aiStudent.name} (${aiStudent.countryJapanese})\n対話時間: ${formatTime(elapsedSeconds)} | ターン数: ${totalTurns} | 発話語数: ${totalWords}\n\n【対話トランスクリプト】\n${transcriptText}\n\n${feedbackText}`;
+
+    navigator.clipboard
+      .writeText(fullText)
+      .then(() => {
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 2500);
+      })
+      .catch(() => {});
   };
 
   const handlePrint = () => {
@@ -98,21 +117,12 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           <button
             type="button"
-            onClick={() =>
-              downloadDialogueLogHTML(
-                profile,
-                messages,
-                feedback,
-                totalTurns,
-                totalWords,
-                elapsedSeconds
-              )
-            }
+            onClick={handleCopyReport}
             className="flex-1 md:flex-none px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-2xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-emerald-200"
-            title="レポートをHTMLファイルとして保存"
+            title="レポートをクリップボードにコピー"
           >
-            <Download className="w-4 h-4" />
-            <span>レポート保存</span>
+            <Copy className="w-4 h-4" />
+            <span>{copySuccess ? 'コピーしました！' : 'コピー'}</span>
           </button>
 
           <button
