@@ -418,12 +418,25 @@ CRITICAL RESPONSE MANDATES:
     const claude = getAnthropicClient();
     if (claude) {
       const primaryModel = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
-      const response = await claude.messages.create({
-        model: primaryModel,
-        max_tokens: 400,
-        system: getSystemInstructionForPersona(aiStudentId),
-        messages: [{ role: 'user', content: prompt }],
-      });
+      
+      // API call with 15-second safety timeout protection
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      let response;
+      try {
+        response = await claude.messages.create(
+          {
+            model: primaryModel,
+            max_tokens: 400,
+            system: getSystemInstructionForPersona(aiStudentId),
+            messages: [{ role: 'user', content: prompt }],
+          },
+          { signal: controller.signal }
+        );
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       const rawText = response.content
         .filter((block) => block.type === 'text')
@@ -438,11 +451,18 @@ CRITICAL RESPONSE MANDATES:
         jsonStr = jsonStr.substring(start, end + 1);
       }
 
-      const parsed = JSON.parse(jsonStr);
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonStr);
+      } catch {
+        throw new Error('API_INVALID_RESPONSE: Failed to parse JSON');
+      }
+
       const sanitizedReply = sanitizeAiOutput(parsed.reply);
 
       return res.json({
         success: true,
+        isFallback: false,
         data: {
           reply: sanitizedReply,
           japaneseTranslation: parsed.japaneseTranslation || '',
@@ -453,7 +473,7 @@ CRITICAL RESPONSE MANDATES:
       });
     }
 
-    // High-quality local context-aware fallback when API key is not configured
+    // High-quality local context-aware fallback when API client is not configured
     const localReply = generateLocalStudentDialogueReply(
       persona,
       topic || 'favorites',
@@ -465,6 +485,8 @@ CRITICAL RESPONSE MANDATES:
 
     return res.json({
       success: true,
+      isFallback: true,
+      fallbackReason: 'API_KEY_NOT_CONFIGURED',
       data: {
         reply: localReply.reply,
         japaneseTranslation: localReply.japaneseTranslation,
@@ -473,7 +495,14 @@ CRITICAL RESPONSE MANDATES:
         detectedName: spokenName || undefined,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    let fallbackReason = 'API_ERROR';
+    if (error?.name === 'AbortError' || error?.message?.includes('aborted') || error?.message?.includes('timeout')) {
+      fallbackReason = 'API_TIMEOUT';
+    } else if (error?.message?.includes('API_INVALID_RESPONSE')) {
+      fallbackReason = 'API_INVALID_RESPONSE';
+    }
+
     // High-quality local context-aware fallback for API error resilience
     const localReply = generateLocalStudentDialogueReply(
       persona,
@@ -486,6 +515,8 @@ CRITICAL RESPONSE MANDATES:
 
     return res.json({
       success: true,
+      isFallback: true,
+      fallbackReason,
       data: {
         reply: localReply.reply,
         japaneseTranslation: localReply.japaneseTranslation,
@@ -601,6 +632,7 @@ app.post('/api/feedback', async (req, res) => {
       const parsed = JSON.parse(jsonStr);
       return res.json({
         success: true,
+        isFallback: false,
         data: {
           ...parsed,
           encounteredVocab: encounteredVocab || [],
@@ -629,9 +661,16 @@ app.post('/api/feedback', async (req, res) => {
 
     return res.json({
       success: true,
+      isFallback: true,
+      fallbackReason: 'API_KEY_NOT_CONFIGURED',
       data: fallbackData,
     });
-  } catch (error) {
+  } catch (error: any) {
+    let fallbackReason = 'API_ERROR';
+    if (error?.name === 'AbortError' || error?.message?.includes('aborted') || error?.message?.includes('timeout')) {
+      fallbackReason = 'API_TIMEOUT';
+    }
+
     // High-quality dynamic fallback feedback for resilience
     const fallbackData = generateFallbackFeedback(
       persona,
@@ -646,6 +685,8 @@ app.post('/api/feedback', async (req, res) => {
 
     return res.json({
       success: true,
+      isFallback: true,
+      fallbackReason,
       data: fallbackData,
     });
   }
