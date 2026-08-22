@@ -7,100 +7,522 @@ export interface LocalDialogueResponse {
   culturalNote?: string;
 }
 
+// Country & Persona specific food / culture details
+const PERSONA_CULTURE_MAP: Record<string, {
+  foodEnglish: string;
+  foodJapanese: string;
+  sportEnglish: string;
+  animalEnglish: string;
+  cultureFact: string;
+}> = {
+  oliver_uk: {
+    foodEnglish: 'fish and chips and afternoon tea',
+    foodJapanese: 'フィッシュアンドチップスと紅茶',
+    sportEnglish: 'football (soccer)',
+    animalEnglish: 'dogs and horses',
+    cultureFact: 'イギリスではアフタヌーンティーやフットボール（サッカー）が大人気だよ！',
+  },
+  emma_usa: {
+    foodEnglish: 'burgers and pizza',
+    foodJapanese: 'ハンバーガーとピザ',
+    sportEnglish: 'baseball and basketball',
+    animalEnglish: 'dogs and dolphins',
+    cultureFact: 'アメリカではハンバーガーや野球、バスケットボールが親しまれているよ！',
+  },
+  liam_aus: {
+    foodEnglish: 'meat pies and Aussie BBQ',
+    foodJapanese: 'ミートパイとバーベキュー',
+    sportEnglish: 'surfing and rugby',
+    animalEnglish: 'koalas and kangaroos',
+    cultureFact: 'オーストラリアにはコアラやカンガルーなどユニークな動物がいっぱい！',
+  },
+  liam_australia: {
+    foodEnglish: 'meat pies and Aussie BBQ',
+    foodJapanese: 'ミートパイとバーベキュー',
+    sportEnglish: 'surfing and rugby',
+    animalEnglish: 'koalas and kangaroos',
+    cultureFact: 'オーストラリアにはコアラやカンガルーなどユニークな動物がいっぱい！',
+  },
+  chloe_can: {
+    foodEnglish: 'pancakes with maple syrup and poutine',
+    foodJapanese: 'メープルシロップのパンケーキとプーティン',
+    sportEnglish: 'ice hockey',
+    animalEnglish: 'bears and dogs',
+    cultureFact: 'カナダはメープルシロップとアイスホッケーがとても有名だよ！',
+  },
+  chloe_canada: {
+    foodEnglish: 'pancakes with maple syrup and poutine',
+    foodJapanese: 'メープルシロップのパンケーキとプーティン',
+    sportEnglish: 'ice hockey',
+    animalEnglish: 'bears and dogs',
+    cultureFact: 'カナダはメープルシロップとアイスホッケーがとても有名だよ！',
+  },
+  bence_hun: {
+    foodEnglish: 'goulash soup (traditional beef soup)',
+    foodJapanese: 'グヤーシュ（伝統的な牛肉とお野菜のスープ）',
+    sportEnglish: 'football and swimming',
+    animalEnglish: 'dogs and horses',
+    cultureFact: 'ハンガリーのグヤーシュは温かいパプリカ風味の美味しいスープだよ！',
+  },
+  bence_hungary: {
+    foodEnglish: 'goulash soup (traditional beef soup)',
+    foodJapanese: 'グヤーシュ（伝統的な牛肉とお野菜のスープ）',
+    sportEnglish: 'football and swimming',
+    animalEnglish: 'dogs and horses',
+    cultureFact: 'ハンガリーのグヤーシュは温かいパプリカ風味の美味しいスープだよ！',
+  },
+  zofia_pol: {
+    foodEnglish: 'pierogi dumplings',
+    foodJapanese: 'ピエロギ（ポーランド風の水餃子）',
+    sportEnglish: 'volleyball and dancing',
+    animalEnglish: 'cats and birds',
+    cultureFact: 'ポーランドのピエロギはもちもちの生地で包んだ伝統料理だよ！',
+  },
+  zofia_poland: {
+    foodEnglish: 'pierogi dumplings',
+    foodJapanese: 'ピエロギ（ポーランド風の水餃子）',
+    sportEnglish: 'volleyball and dancing',
+    animalEnglish: 'cats and birds',
+    cultureFact: 'ポーランドのピエロギはもちもちの生地で包んだ伝統料理だよ！',
+  },
+  rahul_ban: {
+    foodEnglish: 'chicken biryani and curry',
+    foodJapanese: 'ビリヤニ（スパイス香る炊き込みご飯）とカレー',
+    sportEnglish: 'cricket',
+    animalEnglish: 'Bengal tigers and birds',
+    cultureFact: 'バングラデシュでは美味しいビリヤニやクリケットが大人気だよ！',
+  },
+  rahul_bangladesh: {
+    foodEnglish: 'chicken biryani and curry',
+    foodJapanese: 'ビリヤニ（スパイス香る炊き込みご飯）とカレー',
+    sportEnglish: 'cricket',
+    animalEnglish: 'Bengal tigers and birds',
+    cultureFact: 'バングラデシュでは美味しいビリヤニやクリケットが大人気だよ！',
+  },
+  linh_vie: {
+    foodEnglish: 'pho noodle soup and spring rolls',
+    foodJapanese: 'フォー（お米の麺のスープ）と生春巻き',
+    sportEnglish: 'badminton and football',
+    animalEnglish: 'cats and dogs',
+    cultureFact: 'ベトナムのフォーはお米からできた優しい味のヌードルスープだよ！',
+  },
+  linh_vietnam: {
+    foodEnglish: 'pho noodle soup and spring rolls',
+    foodJapanese: 'フォー（お米の麺のスープ）と生春巻き',
+    sportEnglish: 'badminton and football',
+    animalEnglish: 'cats and dogs',
+    cultureFact: 'ベトナムのフォーはお米からできた優しい味のヌードルスープだよ！',
+  },
+  aung_mya: {
+    foodEnglish: 'mohinga noodles',
+    foodJapanese: 'モヒンガー（魚だしの伝統的な米粉麺）',
+    sportEnglish: 'football and chinlone',
+    animalEnglish: 'elephants and dogs',
+    cultureFact: 'ミャンマーのモヒンガーは朝ごはんにも大人気の伝統的な麺料理だよ！',
+  },
+  aung_myanmar: {
+    foodEnglish: 'mohinga noodles',
+    foodJapanese: 'モヒンガー（魚だしの伝統的な米粉麺）',
+    sportEnglish: 'football and chinlone',
+    animalEnglish: 'elephants and dogs',
+    cultureFact: 'ミャンマーのモヒンガーは朝ごはんにも大人気の伝統的な麺料理だよ！',
+  },
+};
+
+function getCultureForPersona(persona: AIStudentProfile) {
+  if (PERSONA_CULTURE_MAP[persona.id]) return PERSONA_CULTURE_MAP[persona.id];
+  const countryKey = Object.keys(PERSONA_CULTURE_MAP).find(
+    (k) => persona.country.toLowerCase().includes(k.split('_')[1] || '') || persona.id.startsWith(k.split('_')[0])
+  );
+  if (countryKey && PERSONA_CULTURE_MAP[countryKey]) return PERSONA_CULTURE_MAP[countryKey];
+  return {
+    foodEnglish: 'delicious local cuisine',
+    foodJapanese: '美味しい郷土料理',
+    sportEnglish: 'soccer',
+    animalEnglish: 'dogs and cats',
+    cultureFact: `${persona.countryJapanese}の素敵な文化を一緒に楽しもう！`,
+  };
+}
+
+/**
+ * Intelligent context-aware local fallback reply generator
+ */
 export function generateLocalStudentDialogueReply(
   persona: AIStudentProfile,
   topic: DialogueTopic,
   studentText: string,
   turnNumber: number,
-  studentName: string
+  studentName: string,
+  history?: ChatMessage[]
 ): LocalDialogueResponse {
-  const filler = persona.fillerWords[Math.floor(Math.random() * persona.fillerWords.length)] || 'Great!';
-  const lower = studentText.toLowerCase();
   const shortName = persona.name.split(' ')[0] || persona.name;
+  const culture = getCultureForPersona(persona);
 
-  // Topic & Keyword-based intelligent interactive responses
-  if (lower.includes('name') || lower.includes('i am') || lower.includes("i'm") || turnNumber <= 1) {
+  const rawLower = studentText.toLowerCase().trim();
+  const lower = rawLower.replace(/[.,?!]/g, ' ');
+
+  // 1. Check for Pardon / Clarification request
+  const isPardon =
+    lower === 'pardon' ||
+    lower.includes('pardon') ||
+    lower === 'sorry' ||
+    lower.includes('say that again') ||
+    lower.includes("don't understand") ||
+    lower.includes('dont understand') ||
+    lower === 'what';
+
+  if (isPardon) {
+    const lastAiMsg = (history || [])
+      .slice()
+      .reverse()
+      .find((m) => m.sender === 'ai' && !m.englishText.toLowerCase().includes('pardon'));
+
+    if (lastAiMsg) {
+      const prev = lastAiMsg.englishText.toLowerCase();
+      if (prev.includes('tea') || prev.includes('drink')) {
+        return {
+          reply: `I said, I love British black tea! What do you like to drink?`,
+          japaneseTranslation: `イギリスの紅茶が大好きだと言ったよ！何を飲むのが好き？`,
+          mood: 'encouraging',
+          culturalNote: `ゆっくり話すから安心してね！`,
+        };
+      }
+      if (prev.includes('goulash') || prev.includes('food') || prev.includes('eat') || prev.includes('pie') || prev.includes('pho') || prev.includes('biryani') || prev.includes('burger')) {
+        return {
+          reply: `I said, I like ${culture.foodEnglish}. What food do you like?`,
+          japaneseTranslation: `私は${culture.foodJapanese}が好きだと言ったよ。何が好き？`,
+          mood: 'encouraging',
+          culturalNote: `もう一度わかりやすく伝えたよ！`,
+        };
+      }
+      if (prev.includes('sport') || prev.includes('football') || prev.includes('soccer') || prev.includes('surf') || prev.includes('hockey')) {
+        return {
+          reply: `I said, I like ${culture.sportEnglish}. Do you like sports?`,
+          japaneseTranslation: `私は${culture.sportEnglish}が好きだと言ったよ。スポーツは好き？`,
+          mood: 'encouraging',
+          culturalNote: `ゆっくり話すから大丈夫だよ！`,
+        };
+      }
+      if (prev.includes('animal') || prev.includes('dog') || prev.includes('cat') || prev.includes('koala')) {
+        return {
+          reply: `I said, I like ${culture.animalEnglish}. What animal do you like?`,
+          japaneseTranslation: `私は${culture.animalEnglish}が好きだと言ったよ。どんな動物が好き？`,
+          mood: 'encouraging',
+          culturalNote: `好きな動物を教えてね！`,
+        };
+      }
+      if (prev.includes('shizuoka') || prev.includes('fuji') || prev.includes('beach')) {
+        return {
+          reply: `I said, Shizuoka is very beautiful! Do you like Mt. Fuji?`,
+          japaneseTranslation: `静岡はとても綺麗だと言ったよ！富士山は好き？`,
+          mood: 'encouraging',
+        };
+      }
+    }
+
     return {
-      reply: `${filler} Nice to meet you, ${studentName || 'friend'}! I love studying at Shizuoka University. What food or sport do you like?`,
-      japaneseTranslation: `はじめまして、${studentName || 'お友達'}！静岡大学で勉強できて嬉しいよ。好きな食べ物やスポーツは何ですか？`,
+      reply: `I said, I love chatting with you! What is your favorite thing?`,
+      japaneseTranslation: `あなたとお話しできて嬉しいと言ったよ！何が好きですか？`,
+      mood: 'encouraging',
+      culturalNote: `わからない時は「Pardon?」と聞き返すのはとても良いことだよ！`,
+    };
+  }
+
+  // 2. Direct Student Questions (Highest Priority)
+  // 2-a. Animal question
+  if (lower.includes('what animal') || lower.includes('favorite animal') || lower.includes('favourite animal')) {
+    return {
+      reply: `I like ${culture.animalEnglish}. They are so cute! What animal do you like?`,
+      japaneseTranslation: `私は${culture.animalEnglish}が好きです。とても可愛いよ！どんな動物が好き？`,
       mood: 'happy',
-      culturalNote: `${filler} は${persona.countryJapanese}で親しい友達にかける挨拶だよ！`,
+      culturalNote: `${persona.countryJapanese}でも動物は大人気だよ！`,
     };
   }
 
-  if (lower.includes('sushi') || lower.includes('tea') || lower.includes('green tea') || lower.includes('food') || lower.includes('ramen') || lower.includes('pizza') || lower.includes('curry')) {
+  // 2-b. Food question
+  if (
+    lower.includes('what food') ||
+    lower.includes('favorite food') ||
+    lower.includes('favourite food') ||
+    lower.includes('what do you eat') ||
+    lower.includes('what do you like to eat')
+  ) {
     return {
-      reply: `${filler} Yum! I love delicious food too. In ${persona.country}, we enjoy great meals. What is your favorite place in Shizuoka?`,
-      japaneseTranslation: `美味しそう！私も美味しい食べ物が大好きです。${persona.countryJapanese}でも素敵な料理を食べるよ。静岡で一番好きな場所はどこ？`,
-      mood: 'encouraging',
-      culturalNote: `留学生 ${shortName} と一緒に食べ物の話を広げてみよう！`,
-    };
-  }
-
-  if (lower.includes('soccer') || lower.includes('football') || lower.includes('baseball') || lower.includes('swimming') || lower.includes('sports') || lower.includes('run')) {
-    return {
-      reply: `${filler} That is so cool! Sports make us energetic and happy. What can you do after school?`,
-      japaneseTranslation: `すごくいいね！スポーツをすると元気になれるよね。放課後はどんなことができる？`,
-      mood: 'encouraging',
-      culturalNote: `スポーツの話題は世界中の留学生と仲良くなれる最高の話題です！`,
-    };
-  }
-
-  if (lower.includes('fuji') || lower.includes('shizuoka') || lower.includes('japan') || lower.includes('park') || lower.includes('sea') || lower.includes('beach')) {
-    return {
-      reply: `${filler} Mt. Fuji in Shizuoka is breathtaking! I took many photos. What other places do you recommend?`,
-      japaneseTranslation: `静岡の富士山は息をのむほど綺麗だね！たくさん写真を撮ったよ。他にオススメの場所はある？`,
+      reply: `I like ${culture.foodEnglish}. It is delicious! Do you like it?`,
+      japaneseTranslation: `私は${culture.foodJapanese}が好きです。とても美味しいよ！あなたは好きですか？`,
       mood: 'happy',
-      culturalNote: `地元の魅力を英語で伝えると留学生はとても喜びます！`,
+      culturalNote: culture.cultureFact,
     };
   }
 
-  if (lower.includes('can') || lower.includes('play') || lower.includes('draw') || lower.includes('sing') || lower.includes('guitar') || lower.includes('piano')) {
+  // 2-c. Sport question: "What sport do you like?", "What's your favorite sport?"
+  if (lower.includes('what sport') || lower.includes('favorite sport') || lower.includes('favourite sport')) {
     return {
-      reply: `${filler} Wow, you are so talented! I can speak my native language and English. What else can you do?`,
-      japaneseTranslation: `わあ、素晴らしい特技だね！私は母国語と英語を話せるよ。他にどんなことができる？`,
-      mood: 'encouraging',
-      culturalNote: `できること（特技）を「I can 〜」で伝えてみよう！`,
+      reply: `I like ${culture.sportEnglish}. It is very exciting! Do you play sports?`,
+      japaneseTranslation: `私は${culture.sportEnglish}が好きです。すごくワクワクするよ！スポーツはする？`,
+      mood: 'happy',
+      culturalNote: `スポーツの話題は留学生と仲良くなる最高の方法だよ！`,
     };
   }
 
-  // Topic based fallback rotation
-  const topicResponses: Record<DialogueTopic, LocalDialogueResponse> = {
-    intro: {
-      reply: `${filler} Thank you for telling me! I love meeting new friends in Japan. What is your favorite subject in school?`,
-      japaneseTranslation: `教えてくれてありがとう！日本で新しい友達に出会えて嬉しいよ。学校で一番好きな教科は何？`,
-      mood: 'encouraging',
-      culturalNote: `「My favorite subject is 〜」と答えてみよう！`,
-    },
-    favorites: {
-      reply: `${filler} That sounds wonderful! I like Japanese anime and delicious green tea. What do you like?`,
-      japaneseTranslation: `素晴らしいね！私は日本のアニメと美味しいお茶が好きだよ。あなたは何が好き？`,
-      mood: 'encouraging',
-      culturalNote: `好きなものを理由と一緒に伝えてみよう！`,
-    },
-    shizuoka_culture: {
-      reply: `${filler} Shizuoka is full of wonderful culture and kind people! What do you like most about Shizuoka?`,
-      japaneseTranslation: `静岡は素晴らしい文化と優しい人々でいっぱいだね！静岡のどんなところが一番好き？`,
+  // 2-d. Color question: "What color do you like?"
+  if (lower.includes('what color') || lower.includes('what colour') || lower.includes('favorite color')) {
+    return {
+      reply: `I like blue and green! They look like nature. What color do you like?`,
+      japaneseTranslation: `私は青と緑が好きです！自然の色みたいだからね。何色が好き？`,
       mood: 'happy',
-      culturalNote: `静岡のいいところをたくさん教えてあげよう！`,
-    },
-    talents: {
-      reply: `${filler} That is fantastic! Practice makes progress. What do you want to try next?`,
-      japaneseTranslation: `素晴らしいね！練習すればもっと上手になるよ。次はどんなことに挑戦してみたい？`,
-      mood: 'encouraging',
-      culturalNote: `前向きなチャレンジの気持ちを英語で伝えてみよう！`,
-    },
-    free: {
-      reply: `${filler} That is really interesting! Talking with you is so much fun. Tell me more!`,
-      japaneseTranslation: `とても興味深いね！あなたとおしゃべりできてすごく楽しいよ。もっと教えて！`,
+    };
+  }
+
+  // 2-e. Origin question: "Where are you from?"
+  if (lower.includes('where are you from') || lower.includes('where do you come from') || lower.includes('what country')) {
+    return {
+      reply: `I am from ${persona.country} (${persona.city}). Have you ever been there?`,
+      japaneseTranslation: `私は${persona.countryJapanese}の${persona.city}出身です。行ったことはある？`,
       mood: 'happy',
-      culturalNote: `自分の言葉で自由に英語の会話を楽しもう！`,
-    },
+      culturalNote: `${persona.name} は${persona.countryJapanese}から静岡大学に留学しているよ！`,
+    };
+  }
+
+  // 2-f. Age question: "How old are you?"
+  if (lower.includes('how old')) {
+    return {
+      reply: `I am ${persona.age} years old. I am a university student!`,
+      japaneseTranslation: `私は${persona.age}歳です。大学生だよ！`,
+      mood: 'happy',
+    };
+  }
+
+  // 2-g. Ability question: "What can you do?", "Can you ...?"
+  if (lower.startsWith('can you') || lower.includes('can you play') || lower.includes('can you swim') || lower.includes('can you speak')) {
+    if (lower.includes('swim')) {
+      return {
+        reply: `Yes, I can swim! How about you?`,
+        japaneseTranslation: `はい、泳げるよ！あなたはどう？`,
+        mood: 'happy',
+      };
+    }
+    if (lower.includes('soccer') || lower.includes('football')) {
+      return {
+        reply: `Yes, I can play soccer! It is so fun.`,
+        japaneseTranslation: `はい、サッカーができるよ！とても楽しいよね。`,
+        mood: 'happy',
+      };
+    }
+    return {
+      reply: `Yes, I can! I can also speak English and study Japanese. What can you do?`,
+      japaneseTranslation: `うん、できるよ！英語を話して日本語も勉強しているよ。あなたは何ができる？`,
+      mood: 'happy',
+    };
+  }
+
+  if (lower.includes('what can you do')) {
+    return {
+      reply: `I can play the guitar and speak English. What can you do?`,
+      japaneseTranslation: `ギターを弾いたり英語を話したりできるよ。あなたは何ができる？`,
+      mood: 'encouraging',
+    };
+  }
+
+  // 2-h. General "Do you like ...?" questions
+  if (lower.startsWith('do you like')) {
+    if (lower.includes('sushi') || lower.includes('japanese food') || lower.includes('ramen')) {
+      return {
+        reply: `Yes, I love Japanese food! Sushi and green tea are wonderful. What Japanese food do you like?`,
+        japaneseTranslation: `はい、日本食が大好きです！お寿司と緑茶は素晴らしいね。どんな日本食が好き？`,
+        mood: 'happy',
+        culturalNote: `日本の食文化は留学生に大人気です！`,
+      };
+    }
+    if (lower.includes('soccer') || lower.includes('baseball') || lower.includes('tennis')) {
+      return {
+        reply: `Yes, I like it very much! It is great fun.`,
+        japaneseTranslation: `はい、大好きだよ！とても楽しいよね。`,
+        mood: 'happy',
+      };
+    }
+    if (lower.includes('dog') || lower.includes('cat') || lower.includes('animal')) {
+      return {
+        reply: `Yes, I love animals! They are so friendly.`,
+        japaneseTranslation: `はい、動物が大好きです！とても人懐っこいよね。`,
+        mood: 'happy',
+      };
+    }
+    return {
+      reply: `Yes, I like it! Talking with you is so nice. What else do you like?`,
+      japaneseTranslation: `うん、好きだよ！あなたとお話しできて嬉しいな。他には何が好き？`,
+      mood: 'happy',
+    };
+  }
+
+  // 2-i. "How about you?" / "And you?"
+  if (lower.includes('how about you') || lower.includes('and you') || lower.includes('what about you')) {
+    if (topic === 'favorites') {
+      return {
+        reply: `I like ${culture.foodEnglish} and ${culture.sportEnglish}! They make me happy.`,
+        japaneseTranslation: `私は${culture.foodJapanese}と${culture.sportEnglish}が好きだよ！元気が出るんだ。`,
+        mood: 'happy',
+        culturalNote: `質問を聞き返してくれてありがとう！`,
+      };
+    }
+    if (topic === 'talents') {
+      return {
+        reply: `I can play music and cook delicious food!`,
+        japaneseTranslation: `私は音楽を演奏したり美味しい料理を作ったりできるよ！`,
+        mood: 'happy',
+      };
+    }
+    return {
+      reply: `I love studying at Shizuoka University and meeting nice friends like you!`,
+      japaneseTranslation: `静岡大学で勉強して、あなたのような優しいお友達に出会えて嬉しいよ！`,
+      mood: 'happy',
+    };
+  }
+
+  // 3. Name introduction by child
+  if (lower.includes('my name is') || lower.includes('i am ') || lower.includes("i'm ") || turnNumber <= 1) {
+    let nameFromText = '';
+    const match = lower.match(/(?:my name is|i am|i'm)\s+([a-zA-Z]+)/);
+    if (match && match[1]) {
+      nameFromText = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
+    }
+    const finalName = nameFromText || studentName || 'friend';
+
+    if (topic === 'favorites') {
+      return {
+        reply: `Nice to meet you, ${finalName}! What is your favorite food?`,
+        japaneseTranslation: `はじめまして、${finalName}！好きな食べ物は何ですか？`,
+        mood: 'happy',
+      };
+    }
+    if (topic === 'shizuoka_culture') {
+      return {
+        reply: `Nice to meet you, ${finalName}! What is your favorite place in Shizuoka?`,
+        japaneseTranslation: `はじめまして、${finalName}！静岡で好きな場所はどこですか？`,
+        mood: 'happy',
+      };
+    }
+    if (topic === 'talents') {
+      return {
+        reply: `Nice to meet you, ${finalName}! What can you do?`,
+        japaneseTranslation: `はじめまして、${finalName}！あなたは何ができますか？`,
+        mood: 'happy',
+      };
+    }
+    return {
+      reply: `Nice to meet you, ${finalName}! How are you today?`,
+      japaneseTranslation: `はじめまして、${finalName}！今日の調子はどうですか？`,
+      mood: 'happy',
+    };
+  }
+
+  // 4. Helper to find next unasked question for rich 10-turn progression
+  const aiHistoryText = (history || [])
+    .filter((m) => m.sender === 'ai')
+    .map((m) => m.englishText.toLowerCase())
+    .join(' ');
+
+  const getNextUnaskedQuestion = (): { english: string; japanese: string } => {
+    if (!aiHistoryText.includes('food') && !aiHistoryText.includes('eat')) {
+      return { english: 'What food do you like?', japanese: 'どんな食べ物が好きですか？' };
+    }
+    if (!aiHistoryText.includes('sport') && !aiHistoryText.includes('game') && !aiHistoryText.includes('play')) {
+      return { english: 'What sport or game do you like?', japanese: 'どんなスポーツやゲームが好きですか？' };
+    }
+    if (!aiHistoryText.includes('animal') && !aiHistoryText.includes('dog') && !aiHistoryText.includes('cat')) {
+      return { english: 'What animal do you like?', japanese: 'どんな動物が好きですか？' };
+    }
+    if (!aiHistoryText.includes('color') && !aiHistoryText.includes('colour')) {
+      return { english: 'What color do you like?', japanese: '何色が好きですか？' };
+    }
+    if (!aiHistoryText.includes('can you') && !aiHistoryText.includes('what can you')) {
+      return { english: 'What can you do well?', japanese: '何が得意ですか？' };
+    }
+    if (!aiHistoryText.includes('shizuoka') && !aiHistoryText.includes('place') && !aiHistoryText.includes('fuji')) {
+      return { english: 'What is your favorite place in Shizuoka?', japanese: '静岡で好きな場所はどこですか？' };
+    }
+    if (!aiHistoryText.includes('season') && !aiHistoryText.includes('summer') && !aiHistoryText.includes('winter')) {
+      return { english: 'What season do you like?', japanese: 'どの季節が好きですか？' };
+    }
+    if (!aiHistoryText.includes('after school') && !aiHistoryText.includes('weekend')) {
+      return { english: 'What do you like to do after school?', japanese: '放課後は何をして過ごすのが好きですか？' };
+    }
+    return { english: 'What are you excited about today?', japanese: '今日はどんなことが楽しみですか？' };
   };
 
-  return topicResponses[topic] || topicResponses.free;
+  const nextQ = getNextUnaskedQuestion();
+
+  // 5. Reactions to Student's Statements with dynamic follow-ups
+  if (lower.includes('sushi') || lower.includes('ramen') || lower.includes('curry') || lower.includes('pizza') || lower.includes('hamburger') || lower.includes('cake') || lower.includes('apple') || lower.includes('fruit')) {
+    return {
+      reply: `Yum! Delicious food makes everyone smile. ${nextQ.english}`,
+      japaneseTranslation: `美味しそう！美味しい食べ物はみんなを笑顔にするね。${nextQ.japanese}`,
+      mood: 'happy',
+      culturalNote: culture.cultureFact,
+    };
+  }
+
+  if (lower.includes('soccer') || lower.includes('football') || lower.includes('baseball') || lower.includes('basketball') || lower.includes('swimming') || lower.includes('tennis')) {
+    return {
+      reply: `That is awesome! Playing sports is so much fun. ${nextQ.english}`,
+      japaneseTranslation: `素晴らしいね！体を動かすのはとても楽しいよね。${nextQ.japanese}`,
+      mood: 'encouraging',
+    };
+  }
+
+  if (lower.includes('dog') || lower.includes('cat') || lower.includes('rabbit') || lower.includes('hamster') || lower.includes('bird')) {
+    return {
+      reply: `Animals are so cute and friendly! ${nextQ.english}`,
+      japaneseTranslation: `動物はとても可愛くて癒やされるね！${nextQ.japanese}`,
+      mood: 'happy',
+    };
+  }
+
+  if (lower.includes('fuji') || lower.includes('shizuoka') || lower.includes('green tea') || lower.includes('castle') || lower.includes('hamamatsu') || lower.includes('beach')) {
+    return {
+      reply: `Shizuoka is wonderful! Mt. Fuji and the ocean are beautiful. ${nextQ.english}`,
+      japaneseTranslation: `静岡は素晴らしいところだね！富士山や海がとても綺麗です。${nextQ.japanese}`,
+      mood: 'happy',
+      culturalNote: `静岡の魅力をたくさん教えてくれてありがとう！`,
+    };
+  }
+
+  if (lower.startsWith('i can') || lower.includes('i can play') || lower.includes('i can draw') || lower.includes('i can sing') || lower.includes('run fast')) {
+    return {
+      reply: `That is a wonderful talent! You are very cool. ${nextQ.english}`,
+      japaneseTranslation: `素晴らしい特技だね！とてもかっこいいよ。${nextQ.japanese}`,
+      mood: 'encouraging',
+    };
+  }
+
+  if (lower.includes('thank you') || lower.includes('thanks') || lower.includes('goodbye') || lower.includes('bye')) {
+    return {
+      reply: `You are very welcome, ${studentName || 'friend'}! I loved talking with you!`,
+      japaneseTranslation: `どういたしまして！${studentName ? studentName + 'さん' : 'あなた'}とお話しできてとても楽しかったよ！`,
+      mood: 'happy',
+      culturalNote: `最後までたくさん英語でお話しできたね！`,
+    };
+  }
+
+  if (lower.includes('good') || lower.includes('fine') || lower.includes('happy') || lower.includes('great')) {
+    return {
+      reply: `I am glad to hear that! ${nextQ.english}`,
+      japaneseTranslation: `それを聞けて嬉しいよ！${nextQ.japanese}`,
+      mood: 'happy',
+    };
+  }
+
+  // 6. Topic-based Natural Continuations
+  return {
+    reply: `That is so nice! ${nextQ.english}`,
+    japaneseTranslation: `いいね！${nextQ.japanese}`,
+    mood: 'happy',
+  };
 }
 
+/**
+ * Generates dynamic feedback strictly based on real conversation history
+ */
 export function generateFallbackFeedback(
   persona: AIStudentProfile,
   studentName: string,
@@ -112,61 +534,192 @@ export function generateFallbackFeedback(
   messages?: ChatMessage[]
 ): FeedbackData {
   const shortName = persona.name.split(' ')[0] || persona.name;
-  const childMsgs = (messages || []).filter(
+  const history = messages || [];
+
+  const childMsgs = history.filter(
     (m) => m.sender !== 'ai' && m.englishText && m.englishText.trim().length > 0
   );
 
-  // Extract key words or phrases spoken by child
-  const spokenHighlights = childMsgs.map((m) => m.englishText.trim());
-  const samplePhrase = spokenHighlights[0] || '';
+  const childTexts = childMsgs.map((m) => m.englishText.trim());
+  const allChildTextLower = childTexts.join(' ').toLowerCase();
 
-  const praisePoint1 = samplePhrase
-    ? `「${samplePhrase}」のように、自分の好きなことや思いをしっかりと英語で伝えようとする積極的な姿勢がとても素晴らしかったです！`
-    : `${studentName || 'あなた'}の思いを、堂々と英語で伝えようとする前向きな姿勢がとても素敵でした！`;
+  // 1. Dynamic Key Phrases Extraction (ONLY phrases that actually occurred in this session!)
+  const extractedPhrases: Array<{ english: string; japanese: string; culturalNote: string }> = [];
 
-  const praisePoint2 =
-    spokenHighlights.length > 1
-      ? `${persona.name} (${persona.countryJapanese}留学生) からの質問をよく聞き、「${spokenHighlights[1]}」とスムーズに会話のキャッチボールを続けられました！`
-      : `${persona.name} (${persona.countryJapanese}留学生) の質問に耳を傾け、しっかりと言葉を返せました！`;
+  // Inspect each message for authentic phrases
+  for (const text of childTexts) {
+    const tLower = text.toLowerCase();
+    if (tLower.includes('my name is')) {
+      if (!extractedPhrases.some((p) => p.english === 'My name is ...')) {
+        extractedPhrases.push({
+          english: text,
+          japanese: '私の名前は〜です',
+          culturalNote: '自分の名前を堂々と自己紹介できた素敵なフレーズ！',
+        });
+      }
+    } else if (tLower.startsWith('what animal') || tLower.includes('what animal')) {
+      if (!extractedPhrases.some((p) => p.english.toLowerCase().includes('what animal'))) {
+        extractedPhrases.push({
+          english: text,
+          japanese: 'どんな動物が好きですか？',
+          culturalNote: '相手の好きな動物を尋ねる上手な質問表現！',
+        });
+      }
+    } else if (tLower.startsWith('what food') || tLower.includes('what food')) {
+      if (!extractedPhrases.some((p) => p.english.toLowerCase().includes('what food'))) {
+        extractedPhrases.push({
+          english: text,
+          japanese: 'どんな食べ物が好きですか？',
+          culturalNote: '相手の好きな食べ物を尋ねる上手な質問表現！',
+        });
+      }
+    } else if (tLower.startsWith('what sport') || tLower.includes('what sport')) {
+      if (!extractedPhrases.some((p) => p.english.toLowerCase().includes('what sport'))) {
+        extractedPhrases.push({
+          english: text,
+          japanese: 'どんなスポーツが好きですか？',
+          culturalNote: '相手の好きなスポーツを尋ねる上手な質問表現！',
+        });
+      }
+    } else if (tLower.startsWith('i like') || tLower.includes('i like')) {
+      if (!extractedPhrases.some((p) => p.english.toLowerCase().includes('i like'))) {
+        extractedPhrases.push({
+          english: text,
+          japanese: '私は〜が好きです',
+          culturalNote: '自分の好きなものをしっかりと伝えられた表現！',
+        });
+      }
+    } else if (tLower.startsWith('i can') || tLower.includes('i can')) {
+      if (!extractedPhrases.some((p) => p.english.toLowerCase().includes('i can'))) {
+        extractedPhrases.push({
+          english: text,
+          japanese: '私は〜ができます',
+          culturalNote: '自分の特技やできることを伝えられた表現！',
+        });
+      }
+    } else if (tLower.includes('how about you') || tLower.includes('and you')) {
+      if (!extractedPhrases.some((p) => p.english.toLowerCase().includes('how about you'))) {
+        extractedPhrases.push({
+          english: text,
+          japanese: 'あなたはどうですか？',
+          culturalNote: '相手に質問を聞き返して会話を広げられた表現！',
+        });
+      }
+    } else if (tLower === 'pardon' || tLower.includes('pardon')) {
+      if (!extractedPhrases.some((p) => p.english.toLowerCase().includes('pardon'))) {
+        extractedPhrases.push({
+          english: 'Pardon?',
+          japanese: 'もう一度言ってくれますか？',
+          culturalNote: '聞き取れなかった時に自然に聞き返すスマートな表現！',
+        });
+      }
+    } else if (extractedPhrases.length < 3 && text.length > 2) {
+      extractedPhrases.push({
+        english: text,
+        japanese: '対話で使った表現',
+        culturalNote: '実際の会話の中で自信を持って使えた英語です！',
+      });
+    }
+  }
 
-  const praisePoint3 =
-    totalWords > 0
-      ? `合計 ${totalWords} 語の英語を使って、最後まで諦めずにやり遂げることができました！大きな自信にしてくださいね。`
-      : '英語の対話を最後まで諦めずにやり遂げることができました！大きな自信にしてくださいね。';
+  // If child didn't speak much, extract authentic expressions from AI messages that were shared
+  if (extractedPhrases.length === 0) {
+    const aiMsgs = history.filter((m) => m.sender === 'ai' && m.englishText);
+    for (const aiM of aiMsgs.slice(0, 3)) {
+      extractedPhrases.push({
+        english: aiM.englishText.slice(0, 40),
+        japanese: aiM.japaneseText?.slice(0, 30) || '留学生の英語表現',
+        culturalNote: `${persona.countryJapanese}留学生 ${shortName} が対話で使った表現です`,
+      });
+    }
+  }
 
-  const adviceDetail = samplePhrase
-    ? `「${samplePhrase}」と答えたあとに、「How about you? (あなたはどうですか？)」や「And you?」と ${shortName} に聞き返すと、さらに会話のキャッチボールが弾みますよ！`
-    : `自分のことを答えたあとに「How about you? (あなたはどうですか？)」と ${shortName} に聞き返すと、さらに会話が弾みますよ！`;
+  // Guaranteed fallback phrases if session was 0 turns
+  if (extractedPhrases.length === 0) {
+    extractedPhrases.push({
+      english: `Hello! I'm ${shortName}.`,
+      japanese: `こんにちは！${shortName}です。`,
+      culturalNote: `${persona.countryJapanese}からの挨拶表現です。`,
+    });
+    extractedPhrases.push({
+      english: 'Nice to meet you!',
+      japanese: 'はじめまして！よろしくね！',
+      culturalNote: '初めて会った時に笑顔で使える基本フレーズ！',
+    });
+  }
 
-  const examplePhrase = samplePhrase
-    ? `${samplePhrase}. How about you, ${shortName}?`
-    : `I like sushi. How about you, ${shortName}?`;
+  // 2. Dynamic Next-Step Advice (Strictly tailored to what student did NOT do yet)
+  const hasUsedHowAboutYou = allChildTextLower.includes('how about you') || allChildTextLower.includes('and you');
+  const hasAskedQuestion = allChildTextLower.includes('what') || allChildTextLower.includes('where') || allChildTextLower.includes('can you') || allChildTextLower.includes('do you') || allChildTextLower.includes('?');
+  const hasUsedILike = allChildTextLower.includes('i like');
+  const hasUsedBecause = allChildTextLower.includes('because');
+  const hasUsedICan = allChildTextLower.includes('i can');
+
+  let adviceTitle = '';
+  let adviceDetail = '';
+  let adviceExample = '';
+
+  if (hasUsedHowAboutYou && hasUsedILike && !hasUsedBecause) {
+    // Child is already advanced enough to ask "How about you?". Advise adding reasons!
+    adviceTitle = '理由を一言付け足してみよう！ (because it is ～)';
+    adviceDetail = `好きなものを答えたあとに「because it is delicious (美味しいから)」や「because it is fun (楽しいから)」と理由を伝えると、もっと気持ちが伝わりますよ！`;
+    adviceExample = `I like sushi because it is delicious.`;
+  } else if (!hasAskedQuestion && !hasUsedHowAboutYou) {
+    // Child hasn't asked questions yet. Advise asking!
+    adviceTitle = '留学生に質問を聞き返してみよう！';
+    adviceDetail = `自分のことを答えたあとに「What food do you like?」や「How about you?」と ${shortName} に聞き返してみると、会話のキャッチボールがさらに弾みますよ！`;
+    adviceExample = `What animal do you like, ${shortName}?`;
+  } else if (hasAskedQuestion && !hasUsedICan) {
+    // Child asked questions! Next, try talking about abilities (I can)
+    adviceTitle = 'できること・特技を伝えてみよう！ (I can ～)';
+    adviceDetail = `「I can play soccer (サッカーができます)」や「I can swim (泳げます)」のように、自分の得意なことを ${shortName} に伝えてみましょう！`;
+    adviceExample = `I can play soccer. Can you play soccer, ${shortName}?`;
+  } else {
+    // General high-level progression
+    adviceTitle = '相槌や感想を一言プラスしてみよう！';
+    adviceDetail = `相手の答えを聞いたあとに「Nice! (いいね！)」や「Sounds good! (いいね！)」とリアクションすると、もっと自然な英会話になりますよ！`;
+    adviceExample = `Sounds good! I like it too!`;
+  }
+
+  // 3. Dynamic Good Points based on actual utterances
+  const firstChildText = childTexts[0] || '';
+  const secondChildText = childTexts[1] || '';
+
+  const goodPoint1 = firstChildText
+    ? `「${firstChildText}」のように、自分の思いや答えを堂々と英語で伝えようとする姿勢がとても素晴らしかったです！`
+    : `${studentName || 'あなた'}の思いを、前向きに英語で伝えようとする姿勢がとても素敵でした！`;
+
+  const goodPoint2 = secondChildText
+    ? `${persona.name} (${persona.countryJapanese}留学生) の言葉をよく聞き、「${secondChildText}」とスムーズに会話のキャッチボールを続けられました！`
+    : `${persona.name} (${persona.countryJapanese}留学生) からの質問にしっかりと耳を傾け、英語でのやり取りに挑戦できました！`;
+
+  const goodPoint3 = totalWords > 0
+    ? `合計 ${totalWords} 語の英語を発話し、最後まで集中して対話練習をやり遂げることができました！`
+    : `最後まで諦めずに留学生との英会話に挑戦できました！大きな自信にしてくださいね。`;
+
+  // 4. Dynamic Overall Comment reflecting persona culture and conversation
+  let topicSummary = 'お互いのこと';
+  if (allChildTextLower.includes('sushi') || allChildTextLower.includes('food') || allChildTextLower.includes('ramen')) {
+    topicSummary = '美味しい食べ物のこと';
+  } else if (allChildTextLower.includes('soccer') || allChildTextLower.includes('sport') || allChildTextLower.includes('baseball')) {
+    topicSummary = '楽しいスポーツのこと';
+  } else if (allChildTextLower.includes('dog') || allChildTextLower.includes('animal') || allChildTextLower.includes('cat')) {
+    topicSummary = '可愛い動物のこと';
+  } else if (allChildTextLower.includes('fuji') || allChildTextLower.includes('shizuoka')) {
+    topicSummary = '素敵な静岡のこと';
+  }
+
+  const overallComment = `${studentName || '児童'}さん、${persona.countryJapanese}の留学生 ${persona.name} と${topicSummary}について楽しく対話練習ができましたね！本番の静岡大学留学生交流会でも、笑顔でたくさん話しかけてみてくださいね！`;
 
   return {
-    goodPoints: [praisePoint1, praisePoint2, praisePoint3],
+    goodPoints: [goodPoint1, goodPoint2, goodPoint3],
     improvementAdvice: {
-      title: '質問を聞き返してみよう！ (How about you?)',
+      title: adviceTitle,
       detail: adviceDetail,
-      examplePhrase: examplePhrase,
+      examplePhrase: adviceExample,
     },
-    overallComment: `${studentName || '児童'}さん、${persona.countryJapanese}の留学生 ${persona.name} との対話練習お疲れ様でした！本番の静岡大学国際交流会でも、その素敵な笑顔でたくさん話しかけてみてくださいね！`,
-    keyPhrases: [
-      {
-        english: persona.fillerWords[0] || 'Awesome!',
-        japanese: '最高！ / 素晴らしい！',
-        culturalNote: `${persona.countryJapanese}でよく使われる親しみやすい相槌です`,
-      },
-      {
-        english: 'I like ~',
-        japanese: '私は〜が好きです',
-        culturalNote: '好きなものを相手に伝える基本のフレーズ',
-      },
-      {
-        english: 'How about you?',
-        japanese: 'あなたはどうですか？',
-        culturalNote: '相手に質問を投げかける便利な表現',
-      },
-    ],
+    overallComment,
+    keyPhrases: extractedPhrases,
     encounteredVocab: encounteredVocab || [],
     aiStudent: persona,
     stats: {
@@ -177,4 +730,3 @@ export function generateFallbackFeedback(
     },
   };
 }
-

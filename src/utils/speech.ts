@@ -457,23 +457,30 @@ export function createSpeechRecognitionInstance(
     recognition.interimResults = true;
     recognition.lang = 'en-US'; // Broadest accuracy for elementary English speech
 
+    // Store accumulated final transcripts across speech events
+    let accumulatedFinal = '';
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onresult = (event: any) => {
       try {
-        let interimTranscript = '';
-        let finalTranscript = '';
+        let currentInterim = '';
+        let currentFinal = '';
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
+        for (let i = 0; i < event.results.length; ++i) {
+          const item = event.results[i];
+          if (item && item[0]) {
+            if (item.isFinal) {
+              currentFinal += item[0].transcript + ' ';
+            } else {
+              currentInterim += item[0].transcript;
+            }
           }
         }
 
-        const currentText = finalTranscript || interimTranscript;
-        const isFinal = Boolean(finalTranscript);
-        onResult(currentText, isFinal);
+        const rawCombined = (currentFinal + currentInterim).trim();
+        const formatted = formatSpeechText(rawCombined);
+        const hasFinal = Boolean(currentFinal.trim());
+        onResult(formatted || rawCombined, hasFinal);
       } catch (e) {
         console.warn('Speech onresult error:', e);
       }
@@ -507,44 +514,90 @@ export function countEnglishWords(text: string): number {
 }
 
 /**
- * Format speech recognition text: capitalization, proper nouns, and punctuation
+ * Format speech recognition text: capitalization, contractions, proper nouns, sentence boundaries, and punctuation
  */
 export function formatSpeechText(text: string): string {
   if (!text) return '';
   let trimmed = text.trim();
   if (trimmed.length === 0) return '';
 
-  // Capitalize first letter
-  trimmed = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
-
-  // Capitalize standalone 'i' to 'I'
+  // Expand / fix common contractions
+  trimmed = trimmed.replace(/\bi\s*m\b/gi, "I'm");
+  trimmed = trimmed.replace(/\bi\s*d\b/gi, "I'd");
+  trimmed = trimmed.replace(/\bi\s*ll\b/gi, "I'll");
+  trimmed = trimmed.replace(/\bi\s*ve\b/gi, "I've");
   trimmed = trimmed.replace(/\bi\b/g, 'I');
 
-  // Capitalize common proper nouns / country names / city names
+  // Insert periods or question marks before new sentence starters if no punctuation exists
+  // e.g. "I like sushi what food do you like" -> "I like sushi. What food do you like"
+  const sentenceStarters = [
+    'what', 'where', 'who', 'how', 'when', 'why',
+    'do you', 'can you', 'are you', 'is it',
+    'my name is', 'my favorite', 'my favourite',
+    'i like', 'i love', 'i can', 'i play', 'i want', "i'm", 'i am',
+    'nice to meet you', 'hello', 'hi'
+  ];
+
+  // Tokenize or separate sentences intelligently
+  for (const starter of sentenceStarters) {
+    const regex = new RegExp(`(?<=[a-zA-Z0-9])\\s+(${starter})\\b`, 'gi');
+    trimmed = trimmed.replace(regex, (match, p1, offset, fullStr) => {
+      // Check if previous character before space was already punctuation
+      const beforeMatch = fullStr.slice(0, offset).trim();
+      const lastC = beforeMatch.slice(-1);
+      if (lastC === '.' || lastC === '?' || lastC === '!' || lastC === ',') {
+        return ` ${p1}`;
+      }
+      const lowerBefore = beforeMatch.toLowerCase();
+      if (
+        lowerBefore.startsWith('what') ||
+        lowerBefore.startsWith('where') ||
+        lowerBefore.startsWith('how') ||
+        lowerBefore.startsWith('do you') ||
+        lowerBefore.startsWith('can you')
+      ) {
+        return `? ${p1}`;
+      }
+      return `. ${p1}`;
+    });
+  }
+
+  // Capitalize after every sentence boundary (. or ? or !)
+  trimmed = trimmed.replace(/(?:^|[.?!]\s+)([a-z])/g, (match, letter) => match.toUpperCase());
+
+  // Capitalize common proper nouns, country names, city names
   const properNouns = [
-    'japan', 'shizuoka', 'hamamatsu', 'tokyo', 'mt. fuji',
-    'oliver', 'emma', 'liam', 'chloe', 'bence', 'zofia', 'rahul', 'linh', 'aung',
-    'uk', 'usa', 'australia', 'canada', 'hungary', 'poland', 'bangladesh', 'vietnam', 'myanmar'
+    'japan', 'shizuoka', 'hamamatsu', 'tokyo', 'mt. fuji', 'fuji',
+    'oliver', 'emma', 'liam', 'chloe', 'bence', 'zofia', 'rahul', 'linh', 'aung', 'ken', 'yuki', 'taro', 'hanako',
+    'uk', 'usa', 'australia', 'canada', 'hungary', 'poland', 'bangladesh', 'vietnam', 'myanmar',
+    'oxford', 'california', 'sydney', 'toronto', 'budapest', 'warsaw', 'dhaka', 'hanoi', 'yangon'
   ];
   properNouns.forEach((noun) => {
     const regex = new RegExp(`\\b${noun}\\b`, 'gi');
-    trimmed = trimmed.replace(regex, (match) => match.charAt(0).toUpperCase() + match.slice(1).toLowerCase());
+    trimmed = trimmed.replace(regex, (match) => {
+      if (match.toLowerCase() === 'uk' || match.toLowerCase() === 'usa') return match.toUpperCase();
+      if (match.toLowerCase() === 'mt. fuji') return 'Mt. Fuji';
+      return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
+    });
   });
 
-  // Ensure proper end punctuation (. or ?)
+  // Ensure overall final end punctuation (. or ?)
   const lastChar = trimmed.slice(-1);
   if (lastChar !== '.' && lastChar !== '?' && lastChar !== '!') {
-    const lower = trimmed.toLowerCase();
+    const sentences = trimmed.split(/[.?!]\s+/);
+    const lastSentence = sentences[sentences.length - 1].toLowerCase().trim();
     if (
-      lower.startsWith('what') ||
-      lower.startsWith('where') ||
-      lower.startsWith('who') ||
-      lower.startsWith('how') ||
-      lower.startsWith('do you') ||
-      lower.startsWith('can you') ||
-      lower.startsWith('is') ||
-      lower.startsWith('are') ||
-      lower.startsWith('what is')
+      lastSentence.startsWith('what') ||
+      lastSentence.startsWith('where') ||
+      lastSentence.startsWith('who') ||
+      lastSentence.startsWith('how') ||
+      lastSentence.startsWith('do you') ||
+      lastSentence.startsWith('can you') ||
+      lastSentence.startsWith('is') ||
+      lastSentence.startsWith('are') ||
+      lastSentence.startsWith('what is') ||
+      lastSentence.endsWith('how about you') ||
+      lastSentence.endsWith('and you')
     ) {
       trimmed += '?';
     } else {

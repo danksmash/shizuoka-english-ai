@@ -391,7 +391,8 @@ export default function App() {
         currentProf.selectedTopic,
         trimmed,
         turnCountRef.current,
-        currentProf.name
+        currentProf.name,
+        messagesRef.current
       );
 
       extractAndAddVocab(localReply.reply);

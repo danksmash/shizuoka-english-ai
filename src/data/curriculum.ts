@@ -381,7 +381,12 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
 ];
 
 export function getAIStudentById(id: string): AIStudentProfile {
-  return AI_STUDENTS_LIST.find((s) => s.id === id) || AI_STUDENTS_LIST[0];
+  const exact = AI_STUDENTS_LIST.find((s) => s.id === id);
+  if (exact) return exact;
+  const prefix = id.split('_')[0];
+  const byPrefix = AI_STUDENTS_LIST.find((s) => s.id.startsWith(prefix));
+  if (byPrefix) return byPrefix;
+  return AI_STUDENTS_LIST[0];
 }
 
 export const DIALOGUE_TOPICS: TopicOption[] = [
