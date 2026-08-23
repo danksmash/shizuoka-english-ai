@@ -57,188 +57,307 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
     });
   };
 
+  const selectedTopicData = DIALOGUE_TOPICS.find((t) => t.id === selectedTopic);
+
   return (
-    <div className="w-full min-h-screen bg-gradient-to-b from-slate-50 via-blue-50/20 to-slate-100 p-2 sm:p-4 md:p-5 flex flex-col justify-between max-w-7xl mx-auto overflow-y-auto">
-      {/* Top Hero Banner */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl py-2.5 px-3.5 sm:py-3 sm:px-5 border border-slate-200 shadow-xs mb-3 flex flex-col sm:flex-row items-center justify-between gap-3 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-xs flex-shrink-0">
-            <Globe2 className="w-6 h-6" />
+    <div className="w-full min-h-screen bg-gradient-to-b from-slate-50 via-blue-50/25 to-slate-100 p-2 sm:p-3 md:p-4 flex flex-col justify-between max-w-7xl mx-auto">
+      {/* Top Header Banner - Streamlined & Compact for Chromebook/Tablet Viewports */}
+      <header className="bg-white rounded-2xl py-2 px-3 sm:py-2.5 sm:px-4 border border-slate-200 shadow-2xs mb-2.5 flex flex-col sm:flex-row items-center justify-between gap-2.5 flex-shrink-0">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-2xs flex-shrink-0">
+            <Globe2 className="w-5 h-5" />
           </div>
-          <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+              <span className="bg-blue-100 text-blue-800 text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
                 静岡大学 留学生交流プログラム
               </span>
-              <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
+              <span className="bg-emerald-100 text-emerald-800 text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
                 小学校５・６年生向け English
               </span>
             </div>
-            <h1 className="text-lg sm:text-xl md:text-2xl font-black text-slate-900 tracking-tight leading-tight">
-              AI留学生 1対1 英会話プラクティス
+            <h1 className="text-base sm:text-lg md:text-xl font-black text-slate-900 tracking-tight leading-tight truncate">
+              AI留学生 1対1 えいご対話プラクティス
             </h1>
           </div>
         </div>
 
-        {/* Student Name Input & Friendly Prompt */}
-        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-blue-900 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl">
-            <span>✨ Let's talk in English! 好きなことや趣味をAI留学生に英語で伝えてみよう！</span>
+        {/* Student Name Input & Cheerful Prompt */}
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end flex-wrap sm:flex-nowrap">
+          <div className="hidden md:flex items-center gap-1 text-[11px] font-bold text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-xl">
+            <span>✨ 好きなことや趣味を英語で伝えてみよう！</span>
           </div>
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-300 px-3.5 py-1.5 rounded-2xl w-full sm:w-auto shadow-2xs flex-shrink-0">
-            <User className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500 flex-shrink-0" />
-            <span className="text-xs sm:text-sm font-bold text-slate-700 whitespace-nowrap">お名前:</span>
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 px-3 py-1 rounded-xl shadow-2xs flex-shrink-0 w-full sm:w-auto justify-between sm:justify-start">
+            <div className="flex items-center gap-1.5">
+              <User className="w-4 h-4 text-slate-500 flex-shrink-0" />
+              <span className="text-xs sm:text-sm font-bold text-slate-700 whitespace-nowrap">お名前:</span>
+            </div>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="ニックネーム等"
-              className="bg-white border border-slate-300 rounded-xl px-2.5 py-1 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 w-28 sm:w-32"
+              className="bg-white border border-slate-300 rounded-lg px-2 py-0.5 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 w-32 sm:w-36"
             />
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Main Configuration Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 flex-1 mb-3.5">
-        {/* Left Section: 9 Exchange Students Grid (All 9 Visible) */}
-        <div className="lg:col-span-8 flex flex-col">
-          <div className="flex items-center justify-between mb-2 flex-shrink-0">
-            <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
-              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-black shadow-2xs">
+      {/* Main Configuration Grid (7 Cols Left / 5 Cols Right on desktop/Chromebook) */}
+      <main className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 sm:gap-3 flex-1 mb-2.5 items-start">
+        {/* Left Section: 9 Exchange Students Grid */}
+        <section className="lg:col-span-7 xl:col-span-7 flex flex-col">
+          <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
+            <h2 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-1.5">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black shadow-2xs">
                 1
               </span>
-              <span>会話するAI留学生をえらぼう（全9名・9カ国）</span>
+              <span>会話するAI留学生をえらぼう（全9名）</span>
             </h2>
-            <span className="text-xs sm:text-sm font-bold text-blue-700 bg-blue-50 px-3 py-0.5 rounded-full border border-blue-200">
-              全9名から選択中
+            <span className="text-[11px] sm:text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+              {selectedStudent.flag} {selectedStudent.countryJapanese} 選択中
             </span>
           </div>
 
-          {/* 3x3 Grid for 9 Students */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+          {/* Responsive 3-Column / 2-Column Grid for 9 Students */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {AI_STUDENTS_LIST.map((student) => {
               const isSelected = student.id === selectedStudentId;
               const isPlaying = previewPlayingId === student.id;
 
               return (
-                <div
+                <button
+                  type="button"
                   key={student.id}
                   onClick={() => setSelectedStudentId(student.id)}
-                  className={`relative p-2.5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                  aria-pressed={isSelected}
+                  className={`relative p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between text-left ${
                     isSelected
-                      ? 'bg-blue-50/95 border-blue-600 shadow-md ring-2 ring-blue-400/40'
+                      ? 'bg-blue-50/95 border-blue-600 shadow-sm ring-2 ring-blue-400/40'
                       : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-slate-50/90 shadow-2xs'
                   }`}
                 >
-                  {/* Selection Checkmark */}
+                  {/* Selection Indicator Checkmark */}
                   {isSelected && (
-                    <div className="absolute top-2 right-2 text-blue-600 z-10">
-                      <CheckCircle2 className="w-5 h-5 fill-blue-600 text-white" />
+                    <div className="absolute top-1.5 right-1.5 text-blue-600 z-10">
+                      <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 fill-blue-600 text-white" />
                     </div>
                   )}
 
-                  <div className="flex flex-col h-full justify-between gap-1.5">
+                  <div className="flex flex-col h-full justify-between gap-1">
                     {/* Country & Flag Header */}
-                    <div className="flex items-center gap-1.5 pr-5 min-w-0">
-                      <span className="text-2xl sm:text-3xl leading-none flex-shrink-0">{student.flag}</span>
-                      <span className="text-xs sm:text-sm font-black text-slate-900 truncate tracking-tight">
-                        {student.country} ({student.countryNative})
+                    <div className="flex items-center gap-1 pr-4 min-w-0">
+                      <span className="text-xl sm:text-2xl leading-none flex-shrink-0">{student.flag}</span>
+                      <span className="text-[11px] sm:text-xs font-black text-slate-900 truncate tracking-tight">
+                        {student.countryNative}
                       </span>
                     </div>
 
-                    {/* Avatar Portrait & Essential Info (Illustration, Name, Age, Accent) */}
-                    <div className="flex items-center gap-2.5 my-1 min-w-0">
-                      <div className="w-20 h-20 sm:w-22 sm:h-22 border border-slate-200 shadow-2xs bg-slate-100 rounded-2xl overflow-hidden flex-shrink-0 flex items-center justify-center">
+                    {/* Avatar Portrait & Essential Info */}
+                    <div className="flex items-center gap-2 my-0.5 min-w-0">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 border border-slate-200 shadow-2xs bg-slate-100 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
                         <StudentAvatar student={student} size="custom" className="w-full h-full object-cover" />
                       </div>
                       <div className="min-w-0 flex-1 flex flex-col justify-center">
-                        <h3 className="text-base sm:text-lg font-black text-slate-900 leading-tight truncate">
+                        <h3 className="text-xs sm:text-sm font-black text-slate-900 leading-tight truncate">
                           {student.name}
                         </h3>
-                        <p className="text-xs sm:text-sm font-extrabold text-blue-700 truncate leading-tight mt-0.5">
+                        <p className="text-[11px] sm:text-xs font-bold text-blue-700 truncate leading-tight mt-0.5">
                           {student.japaneseName}
                         </p>
-                        <p className="text-xs sm:text-sm font-bold text-slate-600 truncate mt-0.5">
-                          {student.age}歳・{student.city.split(' ')[0]}
+                        <p className="text-[10px] sm:text-[11px] font-semibold text-slate-600 truncate mt-0.5">
+                          {student.age}歳 · {student.city.split(' ')[0]}
                         </p>
-                        {/* Accent Badge */}
-                        <div className="mt-1">
-                          <span className="inline-block text-[11px] sm:text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded-md truncate max-w-full">
-                            🗣️ {student.accentName.split(' ')[0]}
-                          </span>
-                        </div>
                       </div>
                     </div>
 
+                    {/* Accent Tag */}
+                    <div className="truncate">
+                      <span className="inline-block text-[10px] font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-1.5 py-0.5 rounded-md truncate max-w-full">
+                        🗣️ {student.accentName.split(' ')[0]}
+                      </span>
+                    </div>
+
                     {/* Voice Preview Button */}
-                    <button
-                      type="button"
+                    <div
                       onClick={(e) => handlePlayVoicePreview(student, e)}
-                      className={`w-full py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                      role="button"
+                      tabIndex={0}
+                      className={`w-full py-1 px-1.5 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer border mt-0.5 ${
                         isPlaying
                           ? 'bg-blue-600 text-white border-blue-600 shadow-2xs animate-pulse'
                           : 'bg-white hover:bg-blue-50 text-blue-700 border-blue-200 hover:border-blue-300 shadow-2xs'
                       }`}
                     >
-                      <Volume2 className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span className="truncate">{isPlaying ? '再生中...' : '声を聞いてみる'}</span>
-                    </button>
+                      <Volume2 className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">{isPlaying ? '再生中...' : '声を聞く'}</span>
+                    </div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
-        </div>
+        </section>
 
-        {/* Right Section: Selected Student Profile & Topic & Time */}
-        <div className="lg:col-span-4 flex flex-col justify-between gap-3 min-h-0">
-          {/* Selected Student Detail Card */}
-          <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200 shadow-2xs flex flex-col justify-between">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl border-2 border-blue-500 shadow-2xs flex-shrink-0 overflow-hidden">
-                <StudentAvatar student={selectedStudent} size="custom" className="w-full h-full" />
+        {/* Right Section: Selected Student Profile & Settings (Level, Topic, Time) */}
+        <section className="lg:col-span-5 xl:col-span-5 flex flex-col gap-2.5 min-h-0">
+          {/* Selected Student Detailed Profile Card - Completely Responsive & Never Overflowing */}
+          <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200 shadow-2xs flex flex-col gap-2">
+            {/* Header with Avatar & Basic Identity */}
+            <div className="flex items-start gap-2.5">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl border-2 border-blue-500 shadow-2xs flex-shrink-0 overflow-hidden">
+                <StudentAvatar student={selectedStudent} size="custom" className="w-full h-full object-cover" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 mb-0.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-xl leading-none">{selectedStudent.flag}</span>
-                  <span className="text-xs sm:text-sm font-extrabold text-slate-800">
-                    {selectedStudent.country} ({selectedStudent.countryNative})
+                  <span className="text-xs sm:text-sm font-black text-slate-800">
+                    {selectedStudent.countryJapanese} ({selectedStudent.countryNative})
                   </span>
                 </div>
-                <h3 className="text-base sm:text-lg font-black text-slate-900 truncate">
+                <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug">
                   {selectedStudent.name}
                 </h3>
-                <p className="text-xs sm:text-sm font-bold text-blue-700 truncate">
-                  {selectedStudent.japaneseName} ({selectedStudent.age}歳・{selectedStudent.city})
+                <p className="text-xs font-bold text-blue-700">
+                  {selectedStudent.japaneseName} · {selectedStudent.age}歳 · {selectedStudent.city}
                 </p>
+                <div className="mt-1">
+                  <span className="inline-block text-[10px] sm:text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                    🗣️ {selectedStudent.accentName}
+                  </span>
+                </div>
               </div>
             </div>
 
-            <p className="text-xs text-slate-700 leading-snug bg-blue-50/70 p-2.5 rounded-xl border border-blue-200/70 mb-2 font-medium">
+            {/* Natural Wrapping Bio */}
+            <p className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-blue-50/70 p-2.5 rounded-xl border border-blue-200/60 font-medium">
               {selectedStudent.japaneseBio}
             </p>
 
-            <div className="space-y-1.5 text-xs font-medium text-slate-700">
-              <p className="flex items-center gap-1.5 truncate">
-                <span className="font-bold text-slate-900 flex-shrink-0">🎓 専攻:</span>
-                <span className="truncate">{selectedStudent.major}</span>
-              </p>
-              <p className="flex items-center gap-1.5 truncate">
+            {/* Profile Meta Details (Likes, Major, Landmark) */}
+            <div className="grid grid-cols-1 gap-1.5 text-xs text-slate-700 font-medium">
+              <div className="flex items-start gap-1.5">
                 <span className="font-bold text-slate-900 flex-shrink-0">❤️ 好き:</span>
-                <span className="truncate">{selectedStudent.likes.slice(0, 2).join(', ')}</span>
-              </p>
+                <span className="text-slate-700 leading-snug break-words">
+                  {selectedStudent.likes.join('、')}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-slate-900 flex-shrink-0">🎓 専攻:</span>
+                <span className="text-slate-700 truncate">{selectedStudent.major}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-slate-900 flex-shrink-0">🏛️ 名所:</span>
+                <span className="text-slate-700 truncate">{selectedStudent.heritageLandmark}</span>
+              </div>
             </div>
           </div>
 
-          {/* Time Duration Selector */}
-          <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-2xs">
-            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black">
+          {/* English Conversation Level Selector (Step 2) */}
+          <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200 shadow-2xs">
+            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-1.5">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black shadow-2xs">
                 2
               </span>
+              <Gauge className="w-4 h-4 text-blue-600" />
+              <span>英語のレベルをえらぼう</span>
+            </h2>
+
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSelectedLevel('easy')}
+                className={`py-1.5 px-1 sm:py-2 sm:px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
+                  selectedLevel === 'easy'
+                    ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-2 ring-emerald-400/30 font-bold shadow-2xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+              >
+                <span className="text-xs sm:text-sm font-extrabold flex items-center gap-1">
+                  <span>🟢</span> やさしい
+                </span>
+                <span className="text-[10px] text-slate-600 mt-0.5">短い1文で会話</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedLevel('normal')}
+                className={`py-1.5 px-1 sm:py-2 sm:px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
+                  selectedLevel === 'normal'
+                    ? 'bg-amber-50 border-amber-600 text-amber-950 ring-2 ring-amber-400/30 font-bold shadow-2xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+              >
+                <span className="text-xs sm:text-sm font-extrabold flex items-center gap-1">
+                  <span>🟡</span> ふつう
+                </span>
+                <span className="text-[10px] text-slate-600 mt-0.5">1〜2文 (おすすめ)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedLevel('hard')}
+                className={`py-1.5 px-1 sm:py-2 sm:px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
+                  selectedLevel === 'hard'
+                    ? 'bg-blue-50 border-blue-600 text-blue-950 ring-2 ring-blue-400/30 font-bold shadow-2xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+              >
+                <span className="text-xs sm:text-sm font-extrabold flex items-center gap-1">
+                  <span>🔵</span> むずかしい
+                </span>
+                <span className="text-[10px] text-slate-600 mt-0.5">2〜3文で挑戦</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Dialogue Topic Selector (Step 3) - Compact Responsive Layout */}
+          <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200 shadow-2xs">
+            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-1.5">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black shadow-2xs">
+                3
+              </span>
+              <MessageCircle className="w-4 h-4 text-blue-600" />
+              <span>対話テーマをえらぶ</span>
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-1.5">
+              {DIALOGUE_TOPICS.map((topic) => {
+                const isSelected = selectedTopic === topic.id;
+                return (
+                  <button
+                    key={topic.id}
+                    type="button"
+                    onClick={() => setSelectedTopic(topic.id)}
+                    className={`py-1.5 px-2.5 rounded-xl text-left transition-all cursor-pointer flex items-center justify-between border ${
+                      isSelected
+                        ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-2 ring-emerald-400/30 font-bold shadow-2xs'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1 pr-1.5">
+                      <p className="text-xs sm:text-sm font-bold text-slate-900 truncate leading-tight">
+                        {topic.title}
+                      </p>
+                      <p className="text-[10px] text-slate-600 truncate">{topic.subTitle}</p>
+                    </div>
+                    {isSelected && (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Time Duration Selector (Step 4) */}
+          <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200 shadow-2xs">
+            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-1.5">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black shadow-2xs">
+                4
+              </span>
               <Clock className="w-4 h-4 text-blue-600" />
-              <span>対話時間をえらぶ (1〜10分)</span>
+              <span>対話時間をえらぶ</span>
             </h2>
 
             <div className="grid grid-cols-5 gap-1.5">
@@ -247,7 +366,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                   key={mins}
                   type="button"
                   onClick={() => setDurationMinutes(mins)}
-                  className={`py-2 rounded-xl font-bold text-xs sm:text-sm flex flex-col items-center justify-center transition-all cursor-pointer border ${
+                  className={`py-1.5 sm:py-2 rounded-xl font-bold text-xs sm:text-sm flex flex-col items-center justify-center transition-all cursor-pointer border ${
                     durationMinutes === mins
                       ? 'bg-blue-600 text-white border-blue-600 shadow-2xs ring-2 ring-blue-400/30'
                       : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
@@ -259,116 +378,21 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
               ))}
             </div>
           </div>
+        </section>
+      </main>
 
-          {/* English Level Selector */}
-          <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-2xs">
-            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black">
-                3
-              </span>
-              <Gauge className="w-4 h-4 text-blue-600" />
-              <span>英語のレベルをえらぼう</span>
-            </h2>
-
-            <div className="grid grid-cols-3 gap-1.5">
-              <button
-                type="button"
-                onClick={() => setSelectedLevel('easy')}
-                className={`py-2 px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
-                  selectedLevel === 'easy'
-                    ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-2 ring-emerald-400/30 font-bold shadow-2xs'
-                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                }`}
-              >
-                <span className="text-xs sm:text-sm font-extrabold flex items-center gap-1">
-                  <span>🟢</span> やさしい
-                </span>
-                <span className="text-[10px] text-slate-500 mt-0.5">短い1文で会話</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedLevel('normal')}
-                className={`py-2 px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
-                  selectedLevel === 'normal'
-                    ? 'bg-amber-50 border-amber-600 text-amber-950 ring-2 ring-amber-400/30 font-bold shadow-2xs'
-                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                }`}
-              >
-                <span className="text-xs sm:text-sm font-extrabold flex items-center gap-1">
-                  <span>🟡</span> ふつう
-                </span>
-                <span className="text-[10px] text-slate-500 mt-0.5">1〜2文 (おすすめ)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedLevel('hard')}
-                className={`py-2 px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
-                  selectedLevel === 'hard'
-                    ? 'bg-blue-50 border-blue-600 text-blue-950 ring-2 ring-blue-400/30 font-bold shadow-2xs'
-                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                }`}
-              >
-                <span className="text-xs sm:text-sm font-extrabold flex items-center gap-1">
-                  <span>🔵</span> むずかしい
-                </span>
-                <span className="text-[10px] text-slate-500 mt-0.5">2〜3文でチャレンジ</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Topic Selector */}
-          <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-2xs">
-            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black">
-                4
-              </span>
-              <MessageCircle className="w-4 h-4 text-blue-600" />
-              <span>対話テーマをえらぶ</span>
-            </h2>
-
-            <div className="space-y-1.5">
-              {DIALOGUE_TOPICS.map((topic) => {
-                const isSelected = selectedTopic === topic.id;
-                return (
-                  <button
-                    key={topic.id}
-                    type="button"
-                    onClick={() => setSelectedTopic(topic.id)}
-                    className={`w-full py-1.5 px-2.5 rounded-xl text-left transition-all cursor-pointer flex items-center justify-between border ${
-                      isSelected
-                        ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-2 ring-emerald-400/30 font-bold shadow-2xs'
-                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1 pr-2">
-                      <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">{topic.title}</p>
-                      <p className="text-[10px] sm:text-[11px] text-slate-600 truncate">{topic.subTitle}</p>
-                    </div>
-                    {isSelected && (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Start Button Footer */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl py-2.5 px-3.5 sm:py-3 sm:px-5 border border-slate-200 shadow-md flex flex-col sm:flex-row items-center justify-between gap-3 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shadow-2xs flex-shrink-0">
+      {/* Start Button & Summary Footer */}
+      <footer className="bg-white rounded-2xl py-2 px-3 sm:py-2.5 sm:px-4 border border-slate-200 shadow-md flex flex-col sm:flex-row items-center justify-between gap-2.5 flex-shrink-0">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shadow-2xs flex-shrink-0">
             <Sparkles className="w-5 h-5 text-amber-600" />
           </div>
-          <div>
-            <p className="text-xs sm:text-sm md:text-base font-bold text-slate-900">
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm md:text-base font-bold text-slate-900 truncate">
               {name}さん × {selectedStudent.name} ({selectedStudent.countryJapanese} {selectedStudent.flag})
             </p>
-            <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
-              対話時間: {durationMinutes}分 | レベル: {selectedLevel === 'easy' ? '🟢 やさしい' : selectedLevel === 'hard' ? '🔵 むずかしい' : '🟡 ふつう'} | テーマ: {DIALOGUE_TOPICS.find((t) => t.id === selectedTopic)?.title}
+            <p className="text-[10px] sm:text-xs text-slate-500 font-medium truncate">
+              時間: {durationMinutes}分 | レベル: {selectedLevel === 'easy' ? '🟢 やさしい' : selectedLevel === 'hard' ? '🔵 むずかしい' : '🟡 ふつう'} | テーマ: {selectedTopicData?.title}
             </p>
           </div>
         </div>
@@ -376,16 +400,16 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
         <button
           type="button"
           onClick={handleStart}
-          className="w-full sm:w-auto px-6 sm:px-8 py-2.5 sm:py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl sm:rounded-2xl font-black text-sm sm:text-base md:text-lg shadow-md flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer flex-shrink-0"
+          className="w-full sm:w-auto px-6 sm:px-8 py-2 sm:py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl sm:rounded-2xl font-black text-sm sm:text-base shadow-md flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer flex-shrink-0"
         >
           <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-white" />
           <span>対話をスタートする！ (Start)</span>
         </button>
-      </div>
+      </footer>
 
-      {/* Safety & Educational Disclosure Note */}
-      <div className="mt-2 text-center text-[11px] text-slate-500 font-medium">
-        <span>本アプリは学校での英語学習を目的として設計されています。AI（Anthropic API）を利用した英語対話練習を行います。利用にあたっては学校・教育委員会のルールに従ってください。</span>
+      {/* Educational & Safety Disclosure */}
+      <div className="mt-1.5 text-center text-[10px] sm:text-[11px] text-slate-500 font-medium">
+        <span>本アプリは学校での英語学習を目的として設計されています。AI（Anthropic API）を利用した英語対話練習を行います。</span>
       </div>
     </div>
   );
