@@ -48,17 +48,22 @@ function calculateDetailedViewportMetrics(width: number, height: number, name: s
   const cardPadding = width >= 640 ? 10 : 8;
   const availableContentWidth = cardWidth - cardPadding * 2;
 
-  // 50% Illustration Area & 50% Profile Area Layout:
-  const illustrationAreaWidth = Math.round(availableContentWidth * 0.48);
-  const profileAreaWidth = availableContentWidth - illustrationAreaWidth; // 52%
   const cardHeight = width >= 1280 ? 156 : (width >= 1024 ? 152 : 144);
 
-  // Main area within card utilizes nearly the entire card height (excluding minimal card padding)
+  // Top Header ~24px, Bottom Voice Button ~30px, Card Padding, and gaps
+  const topHeaderHeight = 24;
+  const bottomButtonHeight = 30;
+  const cardGaps = 8;
   const mainAreaWidth = availableContentWidth;
-  const mainAreaHeight = cardHeight - cardPadding * 2;
+  const mainAreaHeight = cardHeight - cardPadding * 2 - topHeaderHeight - bottomButtonHeight - cardGaps;
+  const middleAreaHeight = mainAreaHeight;
 
-  // Image sizing inside 50% area (aspect-square filling the left half):
-  const actualImageWidth = Math.min(illustrationAreaWidth, mainAreaHeight);
+  // Middle Section: 46% Illustration Area & 54% Profile Area Layout:
+  const illustrationAreaWidth = Math.round(availableContentWidth * 0.46);
+  const profileAreaWidth = availableContentWidth - illustrationAreaWidth; // 54%
+
+  // Image sizing inside Middle Left area (aspect-square filling up available space):
+  const actualImageWidth = Math.min(illustrationAreaWidth, middleAreaHeight + 12);
   const actualImageHeight = actualImageWidth;
 
   const illustrationAreaRatio = `${((illustrationAreaWidth / availableContentWidth) * 100).toFixed(1)}%`;

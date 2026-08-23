@@ -152,60 +152,63 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                     </div>
                   )}
 
-                  <div className="grid grid-cols-[48%_52%] sm:grid-cols-2 gap-1.5 sm:gap-2 items-center w-full h-full">
-                    {/* Left Half: Huge Illustration Dedicated Area */}
-                    <div className="w-full h-full flex items-center justify-center">
-                      <div className="w-full aspect-square border border-slate-200/90 shadow-2xs bg-slate-100 rounded-xl overflow-hidden flex items-center justify-center">
-                        <StudentAvatar student={student} size="custom" className="w-full h-full object-cover" />
+                  <div className="flex flex-col h-full justify-between gap-1 w-full">
+                    {/* 1. Top: Country Header (Larger text: Flag + English Country (Native Country)) */}
+                    <div className="flex items-center gap-1.5 min-w-0 pr-4">
+                      <span className="text-base sm:text-lg leading-none flex-shrink-0">{student.flag}</span>
+                      <span className="text-xs sm:text-[13px] font-black text-slate-900 tracking-tight truncate">
+                        {getStudentCountryDisplay(student)}
+                      </span>
+                    </div>
+
+                    {/* 2. Middle: Left Half (Huge Illustration) + Right Half (Profile Info) */}
+                    <div className="grid grid-cols-[46%_54%] sm:grid-cols-2 gap-1.5 sm:gap-2 items-center w-full min-w-0 flex-1 my-0.5">
+                      {/* Left Half: Large Illustration Dedicated Showcase */}
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="w-full aspect-square border border-slate-200/90 shadow-2xs bg-slate-100 rounded-xl overflow-hidden flex items-center justify-center">
+                          <StudentAvatar student={student} size="custom" className="w-full h-full object-cover" />
+                        </div>
+                      </div>
+
+                      {/* Right Half: English Name, Katakana, Age, City, Country Accent */}
+                      <div className="flex flex-col justify-center h-full min-w-0 gap-0.5">
+                        {/* English Name */}
+                        <h3 className="text-xs sm:text-[13.5px] font-black text-slate-900 leading-tight truncate">
+                          {student.name}
+                        </h3>
+
+                        {/* Katakana Name */}
+                        <p className="text-[11px] sm:text-xs font-bold text-blue-700 leading-tight truncate">
+                          {student.japaneseName}
+                        </p>
+
+                        {/* Age & City */}
+                        <p className="text-[10px] sm:text-[11px] font-semibold text-slate-600 leading-tight truncate">
+                          {student.age}歳 · {student.city.split(' ')[0]}
+                        </p>
+
+                        {/* Country Accent (e.g. アメリカ英語) */}
+                        <div className="truncate mt-0.5">
+                          <span className="inline-block text-[9.5px] sm:text-[10.5px] font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-1 py-0.5 rounded truncate max-w-full">
+                            🗣️ {student.accentName.split(' ')[0]}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Right Half: All Profile Info & Voice Button */}
-                    <div className="flex flex-col justify-between h-full min-w-0 py-0.5 gap-0.5">
-                      {/* 1. Country with Flag: English (Native) */}
-                      <div className="flex items-center gap-1 min-w-0">
-                        <span className="text-sm sm:text-base leading-none flex-shrink-0">{student.flag}</span>
-                        <span className="text-[10px] sm:text-[11px] font-black text-slate-800 tracking-tight truncate">
-                          {getStudentCountryDisplay(student)}
-                        </span>
-                      </div>
-
-                      {/* 2. English Name */}
-                      <h3 className="text-xs sm:text-[13px] font-black text-slate-900 leading-tight truncate">
-                        {student.name}
-                      </h3>
-
-                      {/* 3. Katakana Name */}
-                      <p className="text-[11px] sm:text-xs font-bold text-blue-700 leading-tight truncate">
-                        {student.japaneseName}
-                      </p>
-
-                      {/* 4. Age & Birthplace */}
-                      <p className="text-[10px] sm:text-[11px] font-semibold text-slate-600 leading-tight truncate">
-                        {student.age}歳 · {student.city.split(' ')[0]}
-                      </p>
-
-                      {/* 5. Country's English Accent (e.g. アメリカ英語) */}
-                      <div className="truncate">
-                        <span className="inline-block text-[9px] sm:text-[10px] font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-1 py-0.5 rounded truncate max-w-full">
-                          🗣️ {student.accentName.split(' ')[0]}
-                        </span>
-                      </div>
-
-                      {/* 6. Voice Preview Button */}
-                      <div
-                        onClick={(e) => handlePlayVoicePreview(student, e)}
-                        role="button"
-                        tabIndex={0}
-                        className={`w-full py-1 px-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer border min-h-[26px] sm:min-h-[28px] ${
-                          isPlaying
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-2xs animate-pulse'
-                            : 'bg-white hover:bg-blue-50 text-blue-700 border-blue-200 hover:border-blue-300 shadow-2xs'
-                        }`}
-                      >
-                        <Volume2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" />
-                        <span className="truncate">{isPlaying ? '再生中...' : '声を聞く'}</span>
-                      </div>
+                    {/* 3. Bottom: Voice Preview Button */}
+                    <div
+                      onClick={(e) => handlePlayVoicePreview(student, e)}
+                      role="button"
+                      tabIndex={0}
+                      className={`w-full py-1 sm:py-1.5 px-2 rounded-lg text-[10.5px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer border min-h-[28px] sm:min-h-[30px] ${
+                        isPlaying
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs animate-pulse'
+                          : 'bg-white hover:bg-blue-50 text-blue-700 border-blue-200 hover:border-blue-300 shadow-2xs'
+                      }`}
+                    >
+                      <Volume2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" />
+                      <span className="truncate">{isPlaying ? '再生中...' : '声を聞く'}</span>
                     </div>
                   </div>
                 </button>
