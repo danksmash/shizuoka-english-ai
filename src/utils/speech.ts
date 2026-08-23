@@ -438,6 +438,41 @@ export function isSpeechRecognitionSupported(): boolean {
   return 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
 }
 
+/**
+ * Pure accumulation helper for SpeechRecognition results
+ * Handles multiple results, interim -> final transition, pauses, and combining text without losing previous utterances
+ */
+export function accumulateSpeechResults(
+  results: Array<{ transcript: string; isFinal: boolean }>,
+  baseAccumulated: string = ''
+): { combinedRaw: string; formatted: string; hasFinal: boolean } {
+  let sessionFinal = '';
+  let sessionInterim = '';
+
+  for (const item of results) {
+    if (item.isFinal) {
+      sessionFinal += (sessionFinal ? ' ' : '') + item.transcript.trim();
+    } else {
+      sessionInterim += (sessionInterim ? ' ' : '') + item.transcript.trim();
+    }
+  }
+
+  let fullCombined = baseAccumulated.trim();
+  if (sessionFinal) {
+    fullCombined = (fullCombined ? fullCombined + ' ' : '') + sessionFinal;
+  }
+  if (sessionInterim) {
+    fullCombined = (fullCombined ? fullCombined + ' ' : '') + sessionInterim;
+  }
+
+  const formatted = formatSpeechText(fullCombined);
+  return {
+    combinedRaw: fullCombined,
+    formatted,
+    hasFinal: Boolean(sessionFinal.trim()),
+  };
+}
+
 export function createSpeechRecognitionInstance(
   onResult: (text: string, isFinal: boolean) => void,
   onError: (error: string) => void,
@@ -457,30 +492,22 @@ export function createSpeechRecognitionInstance(
     recognition.interimResults = true;
     recognition.lang = 'en-US'; // Broadest accuracy for elementary English speech
 
-    // Store accumulated final transcripts across speech events
-    let accumulatedFinal = '';
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onresult = (event: any) => {
       try {
-        let currentInterim = '';
-        let currentFinal = '';
-
+        const resultsArray: Array<{ transcript: string; isFinal: boolean }> = [];
         for (let i = 0; i < event.results.length; ++i) {
           const item = event.results[i];
           if (item && item[0]) {
-            if (item.isFinal) {
-              currentFinal += item[0].transcript + ' ';
-            } else {
-              currentInterim += item[0].transcript;
-            }
+            resultsArray.push({
+              transcript: item[0].transcript,
+              isFinal: Boolean(item.isFinal),
+            });
           }
         }
 
-        const rawCombined = (currentFinal + currentInterim).trim();
-        const formatted = formatSpeechText(rawCombined);
-        const hasFinal = Boolean(currentFinal.trim());
-        onResult(formatted || rawCombined, hasFinal);
+        const { formatted, combinedRaw, hasFinal } = accumulateSpeechResults(resultsArray);
+        onResult(formatted || combinedRaw, hasFinal);
       } catch (e) {
         console.warn('Speech onresult error:', e);
       }
@@ -529,10 +556,9 @@ export function formatSpeechText(text: string): string {
   trimmed = trimmed.replace(/\bi\b/g, 'I');
 
   // Insert periods or question marks before new sentence starters if no punctuation exists
-  // e.g. "I like sushi what food do you like" -> "I like sushi. What food do you like"
+  // e.g. "I like sushi what food do you like" -> "I like sushi. What food do you like?"
   const sentenceStarters = [
     'what', 'where', 'who', 'how', 'when', 'why',
-    'do you', 'can you', 'are you', 'is it',
     'my name is', 'my favorite', 'my favourite',
     'i like', 'i love', 'i can', 'i play', 'i want', "i'm", 'i am',
     'nice to meet you', 'hello', 'hi'
@@ -552,9 +578,13 @@ export function formatSpeechText(text: string): string {
       if (
         lowerBefore.startsWith('what') ||
         lowerBefore.startsWith('where') ||
+        lowerBefore.startsWith('who') ||
         lowerBefore.startsWith('how') ||
+        lowerBefore.startsWith('when') ||
+        lowerBefore.startsWith('why') ||
         lowerBefore.startsWith('do you') ||
-        lowerBefore.startsWith('can you')
+        lowerBefore.startsWith('can you') ||
+        lowerBefore.startsWith('are you')
       ) {
         return `? ${p1}`;
       }
@@ -566,17 +596,19 @@ export function formatSpeechText(text: string): string {
   trimmed = trimmed.replace(/(?:^|[.?!]\s+)([a-z])/g, (match, letter) => match.toUpperCase());
 
   // Capitalize common proper nouns, country names, city names
+  trimmed = trimmed.replace(/\bmt\.?\s*fuji\b/gi, 'Mt. Fuji');
+  trimmed = trimmed.replace(/\buk\b/gi, 'UK');
+  trimmed = trimmed.replace(/\busa\b/gi, 'USA');
+
   const properNouns = [
-    'japan', 'shizuoka', 'hamamatsu', 'tokyo', 'mt. fuji', 'fuji',
+    'japan', 'shizuoka', 'hamamatsu', 'tokyo', 'fuji',
     'oliver', 'emma', 'liam', 'chloe', 'bence', 'zofia', 'rahul', 'linh', 'aung', 'ken', 'yuki', 'taro', 'hanako',
-    'uk', 'usa', 'australia', 'canada', 'hungary', 'poland', 'bangladesh', 'vietnam', 'myanmar',
+    'australia', 'canada', 'hungary', 'poland', 'bangladesh', 'vietnam', 'myanmar',
     'oxford', 'california', 'sydney', 'toronto', 'budapest', 'warsaw', 'dhaka', 'hanoi', 'yangon'
   ];
   properNouns.forEach((noun) => {
     const regex = new RegExp(`\\b${noun}\\b`, 'gi');
     trimmed = trimmed.replace(regex, (match) => {
-      if (match.toLowerCase() === 'uk' || match.toLowerCase() === 'usa') return match.toUpperCase();
-      if (match.toLowerCase() === 'mt. fuji') return 'Mt. Fuji';
       return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
     });
   });

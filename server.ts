@@ -88,50 +88,13 @@ function getAnthropicClient(): Anthropic | null {
 
 // =====================================================================
 import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } from './src/utils/security';
+import { validateResponseByLevel } from './src/utils/responseValidation';
 
-export { maskHighRiskPII, detectPromptInjection, detectInappropriateContent };
+export { maskHighRiskPII, detectPromptInjection, detectInappropriateContent, validateResponseByLevel };
 
 // Output Sanitizer to filter AI replies before sending to children
 function sanitizeAiOutput(reply: string, level: 'easy' | 'normal' | 'hard' = 'normal'): string {
-  if (!reply) return 'That is nice! What sport do you like?';
-
-  // Check for harmful content or prompt leakage in output
-  if (detectInappropriateContent(reply) || detectPromptInjection(reply)) {
-    return 'That sounds great! What food do you like?';
-  }
-
-  // Split into sentences
-  const sentences = reply
-    .split(/(?<=[.?!])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  if (level === 'easy') {
-    // Easy: Max 1 sentence (or 1 short filler + 1 short sentence)
-    if (sentences.length > 1) {
-      const firstIsShortFiller = sentences[0].split(' ').length <= 2 && /^(?:oh|wow|nice|great|hello|hi|yes|no|cool)[!,.]?$/i.test(sentences[0].replace(/[!,.]/g, ''));
-      if (firstIsShortFiller && sentences.length >= 2) {
-        return `${sentences[0]} ${sentences[1]}`;
-      }
-      return sentences[0];
-    }
-    return sentences[0] || reply;
-  }
-
-  if (level === 'hard') {
-    // Hard: Max 3 sentences
-    if (sentences.length > 3) {
-      return sentences.slice(0, 3).join(' ');
-    }
-    return reply;
-  }
-
-  // Normal (Default): Max 2 sentences
-  if (sentences.length > 2) {
-    return sentences.slice(0, 2).join(' ');
-  }
-
-  return reply;
+  return validateResponseByLevel(reply, level);
 }
 
 // Simple text sanitizer for history (removes raw high-risk PII)
@@ -143,14 +106,15 @@ function sanitizeStudentInput(text: string): string {
 // Helper to extract student's spoken name from English introduction
 function extractSpokenName(text: string): string | null {
   if (!text) return null;
-  const match = text.match(/\b(?:my name is|i'm|i am|call me)\s+([A-Za-z]{2,15})\b/i);
+  const match = text.match(/\b(?:my name is|call me)\s+([A-Za-z]{2,15})\b/i);
   if (match) {
     const candidate = match[1].trim();
-    const commonWords = [
+    const excludeWords = [
       'in', 'from', 'ten', 'eleven', 'twelve', 'fine', 'good', 'happy', 'ready',
-      'fifth', 'sixth', 'student', 'boy', 'girl', 'japanese', 'japan', 'not', 'very'
+      'fifth', 'sixth', 'student', 'boy', 'girl', 'japanese', 'japan', 'not', 'very',
+      'doing', 'great', 'tired', 'hungry', 'sad', 'okay', 'sorry', 'busy', 'a', 'an', 'the'
     ];
-    if (!commonWords.includes(candidate.toLowerCase())) {
+    if (!excludeWords.includes(candidate.toLowerCase())) {
       return candidate.charAt(0).toUpperCase() + candidate.slice(1).toLowerCase();
     }
   }
@@ -390,7 +354,11 @@ CRITICAL RESPONSE MANDATES:
   try {
     const claude = getAnthropicClient();
     if (claude) {
-      const primaryModel = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
+      const configuredModel = process.env.ANTHROPIC_MODEL;
+      const primaryModel =
+        configuredModel && !configuredModel.startsWith('sk-ant')
+          ? configuredModel
+          : 'claude-3-5-sonnet-20241022';
       
       let response: any;
       let attempts = 0;
@@ -461,11 +429,13 @@ CRITICAL RESPONSE MANDATES:
           detectedName: spokenName || undefined,
         },
         _diagnostics: {
+          requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           requestStart,
           apiRequestStart,
           apiResponseReceived,
           responseEnd,
           latencyMs: responseEnd - requestStart,
+          pathType: 'NORMAL_AI',
           route: 'anthropic',
           level,
         },
@@ -484,6 +454,7 @@ CRITICAL RESPONSE MANDATES:
       rawHistory,
       level
     );
+    const validatedLocalReply = validateResponseByLevel(localReply.reply, level);
     const responseEnd = Date.now();
 
     return res.json({
@@ -491,16 +462,18 @@ CRITICAL RESPONSE MANDATES:
       isFallback: true,
       fallbackReason,
       data: {
-        reply: localReply.reply,
+        reply: validatedLocalReply,
         japaneseTranslation: localReply.japaneseTranslation,
         mood: localReply.mood,
         culturalNote: localReply.culturalNote || '',
         detectedName: spokenName || undefined,
       },
       _diagnostics: {
+        requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         requestStart,
         responseEnd,
         latencyMs: responseEnd - requestStart,
+        pathType: 'SERVER_FALLBACK',
         route,
         fallbackReason,
         level,
@@ -530,6 +503,7 @@ CRITICAL RESPONSE MANDATES:
       rawHistory,
       level
     );
+    const validatedLocalReply = validateResponseByLevel(localReply.reply, level);
     const responseEnd = Date.now();
 
     return res.json({
@@ -537,18 +511,20 @@ CRITICAL RESPONSE MANDATES:
       isFallback: true,
       fallbackReason,
       data: {
-        reply: localReply.reply,
+        reply: validatedLocalReply,
         japaneseTranslation: localReply.japaneseTranslation,
         mood: localReply.mood,
         culturalNote: localReply.culturalNote || '',
         detectedName: spokenName || undefined,
       },
       _diagnostics: {
+        requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         requestStart,
         apiRequestStart,
         apiResponseReceived,
         responseEnd,
         latencyMs: responseEnd - requestStart,
+        pathType: 'SERVER_FALLBACK',
         route,
         fallbackReason,
         level,

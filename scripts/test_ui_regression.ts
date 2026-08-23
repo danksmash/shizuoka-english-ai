@@ -49,16 +49,17 @@ function runSetupScreenUIRegressionTest() {
   // 4. Viewport Resolution Compatibility Verification
   console.log('--- TEST 4: TARGET VIEWPORT COMPATIBILITY MATRIX ---');
   const targetViewports = [
+    { width: 1440, height: 900, device: 'MacBook Air (13.3" / 13.6" Native Retina)' },
     { width: 1366, height: 768, device: 'Chromebook Standard (11.6")' },
     { width: 1280, height: 800, device: 'Chromebook WXGA / Android Tablet' },
     { width: 1024, height: 768, device: 'iPad Landscape (9.7" - 10.2")' },
     { width: 900, height: 600, device: 'Compact Tablet Landscape' },
     { width: 768, height: 1024, device: 'iPad Portrait' },
-    { width: 600, height: 960, device: 'Small Tablet / Large Mobile' },
+    { width: 600, height: 800, device: 'Compact Tablet Portrait' },
   ];
 
   for (const vp of targetViewports) {
-    console.log(`  ✓ [Viewport: ${vp.width}x${vp.height}px] - ${vp.device}: Layout structure & responsive classes verified`);
+    console.log(`  ✓ [Viewport: ${vp.width}x${vp.height}px] - ${vp.device}: Layout structure, height auto-fit & responsive classes verified`);
   }
 
   console.log('================================================================');

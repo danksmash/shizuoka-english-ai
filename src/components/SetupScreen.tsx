@@ -60,9 +60,9 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
   const selectedTopicData = DIALOGUE_TOPICS.find((t) => t.id === selectedTopic);
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-b from-slate-50 via-blue-50/25 to-slate-100 p-2 sm:p-3 md:p-4 flex flex-col justify-between max-w-7xl mx-auto">
-      {/* Top Header Banner - Streamlined & Compact for Chromebook/Tablet Viewports */}
-      <header className="bg-white rounded-2xl py-2 px-3 sm:py-2.5 sm:px-4 border border-slate-200 shadow-2xs mb-2.5 flex flex-col sm:flex-row items-center justify-between gap-2.5 flex-shrink-0">
+    <div className="w-full bg-gradient-to-b from-slate-50 via-blue-50/25 to-slate-100 p-2.5 sm:p-3.5 md:p-4 max-w-7xl mx-auto flex flex-col gap-2.5 sm:gap-3">
+      {/* Top Header Banner - Streamlined & Compact for Chromebook/Tablet/MacBook Viewports */}
+      <header className="bg-white rounded-2xl py-2 px-3 sm:py-2.5 sm:px-4 border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-2.5 flex-shrink-0">
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-2xs flex-shrink-0">
             <Globe2 className="w-5 h-5" />
@@ -103,8 +103,8 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
         </div>
       </header>
 
-      {/* Main Configuration Grid (7 Cols Left / 5 Cols Right on desktop/Chromebook) */}
-      <main className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 sm:gap-3 flex-1 mb-2.5 items-start">
+      {/* Main Configuration Grid (7 Cols Left / 5 Cols Right on desktop/Chromebook/MacBook) */}
+      <main className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 sm:gap-3.5 items-start">
         {/* Left Section: 9 Exchange Students Grid */}
         <section className="lg:col-span-7 xl:col-span-7 flex flex-col">
           <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
@@ -119,7 +119,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
             </span>
           </div>
 
-          {/* Responsive 3-Column / 2-Column Grid for 9 Students */}
+          {/* Responsive 3-Column Grid for 9 Students */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {AI_STUDENTS_LIST.map((student) => {
               const isSelected = student.id === selectedStudentId;
