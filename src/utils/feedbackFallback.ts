@@ -1,4 +1,4 @@
-import { AIStudentProfile, FeedbackData, VisualVocabularyItem, ChatMessage, DialogueTopic } from '../types';
+import { AIStudentProfile, FeedbackData, VisualVocabularyItem, ChatMessage, DialogueTopic, EnglishLevel } from '../types';
 
 export interface LocalDialogueResponse {
   reply: string;
@@ -153,23 +153,32 @@ export function generateLocalStudentDialogueReply(
   studentText: string,
   turnNumber: number,
   studentName: string,
-  history?: ChatMessage[]
+  history?: ChatMessage[],
+  level: EnglishLevel = 'normal'
 ): LocalDialogueResponse {
   const shortName = persona.name.split(' ')[0] || persona.name;
   const culture = getCultureForPersona(persona);
 
   const rawLower = studentText.toLowerCase().trim();
-  const lower = rawLower.replace(/[.,?!]/g, ' ');
+  const lower = rawLower.replace(/[.,?!]/g, ' ').trim();
+
+  // Internal reply resolution
+  const resolveRawResponse = (): LocalDialogueResponse => {
 
   // 1. Check for Pardon / Clarification request
   const isPardon =
     lower === 'pardon' ||
-    lower.includes('pardon') ||
+    lower === 'pardon me' ||
     lower === 'sorry' ||
+    lower === 'what' ||
+    lower === 'what did you say' ||
+    lower === 'what did you mean' ||
     lower.includes('say that again') ||
     lower.includes("don't understand") ||
     lower.includes('dont understand') ||
-    lower === 'what';
+    lower.includes('repeat') ||
+    lower.includes('once more') ||
+    lower.includes('one more time');
 
   if (isPardon) {
     const lastAiMsg = (history || [])
@@ -518,6 +527,38 @@ export function generateLocalStudentDialogueReply(
     japaneseTranslation: `いいね！${nextQ.japanese}`,
     mood: 'happy',
   };
+  };
+
+  const rawRes = resolveRawResponse();
+
+  if (level === 'easy') {
+    // Easy: Max 1 sentence
+    const sentences = rawRes.reply.split(/(?<=[.?!])\s+/).filter(Boolean);
+    const jaSentences = rawRes.japaneseTranslation.split(/(?<=[。！？])\s*/).filter(Boolean);
+    return {
+      ...rawRes,
+      reply: sentences[0] || rawRes.reply,
+      japaneseTranslation: jaSentences[0] || rawRes.japaneseTranslation,
+    };
+  }
+
+  if (level === 'hard') {
+    // Hard: Allow fuller 2-3 sentences
+    return rawRes;
+  }
+
+  // Normal: Max 2 sentences
+  const sentences = rawRes.reply.split(/(?<=[.?!])\s+/).filter(Boolean);
+  const jaSentences = rawRes.japaneseTranslation.split(/(?<=[。！？])\s*/).filter(Boolean);
+  if (sentences.length > 2) {
+    return {
+      ...rawRes,
+      reply: sentences.slice(0, 2).join(' '),
+      japaneseTranslation: jaSentences.slice(0, 2).join(''),
+    };
+  }
+
+  return rawRes;
 }
 
 /**

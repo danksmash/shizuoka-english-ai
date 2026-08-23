@@ -44,6 +44,7 @@ export default function App() {
     selectedDurationMinutes: 1,
     selectedTopic: 'intro',
     selectedAiStudentId: 'emma_usa',
+    selectedLevel: 'normal',
   });
 
   // Current selected AI Student Persona
@@ -349,6 +350,7 @@ export default function App() {
           topic: currentProf.selectedTopic,
           studentName: currentProf.name,
           aiStudentId: currentProf.selectedAiStudentId,
+          level: currentProf.selectedLevel || 'normal',
         }),
       });
 
@@ -392,7 +394,8 @@ export default function App() {
         trimmed,
         turnCountRef.current,
         currentProf.name,
-        messagesRef.current
+        messagesRef.current,
+        currentProf.selectedLevel || 'normal'
       );
 
       extractAndAddVocab(localReply.reply);

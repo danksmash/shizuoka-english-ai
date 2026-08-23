@@ -8,8 +8,9 @@ import {
   User,
   Sparkles,
   CheckCircle2,
+  Gauge,
 } from 'lucide-react';
-import { DialogueTopic, StudentProfile, AIStudentProfile } from '../types';
+import { DialogueTopic, StudentProfile, AIStudentProfile, EnglishLevel } from '../types';
 import { AI_STUDENTS_LIST, DIALOGUE_TOPICS } from '../data/curriculum';
 import { speakStudentVoice, stopSpeaking } from '../utils/speech';
 import { StudentAvatar } from './StudentAvatar';
@@ -23,6 +24,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
   const [name, setName] = useState<string>('5・6年生');
   const [selectedTopic, setSelectedTopic] = useState<DialogueTopic>('intro');
   const [durationMinutes, setDurationMinutes] = useState<number>(1);
+  const [selectedLevel, setSelectedLevel] = useState<EnglishLevel>('normal');
   const [previewPlayingId, setPreviewPlayingId] = useState<string | null>(null);
 
   const selectedStudent =
@@ -51,6 +53,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
       selectedDurationMinutes: durationMinutes,
       selectedTopic,
       selectedAiStudentId: selectedStudentId,
+      selectedLevel,
     });
   };
 
@@ -257,11 +260,69 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
             </div>
           </div>
 
-          {/* Topic Selector */}
+          {/* English Level Selector */}
           <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-2xs">
             <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-2">
               <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black">
                 3
+              </span>
+              <Gauge className="w-4 h-4 text-blue-600" />
+              <span>英語のレベルをえらぼう</span>
+            </h2>
+
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSelectedLevel('easy')}
+                className={`py-2 px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
+                  selectedLevel === 'easy'
+                    ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-2 ring-emerald-400/30 font-bold shadow-2xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+              >
+                <span className="text-xs sm:text-sm font-extrabold flex items-center gap-1">
+                  <span>🟢</span> やさしい
+                </span>
+                <span className="text-[10px] text-slate-500 mt-0.5">短い1文で会話</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedLevel('normal')}
+                className={`py-2 px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
+                  selectedLevel === 'normal'
+                    ? 'bg-amber-50 border-amber-600 text-amber-950 ring-2 ring-amber-400/30 font-bold shadow-2xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+              >
+                <span className="text-xs sm:text-sm font-extrabold flex items-center gap-1">
+                  <span>🟡</span> ふつう
+                </span>
+                <span className="text-[10px] text-slate-500 mt-0.5">1〜2文 (おすすめ)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedLevel('hard')}
+                className={`py-2 px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
+                  selectedLevel === 'hard'
+                    ? 'bg-blue-50 border-blue-600 text-blue-950 ring-2 ring-blue-400/30 font-bold shadow-2xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+              >
+                <span className="text-xs sm:text-sm font-extrabold flex items-center gap-1">
+                  <span>🔵</span> むずかしい
+                </span>
+                <span className="text-[10px] text-slate-500 mt-0.5">2〜3文でチャレンジ</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Topic Selector */}
+          <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-2xs">
+            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black">
+                4
               </span>
               <MessageCircle className="w-4 h-4 text-blue-600" />
               <span>対話テーマをえらぶ</span>
@@ -307,7 +368,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
               {name}さん × {selectedStudent.name} ({selectedStudent.countryJapanese} {selectedStudent.flag})
             </p>
             <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
-              対話時間: {durationMinutes}分 ({durationMinutes * 60}秒) | テーマ: {DIALOGUE_TOPICS.find((t) => t.id === selectedTopic)?.title}
+              対話時間: {durationMinutes}分 | レベル: {selectedLevel === 'easy' ? '🟢 やさしい' : selectedLevel === 'hard' ? '🔵 むずかしい' : '🟡 ふつう'} | テーマ: {DIALOGUE_TOPICS.find((t) => t.id === selectedTopic)?.title}
             </p>
           </div>
         </div>

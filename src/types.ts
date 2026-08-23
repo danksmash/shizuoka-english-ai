@@ -131,11 +131,14 @@ export interface TopicOption {
   examplePhrases: string[];
 }
 
+export type EnglishLevel = 'easy' | 'normal' | 'hard';
+
 export interface StudentProfile {
   name: string;
   grade: string;
   selectedDurationMinutes: number;
   selectedTopic: DialogueTopic;
   selectedAiStudentId: string;
+  selectedLevel?: EnglishLevel;
 }
 
