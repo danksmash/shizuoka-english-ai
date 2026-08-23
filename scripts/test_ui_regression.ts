@@ -26,13 +26,37 @@ function runSetupScreenUIRegressionTest() {
     throw new Error(`Expected 9 students, got ${AI_STUDENTS_LIST.length}`);
   }
 
-  // 2. Check Profile Fields Completeness (Ensuring no missing text that could break layout)
-  console.log('--- TEST 2: ALL 9 STUDENTS PROFILE DATA INTEGRITY ---');
+  // 2. Check Profile Fields Completeness & Country Display Formats
+  console.log('--- TEST 2: ALL 9 STUDENTS PROFILE DATA & COUNTRY DISPLAY INTEGRITY ---');
+  const expectedCountryDisplays: Record<string, string> = {
+    emma_usa: 'United States (USA)',
+    oliver_uk: 'United Kingdom (UK)',
+    liam_australia: 'Australia (Australia)',
+    chloe_canada: 'Canada (Canada)',
+    bence_hungary: 'Hungary (Magyarország)',
+    zofia_poland: 'Poland (Polska)',
+    rahul_bangladesh: 'Bangladesh (বাংলাদেশ)',
+    linh_vietnam: 'Vietnam (Việt Nam)',
+    aung_myanmar: 'Myanmar (မြန်မာ)',
+  };
+
+  const getStudentCountryDisplay = (student: any): string => {
+    if (student.country && student.countryNative) {
+      return `${student.country} (${student.countryNative})`;
+    }
+    return student.country;
+  };
+
   for (const student of AI_STUDENTS_LIST) {
     if (!student.name || !student.japaneseName || !student.country || !student.countryJapanese || !student.flag || !student.city || !student.japaneseBio || !student.major || !student.likes || student.likes.length === 0 || !student.heritageLandmark) {
       throw new Error(`Missing profile fields for ${student.id}`);
     }
-    console.log(`  ✓ ${student.flag} ${student.name} (${student.countryJapanese}): All profile fields intact`);
+    const countryDisplay = getStudentCountryDisplay(student);
+    const expected = expectedCountryDisplays[student.id];
+    if (countryDisplay !== expected) {
+      throw new Error(`Country display mismatch for ${student.id}: expected "${expected}", got "${countryDisplay}"`);
+    }
+    console.log(`  ✓ ${student.flag} ${student.name} -> Country: "${countryDisplay}" (${student.countryJapanese}): Profile intact`);
   }
 
   // 3. Check Conversation Level & Topic Options

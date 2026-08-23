@@ -19,6 +19,14 @@ interface SetupScreenProps {
   onStartDialogue: (profile: StudentProfile) => void;
 }
 
+// Helper to get formatted country name: "English (Native)" as specified in curriculum
+const getStudentCountryDisplay = (student: AIStudentProfile): string => {
+  if (student.country && student.countryNative) {
+    return `${student.country} (${student.countryNative})`;
+  }
+  return student.country;
+};
+
 export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => {
   const [selectedStudentId, setSelectedStudentId] = useState<string>('emma_usa');
   const [name, setName] = useState<string>('5・6年生');
@@ -104,9 +112,9 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
       </header>
 
       {/* Main Configuration Grid (7 Cols Left / 5 Cols Right on desktop/Chromebook/MacBook) */}
-      <main className="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-3 items-start">
+      <main className="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-3 items-stretch flex-1">
         {/* Left Section: 9 Exchange Students Grid */}
-        <section className="lg:col-span-7 xl:col-span-7 flex flex-col">
+        <section className="lg:col-span-7 xl:col-span-7 flex flex-col justify-between h-full">
           <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
             <h2 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
               <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black shadow-2xs">
@@ -120,7 +128,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
           </div>
 
           {/* Responsive 3-Column Grid for 9 Students */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 items-stretch flex-1">
             {AI_STUDENTS_LIST.map((student) => {
               const isSelected = student.id === selectedStudentId;
               const isPlaying = previewPlayingId === student.id;
@@ -131,7 +139,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                   key={student.id}
                   onClick={() => setSelectedStudentId(student.id)}
                   aria-pressed={isSelected}
-                  className={`relative p-2 rounded-xl sm:rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between text-left ${
+                  className={`relative p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between text-left h-full ${
                     isSelected
                       ? 'bg-blue-50/95 border-blue-600 shadow-sm ring-2 ring-blue-400/40'
                       : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-slate-50/90 shadow-2xs'
@@ -144,53 +152,60 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                     </div>
                   )}
 
-                  <div className="flex flex-col h-full justify-between gap-1">
-                    {/* Country & Flag Header */}
-                    <div className="flex items-center gap-1.5 pr-4 min-w-0">
-                      <span className="text-lg sm:text-xl leading-none flex-shrink-0">{student.flag}</span>
-                      <span className="text-[11px] sm:text-xs font-black text-slate-900 truncate tracking-tight">
-                        {student.countryNative}
-                      </span>
-                    </div>
-
-                    {/* Avatar Portrait & Essential Info */}
-                    <div className="flex items-center gap-2 my-0.5 min-w-0">
-                      <div className="w-13 h-13 sm:w-14 sm:h-14 border border-slate-200 shadow-2xs bg-slate-100 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
+                  <div className="grid grid-cols-[48%_52%] sm:grid-cols-2 gap-1.5 sm:gap-2 items-center w-full h-full">
+                    {/* Left Half: Huge Illustration Dedicated Area */}
+                    <div className="w-full h-full flex items-center justify-center">
+                      <div className="w-full aspect-square border border-slate-200/90 shadow-2xs bg-slate-100 rounded-xl overflow-hidden flex items-center justify-center">
                         <StudentAvatar student={student} size="custom" className="w-full h-full object-cover" />
                       </div>
-                      <div className="min-w-0 flex-1 flex flex-col justify-center">
-                        <h3 className="text-xs sm:text-sm font-black text-slate-900 leading-tight truncate">
-                          {student.name}
-                        </h3>
-                        <p className="text-[11px] sm:text-xs font-bold text-blue-700 truncate leading-tight mt-0.5">
-                          {student.japaneseName}
-                        </p>
-                        <p className="text-[10px] sm:text-[11px] font-semibold text-slate-600 truncate mt-0.5">
-                          {student.age}歳 · {student.city.split(' ')[0]}
-                        </p>
+                    </div>
+
+                    {/* Right Half: All Profile Info & Voice Button */}
+                    <div className="flex flex-col justify-between h-full min-w-0 py-0.5 gap-0.5">
+                      {/* 1. Country with Flag: English (Native) */}
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className="text-sm sm:text-base leading-none flex-shrink-0">{student.flag}</span>
+                        <span className="text-[10px] sm:text-[11px] font-black text-slate-800 tracking-tight truncate">
+                          {getStudentCountryDisplay(student)}
+                        </span>
                       </div>
-                    </div>
 
-                    {/* Accent Tag */}
-                    <div className="truncate">
-                      <span className="inline-block text-[10px] font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-1.5 py-0.5 rounded-md truncate max-w-full">
-                        🗣️ {student.accentName.split(' ')[0]}
-                      </span>
-                    </div>
+                      {/* 2. English Name */}
+                      <h3 className="text-xs sm:text-[13px] font-black text-slate-900 leading-tight truncate">
+                        {student.name}
+                      </h3>
 
-                    {/* Voice Preview Button */}
-                    <div
-                      onClick={(e) => handlePlayVoicePreview(student, e)}
-                      role="button"
-                      tabIndex={0}
-                      className={`w-full py-1 px-1.5 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer border mt-0.5 ${
-                        isPlaying
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs animate-pulse'
-                          : 'bg-white hover:bg-blue-50 text-blue-700 border-blue-200 hover:border-blue-300 shadow-2xs'
-                      }`}
-                    >
-                      <Volume2 className="w-3 h-3 flex-shrink-0" />
-                      <span className="truncate">{isPlaying ? '再生中...' : '声を聞く'}</span>
+                      {/* 3. Katakana Name */}
+                      <p className="text-[11px] sm:text-xs font-bold text-blue-700 leading-tight truncate">
+                        {student.japaneseName}
+                      </p>
+
+                      {/* 4. Age & Birthplace */}
+                      <p className="text-[10px] sm:text-[11px] font-semibold text-slate-600 leading-tight truncate">
+                        {student.age}歳 · {student.city.split(' ')[0]}
+                      </p>
+
+                      {/* 5. Country's English Accent (e.g. アメリカ英語) */}
+                      <div className="truncate">
+                        <span className="inline-block text-[9px] sm:text-[10px] font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-1 py-0.5 rounded truncate max-w-full">
+                          🗣️ {student.accentName.split(' ')[0]}
+                        </span>
+                      </div>
+
+                      {/* 6. Voice Preview Button */}
+                      <div
+                        onClick={(e) => handlePlayVoicePreview(student, e)}
+                        role="button"
+                        tabIndex={0}
+                        className={`w-full py-1 px-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer border min-h-[26px] sm:min-h-[28px] ${
+                          isPlaying
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-2xs animate-pulse'
+                            : 'bg-white hover:bg-blue-50 text-blue-700 border-blue-200 hover:border-blue-300 shadow-2xs'
+                        }`}
+                      >
+                        <Volume2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" />
+                        <span className="truncate">{isPlaying ? '再生中...' : '声を聞く'}</span>
+                      </div>
                     </div>
                   </div>
                 </button>
@@ -200,19 +215,19 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
         </section>
 
         {/* Right Section: Selected Student Profile & Settings (Level, Topic, Time) */}
-        <section className="lg:col-span-5 xl:col-span-5 flex flex-col gap-2 min-h-0">
+        <section className="lg:col-span-5 xl:col-span-5 flex flex-col justify-between gap-2 h-full min-h-0">
           {/* Selected Student Detailed Profile Card - Completely Responsive & Never Overflowing */}
           <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200 shadow-2xs flex flex-col gap-1.5">
             {/* Header with Avatar & Basic Identity */}
             <div className="flex items-start gap-2.5">
-              <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl border-2 border-blue-500 shadow-2xs flex-shrink-0 overflow-hidden">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl border-2 border-blue-500 shadow-2xs flex-shrink-0 overflow-hidden">
                 <StudentAvatar student={selectedStudent} size="custom" className="w-full h-full object-cover" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-lg sm:text-xl leading-none">{selectedStudent.flag}</span>
                   <span className="text-xs sm:text-sm font-black text-slate-800">
-                    {selectedStudent.countryJapanese} ({selectedStudent.countryNative})
+                    {selectedStudent.countryJapanese} ({getStudentCountryDisplay(selectedStudent)})
                   </span>
                 </div>
                 <h3 className="text-xs sm:text-sm font-black text-slate-900 leading-snug">
