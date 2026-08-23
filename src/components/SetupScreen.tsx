@@ -60,9 +60,9 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
   const selectedTopicData = DIALOGUE_TOPICS.find((t) => t.id === selectedTopic);
 
   return (
-    <div className="w-full bg-gradient-to-b from-slate-50 via-blue-50/25 to-slate-100 p-2.5 sm:p-3.5 md:p-4 max-w-7xl mx-auto flex flex-col gap-2.5 sm:gap-3">
+    <div className="w-full bg-gradient-to-b from-slate-50 via-blue-50/25 to-slate-100 p-2.5 sm:p-3.5 md:p-4 max-w-7xl mx-auto flex flex-col gap-2 sm:gap-2.5">
       {/* Top Header Banner - Streamlined & Compact for Chromebook/Tablet/MacBook Viewports */}
-      <header className="bg-white rounded-2xl py-2 px-3 sm:py-2.5 sm:px-4 border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-2.5 flex-shrink-0">
+      <header className="bg-white rounded-2xl py-2 px-3 sm:py-2.5 sm:px-4 border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-2 flex-shrink-0">
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-2xs flex-shrink-0">
             <Globe2 className="w-5 h-5" />
@@ -76,7 +76,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                 小学校５・６年生向け English
               </span>
             </div>
-            <h1 className="text-base sm:text-lg md:text-xl font-black text-slate-900 tracking-tight leading-tight truncate">
+            <h1 className="text-sm sm:text-base md:text-lg font-black text-slate-900 tracking-tight leading-tight truncate">
               AI留学生 1対1 えいご対話プラクティス
             </h1>
           </div>
@@ -104,17 +104,17 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
       </header>
 
       {/* Main Configuration Grid (7 Cols Left / 5 Cols Right on desktop/Chromebook/MacBook) */}
-      <main className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 sm:gap-3.5 items-start">
+      <main className="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-3 items-start">
         {/* Left Section: 9 Exchange Students Grid */}
         <section className="lg:col-span-7 xl:col-span-7 flex flex-col">
           <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
-            <h2 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-1.5">
+            <h2 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
               <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black shadow-2xs">
                 1
               </span>
               <span>会話するAI留学生をえらぼう（全9名）</span>
             </h2>
-            <span className="text-[11px] sm:text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+            <span className="text-[11px] sm:text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
               {selectedStudent.flag} {selectedStudent.countryJapanese} 選択中
             </span>
           </div>
@@ -131,7 +131,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                   key={student.id}
                   onClick={() => setSelectedStudentId(student.id)}
                   aria-pressed={isSelected}
-                  className={`relative p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between text-left ${
+                  className={`relative p-2 rounded-xl sm:rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between text-left ${
                     isSelected
                       ? 'bg-blue-50/95 border-blue-600 shadow-sm ring-2 ring-blue-400/40'
                       : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-slate-50/90 shadow-2xs'
@@ -146,8 +146,8 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
 
                   <div className="flex flex-col h-full justify-between gap-1">
                     {/* Country & Flag Header */}
-                    <div className="flex items-center gap-1 pr-4 min-w-0">
-                      <span className="text-xl sm:text-2xl leading-none flex-shrink-0">{student.flag}</span>
+                    <div className="flex items-center gap-1.5 pr-4 min-w-0">
+                      <span className="text-lg sm:text-xl leading-none flex-shrink-0">{student.flag}</span>
                       <span className="text-[11px] sm:text-xs font-black text-slate-900 truncate tracking-tight">
                         {student.countryNative}
                       </span>
@@ -155,7 +155,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
 
                     {/* Avatar Portrait & Essential Info */}
                     <div className="flex items-center gap-2 my-0.5 min-w-0">
-                      <div className="w-14 h-14 sm:w-16 sm:h-16 border border-slate-200 shadow-2xs bg-slate-100 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
+                      <div className="w-13 h-13 sm:w-14 sm:h-14 border border-slate-200 shadow-2xs bg-slate-100 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
                         <StudentAvatar student={student} size="custom" className="w-full h-full object-cover" />
                       </div>
                       <div className="min-w-0 flex-1 flex flex-col justify-center">
@@ -200,42 +200,37 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
         </section>
 
         {/* Right Section: Selected Student Profile & Settings (Level, Topic, Time) */}
-        <section className="lg:col-span-5 xl:col-span-5 flex flex-col gap-2.5 min-h-0">
+        <section className="lg:col-span-5 xl:col-span-5 flex flex-col gap-2 min-h-0">
           {/* Selected Student Detailed Profile Card - Completely Responsive & Never Overflowing */}
-          <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200 shadow-2xs flex flex-col gap-2">
+          <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200 shadow-2xs flex flex-col gap-1.5">
             {/* Header with Avatar & Basic Identity */}
             <div className="flex items-start gap-2.5">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl border-2 border-blue-500 shadow-2xs flex-shrink-0 overflow-hidden">
+              <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl border-2 border-blue-500 shadow-2xs flex-shrink-0 overflow-hidden">
                 <StudentAvatar student={selectedStudent} size="custom" className="w-full h-full object-cover" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-xl leading-none">{selectedStudent.flag}</span>
+                  <span className="text-lg sm:text-xl leading-none">{selectedStudent.flag}</span>
                   <span className="text-xs sm:text-sm font-black text-slate-800">
                     {selectedStudent.countryJapanese} ({selectedStudent.countryNative})
                   </span>
                 </div>
-                <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug">
+                <h3 className="text-xs sm:text-sm font-black text-slate-900 leading-snug">
                   {selectedStudent.name}
                 </h3>
-                <p className="text-xs font-bold text-blue-700">
+                <p className="text-[11px] sm:text-xs font-bold text-blue-700">
                   {selectedStudent.japaneseName} · {selectedStudent.age}歳 · {selectedStudent.city}
                 </p>
-                <div className="mt-1">
-                  <span className="inline-block text-[10px] sm:text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                    🗣️ {selectedStudent.accentName}
-                  </span>
-                </div>
               </div>
             </div>
 
             {/* Natural Wrapping Bio */}
-            <p className="text-xs sm:text-sm text-slate-700 leading-relaxed bg-blue-50/70 p-2.5 rounded-xl border border-blue-200/60 font-medium">
+            <p className="text-[11px] sm:text-xs text-slate-700 leading-relaxed bg-blue-50/70 p-2 rounded-xl border border-blue-200/60 font-medium break-words">
               {selectedStudent.japaneseBio}
             </p>
 
             {/* Profile Meta Details (Likes, Major, Landmark) */}
-            <div className="grid grid-cols-1 gap-1.5 text-xs text-slate-700 font-medium">
+            <div className="grid grid-cols-1 gap-1 text-[11px] sm:text-xs text-slate-700 font-medium">
               <div className="flex items-start gap-1.5">
                 <span className="font-bold text-slate-900 flex-shrink-0">❤️ 好き:</span>
                 <span className="text-slate-700 leading-snug break-words">
@@ -254,12 +249,12 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
           </div>
 
           {/* English Conversation Level Selector (Step 2) */}
-          <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200 shadow-2xs">
-            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-1.5">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black shadow-2xs">
+          <div className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200 shadow-2xs">
+            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-1">
+              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-black shadow-2xs">
                 2
               </span>
-              <Gauge className="w-4 h-4 text-blue-600" />
+              <Gauge className="w-3.5 h-3.5 text-blue-600" />
               <span>英語のレベルをえらぼう</span>
             </h2>
 
@@ -267,61 +262,61 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
               <button
                 type="button"
                 onClick={() => setSelectedLevel('easy')}
-                className={`py-1.5 px-1 sm:py-2 sm:px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
+                className={`py-1 px-1 sm:py-1.5 sm:px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
                   selectedLevel === 'easy'
                     ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-2 ring-emerald-400/30 font-bold shadow-2xs'
                     : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                 }`}
               >
-                <span className="text-xs sm:text-sm font-extrabold flex items-center gap-1">
+                <span className="text-[11px] sm:text-xs font-extrabold flex items-center gap-0.5">
                   <span>🟢</span> やさしい
                 </span>
-                <span className="text-[10px] text-slate-600 mt-0.5">短い1文で会話</span>
+                <span className="text-[9px] sm:text-[10px] text-slate-600">短い1文</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setSelectedLevel('normal')}
-                className={`py-1.5 px-1 sm:py-2 sm:px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
+                className={`py-1 px-1 sm:py-1.5 sm:px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
                   selectedLevel === 'normal'
                     ? 'bg-amber-50 border-amber-600 text-amber-950 ring-2 ring-amber-400/30 font-bold shadow-2xs'
                     : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                 }`}
               >
-                <span className="text-xs sm:text-sm font-extrabold flex items-center gap-1">
+                <span className="text-[11px] sm:text-xs font-extrabold flex items-center gap-0.5">
                   <span>🟡</span> ふつう
                 </span>
-                <span className="text-[10px] text-slate-600 mt-0.5">1〜2文 (おすすめ)</span>
+                <span className="text-[9px] sm:text-[10px] text-slate-600">1〜2文(推奨)</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setSelectedLevel('hard')}
-                className={`py-1.5 px-1 sm:py-2 sm:px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
+                className={`py-1 px-1 sm:py-1.5 sm:px-1.5 rounded-xl text-center transition-all cursor-pointer border flex flex-col items-center justify-center ${
                   selectedLevel === 'hard'
                     ? 'bg-blue-50 border-blue-600 text-blue-950 ring-2 ring-blue-400/30 font-bold shadow-2xs'
                     : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                 }`}
               >
-                <span className="text-xs sm:text-sm font-extrabold flex items-center gap-1">
+                <span className="text-[11px] sm:text-xs font-extrabold flex items-center gap-0.5">
                   <span>🔵</span> むずかしい
                 </span>
-                <span className="text-[10px] text-slate-600 mt-0.5">2〜3文で挑戦</span>
+                <span className="text-[9px] sm:text-[10px] text-slate-600">2〜3文</span>
               </button>
             </div>
           </div>
 
           {/* Dialogue Topic Selector (Step 3) - Compact Responsive Layout */}
-          <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200 shadow-2xs">
-            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-1.5">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black shadow-2xs">
+          <div className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200 shadow-2xs">
+            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-1">
+              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-black shadow-2xs">
                 3
               </span>
-              <MessageCircle className="w-4 h-4 text-blue-600" />
+              <MessageCircle className="w-3.5 h-3.5 text-blue-600" />
               <span>対話テーマをえらぶ</span>
             </h2>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-1">
               {DIALOGUE_TOPICS.map((topic) => {
                 const isSelected = selectedTopic === topic.id;
                 return (
@@ -329,20 +324,20 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                     key={topic.id}
                     type="button"
                     onClick={() => setSelectedTopic(topic.id)}
-                    className={`py-1.5 px-2.5 rounded-xl text-left transition-all cursor-pointer flex items-center justify-between border ${
+                    className={`py-1 px-2 rounded-xl text-left transition-all cursor-pointer flex items-center justify-between border ${
                       isSelected
                         ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-2 ring-emerald-400/30 font-bold shadow-2xs'
                         : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                     }`}
                   >
-                    <div className="min-w-0 flex-1 pr-1.5">
-                      <p className="text-xs sm:text-sm font-bold text-slate-900 truncate leading-tight">
+                    <div className="min-w-0 flex-1 pr-1">
+                      <p className="text-[11px] sm:text-xs font-bold text-slate-900 truncate leading-tight">
                         {topic.title}
                       </p>
-                      <p className="text-[10px] text-slate-600 truncate">{topic.subTitle}</p>
+                      <p className="text-[9px] sm:text-[10px] text-slate-600 truncate">{topic.subTitle}</p>
                     </div>
                     {isSelected && (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
                     )}
                   </button>
                 );
@@ -351,29 +346,29 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
           </div>
 
           {/* Time Duration Selector (Step 4) */}
-          <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200 shadow-2xs">
-            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-1.5">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black shadow-2xs">
+          <div className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200 shadow-2xs">
+            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-1">
+              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-black shadow-2xs">
                 4
               </span>
-              <Clock className="w-4 h-4 text-blue-600" />
+              <Clock className="w-3.5 h-3.5 text-blue-600" />
               <span>対話時間をえらぶ</span>
             </h2>
 
-            <div className="grid grid-cols-5 gap-1.5">
+            <div className="grid grid-cols-5 gap-1">
               {[1, 2, 3, 5, 10].map((mins) => (
                 <button
                   key={mins}
                   type="button"
                   onClick={() => setDurationMinutes(mins)}
-                  className={`py-1.5 sm:py-2 rounded-xl font-bold text-xs sm:text-sm flex flex-col items-center justify-center transition-all cursor-pointer border ${
+                  className={`py-1 sm:py-1.5 rounded-xl font-bold text-xs flex flex-col items-center justify-center transition-all cursor-pointer border ${
                     durationMinutes === mins
                       ? 'bg-blue-600 text-white border-blue-600 shadow-2xs ring-2 ring-blue-400/30'
                       : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                   }`}
                 >
-                  <span className="font-extrabold">{mins}分</span>
-                  <span className="text-[9px] opacity-80">{mins * 60}秒</span>
+                  <span className="font-extrabold text-[11px] sm:text-xs">{mins}分</span>
+                  <span className="text-[8px] sm:text-[9px] opacity-80">{mins * 60}秒</span>
                 </button>
               ))}
             </div>
@@ -382,10 +377,10 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
       </main>
 
       {/* Start Button & Summary Footer */}
-      <footer className="bg-white rounded-2xl py-2 px-3 sm:py-2.5 sm:px-4 border border-slate-200 shadow-md flex flex-col sm:flex-row items-center justify-between gap-2.5 flex-shrink-0">
+      <footer className="bg-white rounded-2xl py-2 px-3 sm:py-2.5 sm:px-4 border border-slate-200 shadow-md flex flex-col sm:flex-row items-center justify-between gap-2 flex-shrink-0">
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shadow-2xs flex-shrink-0">
-            <Sparkles className="w-5 h-5 text-amber-600" />
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shadow-2xs flex-shrink-0">
+            <Sparkles className="w-4 h-4 text-amber-600" />
           </div>
           <div className="min-w-0">
             <p className="text-xs sm:text-sm md:text-base font-bold text-slate-900 truncate">
@@ -400,7 +395,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
         <button
           type="button"
           onClick={handleStart}
-          className="w-full sm:w-auto px-6 sm:px-8 py-2 sm:py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl sm:rounded-2xl font-black text-sm sm:text-base shadow-md flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer flex-shrink-0"
+          className="w-full sm:w-auto px-6 sm:px-8 py-2 sm:py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm md:text-base shadow-md flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer flex-shrink-0"
         >
           <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-white" />
           <span>対話をスタートする！ (Start)</span>
@@ -408,7 +403,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
       </footer>
 
       {/* Educational & Safety Disclosure */}
-      <div className="mt-1.5 text-center text-[10px] sm:text-[11px] text-slate-500 font-medium">
+      <div className="text-center text-[10px] sm:text-[11px] text-slate-500 font-medium">
         <span>本アプリは学校での英語学習を目的として設計されています。AI（Anthropic API）を利用した英語対話練習を行います。</span>
       </div>
     </div>
