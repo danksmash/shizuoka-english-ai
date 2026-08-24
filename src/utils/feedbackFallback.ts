@@ -1,7 +1,9 @@
 import { AIStudentProfile, FeedbackData, VisualVocabularyItem, ChatMessage } from '../types';
+import { maskHighRiskPII } from './security';
 
 /**
- * Generates dynamic feedback strictly based on real conversation history
+ * Generates dynamic feedback strictly based on real conversation history.
+ * Any child-provided text is masked before it can be copied into feedback UI.
  */
 export function generateFallbackFeedback(
   persona: AIStudentProfile,
@@ -14,13 +16,18 @@ export function generateFallbackFeedback(
   messages?: ChatMessage[]
 ): FeedbackData {
   const shortName = persona.name.split(' ')[0] || persona.name;
+  const safeStudentName = maskHighRiskPII(String(studentName || '')).maskedText.slice(0, 12) || 'あなた';
   const history = messages || [];
 
   const childMsgs = history.filter(
     (m) => m.sender !== 'ai' && m.englishText && m.englishText.trim().length > 0
   );
 
-  const childTexts = childMsgs.map((m) => m.englishText.trim());
+  // Never carry raw child text into fallback feedback. This protects the feedback
+  // screen as well as later HTML export when the local/API fallback is used.
+  const childTexts = childMsgs
+    .map((m) => maskHighRiskPII(m.englishText.trim()).maskedText.slice(0, 100))
+    .filter((text) => text.length > 0);
   const allChildTextLower = childTexts.join(' ').toLowerCase();
 
   // 1. Dynamic Key Phrases Extraction (ONLY phrases that actually occurred in this session!)
@@ -58,7 +65,7 @@ export function generateFallbackFeedback(
         extractedPhrases.push({
           english: text,
           japanese: 'どんなスポーツが好きですか？',
-          culturalNote: '相手の好きなスポーツを尋ねる上手な質問表現！',
+          culturalNote: 'どんなスポーツが好きですか？と尋ねる上手な質問表現！',
         });
       }
     } else if (tLower.startsWith('i like') || tLower.includes('i like')) {
@@ -140,22 +147,18 @@ export function generateFallbackFeedback(
   let adviceExample = '';
 
   if (hasUsedHowAboutYou && hasUsedILike && !hasUsedBecause) {
-    // Child is already advanced enough to ask "How about you?". Advise adding reasons!
     adviceTitle = '理由を一言付け足してみよう！ (because it is ～)';
     adviceDetail = `好きなものを答えたあとに「because it is delicious (美味しいから)」や「because it is fun (楽しいから)」と理由を伝えると、もっと気持ちが伝わりますよ！`;
     adviceExample = `I like sushi because it is delicious.`;
   } else if (!hasAskedQuestion && !hasUsedHowAboutYou) {
-    // Child hasn't asked questions yet. Advise asking!
     adviceTitle = '留学生に質問を聞き返してみよう！';
     adviceDetail = `自分のことを答えたあとに「What food do you like?」や「How about you?」と ${shortName} に聞き返してみると、会話のキャッチボールがさらに弾みますよ！`;
     adviceExample = `What animal do you like, ${shortName}?`;
   } else if (hasAskedQuestion && !hasUsedICan) {
-    // Child asked questions! Next, try talking about abilities (I can)
     adviceTitle = 'できること・特技を伝えてみよう！ (I can ～)';
     adviceDetail = `「I can play soccer (サッカーができます)」や「I can swim (泳げます)」のように、自分の得意なことを ${shortName} に伝えてみましょう！`;
     adviceExample = `I can play soccer. Can you play soccer, ${shortName}?`;
   } else {
-    // General high-level progression
     adviceTitle = '相槌や感想を一言プラスしてみよう！';
     adviceDetail = `相手の答えを聞いたあとに「Nice! (いいね！)」や「Sounds good! (いいね！)」とリアクションすると、もっと自然な英会話になりますよ！`;
     adviceExample = `Sounds good! I like it too!`;
@@ -167,7 +170,7 @@ export function generateFallbackFeedback(
 
   const goodPoint1 = firstChildText
     ? `「${firstChildText}」のように、自分の思いや答えを堂々と英語で伝えようとする姿勢がとても素晴らしかったです！`
-    : `${studentName || 'あなた'}の思いを、前向きに英語で伝えようとする姿勢がとても素敵でした！`;
+    : `${safeStudentName}さんの思いを、前向きに英語で伝えようとする姿勢がとても素敵でした！`;
 
   const goodPoint2 = secondChildText
     ? `${persona.name} (${persona.countryJapanese}留学生) の言葉をよく聞き、「${secondChildText}」とスムーズに会話のキャッチボールを続けられました！`
@@ -189,7 +192,7 @@ export function generateFallbackFeedback(
     topicSummary = '素敵な静岡のこと';
   }
 
-  const overallComment = `${studentName || '児童'}さん、${persona.countryJapanese}の留学生 ${persona.name} と${topicSummary}について楽しく対話練習ができましたね！本番の静岡大学留学生交流会でも、笑顔でたくさん話しかけてみてくださいね！`;
+  const overallComment = `${safeStudentName}さん、${persona.countryJapanese}の留学生 ${persona.name} と${topicSummary}について楽しく対話練習ができましたね！本番の静岡大学留学生交流会でも、笑顔でたくさん話しかけてみてくださいね！`;
 
   return {
     goodPoints: [goodPoint1, goodPoint2, goodPoint3],
