@@ -66,7 +66,6 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
 
   return (
     <div className="w-full bg-gradient-to-b from-slate-50 via-blue-50/25 to-slate-100 p-2.5 sm:p-3.5 md:p-4 max-w-7xl mx-auto flex flex-col gap-2 sm:gap-2.5">
-      {/* Top Header Banner - Streamlined & Compact for Chromebook/Tablet/MacBook Viewports */}
       <header className="bg-white rounded-2xl py-2 px-3 sm:py-2.5 sm:px-4 border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-2 flex-shrink-0">
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-2xs flex-shrink-0">
@@ -87,7 +86,6 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
           </div>
         </div>
 
-        {/* Student Name Input & Cheerful Prompt */}
         <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end flex-wrap sm:flex-nowrap">
           <div className="hidden md:flex items-center gap-1 text-[11px] font-bold text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-xl">
             <span>✨ 好きなことや趣味を英語で伝えてみよう！</span>
@@ -108,15 +106,11 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
         </div>
       </header>
 
-      {/* Main Configuration Grid (7 Cols Left / 5 Cols Right on desktop/Chromebook/MacBook) */}
       <main className="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-3 items-stretch flex-1">
-        {/* Left Section: 9 Exchange Students Grid */}
         <section className="lg:col-span-7 xl:col-span-7 flex flex-col justify-between h-full">
           <div className="flex items-center justify-between mb-1.5 flex-shrink-0">
             <h2 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black shadow-2xs">
-                1
-              </span>
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black shadow-2xs">1</span>
               <span>会話するAI留学生をえらぼう（全9名）</span>
             </h2>
             <span className="text-[11px] sm:text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
@@ -124,7 +118,6 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
             </span>
           </div>
 
-          {/* Responsive 3-Column Grid for 9 Students */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 items-stretch flex-1">
             {AI_STUDENTS_LIST.map((student) => {
               const isSelected = student.id === selectedStudentId;
@@ -142,7 +135,6 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                       : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-slate-50/90 shadow-2xs'
                   }`}
                 >
-                  {/* Selection Indicator Checkmark */}
                   {isSelected && (
                     <div className="absolute top-1.5 right-1.5 text-blue-600 z-10">
                       <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 fill-blue-600 text-white" />
@@ -150,7 +142,6 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                   )}
 
                   <div className="flex flex-col h-full justify-between gap-1 w-full">
-                    {/* 1. Top: Country Header (Larger text: Flag + English Country (Native Country)) */}
                     <div className="flex items-center gap-1.5 min-w-0 pr-4">
                       <span className="text-base sm:text-lg leading-none flex-shrink-0">{student.flag}</span>
                       <span className="text-xs sm:text-[13px] font-black text-slate-900 tracking-tight truncate">
@@ -158,33 +149,17 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                       </span>
                     </div>
 
-                    {/* 2. Middle: Left Half (Huge Illustration) + Right Half (Profile Info) */}
                     <div className="grid grid-cols-[46%_54%] sm:grid-cols-2 gap-1.5 sm:gap-2 items-center w-full min-w-0 flex-1 my-0.5">
-                      {/* Left Half: Large Illustration Dedicated Showcase */}
                       <div className="w-full h-full flex items-center justify-center">
                         <div className="w-full aspect-square border border-slate-200/90 shadow-2xs bg-slate-100 rounded-xl overflow-hidden flex items-center justify-center">
                           <StudentAvatar student={student} size="custom" className="w-full h-full object-cover" />
                         </div>
                       </div>
 
-                      {/* Right Half: English Name, Katakana, Age, City, Country Accent */}
                       <div className="flex flex-col justify-center h-full min-w-0 gap-0.5">
-                        {/* English Name */}
-                        <h3 className="text-xs sm:text-[13.5px] font-black text-slate-900 leading-tight truncate">
-                          {student.name}
-                        </h3>
-
-                        {/* Katakana Name */}
-                        <p className="text-[11px] sm:text-xs font-bold text-blue-700 leading-tight truncate">
-                          {student.japaneseName}
-                        </p>
-
-                        {/* Age & City */}
-                        <p className="text-[10px] sm:text-[11px] font-semibold text-slate-600 leading-tight truncate">
-                          {student.age}歳 · {student.city.split(' ')[0]}
-                        </p>
-
-                        {/* Country Accent (e.g. アメリカ英語) */}
+                        <h3 className="text-xs sm:text-[13.5px] font-black text-slate-900 leading-tight truncate">{student.name}</h3>
+                        <p className="text-[11px] sm:text-xs font-bold text-blue-700 leading-tight truncate">{student.japaneseName}</p>
+                        <p className="text-[10px] sm:text-[11px] font-semibold text-slate-600 leading-tight truncate">{student.age}歳 · {student.city.split(' ')[0]}</p>
                         <div className="truncate mt-0.5">
                           <span className="inline-block text-[9.5px] sm:text-[10.5px] font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-1 py-0.5 rounded truncate max-w-full">
                             🗣️ {student.accentName.split(' ')[0]}
@@ -193,7 +168,6 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                       </div>
                     </div>
 
-                    {/* 3. Bottom: Voice Preview Button */}
                     <div
                       onClick={(e) => handlePlayVoicePreview(student, e)}
                       role="button"
@@ -214,11 +188,9 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
           </div>
         </section>
 
-        {/* Right Section: Selected Student Profile & Settings (Level, Topic, Time) */}
-        <section className="lg:col-span-5 xl:col-span-5 flex flex-col justify-between gap-2 h-full min-h-0">
-          {/* Selected Student Detailed Profile Card - Completely Responsive & Never Overflowing */}
-          <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200 shadow-2xs flex flex-col gap-1.5">
-            {/* Header with Avatar & Basic Identity */}
+        {/* Right Section: selected student profile + the two remaining setup steps. */}
+        <section className="lg:col-span-5 xl:col-span-5 grid grid-rows-[minmax(0,1fr)_auto_auto] gap-2 h-full min-h-0">
+          <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200 shadow-2xs flex flex-col gap-1.5 min-h-0">
             <div className="flex items-start gap-2.5">
               <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl border-2 border-blue-500 shadow-2xs flex-shrink-0 overflow-hidden">
                 <StudentAvatar student={selectedStudent} size="custom" className="w-full h-full object-cover" />
@@ -230,27 +202,21 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                     {selectedStudent.countryJapanese} ({getStudentCountryDisplay(selectedStudent)})
                   </span>
                 </div>
-                <h3 className="text-xs sm:text-sm font-black text-slate-900 leading-snug">
-                  {selectedStudent.name}
-                </h3>
+                <h3 className="text-xs sm:text-sm font-black text-slate-900 leading-snug">{selectedStudent.name}</h3>
                 <p className="text-[11px] sm:text-xs font-bold text-blue-700">
                   {selectedStudent.japaneseName} · {selectedStudent.age}歳 · {selectedStudent.city}
                 </p>
               </div>
             </div>
 
-            {/* Natural Wrapping Bio */}
             <p className="text-[11px] sm:text-xs text-slate-700 leading-relaxed bg-blue-50/70 p-2 rounded-xl border border-blue-200/60 font-medium break-words">
               {selectedStudent.japaneseBio}
             </p>
 
-            {/* Profile Meta Details (Likes, Major, Landmark) */}
             <div className="grid grid-cols-1 gap-1 text-[11px] sm:text-xs text-slate-700 font-medium">
               <div className="flex items-start gap-1.5">
                 <span className="font-bold text-slate-900 flex-shrink-0">❤️ 好き:</span>
-                <span className="text-slate-700 leading-snug break-words">
-                  {selectedStudent.likes.join('、')}
-                </span>
+                <span className="text-slate-700 leading-snug break-words">{selectedStudent.likes.join('、')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="font-bold text-slate-900 flex-shrink-0">🎓 専攻:</span>
@@ -263,12 +229,9 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
             </div>
           </div>
 
-          {/* Dialogue Topic Selector (Step 2) - Compact Responsive Layout */}
           <div className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200 shadow-2xs">
             <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-1">
-              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-black shadow-2xs">
-                2
-              </span>
+              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-black shadow-2xs">2</span>
               <MessageCircle className="w-3.5 h-3.5 text-blue-600" />
               <span>対話テーマをえらぶ</span>
             </h2>
@@ -288,26 +251,19 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                     }`}
                   >
                     <div className="min-w-0 flex-1 pr-1">
-                      <p className="text-[11px] sm:text-xs font-bold text-slate-900 truncate leading-tight">
-                        {topic.title}
-                      </p>
+                      <p className="text-[11px] sm:text-xs font-bold text-slate-900 truncate leading-tight">{topic.title}</p>
                       <p className="text-[9px] sm:text-[10px] text-slate-600 truncate">{topic.subTitle}</p>
                     </div>
-                    {isSelected && (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                    )}
+                    {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Time Duration Selector (Step 3) */}
           <div className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200 shadow-2xs">
             <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-1">
-              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-black shadow-2xs">
-                3
-              </span>
+              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-black shadow-2xs">3</span>
               <Clock className="w-3.5 h-3.5 text-blue-600" />
               <span>対話時間をえらぶ</span>
             </h2>
@@ -333,7 +289,6 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
         </section>
       </main>
 
-      {/* Start Button & Summary Footer */}
       <footer className="bg-white rounded-2xl py-2 px-3 sm:py-2.5 sm:px-4 border border-slate-200 shadow-md flex flex-col sm:flex-row items-center justify-between gap-2 flex-shrink-0">
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shadow-2xs flex-shrink-0">
@@ -359,11 +314,9 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
         </button>
       </footer>
 
-      {/* Educational & Safety Disclosure */}
       <div className="text-center text-[10px] sm:text-[11px] text-slate-500 font-medium">
         <span>本アプリは学校での英語学習を目的として設計されています。AI（Anthropic API）を利用した英語対話練習を行います。</span>
       </div>
     </div>
   );
 };
-
