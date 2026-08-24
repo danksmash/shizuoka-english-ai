@@ -36,7 +36,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
   const selectedStudent =
     AI_STUDENTS_LIST.find((s) => s.id === selectedStudentId) || AI_STUDENTS_LIST[0];
 
-  const handlePlayVoicePreview = (student: AIStudentProfile, e: React.MouseEvent) => {
+  const handlePlayVoicePreview = (student: AIStudentProfile, e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
     stopSpeaking();
     setPreviewPlayingId(student.id);
@@ -124,11 +124,18 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
               const isPlaying = previewPlayingId === student.id;
 
               return (
-                <button
-                  type="button"
+                <div
                   key={student.id}
-                  onClick={() => setSelectedStudentId(student.id)}
+                  role="button"
+                  tabIndex={0}
                   aria-pressed={isSelected}
+                  onClick={() => setSelectedStudentId(student.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedStudentId(student.id);
+                    }
+                  }}
                   className={`relative p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between text-left h-full ${
                     isSelected
                       ? 'bg-blue-50/95 border-blue-600 shadow-sm ring-2 ring-blue-400/40'
@@ -168,10 +175,10 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                       </div>
                     </div>
 
-                    <div
+                    <button
+                      type="button"
                       onClick={(e) => handlePlayVoicePreview(student, e)}
-                      role="button"
-                      tabIndex={0}
+                      aria-label={`${student.name}の声を聞く`}
                       className={`w-full py-1 sm:py-1.5 px-2 rounded-lg text-[10.5px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer border min-h-[28px] sm:min-h-[30px] ${
                         isPlaying
                           ? 'bg-blue-600 text-white border-blue-600 shadow-2xs animate-pulse'
@@ -180,9 +187,9 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                     >
                       <Volume2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" />
                       <span className="truncate">{isPlaying ? '再生中...' : '声を聞く'}</span>
-                    </div>
+                    </button>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
