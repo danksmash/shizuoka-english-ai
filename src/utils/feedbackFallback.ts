@@ -1,4 +1,4 @@
-import { AIStudentProfile, FeedbackData, VisualVocabularyItem, ChatMessage, DialogueTopic, EnglishLevel } from '../types';
+import { AIStudentProfile, FeedbackData, VisualVocabularyItem, ChatMessage, DialogueTopic } from '../types';
 
 export interface LocalDialogueResponse {
   reply: string;
@@ -153,8 +153,7 @@ export function generateLocalStudentDialogueReply(
   studentText: string,
   turnNumber: number,
   studentName: string,
-  history?: ChatMessage[],
-  level: EnglishLevel = 'normal'
+  history?: ChatMessage[]
 ): LocalDialogueResponse {
   const shortName = persona.name.split(' ')[0] || persona.name;
   const culture = getCultureForPersona(persona);
@@ -162,10 +161,17 @@ export function generateLocalStudentDialogueReply(
   const rawLower = studentText.toLowerCase().trim();
   const lower = rawLower.replace(/[.,?!]/g, ' ').trim();
 
-  // Internal reply resolution
-  const resolveRawResponse = (): LocalDialogueResponse => {
+  // 1. Check for Goodbye / Farewell / Thank you (No forced question on farewell)
+  if (lower === 'goodbye' || lower === 'bye' || lower === 'bye bye' || lower === 'see you' || lower.includes('see you later') || lower.includes('have a nice day')) {
+    return {
+      reply: `Goodbye, ${studentName || 'friend'}! I had so much fun talking with you today! See you next time!`,
+      japaneseTranslation: `さようなら、${studentName ? studentName + 'さん' : 'お友達'}！今日はいっぱいお話しできて楽しかったよ！またね！`,
+      mood: 'happy',
+      culturalNote: `笑顔でバイバイの挨拶ができたね！`,
+    };
+  }
 
-  // 1. Check for Pardon / Clarification request
+  // 2. Check for Pardon / Clarification request
   const isPardon =
     lower === 'pardon' ||
     lower === 'pardon me' ||
@@ -237,8 +243,18 @@ export function generateLocalStudentDialogueReply(
     };
   }
 
-  // 2. Direct Student Questions (Highest Priority)
-  // 2-a. Animal question
+  // 3. "How are you?" / "How are you doing?" Direct Answer First
+  if (lower.includes('how are you') || lower.includes('how are you doing') || lower.includes('how do you do')) {
+    return {
+      reply: `I am doing great today, thanks! How are you?`,
+      japaneseTranslation: `今日はとても元気だよ、ありがとう！調子はどうですか？`,
+      mood: 'happy',
+      culturalNote: `「How are you?」と聞かれたら元気に気分を伝えてみよう！`,
+    };
+  }
+
+  // 4. Direct Student Questions (Highest Priority)
+  // 4-a. Animal question
   if (lower.includes('what animal') || lower.includes('favorite animal') || lower.includes('favourite animal')) {
     return {
       reply: `I like ${culture.animalEnglish}. They are so cute! What animal do you like?`,
@@ -248,7 +264,7 @@ export function generateLocalStudentDialogueReply(
     };
   }
 
-  // 2-b. Food question
+  // 4-b. Food question
   if (
     lower.includes('what food') ||
     lower.includes('favorite food') ||
@@ -257,14 +273,14 @@ export function generateLocalStudentDialogueReply(
     lower.includes('what do you like to eat')
   ) {
     return {
-      reply: `I like ${culture.foodEnglish}. It is delicious! Do you like it?`,
-      japaneseTranslation: `私は${culture.foodJapanese}が好きです。とても美味しいよ！あなたは好きですか？`,
+      reply: `I like ${culture.foodEnglish}. It is delicious! What food do you like?`,
+      japaneseTranslation: `私は${culture.foodJapanese}が好きです。とても美味しいよ！好きな食べ物は何ですか？`,
       mood: 'happy',
       culturalNote: culture.cultureFact,
     };
   }
 
-  // 2-c. Sport question: "What sport do you like?", "What's your favorite sport?"
+  // 4-c. Sport question: "What sport do you like?", "What's your favorite sport?"
   if (lower.includes('what sport') || lower.includes('favorite sport') || lower.includes('favourite sport')) {
     return {
       reply: `I like ${culture.sportEnglish}. It is very exciting! Do you play sports?`,
@@ -274,7 +290,7 @@ export function generateLocalStudentDialogueReply(
     };
   }
 
-  // 2-d. Color question: "What color do you like?"
+  // 4-d. Color question: "What color do you like?"
   if (lower.includes('what color') || lower.includes('what colour') || lower.includes('favorite color')) {
     return {
       reply: `I like blue and green! They look like nature. What color do you like?`,
@@ -283,7 +299,7 @@ export function generateLocalStudentDialogueReply(
     };
   }
 
-  // 2-e. Origin question: "Where are you from?"
+  // 4-e. Origin question: "Where are you from?"
   if (lower.includes('where are you from') || lower.includes('where do you come from') || lower.includes('what country')) {
     return {
       reply: `I am from ${persona.country} (${persona.city}). Have you ever been there?`,
@@ -293,16 +309,16 @@ export function generateLocalStudentDialogueReply(
     };
   }
 
-  // 2-f. Age question: "How old are you?"
+  // 4-f. Age question: "How old are you?"
   if (lower.includes('how old')) {
     return {
-      reply: `I am ${persona.age} years old. I am a university student!`,
-      japaneseTranslation: `私は${persona.age}歳です。大学生だよ！`,
+      reply: `I am ${persona.age} years old. I am a university student! How old are you?`,
+      japaneseTranslation: `私は${persona.age}歳です。大学生だよ！あなたは何歳ですか？`,
       mood: 'happy',
     };
   }
 
-  // 2-g. Ability question: "What can you do?", "Can you ...?"
+  // 4-g. Ability question: "What can you do?", "Can you ...?"
   if (lower.startsWith('can you') || lower.includes('can you play') || lower.includes('can you swim') || lower.includes('can you speak')) {
     if (lower.includes('swim')) {
       return {
@@ -313,8 +329,8 @@ export function generateLocalStudentDialogueReply(
     }
     if (lower.includes('soccer') || lower.includes('football')) {
       return {
-        reply: `Yes, I can play soccer! It is so fun.`,
-        japaneseTranslation: `はい、サッカーができるよ！とても楽しいよね。`,
+        reply: `Yes, I can play soccer! It is so fun. Can you play soccer?`,
+        japaneseTranslation: `はい、サッカーができるよ！とても楽しいよね。サッカーはできる？`,
         mood: 'happy',
       };
     }
@@ -333,7 +349,7 @@ export function generateLocalStudentDialogueReply(
     };
   }
 
-  // 2-h. General "Do you like ...?" questions
+  // 4-h. General "Do you like ...?" questions
   if (lower.startsWith('do you like')) {
     if (lower.includes('sushi') || lower.includes('japanese food') || lower.includes('ramen')) {
       return {
@@ -345,15 +361,15 @@ export function generateLocalStudentDialogueReply(
     }
     if (lower.includes('soccer') || lower.includes('baseball') || lower.includes('tennis')) {
       return {
-        reply: `Yes, I like it very much! It is great fun.`,
-        japaneseTranslation: `はい、大好きだよ！とても楽しいよね。`,
+        reply: `Yes, I like it very much! It is great fun. Do you play often?`,
+        japaneseTranslation: `はい、大好きだよ！とても楽しいよね。よくやるの？`,
         mood: 'happy',
       };
     }
     if (lower.includes('dog') || lower.includes('cat') || lower.includes('animal')) {
       return {
-        reply: `Yes, I love animals! They are so friendly.`,
-        japaneseTranslation: `はい、動物が大好きです！とても人懐っこいよね。`,
+        reply: `Yes, I love animals! They are so friendly. What animal do you like?`,
+        japaneseTranslation: `はい、動物が大好きです！とても人懐っこいよね。どんな動物が好き？`,
         mood: 'happy',
       };
     }
@@ -364,31 +380,31 @@ export function generateLocalStudentDialogueReply(
     };
   }
 
-  // 2-i. "How about you?" / "And you?"
+  // 4-i. "How about you?" / "And you?"
   if (lower.includes('how about you') || lower.includes('and you') || lower.includes('what about you')) {
     if (topic === 'favorites') {
       return {
-        reply: `I like ${culture.foodEnglish} and ${culture.sportEnglish}! They make me happy.`,
-        japaneseTranslation: `私は${culture.foodJapanese}と${culture.sportEnglish}が好きだよ！元気が出るんだ。`,
+        reply: `I like ${culture.foodEnglish} and ${culture.sportEnglish}! They make me happy. What do you like?`,
+        japaneseTranslation: `私は${culture.foodJapanese}と${culture.sportEnglish}が好きだよ！元気が出るんだ。あなたは何が好き？`,
         mood: 'happy',
         culturalNote: `質問を聞き返してくれてありがとう！`,
       };
     }
     if (topic === 'talents') {
       return {
-        reply: `I can play music and cook delicious food!`,
-        japaneseTranslation: `私は音楽を演奏したり美味しい料理を作ったりできるよ！`,
+        reply: `I can play music and cook delicious food! What can you do?`,
+        japaneseTranslation: `私は音楽を演奏したり美味しい料理を作ったりできるよ！あなたは何ができる？`,
         mood: 'happy',
       };
     }
     return {
-      reply: `I love studying at Shizuoka University and meeting nice friends like you!`,
-      japaneseTranslation: `静岡大学で勉強して、あなたのような優しいお友達に出会えて嬉しいよ！`,
+      reply: `I love studying at Shizuoka University and meeting nice friends like you! What do you like to do?`,
+      japaneseTranslation: `静岡大学で勉強して、あなたのような優しいお友達に出会えて嬉しいよ！何をするのが好き？`,
       mood: 'happy',
     };
   }
 
-  // 3. Name introduction by child
+  // 5. Name introduction by child
   if (lower.includes('my name is') || lower.includes('i am ') || lower.includes("i'm ") || turnNumber <= 1) {
     let nameFromText = '';
     const match = lower.match(/(?:my name is|i am|i'm)\s+([a-zA-Z]+)/);
@@ -425,7 +441,7 @@ export function generateLocalStudentDialogueReply(
     };
   }
 
-  // 4. Helper to find next unasked question for rich 10-turn progression
+  // 6. Context-based unasked question helper
   const aiHistoryText = (history || [])
     .filter((m) => m.sender === 'ai')
     .map((m) => m.englishText.toLowerCase())
@@ -453,15 +469,12 @@ export function generateLocalStudentDialogueReply(
     if (!aiHistoryText.includes('season') && !aiHistoryText.includes('summer') && !aiHistoryText.includes('winter')) {
       return { english: 'What season do you like?', japanese: 'どの季節が好きですか？' };
     }
-    if (!aiHistoryText.includes('after school') && !aiHistoryText.includes('weekend')) {
-      return { english: 'What do you like to do after school?', japanese: '放課後は何をして過ごすのが好きですか？' };
-    }
-    return { english: 'What are you excited about today?', japanese: '今日はどんなことが楽しみですか？' };
+    return { english: 'What do you like to do in your free time?', japanese: '自由な時間には何をするのが好きですか？' };
   };
 
   const nextQ = getNextUnaskedQuestion();
 
-  // 5. Reactions to Student's Statements with dynamic follow-ups
+  // 7. Reactions to Student's Statements with dynamic follow-ups
   if (lower.includes('sushi') || lower.includes('ramen') || lower.includes('curry') || lower.includes('pizza') || lower.includes('hamburger') || lower.includes('cake') || lower.includes('apple') || lower.includes('fruit')) {
     return {
       reply: `Yum! Delicious food makes everyone smile. ${nextQ.english}`,
@@ -504,7 +517,7 @@ export function generateLocalStudentDialogueReply(
     };
   }
 
-  if (lower.includes('thank you') || lower.includes('thanks') || lower.includes('goodbye') || lower.includes('bye')) {
+  if (lower.includes('thank you') || lower.includes('thanks')) {
     return {
       reply: `You are very welcome, ${studentName || 'friend'}! I loved talking with you!`,
       japaneseTranslation: `どういたしまして！${studentName ? studentName + 'さん' : 'あなた'}とお話しできてとても楽しかったよ！`,
@@ -521,45 +534,14 @@ export function generateLocalStudentDialogueReply(
     };
   }
 
-  // 6. Topic-based Natural Continuations
+  // 8. General natural reply
   return {
-    reply: `That is so nice! ${nextQ.english}`,
-    japaneseTranslation: `いいね！${nextQ.japanese}`,
+    reply: `That sounds fun! ${nextQ.english}`,
+    japaneseTranslation: `楽しそうだね！${nextQ.japanese}`,
     mood: 'happy',
   };
-  };
-
-  const rawRes = resolveRawResponse();
-
-  if (level === 'easy') {
-    // Easy: Max 1 sentence
-    const sentences = rawRes.reply.split(/(?<=[.?!])\s+/).filter(Boolean);
-    const jaSentences = rawRes.japaneseTranslation.split(/(?<=[。！？])\s*/).filter(Boolean);
-    return {
-      ...rawRes,
-      reply: sentences[0] || rawRes.reply,
-      japaneseTranslation: jaSentences[0] || rawRes.japaneseTranslation,
-    };
-  }
-
-  if (level === 'hard') {
-    // Hard: Allow fuller 2-3 sentences
-    return rawRes;
-  }
-
-  // Normal: Max 2 sentences
-  const sentences = rawRes.reply.split(/(?<=[.?!])\s+/).filter(Boolean);
-  const jaSentences = rawRes.japaneseTranslation.split(/(?<=[。！？])\s*/).filter(Boolean);
-  if (sentences.length > 2) {
-    return {
-      ...rawRes,
-      reply: sentences.slice(0, 2).join(' '),
-      japaneseTranslation: jaSentences.slice(0, 2).join(''),
-    };
-  }
-
-  return rawRes;
 }
+
 
 /**
  * Generates dynamic feedback strictly based on real conversation history

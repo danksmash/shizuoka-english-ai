@@ -1,61 +1,66 @@
 import { detectInappropriateContent, detectPromptInjection } from './security';
 
 /**
- * Common Level Response Validator for both AI (Anthropic) and Fallback routes
- * Enforces strict elementary Grade 5/6 sentence count and structural rules:
- * - Easy: Max 1 sentence (or 1 short filler + 1 short sentence)
- * - Normal: Max 1-2 simple sentences (Default)
- * - Hard: Max 2-3 sentences (Allows simple 'and' / 'because')
+ * AI Response Technical and Safety Validator
+ * 
+ * DESIGN PRINCIPLE: VALIDATION !== GENERATION.
+ * - This validator performs safety, PII protection, and technical anomaly checks.
+ * - It DOES NOT rewrite or inject predetermined questions (e.g. "What sport do you like?").
+ * - It DOES NOT enforce artificial sentence count or easy/normal/hard level truncation.
+ * - If the AI response is clean and safe, it is passed through exactly as generated.
  */
-export function validateResponseByLevel(
-  reply: string,
-  level: 'easy' | 'normal' | 'hard' = 'normal'
-): string {
-  if (!reply) return 'That is nice! What sport do you like?';
+export interface ValidationResult {
+  isValid: boolean;
+  sanitizedReply: string;
+  reason?: string;
+}
 
-  // Check for harmful content or prompt leakage in output
-  if (detectInappropriateContent(reply) || detectPromptInjection(reply)) {
-    return 'That sounds great! What food do you like?';
+export function validateAiResponse(reply: string, personaName: string = 'AI Student'): string {
+  const result = inspectAiResponse(reply, personaName);
+  return result.sanitizedReply;
+}
+
+export function inspectAiResponse(rawReply: string, personaName: string = 'AI Student'): ValidationResult {
+  if (!rawReply || typeof rawReply !== 'string' || !rawReply.trim()) {
+    return {
+      isValid: false,
+      sanitizedReply: `Hello! I'm ${personaName}. What would you like to talk about today?`,
+      reason: 'EMPTY_RESPONSE',
+    };
   }
 
-  // Split into sentences using punctuation boundaries
-  const rawSentences = reply
-    .split(/(?<=[.?!])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  let cleaned = rawReply.trim();
 
-  if (rawSentences.length === 0) {
-    return reply;
+  // 1. Clean technical artifacts if any (e.g. markdown code fences, JSON artifacts)
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  cleaned = cleaned.replace(/^\{[\s\S]*?"reply":\s*"/, '').replace(/"[\s\S]*?\}$/, '');
+  cleaned = cleaned.trim();
+
+  // Strip excessive enclosing quotes if returned as a single quoted string
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1).trim();
   }
 
-  if (level === 'easy') {
-    // Easy: Max 1 sentence (or 1 short reaction like "Oh!" + 1 short sentence)
-    if (rawSentences.length > 1) {
-      const firstIsShortFiller =
-        rawSentences[0].split(' ').length <= 2 &&
-        /^(?:oh|wow|nice|great|hello|hi|yes|no|cool)[!,.]?$/i.test(
-          rawSentences[0].replace(/[!,.]/g, '')
-        );
-      if (firstIsShortFiller && rawSentences.length >= 2) {
-        return `${rawSentences[0]} ${rawSentences[1]}`;
-      }
-      return rawSentences[0];
-    }
-    return rawSentences[0];
+  // 2. Safety filter
+  if (detectInappropriateContent(cleaned)) {
+    return {
+      isValid: false,
+      sanitizedReply: `Let's practice friendly English together! What is your favorite thing?`,
+      reason: 'SAFETY_FILTER_TRIGGERED',
+    };
   }
 
-  if (level === 'hard') {
-    // Hard: Max 3 sentences
-    if (rawSentences.length > 3) {
-      return rawSentences.slice(0, 3).join(' ');
-    }
-    return rawSentences.join(' ');
+  // 3. Prompt leakage filter
+  if (detectPromptInjection(cleaned)) {
+    return {
+      isValid: false,
+      sanitizedReply: `I am ${personaName}! Let's have fun talking in English.`,
+      reason: 'PROMPT_LEAK_FILTER_TRIGGERED',
+    };
   }
 
-  // Normal (Default): Max 2 sentences
-  if (rawSentences.length > 2) {
-    return rawSentences.slice(0, 2).join(' ');
-  }
-
-  return rawSentences.join(' ');
+  return {
+    isValid: true,
+    sanitizedReply: cleaned,
+  };
 }
