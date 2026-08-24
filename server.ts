@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAIStudentById } from './src/data/curriculum';
-import { generateLocalStudentDialogueReply, generateFallbackFeedback } from './src/utils/feedbackFallback';
+import { generateFallbackFeedback } from './src/utils/feedbackFallback';
 
 dotenv.config();
 
@@ -382,78 +382,33 @@ CRITICAL RESPONSE MANDATES:
       });
     }
 
-    // High-quality local context-aware fallback when API client is not configured
-    route = 'fallback';
-    fallbackReason = 'API_KEY_NOT_CONFIGURED';
-    const localReply = generateLocalStudentDialogueReply(
-      persona,
-      topic || 'favorites',
-      safeUserMessage,
-      rawHistory.length + 1,
-      effectiveName,
-      rawHistory
-    );
-    const sanitizedLocalReply = sanitizeAiOutput(localReply.reply, persona.name);
-    const responseEnd = Date.now();
-
-    return res.json({
-      success: true,
-      isFallback: true,
-      fallbackReason,
-      data: {
-        reply: sanitizedLocalReply,
-        japaneseTranslation: localReply.japaneseTranslation,
-        mood: localReply.mood,
-        culturalNote: localReply.culturalNote || '',
-        detectedName: spokenName || undefined,
-      },
+    return res.status(503).json({
+      success: false,
+      error: 'AI service is not configured. No conversation fallback is available.',
       _diagnostics: {
         requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         requestStart,
-        responseEnd,
-        latencyMs: responseEnd - requestStart,
-        pathType: 'SERVER_FALLBACK',
-        route,
-        fallbackReason,
+        responseEnd: Date.now(),
+        pathType: 'AI_UNAVAILABLE',
       },
     });
   } catch (error: any) {
-    route = 'fallback';
-    if (error?.status === 429) {
-      fallbackReason = 'RATE_LIMIT';
-    } else if (error?.name === 'AbortError' || error?.message?.includes('aborted') || error?.message?.includes('timeout')) {
-      fallbackReason = 'API_TIMEOUT';
-    } else if (error?.message?.includes('API_INVALID_RESPONSE')) {
-      fallbackReason = 'API_INVALID_RESPONSE';
-    } else if (error?.status >= 500) {
-      fallbackReason = 'API_5XX';
-    } else {
-      fallbackReason = 'API_ERROR';
-    }
-
-    // High-quality local context-aware fallback for API error resilience
-    const localReply = generateLocalStudentDialogueReply(
-      persona,
-      topic || 'favorites',
-      safeUserMessage,
-      rawHistory.length + 1,
-      effectiveName,
-      rawHistory
-    );
-    const sanitizedLocalReply = sanitizeAiOutput(localReply.reply, persona.name);
     const responseEnd = Date.now();
+    const fallbackReason =
+      error?.status === 429
+        ? 'RATE_LIMIT'
+        : error?.name === 'AbortError' || error?.message?.includes('aborted') || error?.message?.includes('timeout')
+          ? 'API_TIMEOUT'
+          : error?.message?.includes('API_INVALID_RESPONSE')
+            ? 'API_INVALID_RESPONSE'
+            : error?.status >= 500
+              ? 'API_5XX'
+              : 'API_ERROR';
 
-    return res.json({
-      success: true,
-      isFallback: true,
-      fallbackReason,
-      data: {
-        reply: sanitizedLocalReply,
-        japaneseTranslation: localReply.japaneseTranslation,
-        mood: localReply.mood,
-        culturalNote: localReply.culturalNote || '',
-        detectedName: spokenName || undefined,
-      },
+    const statusCode = fallbackReason === 'RATE_LIMIT' ? 429 : fallbackReason === 'API_TIMEOUT' ? 504 : 502;
+    return res.status(statusCode).json({
+      success: false,
+      error: 'AI service is temporarily unavailable. No conversation fallback is available.',
       _diagnostics: {
         requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         requestStart,
@@ -461,8 +416,7 @@ CRITICAL RESPONSE MANDATES:
         apiResponseReceived,
         responseEnd,
         latencyMs: responseEnd - requestStart,
-        pathType: 'SERVER_FALLBACK',
-        route,
+        pathType: 'AI_ERROR',
         fallbackReason,
       },
     });

@@ -18,7 +18,6 @@ import { DIALOGUE_TOPICS, getAIStudentById } from './data/curriculum';
 import { detectVocabularyInText } from './data/vocabulary';
 import {
   generateFallbackFeedback,
-  generateLocalStudentDialogueReply,
 } from './utils/feedbackFallback';
 import {
   speakStudentVoice,
@@ -383,37 +382,10 @@ export default function App() {
         throw new Error('API response unsuccessful, switching to local engine');
       }
     } catch (e) {
-      console.warn('AI backend unavailable, generating local safe response:', e);
-      const studentObj = currentAiStudentRef.current;
-      const currentProf = profileRef.current;
-      const localReply = generateLocalStudentDialogueReply(
-        studentObj,
-        currentProf.selectedTopic,
-        trimmed,
-        turnCountRef.current,
-        currentProf.name,
-        messagesRef.current
-      );
-
-      extractAndAddVocab(localReply.reply);
-
-      const fallbackAiMsg: ChatMessage = {
-        id: `ai-local-${Date.now()}`,
-        sender: 'ai',
-        englishText: localReply.reply,
-        japaneseText: localReply.japaneseTranslation,
-        timestamp: Date.now(),
-        culturalNote: localReply.culturalNote,
-      };
-      const fallbackHistory = [...messagesRef.current, fallbackAiMsg];
-      setMessages(fallbackHistory);
-      messagesRef.current = fallbackHistory;
-
-      setMood((localReply.mood as CharacterMood) || 'speaking');
-      if (localReply.culturalNote) {
-        setLatestCulturalNote(localReply.culturalNote);
-      }
-      playAiVoice(localReply.reply);
+      console.error('AI backend unavailable; no conversation fallback will be generated:', e);
+      setMood('listening');
+      setMicHintMessage('AI留学生に接続できませんでした。もう一度送ってみてね。');
+      setTimeout(() => setMicHintMessage(''), 5000);
     } finally {
       setIsAiResponding(false);
     }
