@@ -22,14 +22,14 @@
    - 視覚的語彙ドック（イラスト・発音・例文付き）によるスムーズな発話サポート
 
 3. **学校教育向け安全性・プライバシー配慮設計**
-   - **サーバー経由の安全なAI連携**: Anthropic Claude API をバックエンドサーバー経由で安全に連携（APIキーはブラウザに露出しません）。
-   - **自然な対話と高リスク個人情報の自動マスキング**:
-     - 英語学習に必要な自己紹介（名前・年齢・学年・好きなこと・静岡や浜松などの市レベルの地域名）は自然に対話で利用できます。
-     - 一方で、詳細な番地を含む住所・電話番号・メールアドレス・パスワードなどの高リスク情報は、AI送信前に自動でマスキング処理（`[phone number omitted]` など）が行われます。
+   - **サーバー経由のAI連携**: Anthropic Claude API をバックエンドサーバー経由で連携します。APIキーはブラウザに露出させない構成です。
+   - **高リスク個人情報の自動マスキング**:
+     - 英語学習に必要な自己紹介（名前・年齢・学年・好きなこと・市レベルの地域名等）は会話機能で扱うことがあります。
+     - 一方で、詳細な番地を含む住所・電話番号・メールアドレス・パスワードなどの高リスク情報は、AI送信前に自動でマスキング処理します。
      - 会話を不自然に遮断することなく、児童が安心して英語でやり取りできる環境を維持します。
-   - **会話ログの非永続化**: サーバー、データベース、Cookie、ローカルストレージに児童の対話履歴や個人情報を永続保存しません（セッション終了時に破棄されます）。
-   - **音声データのローカル処理**: Web Speech API を使用し、音声認識および音声合成は端末（ブラウザ）側で動作します。音声データそのものをサーバーへ送信・保存することはありません。
-   - **不適切表現・プロンプトインジェクション対策**: 小学生の学習環境に適したシステムプロンプト、入力チェック、AI出力サニタイズ（最大2文制限、不適切語句の防止）を実装しています。
+   - **会話ログの非永続化**: アプリケーションコード上、サーバーDB、Cookie、localStorage、sessionStorage、IndexedDB等へ児童の対話履歴を永続保存する処理は確認されていません。なお、AIサービスへのリクエスト処理中には会話データが一時的にメモリ上で扱われます。
+   - **音声データのローカル処理**: Web Speech API を使用し、音声認識および音声合成はブラウザ側で動作する構成です。アプリケーションサーバーが音声データを保存する処理は実装していません。
+   - **不適切表現・プロンプトインジェクション対策**: 小学生の学習環境に適したシステムプロンプト、入力チェック、AI出力サニタイズを実装しています。
    - **利用にあたって**: 本アプリは学校での英語学習を支援する目的で設計されています。実際の授業等でのご利用にあたっては、各学校・教育委員会の利用ガイドラインに従ってご活用ください。
 
 ---
@@ -57,7 +57,7 @@ cp .env.example .env
 # Anthropic Claude APIキー (メインAI対話・評価エンジン)
 ANTHROPIC_API_KEY="sk-ant-..."
 ```
-※ APIキー未設定時でも、内蔵のインテリジェント・フォールバック対話エンジンにより対話や音声練習が安全に動作します。
+**注意:** APIキーが設定されていない場合、現在の実装ではAI会話APIは `503` を返します。APIキーなしでもClaudeによる通常会話が継続するオフラインFallbackを提供する仕様ではありません。
 
 ### 4. 開発サーバーの起動
 ```bash
@@ -78,54 +78,41 @@ npm start
 
 ## 🌐 Web公開・デプロイ手順
 
-GitHubリポジトリから簡単にWeb上に公開・デプロイできます。
+本アプリは、**フロントエンド（Vite/React）とAI APIを処理するNode.js/Expressバックエンドを分けて考える必要があります。** GitHub Pagesは静的フロントエンドの公開には利用できますが、ExpressサーバーやAnthropic APIをGitHub Pages上で実行することはできません。
 
-### A. 🚀 GitHub Pages で公開（最も簡単・無料・推奨）
-本リポジトリには `.github/workflows/deploy.yml` が同梱されているため、GitHubにプッシュするだけで自動ビルド＆公開されます。
+### A. GitHub Pagesでフロントエンドを公開する場合
 
-1. **リポジトリをGitHubにプッシュ**:
-   ```bash
-   git init
-   git branch -M main
-   git add .
-   git commit -m "feat: AI留学生えいご対話アプリ"
-   git remote add origin https://github.com/<あなたのユーザー名>/<リポジトリ名>.git
-   git push -u origin main
-   ```
-2. **GitHubリポジトリの設定**:
-   - リポジトリの **Settings** タブを開く
-   - 左メニューの **Pages** を選択
-   - **Build and deployment** > **Source** を **`GitHub Actions`** に設定
-3. 数十秒で自動的に `https://<あなたのユーザー名>.github.io/<リポジトリ名>/` に公開されます！
-   *(※相対パス `base: './'` および画像パス最適化済みのため、サブディレクトリ環境でも全ての留学生イラスト・音声・機能が完全動作します)*
+本リポジトリには `.github/workflows/pages.yml` があり、`main` へのpush時にViteビルドを行って `dist` をGitHub Pagesへデプロイします。
 
----
+1. **GitHubリポジトリへpush**
+2. **Settings > Pages > Build and deployment > Source** を `GitHub Actions` に設定
+3. GitHub Actionsが `dist` を公開
 
-### B. Render / Railway などの Node.js ホスティング (Claude API サーバー常駐)
-1. GitHubリポジトリを連携
-2. 設定:
-   - **Build Command**: `npm install && npm run build`
-   - **Start Command**: `npm start`
-3. 環境変数（Environment Variables）に設定:
-   - **`ANTHROPIC_API_KEY`**: *(お持ちのClaude APIキー)*
-   - **`NODE_ENV`**: `production`
+**重要:** GitHub Pagesで公開されるのは静的フロントエンドです。`/api/chat` や `/api/feedback` を処理するExpressバックエンド、および `ANTHROPIC_API_KEY` を必要とするClaude API連携は、別途Node.js対応のサーバー環境へ配置する必要があります。
 
----
+### B. Node.jsホスティングへバックエンドを配置する場合
 
-### C. Vercel / Netlify などの静的ホスティング
-1. GitHubリポジトリをインポート
-2. 設定:
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `dist`
-3. ※ ブラウザ完結のインテリジェント対話エンジンにより、音声入力・TTS再生・評価フィードバック・語彙ドックが安全に動作します。
+Render / RailwayなどNode.jsを実行できるホスティングを利用できます。
+
+- **Build Command**: `npm install && npm run build`
+- **Start Command**: `npm start`
+- **Environment Variables**:
+  - `ANTHROPIC_API_KEY`: Claude APIキー
+  - `NODE_ENV`: `production`
+
+フロントエンドからバックエンドAPIへ接続できるよう、公開URLおよびCORS等の本番構成を環境に合わせて設定してください。
+
+### C. 静的ホスティングだけで公開する場合
+
+GitHub Pages、Vercel、Netlify等の静的ホスティングだけでは、現在のExpressベースの `/api/chat` および `/api/feedback` をそのまま実行できません。AI会話機能を利用する本番構成では、Node.jsバックエンドまたは対応するサーバーレスAPI基盤が別途必要です。
 
 ---
 
 ## 🛠️ 技術スタック
 - **Frontend**: React 19, TypeScript, Tailwind CSS, Motion (Framer Motion), Lucide React
 - **Backend / Server**: Express, tsx, esbuild, Node.js
-- **AI Engine**: **Anthropic Claude API (`@anthropic-ai/sdk`)** (Claude 3.5 / 3.7 Sonnet & Claude 3.5 Haiku)
-- **Offline / Safe Fallback**: 内蔵対話エンジン（ルールベース・小学生向け応答設計）
+- **AI Engine**: **Anthropic Claude API (`@anthropic-ai/sdk`)**
+- **Fallback**: Feedback APIには安全な内蔵Fallbackがあります。通常のAI会話については、APIキー未設定時にClaude会話を代替するオフライン対話エンジンを提供する仕様ではありません。
 - **Speech**: Web Speech API (SpeechRecognition & SpeechSynthesis)
 
 ---
