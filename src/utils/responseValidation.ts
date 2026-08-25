@@ -1,5 +1,77 @@
 import { detectInappropriateContent, detectPromptInjection } from './security';
 
+
+export interface AlignedReply {
+  english: string;
+  japanese: string;
+  segmentCount: number;
+}
+
+interface RawReplySegment {
+  english?: unknown;
+  japanese?: unknown;
+}
+
+function cleanSegmentText(value: unknown): string {
+  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+}
+
+/**
+ * Keeps English and Japanese together as atomic sentence pairs.
+ * It never shortens English independently from its translation.
+ */
+export function buildAlignedReply(parsed: any, personaName: string = 'AI Student'): AlignedReply {
+  const rawSegments: RawReplySegment[] = Array.isArray(parsed?.replySegments)
+    ? parsed.replySegments
+    : [];
+
+  const validSegments = rawSegments
+    .map((segment) => ({
+      english: cleanSegmentText(segment?.english),
+      japanese: cleanSegmentText(segment?.japanese),
+    }))
+    .filter((segment) => segment.english && segment.japanese);
+
+  let selected = validSegments;
+  if (validSegments.length > 2) {
+    const finalQuestion = [...validSegments].reverse().find((segment) => /\?\s*$/.test(segment.english));
+    selected = finalQuestion && finalQuestion !== validSegments[0]
+      ? [validSegments[0], finalQuestion]
+      : validSegments.slice(0, 2);
+  } else {
+    selected = validSegments.slice(0, 2);
+  }
+
+  if (selected.length === 0) {
+    const legacyEnglish = cleanSegmentText(parsed?.reply);
+    const legacyJapanese = cleanSegmentText(parsed?.japaneseTranslation);
+    if (legacyEnglish && legacyJapanese) {
+      selected = [{ english: legacyEnglish, japanese: legacyJapanese }];
+    }
+  }
+
+  const english = selected.map((segment) => segment.english).join(' ').trim();
+  const japanese = selected.map((segment) => segment.japanese).join('').trim();
+
+  if (!english || !japanese) {
+    return {
+      english: `Hello! I'm ${personaName}. What do you like?`,
+      japanese: `こんにちは！${personaName}です。何が好きですか？`,
+      segmentCount: 0,
+    };
+  }
+
+  if (detectInappropriateContent(english) || detectPromptInjection(english)) {
+    return {
+      english: "Let's use friendly English. What do you like?",
+      japanese: '楽しく英語で話そう。何が好きですか？',
+      segmentCount: 0,
+    };
+  }
+
+  return { english, japanese, segmentCount: selected.length };
+}
+
 export interface ValidationResult {
   isValid: boolean;
   sanitizedReply: string;

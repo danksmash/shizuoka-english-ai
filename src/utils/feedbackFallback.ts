@@ -193,6 +193,7 @@ export function generateFallbackFeedback(
   }
 
   const overallComment = `${safeStudentName}さん、${persona.countryJapanese}の留学生 ${persona.name} と${topicSummary}について楽しく対話練習ができましたね！本番の静岡大学留学生交流会でも、笑顔でたくさん話しかけてみてくださいね！`;
+  const studentMessage = `${topicSummary}について一緒に話せて楽しかったよ！また英語でお話ししようね！`;
 
   return {
     goodPoints: [goodPoint1, goodPoint2, goodPoint3],
@@ -202,6 +203,7 @@ export function generateFallbackFeedback(
       examplePhrase: adviceExample,
     },
     overallComment,
+    studentMessage,
     keyPhrases: extractedPhrases,
     encounteredVocab: encounteredVocab || [],
     aiStudent: persona,
