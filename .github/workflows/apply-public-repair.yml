@@ -66,6 +66,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/App.tsx src/utils/translation.ts src/components/FeedbackScreen.tsx src/components/SetupScreen.tsx server.ts .github/workflows/pages.yml
+          git restore .github/workflows/pages.yml
+          git add src/App.tsx src/utils/translation.ts src/components/FeedbackScreen.tsx src/components/SetupScreen.tsx server.ts
           git commit -m "fix: repair public AI connection and dialogue report" || exit 0
           git push
