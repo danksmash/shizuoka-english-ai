@@ -1,18 +1,38 @@
 import { detectInappropriateContent, detectPromptInjection } from './security';
 
 /**
- * AI Response Technical and Safety Validator
- * 
- * DESIGN PRINCIPLE: VALIDATION !== GENERATION.
- * - This validator performs safety, PII protection, and technical anomaly checks.
- * - It DOES NOT rewrite or inject predetermined questions (e.g. "What sport do you like?").
- * - It DOES NOT enforce artificial sentence count or easy/normal/hard level truncation.
- * - If the AI response is clean and safe, it is passed through exactly as generated.
+ * AI Response Technical, Safety, and Classroom-Length Validator
+ *
+ * The conversation model remains generative, but spoken replies must stay short enough
+ * for Grade 5/6 learners to process and answer. We therefore apply a deterministic
+ * final guard after safety checks: at most two short sentences and 24 words.
  */
 export interface ValidationResult {
   isValid: boolean;
   sanitizedReply: string;
   reason?: string;
+}
+
+const MAX_SENTENCES = 2;
+const MAX_WORDS = 24;
+
+function enforceClassroomLength(text: string): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return normalized;
+
+  // Keep at most two sentence-like units. This deliberately preserves punctuation.
+  const sentenceMatches = normalized.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [normalized];
+  let shortened = sentenceMatches.slice(0, MAX_SENTENCES).join(' ').trim();
+
+  // Secondary word cap protects against two unusually long sentences.
+  const words = shortened.split(/\s+/).filter(Boolean);
+  if (words.length > MAX_WORDS) {
+    shortened = words.slice(0, MAX_WORDS).join(' ');
+    shortened = shortened.replace(/[,;:\-–—]+$/g, '').trim();
+    if (!/[.!?]$/.test(shortened)) shortened += '.';
+  }
+
+  return shortened;
 }
 
 export function validateAiResponse(reply: string, personaName: string = 'AI Student'): string {
@@ -24,7 +44,7 @@ export function inspectAiResponse(rawReply: string, personaName: string = 'AI St
   if (!rawReply || typeof rawReply !== 'string' || !rawReply.trim()) {
     return {
       isValid: false,
-      sanitizedReply: `Hello! I'm ${personaName}. What would you like to talk about today?`,
+      sanitizedReply: `Hello! I'm ${personaName}. What would you like to talk about?`,
       reason: 'EMPTY_RESPONSE',
     };
   }
@@ -36,7 +56,6 @@ export function inspectAiResponse(rawReply: string, personaName: string = 'AI St
   cleaned = cleaned.replace(/^\{[\s\S]*?"reply":\s*"/, '').replace(/"[\s\S]*?\}$/, '');
   cleaned = cleaned.trim();
 
-  // Strip excessive enclosing quotes if returned as a single quoted string
   if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
     cleaned = cleaned.slice(1, -1).trim();
   }
@@ -45,7 +64,7 @@ export function inspectAiResponse(rawReply: string, personaName: string = 'AI St
   if (detectInappropriateContent(cleaned)) {
     return {
       isValid: false,
-      sanitizedReply: `Let's practice friendly English together! What is your favorite thing?`,
+      sanitizedReply: `Let's practice friendly English! What do you like?`,
       reason: 'SAFETY_FILTER_TRIGGERED',
     };
   }
@@ -54,13 +73,17 @@ export function inspectAiResponse(rawReply: string, personaName: string = 'AI St
   if (detectPromptInjection(cleaned)) {
     return {
       isValid: false,
-      sanitizedReply: `I am ${personaName}! Let's have fun talking in English.`,
+      sanitizedReply: `I'm ${personaName}! Let's talk in English.`,
       reason: 'PROMPT_LEAK_FILTER_TRIGGERED',
     };
   }
 
+  // 4. Classroom-length guard. Never let a verbose model response reach speech/UI unchanged.
+  const classroomReply = enforceClassroomLength(cleaned);
+
   return {
     isValid: true,
-    sanitizedReply: cleaned,
+    sanitizedReply: classroomReply,
+    reason: classroomReply !== cleaned ? 'CLASSROOM_LENGTH_LIMIT_APPLIED' : undefined,
   };
 }
