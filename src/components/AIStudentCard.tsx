@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { Volume2, Sparkles, Flag } from 'lucide-react';
 import { CharacterMood, AIStudentProfile } from '../types';
 import { StudentAvatar } from './StudentAvatar';
@@ -25,15 +25,13 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
   onReplayAudio,
   onChangeSpeechRate,
 }) => {
-  const didInitializeRate = useRef(false);
-
-  // The classroom default is 1.00x. Keep this independent from persona voice settings.
-  useEffect(() => {
-    if (!didInitializeRate.current) {
-      didInitializeRate.current = true;
-      onChangeSpeechRate(1.0);
-    }
-  }, [onChangeSpeechRate]);
+  const updateSpeechRate = (rawValue: string) => {
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) return;
+    const clamped = Math.min(1.25, Math.max(0.75, parsed));
+    const stepped = Math.round(clamped * 20) / 20;
+    onChangeSpeechRate(stepped);
+  };
 
   const getStatusBadge = () => {
     if (isSpeaking) {
@@ -119,11 +117,10 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
 
       <div className="mb-3">{getStatusBadge()}</div>
 
-      {/* Always-visible classroom speech-speed control. */}
       <div className="w-full bg-blue-50/70 border border-blue-200 rounded-2xl p-3 mb-3">
         <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 mb-2">
           <span>🔊 AIが話す速さ</span>
-          <span className="font-mono text-blue-700 bg-white border border-blue-200 px-2 py-0.5 rounded-lg">
+          <span className="font-mono text-blue-700 bg-white border border-blue-200 px-2 py-0.5 rounded-lg" aria-live="polite">
             {speechRate.toFixed(2)}x
           </span>
         </div>
@@ -134,17 +131,20 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
           max="1.25"
           step="0.05"
           value={speechRate}
-          onChange={(e) => onChangeSpeechRate(Number(e.target.value))}
-          className="w-full accent-blue-600 cursor-pointer h-2 bg-slate-200 rounded-lg"
+          onInput={(e) => updateSpeechRate(e.currentTarget.value)}
+          onChange={(e) => updateSpeechRate(e.currentTarget.value)}
+          className="w-full h-8 accent-blue-600 cursor-pointer touch-pan-y select-none"
         />
         <div className="flex justify-between text-[9px] text-slate-500 font-bold mt-1">
           <span>0.75 ゆっくり</span>
           <span>1.00 ふつう</span>
           <span>1.25 はやい</span>
         </div>
+        <p className="text-[9px] text-slate-500 font-semibold mt-1.5">
+          スライダーを動かすと、次のAI音声と「もう一度聞く」に反映されます。
+        </p>
       </div>
 
-      {/* Accent information only. Fixed filler/catchphrase fields are intentionally not rendered. */}
       <div className="w-full bg-slate-50 border border-slate-200/80 rounded-2xl p-2.5 text-left">
         <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
           <Flag className="w-3 h-3 text-blue-600" />
