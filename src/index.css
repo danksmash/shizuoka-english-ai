@@ -69,3 +69,17 @@ body {
     min-height: 0 !important;
   }
 }
+
+/*
+ * Dialogue cleanup after fixed persona fillers/catchphrases were retired.
+ * The old right-column challenge and bottom quote card still referenced empty
+ * fillerWords/characteristicPhrases arrays and rendered meaningless 「」 / ().
+ * Hide those obsolete widgets rather than showing empty content to pupils.
+ */
+#root .h-screen > main > div:last-child > div:first-child .bg-amber-50 {
+  display: none !important;
+}
+
+#root .h-screen > main > div:last-child > div:last-child {
+  display: none !important;
+}
