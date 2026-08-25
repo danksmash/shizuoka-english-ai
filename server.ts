@@ -6,7 +6,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getAIStudentById } from './src/data/curriculum';
 import { generateFallbackFeedback } from './src/utils/feedbackFallback';
 import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } from './src/utils/security';
-import { validateAiResponse, inspectAiResponse } from './src/utils/responseValidation';
+import { validateAiResponse, inspectAiResponse, buildAlignedReply } from './src/utils/responseValidation';
 
 dotenv.config();
 
@@ -153,20 +153,6 @@ function isExplicitFarewell(text: string): boolean {
   return /\b(?:goodbye|bye(?: bye)?|see you|see ya)\b/i.test(text.trim());
 }
 
-function ensureQuestion(reply: string, topic: string): string {
-  const normalized = reply.replace(/\s+/g, ' ').trim();
-  if (/\?\s*$/.test(normalized)) return normalized;
-  const questions: Record<string, string> = {
-    intro: 'How about you?',
-    favorites: 'What do you like?',
-    shizuoka_culture: 'What do you like about Shizuoka?',
-    talents: 'What can you do?',
-    free: 'What do you want to talk about?',
-  };
-  const q = questions[topic] || 'How about you?';
-  return normalized ? `${normalized.replace(/[.!?]*$/, '.')} ${q}` : q;
-}
-
 function extractSpokenName(text: string): string | null {
   const match = text.match(/\b(?:my name is|call me)\s+([A-Za-z]{2,15})\b/i);
   if (!match) return null;
@@ -195,23 +181,33 @@ Use the self-introduction topic as the level reference.
 Conversation rules:
 1. Answer the student's actual message first.
 2. If the student asks a question, answer it directly before asking one short related question.
-3. End normal turns with exactly one easy, natural question.
-4. Do not use any fixed script, fixed reaction, fixed filler list, catchphrase, or repeated praise phrase from persona data.
-5. Natural reactions or fillers are allowed only when you generate them naturally from the immediate conversation. Do not force them, repeat them mechanically, or use them as a persona signature.
-6. Persona identity comes from facts, interests, home country, and voice, not from catchphrases.
-7. Do not correct grammar unless asked.
-8. If the student's English is incomplete, infer the likely meaning and answer simply.
-9. If the student says Pardon?, Sorry?, or What?, rephrase the previous idea with easier words.
-10. Only explicit Goodbye/Bye/See you ends the conversation.
-11. The selected topic changes WHAT you talk about, not the English difficulty.
-12. The selected conversation duration changes only how long the dialogue continues, not the English difficulty.
+3. Respond to the communicative purpose of the student's latest utterance first.
+   - If the student asks a question, answer that exact question first using the persona facts.
+   - If the student shares information, react to that information first.
+   - If the student gives a short Yes/No answer, use the preceding conversation for context.
+   - If the student asks for repetition, rephrase the previous idea in easier English.
+4. After responding, usually ask one short, natural question when it helps the conversation continue. Do not force a question when it would be unnatural.
+5. Keep the complete response to one or two short sentence units whenever possible.
+6. Do not use any fixed script, fixed reaction, fixed filler list, catchphrase, or repeated praise phrase from persona data.
+7. Natural reactions or fillers are allowed only when you generate them naturally from the immediate conversation. Do not force them, repeat them mechanically, or use them as a persona signature.
+8. Persona identity comes from facts, interests, home country, and voice, not from catchphrases.
+9. Do not correct grammar unless asked.
+10. If the student's English is incomplete, infer the likely meaning and answer simply.
+11. If the student says Pardon?, Sorry?, or What?, rephrase the previous idea with easier words.
+12. Only explicit Goodbye/Bye/See you ends the conversation.
+13. The selected topic changes WHAT you talk about, not the English difficulty.
+14. The selected conversation duration changes only how long the dialogue continues, not the English difficulty.
 
 Persona interests: ${p.likes.join(', ')}.
 
 Return strictly valid JSON:
 {
-  "reply": "short natural English",
-  "japaneseTranslation": "自然な日本語訳",
+  "replySegments": [
+    {
+      "english": "one complete natural English sentence unit",
+      "japanese": "そのenglishだけに対応する自然な日本語訳"
+    }
+  ],
   "studentJapaneseTranslation": "児童の最新英語の自然な日本語訳",
   "studentTranslationStatus": "translated" | "incomplete",
   "mood": "happy" | "speaking" | "thinking" | "encouraging",
@@ -294,10 +290,9 @@ Translate the student's latest English into Japanese too.`;
 
   try {
     const { parsed, model } = await callClaudeJson(getSystemInstructionForPersona(aiStudentId), prompt, 300);
-    const baseReply = validateAiResponse(String(parsed.reply || ''), persona.name);
-    const reply = isExplicitFarewell(trimmedMessage)
-      ? baseReply
-      : ensureQuestion(baseReply, String(topic || 'favorites'));
+    const alignedReply = buildAlignedReply(parsed, persona.name);
+    const reply = alignedReply.english;
+    const japaneseTranslation = alignedReply.japanese;
 
     const studentTranslationStatus = parsed.studentTranslationStatus === 'incomplete' ? 'incomplete' : 'translated';
     const studentJapaneseTranslation =
@@ -312,7 +307,7 @@ Translate the student's latest English into Japanese too.`;
       isFallback: false,
       data: {
         reply,
-        japaneseTranslation: parsed.japaneseTranslation || '',
+        japaneseTranslation,
         studentJapaneseTranslation,
         studentTranslationStatus,
         mood: parsed.mood || 'speaking',
@@ -369,12 +364,29 @@ JSONのみ:
 {
  "goodPoints":["...","...","..."],
  "improvementAdvice":{"title":"...","detail":"...","examplePhrase":"..."},
- "overallComment":"...",
+ "overallComment":"指導者としての短い総合講評",
+ "studentMessage":"選択された留学生本人が、実際の対話内容に触れながら児童へ直接話す自然な短いメッセージ",
  "keyPhrases":[{"english":"...","japanese":"...","culturalNote":"..."}]
 }`;
 
   try {
-    const { parsed } = await callClaudeJson('あなたは小学校外国語教育の専門家です。児童を具体的かつ温かく励ましてください。', prompt, 900);
+    const { parsed } = await callClaudeJson(
+      `あなたは小学校外国語教育の専門家です。児童を具体的かつ温かく励ましてください。
+講評部分は指導者の視点で書き、studentMessageだけは${persona.name}本人が児童に直接話しかける自然な一人称メッセージにしてください。
+${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${persona.country}、好きなものは${persona.likes.join(', ')}です。`,
+      prompt,
+      900
+    );
+    const fallbackFeedback = generateFallbackFeedback(
+      persona,
+      'あなた',
+      turns || 0,
+      totalWords || 0,
+      (durationMinutes || 1) * 60,
+      durationMinutes || 1,
+      encounteredVocab || [],
+      rawHistory
+    );
     const uniqueKeyPhrases = Array.isArray(parsed.keyPhrases)
       ? parsed.keyPhrases.filter((phrase: any, index: number, all: any[]) => {
           const key = String(phrase?.english || '').trim().toLowerCase();
@@ -387,6 +399,14 @@ JSONのみ:
       isFallback: false,
       data: {
         ...parsed,
+        overallComment:
+          typeof parsed.overallComment === 'string' && parsed.overallComment.trim()
+            ? parsed.overallComment.trim()
+            : fallbackFeedback.overallComment,
+        studentMessage:
+          typeof parsed.studentMessage === 'string' && parsed.studentMessage.trim()
+            ? parsed.studentMessage.trim()
+            : fallbackFeedback.studentMessage,
         keyPhrases: uniqueKeyPhrases,
         encounteredVocab: encounteredVocab || [],
         aiStudent: persona,
