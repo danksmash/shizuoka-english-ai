@@ -5,13 +5,14 @@ import { createServer as createViteServer } from 'vite';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAIStudentById } from './src/data/curriculum';
 import { generateFallbackFeedback } from './src/utils/feedbackFallback';
+import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } from './src/utils/security';
+import { validateAiResponse, inspectAiResponse } from './src/utils/responseValidation';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-// Security + CORS middleware for the GitHub Pages frontend.
 const ALLOWED_ORIGINS = new Set([
   'https://danksmash.github.io',
   'http://localhost:3000',
@@ -21,7 +22,6 @@ const ALLOWED_ORIGINS = new Set([
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-
   const origin = req.headers.origin;
   if (origin && ALLOWED_ORIGINS.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
@@ -29,594 +29,374 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   }
-
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(204);
-  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
 
-// JSON Body Parser with strict 10kb limit to prevent payload flooding
 app.use(express.json({ limit: '10kb' }));
+app.use('/images', express.static(path.join(process.cwd(), 'src', 'assets', 'images')));
 
-// Classroom-friendly Rate Limiter for School NAT environments
-// A single Hamamatsu school public IP may host 30-40 simultaneous Chromebooks in one class.
-// Global IP limit: 300 requests per minute per IP.
-// Fast repeated request throttle: Prevents automated flood from single connection.
-interface RateRecord {
-  count: number;
-  resetTime: number;
-}
+interface RateRecord { count: number; resetTime: number; }
 const rateLimitMap = new Map<string, RateRecord>();
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
-  const windowMs = 60 * 1000; // 1 minute
-  const maxRequests = 300; // Accommodates an entire 35-student classroom active concurrently
-
+  const windowMs = 60_000;
+  const maxRequests = 1200;
   const record = rateLimitMap.get(ip);
   if (!record || now > record.resetTime) {
     rateLimitMap.set(ip, { count: 1, resetTime: now + windowMs });
     return true;
   }
-
-  if (record.count >= maxRequests) {
-    return false;
-  }
-
+  if (record.count >= maxRequests) return false;
   record.count += 1;
   return true;
 }
 
-// Clean up old rate limit records periodically
 setInterval(() => {
   const now = Date.now();
   for (const [ip, record] of rateLimitMap.entries()) {
-    if (now > record.resetTime) {
-      rateLimitMap.delete(ip);
-    }
+    if (now > record.resetTime) rateLimitMap.delete(ip);
   }
-}, 5 * 60 * 1000);
+}, 5 * 60_000);
 
-// Serve static images directly from src/assets/images
-app.use('/images', express.static(path.join(process.cwd(), 'src', 'assets', 'images')));
-
-// Health check endpoint (Minimal, does NOT leak API keys or internal configuration)
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    version: '1.0.0',
-  });
-});
-
-// Lazy initialization of Claude (Anthropic) Client
 let anthropicClient: Anthropic | null = null;
 function getAnthropicClient(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return null;
-  }
+  if (!apiKey) return null;
   if (!anthropicClient) {
     anthropicClient = new Anthropic({
       apiKey,
+      maxRetries: 3,
+      timeout: 30_000,
     });
   }
   return anthropicClient;
 }
 
-// =====================================================================
-import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } from './src/utils/security';
-import { validateAiResponse, inspectAiResponse } from './src/utils/responseValidation';
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function extractJson(text: string): any {
+  const trimmed = text.trim();
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('API_INVALID_RESPONSE');
+  return JSON.parse(trimmed.slice(start, end + 1));
+}
+
+function isRetryable(error: any): boolean {
+  const status = Number(error?.status || 0);
+  if ([408, 409, 429, 500, 502, 503, 504, 529].includes(status)) return true;
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    message.includes('timeout') ||
+    message.includes('timed out') ||
+    message.includes('aborted') ||
+    message.includes('connection') ||
+    message.includes('network') ||
+    message.includes('socket') ||
+    message.includes('econnreset') ||
+    message.includes('api_invalid_response')
+  );
+}
+
+async function callClaudeJson(system: string, prompt: string, maxTokens: number) {
+  const client = getAnthropicClient();
+  if (!client) throw new Error('API_KEY_NOT_CONFIGURED');
+
+  const configured = process.env.ANTHROPIC_MODEL?.trim();
+  const models = Array.from(new Set([
+    configured || 'claude-sonnet-4-6',
+    'claude-haiku-4-5',
+  ]));
+
+  let lastError: any = null;
+
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await client.messages.create({
+          model,
+          max_tokens: maxTokens,
+          temperature: 0.5,
+          system,
+          messages: [{ role: 'user', content: prompt }],
+        });
+
+        const rawText = response.content
+          .filter((block: any) => block.type === 'text')
+          .map((block: any) => ('text' in block ? block.text : ''))
+          .join('')
+          .trim();
+
+        return { parsed: extractJson(rawText), model };
+      } catch (error: any) {
+        lastError = error;
+        if (!isRetryable(error)) break;
+        await sleep(500 * Math.pow(2, attempt));
+      }
+    }
+  }
+
+  throw lastError || new Error('AI_UNAVAILABLE');
+}
 
 export { maskHighRiskPII, detectPromptInjection, detectInappropriateContent, validateAiResponse, inspectAiResponse };
 
-// Output Sanitizer to filter AI replies before sending to children
-function sanitizeAiOutput(reply: string, personaName: string): string {
-  return validateAiResponse(reply, personaName);
-}
-
-// Simple text sanitizer for history (removes raw high-risk PII)
 function sanitizeStudentInput(text: string): string {
-  if (!text) return '';
-  return maskHighRiskPII(text).maskedText;
+  return text ? maskHighRiskPII(text).maskedText : '';
 }
 
 function isExplicitFarewell(text: string): boolean {
   return /\b(?:goodbye|bye(?: bye)?|see you|see ya)\b/i.test(text.trim());
 }
 
-function ensureActiveTurnEndsWithQuestion(reply: string, topic: string): string {
+function ensureQuestion(reply: string, topic: string): string {
   const normalized = reply.replace(/\s+/g, ' ').trim();
   if (/\?\s*$/.test(normalized)) return normalized;
-
-  const topicQuestions: Record<string, string> = {
+  const questions: Record<string, string> = {
     intro: 'How about you?',
     favorites: 'What do you like?',
     shizuoka_culture: 'What do you like about Shizuoka?',
     talents: 'What can you do?',
-    free: 'What would you like to talk about?',
+    free: 'What do you want to talk about?',
   };
-  const question = topicQuestions[topic] || 'How about you?';
-  const firstUnit = (normalized.match(/^[^.!?]+[.!?]?/)?.[0] || normalized).trim();
-  const words = firstUnit.split(/\s+/).filter(Boolean);
-  let shortStatement = words.slice(0, 14).join(' ').replace(/[?]+$/g, '').trim();
-  if (shortStatement && !/[.!]$/.test(shortStatement)) shortStatement += '.';
-  return shortStatement ? shortStatement + ' ' + question : question;
+  const q = questions[topic] || 'How about you?';
+  return normalized ? `${normalized.replace(/[.!?]*$/, '.')} ${q}` : q;
 }
 
-
-// Helper to extract student's spoken name from English introduction
 function extractSpokenName(text: string): string | null {
-  if (!text) return null;
   const match = text.match(/\b(?:my name is|call me)\s+([A-Za-z]{2,15})\b/i);
-  if (match) {
-    const candidate = match[1].trim();
-    const excludeWords = [
-      'in', 'from', 'ten', 'eleven', 'twelve', 'fine', 'good', 'happy', 'ready',
-      'fifth', 'sixth', 'student', 'boy', 'girl', 'japanese', 'japan', 'not', 'very',
-      'doing', 'great', 'tired', 'hungry', 'sad', 'okay', 'sorry', 'busy', 'a', 'an', 'the'
-    ];
-    if (!excludeWords.includes(candidate.toLowerCase())) {
-      return candidate.charAt(0).toUpperCase() + candidate.slice(1).toLowerCase();
-    }
-  }
-  return null;
+  if (!match) return null;
+  const candidate = match[1].trim();
+  const blocked = new Set(['in','from','ten','eleven','twelve','fine','good','happy','ready','fifth','sixth','student','boy','girl','japanese','japan']);
+  if (blocked.has(candidate.toLowerCase())) return null;
+  return candidate.charAt(0).toUpperCase() + candidate.slice(1).toLowerCase();
 }
 
-// System Instruction Generator for Persona (Generative AI-centric Natural System Prompt)
 function getSystemInstructionForPersona(studentId: string): string {
   const p = getAIStudentById(studentId);
+  return `You are ${p.name}, a friendly ${p.age}-year-old Shizuoka University exchange student from ${p.city}, ${p.country}.
+You are speaking one-on-one with a Japanese elementary school student in Grade 5 or 6.
 
-  return `You are a friendly virtual international student.
-You are having a one-on-one English conversation with a Japanese elementary school student in Grade 5 or 6.
-Your role is to be a friendly conversation partner, not a teacher, examiner, or interviewer.
-Be warm, curious, patient, and genuinely interested in what the student says.
-Speak naturally and use English that is generally easy for a Japanese elementary school student to understand.
-Prefer familiar everyday words and natural sentences.
-However, do NOT follow a fixed vocabulary list, grammar list, sentence length, question list, conversation script, or set of reaction phrases.
-Natural communication is more important than strict textbook conformity.
+Keep the conversation natural, warm, and genuinely responsive.
+Use SIMPLE spoken English while preserving naturalness:
+- Prefer very common everyday words.
+- Prefer short SVO sentences.
+- Usually use one short statement and one short question.
+- Aim for about 8-16 English words total when possible.
+- Avoid idioms, phrasal verbs, slang, abstract words, and long clauses unless the child used them first.
+- Do not sound like a textbook or a quiz.
 
-PERSONA DETAILS:
-Name: ${p.name} (${p.japaneseName})
-Age: ${p.age} years old
-From: ${p.city}, ${p.country} (${p.countryJapanese})
-University: Shizuoka University exchange student (静岡大学 交換留学生)
-Major: ${p.major}
-Interests / Background: ${p.likes.join(', ')}
+Conversation rules:
+1. Answer the student's actual message first.
+2. If the student asks a question, answer it directly before asking one short related question.
+3. End normal turns with exactly one easy, natural question.
+4. Do not use a fixed script, fixed reaction, filler list, catchphrase, or repeated praise phrase.
+5. Do NOT begin a reply with words such as "Awesome!", "Brilliant!", "Wonderful!", "Fantastic!", "Totally!", "No worries!", "Excellent!", or similar reaction fillers unless the student's immediately previous message genuinely makes that reaction necessary. Even then, vary naturally and use such reactions rarely.
+6. Persona identity comes from facts and interests, not from catchphrases.
+7. Do not correct grammar unless asked.
+8. If the student's English is incomplete, infer the likely meaning and answer simply.
+9. If the student says Pardon?, Sorry?, or What?, rephrase the previous idea with easier words.
+10. Only explicit Goodbye/Bye/See you ends the conversation.
 
-IMPORTANT CONVERSATION RULES:
-1. Listen carefully to the student's latest message.
-2. Respond to what the student actually said.
-3. If the student asks a question (e.g. "How are you?", "What food do you like?", "Where are you from?", "Can you play soccer?"), answer that question directly and naturally first before asking anything back.
-4. Never give an unrelated response.
-5. In EVERY normal dialogue turn, end your reply with exactly ONE natural question related to the student's latest message or current topic context.
-6. Generate the follow-up question from the conversation context.
-7. Do not use predetermined questions.
-8. Do not rely on predetermined reaction phrases or filler expressions.
-9. Do not repeatedly use the same wording.
-10. Follow the student's topic when the conversation naturally changes direction.
-11. Share a small amount of relevant information about yourself when appropriate.
-12. Do not correct the student's grammar unless correction is specifically requested.
-13. If the student's English is incomplete or imperfect, infer the intended meaning and respond naturally.
-14. If the student explicitly says "Goodbye", "Bye", or "See you" and clearly ends the conversation, say goodbye warmly and do not ask a follow-up question. A simple "Thank you" by itself is not automatically the end of the dialogue.
-15. If the student asks for clarification (e.g. "Pardon?", "Sorry?", "What?"), rephrase what you previously said in simpler, clearer English.
-16. Keep the conversation friendly, encouraging, age-appropriate, and natural.
-17. Make the conversation feel like a genuine conversation, not an English test.
+Persona interests: ${p.likes.join(', ')}.
 
-The student's latest message and the conversation context are more important than any predetermined conversation pattern.
-
-Output strictly valid JSON:
+Return strictly valid JSON:
 {
-  "reply": "English response from ${p.name}",
-  "japaneseTranslation": "Natural, gentle Japanese translation of the AI reply suitable for 5th/6th grade student",
-  "studentJapaneseTranslation": "Natural Japanese translation of the student latest English input, or exactly 日本語に訳せませんでした。 when the utterance is too incomplete to translate reliably",
+  "reply": "short natural English",
+  "japaneseTranslation": "自然な日本語訳",
+  "studentJapaneseTranslation": "児童の最新英語の自然な日本語訳",
   "studentTranslationStatus": "translated" | "incomplete",
   "mood": "happy" | "speaking" | "thinking" | "encouraging",
-  "culturalNote": "Brief friendly cultural tip in Japanese if relevant (or empty string)"
+  "culturalNote": "必要なときだけ短い日本語。不要なら空文字"
 }`;
 }
 
-// =====================================================================
-// API endpoint for Chat (/api/chat)
-// =====================================================================
+app.get('/api/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    aiConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
+    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+    resilience: 'multi-retry-model-fallback',
+  });
+});
+
 app.post('/api/chat', async (req, res) => {
   const requestStart = Date.now();
-  let apiRequestStart: number | null = null;
-  let apiResponseReceived: number | null = null;
-  let route: 'anthropic' | 'fallback' = 'anthropic';
-  let fallbackReason: string | undefined = undefined;
-
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
-
-  // 1. Rate Limiting Check (300 requests/min/IP for school NAT environment)
   if (!checkRateLimit(ip)) {
-    return res.status(429).json({
-      success: false,
-      error: 'Too many requests. Please wait a moment.',
-      data: {
-        reply: 'Please wait a moment before sending another message.',
-        japaneseTranslation: '少し時間をおいてから送信してね。',
-        mood: 'thinking',
-      },
-    });
+    return res.status(429).json({ success: false, error: 'Too many requests. Please retry.' });
   }
 
-  const { message, history, topic, studentName, aiStudentId } = req.body;
+  const { message, history, topic, aiStudentId } = req.body;
   const persona = getAIStudentById(aiStudentId);
-  const rawMessage = typeof message === 'string' ? message : '';
-  const trimmedMessage = rawMessage.trim();
+  const trimmedMessage = typeof message === 'string' ? message.trim() : '';
 
-  // 2. Character Length Restriction (Max 100 characters)
+  if (!trimmedMessage) {
+    return res.status(400).json({ success: false, error: 'Empty message' });
+  }
+
   if (trimmedMessage.length > 100) {
     return res.json({
       success: true,
       data: {
-        reply: 'Your sentence is a bit long! Please try a shorter English sentence.',
-        japaneseTranslation: '文が少し長いです！もう少し短い英語で話してみてね。',
+        reply: 'Please use a shorter sentence. What do you want to say?',
+        japaneseTranslation: 'もう少し短い文で話してみてね。何を伝えたいですか？',
+        studentJapaneseTranslation: '',
+        studentTranslationStatus: 'translated',
         mood: 'thinking',
-        culturalNote: '短い文でポンポン会話を続けるのが英語上達のコツだよ！',
-      },
-      _diagnostics: {
-        requestStart,
-        responseEnd: Date.now(),
-        latencyMs: Date.now() - requestStart,
-        route: 'precheck_length',
+        culturalNote: '',
       },
     });
   }
 
-  // 3. Prompt Injection Pre-Check
-  if (detectPromptInjection(trimmedMessage)) {
+  if (detectPromptInjection(trimmedMessage) || detectInappropriateContent(trimmedMessage)) {
     return res.json({
       success: true,
       data: {
-        reply: `I am ${persona.name} from ${persona.countryJapanese}! Let's practice English together. What is your favourite sport?`,
-        japaneseTranslation: `静岡大学留学生の${persona.name}だよ！一緒に英語の練習をしよう。好きなスポーツは何ですか？`,
+        reply: `Let's keep our English friendly. What do you like?`,
+        japaneseTranslation: '楽しく英語で話そう。何が好きですか？',
+        studentJapaneseTranslation: '',
+        studentTranslationStatus: 'translated',
         mood: 'encouraging',
-        culturalNote: `${persona.name}と一緒に楽しく英語の会話を続けよう！`,
-      },
-      _diagnostics: {
-        requestStart,
-        responseEnd: Date.now(),
-        latencyMs: Date.now() - requestStart,
-        route: 'precheck_injection',
+        culturalNote: '',
       },
     });
   }
 
-  // 4. Inappropriate / Dangerous Topic Pre-Check
-  if (detectInappropriateContent(trimmedMessage)) {
-    return res.json({
-      success: true,
-      data: {
-        reply: "Let's practice friendly English! What food do you like?",
-        japaneseTranslation: '仲良く英語の練習をしよう！好きな食べ物は何ですか？',
-        mood: 'encouraging',
-        culturalNote: '好きな食べ物を英語で伝えてみよう！(例: I like sushi.)',
-      },
-      _diagnostics: {
-        requestStart,
-        responseEnd: Date.now(),
-        latencyMs: Date.now() - requestStart,
-        route: 'precheck_safety',
-      },
-    });
-  }
-
-  // 5. High-Risk PII Masking
   const { maskedText: safeUserMessage, hasHighRiskPII } = maskHighRiskPII(trimmedMessage);
-
-  // Extract spoken name if the student just introduced themselves
-  const spokenName = extractSpokenName(trimmedMessage);
-  const effectiveName = '';
-
-  // 6. Sanitize History & Limit to last 4 turns (8 messages)
   const rawHistory = Array.isArray(history) ? history : [];
   const recentHistory = rawHistory.slice(-8);
   const formattedHistory = recentHistory
-    .map((msg: { sender: string; englishText: string }) => {
-      const speaker = msg.sender === 'ai' ? persona.name : (effectiveName || 'Student');
-      return `${speaker}: ${sanitizeStudentInput(msg.englishText || '').slice(0, 100)}`;
-    })
+    .map((msg: { sender: string; englishText: string }) =>
+      `${msg.sender === 'ai' ? persona.name : 'Student'}: ${sanitizeStudentInput(msg.englishText || '').slice(0, 100)}`
+    )
     .join('\n');
 
-  const prompt = `Conversation history (recent turns):
-${formattedHistory || '(Beginning of dialogue)'}
+  const prompt = `Recent conversation:
+${formattedHistory || '(start)'}
 
-Selected topic: ${topic || 'favorites'}
-Student Name: ${effectiveName || 'Elementary Student (Grade 5/6)'}
-AI Student: ${persona.name} (${persona.country}, Likes/Culture: ${persona.likes.join(', ')})
-Student's latest input: "${safeUserMessage || 'Hello!'}"
-${hasHighRiskPII ? '(Note: A private contact detail in student input was masked for safety. Continue practicing English warmly.)' : ''}
+Selected topic: ${String(topic || 'favorites')}
+Student's latest input: "${safeUserMessage}"
+${hasHighRiskPII ? 'A private detail was masked. Continue naturally without asking for it.' : ''}
 
-CRITICAL RESPONSE MANDATES:
-1. Listen carefully to student's latest input and respond directly and naturally.
-2. If student asked a question, DIRECTLY ANSWER FIRST with your persona details.
-3. For every normal dialogue turn, END with exactly ONE short, natural follow-up question. Do not end a normal turn with only a statement.
-4. Only when the student explicitly says "Goodbye" / "Bye" / "See you" and clearly ends the dialogue, respond with a warm farewell and no question.
-5. If student asks for clarification, rephrase your previous statement simply and then ask one simple checking question.
-6. Translate the student latest English input into natural Japanese in studentJapaneseTranslation. Normal complete utterances and questions, including short expressions such as "How are you?", "Yes.", "No.", "I like soccer.", MUST be translated.
-7. Only when the latest English is so fragmentary that its intended meaning cannot be translated reliably, set studentTranslationStatus to "incomplete" and studentJapaneseTranslation to exactly "日本語に訳せませんでした。". Otherwise set studentTranslationStatus to "translated".
-8. Return strictly valid JSON: { "reply": "...", "japaneseTranslation": "...", "studentJapaneseTranslation": "...", "studentTranslationStatus": "translated"|"incomplete", "mood": "happy"|"speaking"|"encouraging", "culturalNote": "..." }`;
+Respond to the latest input. Keep the English simpler than ordinary adult conversation, but still natural.
+Do not prepend a generic reaction or praise word.
+Translate the student's latest English into Japanese too.`;
 
   try {
-    const claude = getAnthropicClient();
-    if (claude) {
-      const configuredModel = process.env.ANTHROPIC_MODEL;
-      const primaryModel =
-        configuredModel && !configuredModel.startsWith('sk-ant')
-          ? configuredModel
-          : 'claude-3-5-sonnet-20241022';
-      
-      let response: any;
-      let attempts = 0;
+    const { parsed, model } = await callClaudeJson(getSystemInstructionForPersona(aiStudentId), prompt, 300);
+    const baseReply = validateAiResponse(String(parsed.reply || ''), persona.name);
+    const reply = isExplicitFarewell(trimmedMessage)
+      ? baseReply
+      : ensureQuestion(baseReply, String(topic || 'favorites'));
 
-      while (attempts < 2) {
-        attempts++;
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
-          apiRequestStart = Date.now();
+    const studentTranslationStatus = parsed.studentTranslationStatus === 'incomplete' ? 'incomplete' : 'translated';
+    const studentJapaneseTranslation =
+      studentTranslationStatus === 'incomplete'
+        ? '日本語に訳せませんでした。'
+        : typeof parsed.studentJapaneseTranslation === 'string' && /[ぁ-んァ-ヶ一-龠]/.test(parsed.studentJapaneseTranslation)
+          ? parsed.studentJapaneseTranslation.trim()
+          : '日本語に訳せませんでした。';
 
-          try {
-            response = await claude.messages.create(
-              {
-                model: primaryModel,
-                max_tokens: 400,
-                system: getSystemInstructionForPersona(aiStudentId),
-                messages: [{ role: 'user', content: prompt }],
-              },
-              { signal: controller.signal }
-            );
-            apiResponseReceived = Date.now();
-            break; // Success
-          } finally {
-            clearTimeout(timeoutId);
-          }
-        } catch (err: any) {
-          // If 429 rate limited on first attempt, retry once after a short wait
-          if (err?.status === 429 && attempts === 1) {
-            await new Promise((r) => setTimeout(r, 800));
-            continue;
-          }
-          throw err;
-        }
-      }
-
-      const rawText = response.content
-        .filter((block: any) => block.type === 'text')
-        .map((block: any) => ('text' in block ? block.text : ''))
-        .join('')
-        .trim();
-
-      let jsonStr = rawText;
-      if (jsonStr.includes('{') && jsonStr.includes('}')) {
-        const start = jsonStr.indexOf('{');
-        const end = jsonStr.lastIndexOf('}');
-        jsonStr = jsonStr.substring(start, end + 1);
-      }
-
-      let parsed;
-      try {
-        parsed = JSON.parse(jsonStr);
-      } catch {
-        throw new Error('API_INVALID_RESPONSE: Failed to parse JSON');
-      }
-
-      const baseSanitizedReply = sanitizeAiOutput(parsed.reply, persona.name);
-      const sanitizedReply = isExplicitFarewell(trimmedMessage)
-        ? baseSanitizedReply
-        : ensureActiveTurnEndsWithQuestion(baseSanitizedReply, String(topic || 'favorites'));
-      const studentTranslationStatus =
-        parsed.studentTranslationStatus === 'incomplete' ? 'incomplete' : 'translated';
-      const studentJapaneseTranslation =
-        studentTranslationStatus === 'incomplete'
-          ? '日本語に訳せませんでした。'
-          : typeof parsed.studentJapaneseTranslation === 'string' &&
-              /[ぁ-んァ-ヶ一-龠]/.test(parsed.studentJapaneseTranslation)
-            ? parsed.studentJapaneseTranslation.trim()
-            : '日本語に訳せませんでした。';
-      const responseEnd = Date.now();
-
-      return res.json({
-        success: true,
-        isFallback: false,
-        data: {
-          reply: sanitizedReply,
-          japaneseTranslation: parsed.japaneseTranslation || '',
-          studentJapaneseTranslation,
-          studentTranslationStatus,
-          mood: parsed.mood || 'speaking',
-          culturalNote: parsed.culturalNote || '',
-          detectedName: spokenName || undefined,
-        },
-        _diagnostics: {
-          requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          requestStart,
-          apiRequestStart,
-          apiResponseReceived,
-          responseEnd,
-          latencyMs: responseEnd - requestStart,
-          pathType: 'NORMAL_AI',
-          route: 'anthropic',
-        },
-      });
-    }
-
+    return res.json({
+      success: true,
+      isFallback: false,
+      data: {
+        reply,
+        japaneseTranslation: parsed.japaneseTranslation || '',
+        studentJapaneseTranslation,
+        studentTranslationStatus,
+        mood: parsed.mood || 'speaking',
+        culturalNote: parsed.culturalNote || '',
+        detectedName: extractSpokenName(trimmedMessage) || undefined,
+      },
+      _diagnostics: {
+        requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        model,
+        latencyMs: Date.now() - requestStart,
+        route: 'anthropic-resilient',
+      },
+    });
+  } catch (error: any) {
+    console.error('All Claude attempts failed', {
+      status: error?.status,
+      name: error?.name,
+      message: error?.message,
+    });
     return res.status(503).json({
       success: false,
-      error: 'AI service is not configured. No conversation fallback is available.',
+      error: 'AI service unavailable after automatic retries.',
       _diagnostics: {
         requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        requestStart,
-        responseEnd: Date.now(),
-        pathType: 'AI_UNAVAILABLE',
-      },
-    });
-  } catch (error: any) {
-    const responseEnd = Date.now();
-    const fallbackReason =
-      error?.status === 429
-        ? 'RATE_LIMIT'
-        : error?.name === 'AbortError' || error?.message?.includes('aborted') || error?.message?.includes('timeout')
-          ? 'API_TIMEOUT'
-          : error?.message?.includes('API_INVALID_RESPONSE')
-            ? 'API_INVALID_RESPONSE'
-            : error?.status >= 500
-              ? 'API_5XX'
-              : 'API_ERROR';
-
-    const statusCode = fallbackReason === 'RATE_LIMIT' ? 429 : fallbackReason === 'API_TIMEOUT' ? 504 : 502;
-    return res.status(statusCode).json({
-      success: false,
-      error: 'AI service is temporarily unavailable. No conversation fallback is available.',
-      _diagnostics: {
-        requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        requestStart,
-        apiRequestStart,
-        apiResponseReceived,
-        responseEnd,
-        latencyMs: responseEnd - requestStart,
-        pathType: 'AI_ERROR',
-        fallbackReason,
+        latencyMs: Date.now() - requestStart,
+        route: 'all-ai-attempts-failed',
       },
     });
   }
 });
 
-
-// =====================================================================
-// API endpoint for Dialogue Feedback (/api/feedback)
-// =====================================================================
 app.post('/api/feedback', async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
-  if (!checkRateLimit(ip)) {
-    return res.status(429).json({ success: false, error: 'Rate limited' });
-  }
+  if (!checkRateLimit(ip)) return res.status(429).json({ success: false, error: 'Rate limited' });
 
-  const { history, studentName, durationMinutes, turns, totalWords, aiStudentId, encounteredVocab } =
-    req.body;
+  const { history, durationMinutes, turns, totalWords, aiStudentId, encounteredVocab } = req.body;
   const persona = getAIStudentById(aiStudentId);
-
   const rawHistory = Array.isArray(history) ? history : [];
-  const childMessages = rawHistory.filter(
-    (m: { sender: string; englishText: string }) => m.sender !== 'ai' && m.englishText?.trim()
-  );
-
-  // Check if student introduced their name in conversation
-  let detectedNameInDialogue: string | null = null;
-  for (const m of childMessages) {
-    const found = extractSpokenName(m.englishText);
-    if (found) {
-      detectedNameInDialogue = found;
-      break;
-    }
-  }
-
-  const safeName = '';
-  const displayName = safeName || 'あなた';
-
-  // Extract observable English phrases, max 6 phrases, with high-risk PII masked
+  const childMessages = rawHistory.filter((m: any) => m.sender !== 'ai' && m.englishText?.trim());
   const childUtterances = childMessages
     .slice(-8)
-    .map((m: { englishText: string }) => maskHighRiskPII(m.englishText.trim()).maskedText.slice(0, 60))
-    .filter((t: string) => t.length > 0);
+    .map((m: any) => maskHighRiskPII(String(m.englishText).trim()).maskedText.slice(0, 60))
+    .filter(Boolean);
+  const examples = childUtterances.map((t: string) => `「${t}」`).join('、');
 
-  const childUtteranceList = childUtterances.map((text: string) => `「${text}」`).join('、 ');
-  const allSpokenTextLower = childUtterances.join(' ').toLowerCase();
+  const prompt = `小学5・6年生の英会話練習を日本語で短く講評してください。
+留学生: ${persona.name}
+時間: ${durationMinutes || 1}分
+ターン: ${turns || 0}
+児童の実際の発話: ${examples || '(発話なし)'}
 
-  const feedbackPrompt = `
-あなたは静岡大学留学生交流プログラムの指導教員・小学校英語教育の専門家です。
-文部科学省の小学校外国語（英語）目標に基づき、小学5・6年生の児童 (${displayName}) に対する対話練習の講評を作成してください。
-
-【厳格な評価指針】:
-1. 「今回学んだ英語 (keyPhrases)」:
-   - 児童および留学生が「実際の会話で本当に使用した英語フレーズ・語彙」のみを抽出してください。
-   - 会話に一度も登場していない架空のフレーズや固定例文（「How about you?」「I like sushi.」など）を勝手に追加することは固く禁止します。
-2. 「次へのステップアップ (improvementAdvice)」:
-   - 児童の実際の発話（${childUtteranceList || '発話'}）を分析し、児童が「まだ使っていない次の表現」を動的に提案してください。
-   - もし児童が既に「How about you?」を使っていた場合、「How about you?を使おう」と提案することは絶対に禁止です。理由を一言付け足す「because it is ～」や、できることを伝える「I can ～」など別の発展表現を提案してください。
-3. 児童の名前（${displayName}さん）を自然に温かく用いて励ましてください。
-
-対話実績:
-- 留学生: ${persona.name} (${persona.countryJapanese}, ${persona.city})
-- 時間: ${durationMinutes || 1}分
-- ターン数: ${turns || 0}ターン
-- 児童の英語発話例: ${childUtteranceList || '(リスニング中心)'}
-
-以下のJSONフォーマットのみを出力してください:
+実際に出た表現だけを keyPhrases に入れ、架空の発話を追加しないでください。
+JSONのみ:
 {
-  "goodPoints": [
-    "実際に話せた英語表現（${childUtteranceList || '発話'}）を具体的に引用して褒める点",
-    "質問に答えられたことや会話を続けられた点を褒める点",
-    "意欲的に挑戦できた点を褒める点"
-  ],
-  "improvementAdvice": {
-    "title": "次へのステップアドバイスの見出し",
-    "detail": "児童の発話分析に基づき、まだ使っていない次の一歩を優しく促す説明",
-    "examplePhrase": "すぐに使える英語フレーズ例"
-  },
-  "overallComment": "${displayName}さん、${persona.countryJapanese}の留学生 ${persona.name} との対話の温かい講評メッセージ",
-  "keyPhrases": [
-    { "english": "実際に会話に出たフレーズ", "japanese": "日本語訳", "culturalNote": "ワンポイント" }
-  ]
-}
-`;
+ "goodPoints":["...","...","..."],
+ "improvementAdvice":{"title":"...","detail":"...","examplePhrase":"..."},
+ "overallComment":"...",
+ "keyPhrases":[{"english":"...","japanese":"...","culturalNote":"..."}]
+}`;
 
   try {
-    const claude = getAnthropicClient();
-    if (claude) {
-      const primaryModel = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
-      const response = await claude.messages.create({
-        model: primaryModel,
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: feedbackPrompt }],
-      });
+    const { parsed } = await callClaudeJson('あなたは小学校外国語教育の専門家です。児童を具体的かつ温かく励ましてください。', prompt, 900);
+    const uniqueKeyPhrases = Array.isArray(parsed.keyPhrases)
+      ? parsed.keyPhrases.filter((phrase: any, index: number, all: any[]) => {
+          const key = String(phrase?.english || '').trim().toLowerCase();
+          return key && all.findIndex((p: any) => String(p?.english || '').trim().toLowerCase() === key) === index;
+        })
+      : [];
 
-      const rawText = response.content
-        .filter((block) => block.type === 'text')
-        .map((block) => ('text' in block ? block.text : ''))
-        .join('')
-        .trim();
-
-      let jsonStr = rawText;
-      if (jsonStr.includes('{') && jsonStr.includes('}')) {
-        const start = jsonStr.indexOf('{');
-        const end = jsonStr.lastIndexOf('}');
-        jsonStr = jsonStr.substring(start, end + 1);
-      }
-
-      const parsed = JSON.parse(jsonStr);
-      const uniqueKeyPhrases = Array.isArray(parsed.keyPhrases)
-        ? parsed.keyPhrases.filter((phrase: any, index: number, all: any[]) => {
-            const key = String(phrase?.english || '').trim().toLowerCase();
-            return key.length > 0 && all.findIndex((candidate: any) =>
-              String(candidate?.english || '').trim().toLowerCase() === key
-            ) === index;
-          })
-        : [];
-      return res.json({
-        success: true,
-        isFallback: false,
-        data: {
-          ...parsed,
-          keyPhrases: uniqueKeyPhrases,
-          encounteredVocab: encounteredVocab || [],
-          aiStudent: persona,
-          stats: {
-            totalTurns: turns || 0,
-            totalChildWords: totalWords || 0,
-            durationSeconds: (durationMinutes || 1) * 60,
-            targetDurationMinutes: durationMinutes || 1,
-          },
+    return res.json({
+      success: true,
+      isFallback: false,
+      data: {
+        ...parsed,
+        keyPhrases: uniqueKeyPhrases,
+        encounteredVocab: encounteredVocab || [],
+        aiStudent: persona,
+        stats: {
+          totalTurns: turns || 0,
+          totalChildWords: totalWords || 0,
+          durationSeconds: (durationMinutes || 1) * 60,
+          targetDurationMinutes: durationMinutes || 1,
         },
-      });
-    }
-
-    // High-quality dynamic fallback feedback
+      },
+    });
+  } catch {
     const fallbackData = generateFallbackFeedback(
       persona,
-      displayName,
+      'あなた',
       turns || 0,
       totalWords || 0,
       (durationMinutes || 1) * 60,
@@ -624,58 +404,21 @@ app.post('/api/feedback', async (req, res) => {
       encounteredVocab || [],
       rawHistory
     );
-
-    return res.json({
-      success: true,
-      isFallback: true,
-      fallbackReason: 'API_KEY_NOT_CONFIGURED',
-      data: fallbackData,
-    });
-  } catch (error: any) {
-    let fallbackReason = 'API_ERROR';
-    if (error?.name === 'AbortError' || error?.message?.includes('aborted') || error?.message?.includes('timeout')) {
-      fallbackReason = 'API_TIMEOUT';
-    }
-
-    // High-quality dynamic fallback feedback for resilience
-    const fallbackData = generateFallbackFeedback(
-      persona,
-      displayName,
-      turns || 0,
-      totalWords || 0,
-      (durationMinutes || 1) * 60,
-      durationMinutes || 1,
-      encounteredVocab || [],
-      rawHistory
-    );
-
-    return res.json({
-      success: true,
-      isFallback: true,
-      fallbackReason,
-      data: fallbackData,
-    });
+    return res.json({ success: true, isFallback: true, fallbackReason: 'AI_RETRY_EXHAUSTED', data: fallbackData });
   }
 });
 
-// Start server with Vite middleware in dev or static serving in prod
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    // High-level start message without sensitive details
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
