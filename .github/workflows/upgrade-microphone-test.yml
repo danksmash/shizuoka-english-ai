@@ -1,3 +1,4 @@
+# Trigger existing one-shot workflow
 name: One-shot microphone recognition test upgrade
 
 on:
@@ -22,7 +23,6 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
 
           path = Path('src/components/SetupScreen.tsx')
           s = path.read_text()
@@ -67,7 +67,6 @@ jobs:
     setMicMessage('マイクを確認しています。許可画面が出たら「許可」を押してください…');
 
     try {
-      // Explicit user action requests microphone permission before the dialogue starts.
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((track) => track.stop());
 
@@ -148,38 +147,13 @@ jobs:
 '''
           s = s[:start] + new_func + s[end:]
 
-          # Update heading and button behavior/text.
           s = s.replace('<span>マイクを準備する</span>', '<span>マイク・音声入力をテスト</span>', 1)
-          s = s.replace(
-              "disabled={micStatus === 'checking' || micStatus === 'ready' || micStatus === 'unsupported'}",
-              "disabled={micStatus === 'checking' || micStatus === 'testing' || micStatus === 'unsupported'}",
-              1,
-          )
-          s = s.replace(
-              "micStatus === 'checking' || micStatus === 'unsupported'",
-              "micStatus === 'checking' || micStatus === 'testing' || micStatus === 'unsupported'",
-              1,
-          )
-          s = s.replace(
-              "{micStatus === 'ready' ? '✓ 準備OK' : 'マイクを準備'}",
-              "{micStatus === 'testing' ? 'テスト中…' : micStatus === 'ready' ? '✓ 音声入力OK' : 'マイクテスト'}",
-              1,
-          )
-          s = s.replace(
-              "if (micStatus === 'checking' || micStatus === 'prompt') {\n      setMicMessage('先に「マイクを準備する」を押して、許可確認を済ませてください。');",
-              "if (micStatus === 'checking' || micStatus === 'prompt' || micStatus === 'testing') {\n      setMicMessage('先に「マイク・音声入力をテスト」を行い、音声入力OKを確認してください。');",
-              1,
-          )
-          s = s.replace(
-              "disabled={micStatus === 'checking' || micStatus === 'prompt'}",
-              "disabled={micStatus === 'checking' || micStatus === 'prompt' || micStatus === 'testing'}",
-              1,
-          )
-          s = s.replace(
-              "micStatus === 'checking' || micStatus === 'prompt'\n                ? 'bg-slate-300",
-              "micStatus === 'checking' || micStatus === 'prompt' || micStatus === 'testing'\n                ? 'bg-slate-300",
-              1,
-          )
+          s = s.replace("disabled={micStatus === 'checking' || micStatus === 'ready' || micStatus === 'unsupported'}", "disabled={micStatus === 'checking' || micStatus === 'testing' || micStatus === 'unsupported'}", 1)
+          s = s.replace("micStatus === 'checking' || micStatus === 'unsupported'", "micStatus === 'checking' || micStatus === 'testing' || micStatus === 'unsupported'", 1)
+          s = s.replace("{micStatus === 'ready' ? '✓ 準備OK' : 'マイクを準備'}", "{micStatus === 'testing' ? 'テスト中…' : micStatus === 'ready' ? '✓ 音声入力OK' : 'マイクテスト'}", 1)
+          s = s.replace("if (micStatus === 'checking' || micStatus === 'prompt') {\n      setMicMessage('先に「マイクを準備する」を押して、許可確認を済ませてください。');", "if (micStatus === 'checking' || micStatus === 'prompt' || micStatus === 'testing') {\n      setMicMessage('先に「マイク・音声入力をテスト」を行い、音声入力OKを確認してください。');", 1)
+          s = s.replace("disabled={micStatus === 'checking' || micStatus === 'prompt'}", "disabled={micStatus === 'checking' || micStatus === 'prompt' || micStatus === 'testing'}", 1)
+          s = s.replace("micStatus === 'checking' || micStatus === 'prompt'\n                ? 'bg-slate-300", "micStatus === 'checking' || micStatus === 'prompt' || micStatus === 'testing'\n                ? 'bg-slate-300", 1)
 
           path.write_text(s)
           PY
