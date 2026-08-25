@@ -25,8 +25,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Type-check
-        run: npm run lint
+      - name: Full QA (dialogue, speech, security, type-check)
+        run: npm run qa
 
       - name: Production build
         run: npm run build
