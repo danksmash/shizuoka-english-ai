@@ -22,3 +22,16 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Setup screen: prevent the selected-student panel from stretching into unused vertical space on desktop. */
+@media (min-width: 1024px) {
+  .bg-gradient-to-b > main > section:nth-child(2) {
+    grid-template-rows: auto auto auto !important;
+    height: fit-content !important;
+    align-self: start !important;
+  }
+
+  .bg-gradient-to-b > main > section:nth-child(2) > div:first-child {
+    min-height: 0 !important;
+  }
+}
