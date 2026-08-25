@@ -1,33 +1,22 @@
 @import "tailwindcss";
 
 /*
- * Responsive UI scale
- * -------------------
- * Tailwind spacing, typography, radii and most component dimensions are rem-based.
- * Scaling the root size therefore keeps the existing visual proportions while letting
- * the whole application grow on large displays and shrink modestly on compact ones.
- *
- *  768px viewport  -> 14px root
- * 1440px viewport  -> ~16px root
- * 1920px viewport  -> ~18px root
- * 2560px+ viewport -> 20px root (capped)
+ * Tablet-first responsive scaling.
+ * Baseline: school tablet in landscape (about 1280x800 CSS px).
+ * Use both viewport width and height so the whole UI grows/shrinks without
+ * creating unused outer whitespace, while preserving existing rem proportions.
  */
 html {
-  font-size: clamp(14px, calc(10px + 0.42vw), 20px);
+  font-size: clamp(13px, min(calc(9px + 0.55vw), calc(9px + 0.9vh)), 19px);
   text-size-adjust: 100%;
   -webkit-text-size-adjust: 100%;
 }
 
-/* On phone-sized screens, preserve tap/readability size while the layout stacks. */
 @media (max-width: 640px) {
-  html {
-    font-size: 15px;
-  }
+  html { font-size: 15px; }
 }
 
-html,
-body,
-#root {
+html, body, #root {
   width: 100%;
   min-width: 0;
   min-height: 100%;
@@ -41,31 +30,41 @@ body {
   overflow-x: hidden;
 }
 
-/* Custom smooth scrollbar for tablet dialog */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+#root {
+  min-height: 100dvh;
 }
 
-/* Setup screen: prevent the selected-student panel from stretching into unused vertical space on desktop. */
+/* Setup screen: fill the available landscape display instead of staying at max-w-7xl. */
+#root > .bg-gradient-to-b {
+  max-width: none !important;
+  width: 100% !important;
+  min-height: 100dvh;
+  box-sizing: border-box;
+}
+
+@media (min-width: 900px) and (orientation: landscape) {
+  #root > .bg-gradient-to-b {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  #root > .bg-gradient-to-b > main {
+    min-height: 0;
+  }
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Keep the right setup column compact, but let the page itself fill the screen. */
 @media (min-width: 1024px) {
   .bg-gradient-to-b > main > section:nth-child(2) {
-    grid-template-rows: auto auto auto !important;
+    grid-template-rows: auto auto auto auto !important;
     height: fit-content !important;
     align-self: start !important;
   }
-
   .bg-gradient-to-b > main > section:nth-child(2) > div:first-child {
     min-height: 0 !important;
   }
