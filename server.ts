@@ -264,7 +264,7 @@ app.post('/api/chat', async (req, res) => {
 
   // Extract spoken name if the student just introduced themselves
   const spokenName = extractSpokenName(trimmedMessage);
-  const effectiveName = spokenName || (studentName && studentName !== '5・6年生' ? studentName.slice(0, 12) : '');
+  const effectiveName = '';
 
   // 6. Sanitize History & Limit to last 4 turns (8 messages)
   const rawHistory = Array.isArray(history) ? history : [];
@@ -452,7 +452,7 @@ app.post('/api/feedback', async (req, res) => {
     }
   }
 
-  const safeName = detectedNameInDialogue || (studentName && studentName !== '5・6年生' ? sanitizeStudentInput(studentName).slice(0, 12) : '');
+  const safeName = '';
   const displayName = safeName || 'あなた';
 
   // Extract observable English phrases, max 6 phrases, with high-risk PII masked
