@@ -215,6 +215,30 @@ Return strictly valid JSON:
 }`;
 }
 
+async function translateStudentInputNaturally(sourceEnglish: string): Promise<string> {
+  const prompt = `Translate this elementary school student's complete English utterance into natural Japanese.
+
+English:
+${sourceEnglish}
+
+Return JSON only:
+{
+  "translation": "自然な日本語訳だけ"
+}
+
+Do not leave English sentences in the translation.
+Do not repeat the English source in parentheses.
+Infer missing punctuation naturally without correcting or changing the student's intended meaning.`;
+
+  const { parsed } = await callClaudeJson(
+    'You are a careful English-to-Japanese translator for elementary school dialogue records.',
+    prompt,
+    180
+  );
+  const inspected = inspectStudentJapaneseTranslation(parsed?.translation, sourceEnglish);
+  return inspected.isValid ? inspected.translation : '';
+}
+
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
@@ -296,18 +320,32 @@ Translate the student's latest English into Japanese too.`;
 
     const requestedStudentTranslationStatus =
       parsed.studentTranslationStatus === 'incomplete' ? 'incomplete' : 'translated';
-    const inspectedStudentTranslation = inspectStudentJapaneseTranslation(
+    let inspectedStudentTranslation = inspectStudentJapaneseTranslation(
       parsed.studentJapaneseTranslation,
       trimmedMessage
     );
-    const studentTranslationStatus =
-      requestedStudentTranslationStatus === 'incomplete' || !inspectedStudentTranslation.isValid
-        ? 'incomplete'
-        : 'translated';
-    const studentJapaneseTranslation =
-      studentTranslationStatus === 'translated'
-        ? inspectedStudentTranslation.translation
-        : '日本語に訳せませんでした。';
+
+    if (requestedStudentTranslationStatus === 'incomplete' || !inspectedStudentTranslation.isValid) {
+      try {
+        const retriedTranslation = await translateStudentInputNaturally(trimmedMessage);
+        inspectedStudentTranslation = inspectStudentJapaneseTranslation(
+          retriedTranslation,
+          trimmedMessage
+        );
+      } catch (translationError: any) {
+        console.warn('Student translation retry failed', {
+          name: translationError?.name,
+          message: translationError?.message,
+        });
+      }
+    }
+
+    const studentTranslationStatus = inspectedStudentTranslation.isValid
+      ? 'translated'
+      : 'incomplete';
+    const studentJapaneseTranslation = inspectedStudentTranslation.isValid
+      ? inspectedStudentTranslation.translation
+      : '';
 
     return res.json({
       success: true,
