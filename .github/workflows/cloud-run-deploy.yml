@@ -25,11 +25,9 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
           project_id: shizuoka-english-ai
-          token_format: access_token
-          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
