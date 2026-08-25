@@ -105,6 +105,7 @@ export interface FeedbackData {
     examplePhrase?: string;
   };
   overallComment: string;
+  studentMessage: string;
   keyPhrases: Array<{
     english: string;
     japanese: string;
