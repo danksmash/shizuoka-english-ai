@@ -1,7 +1,6 @@
 import { AIStudentProfile, DialogueTopic, TopicOption } from '../types';
 
-const starters = (
-  name: string,
+const topicPrompts = (
   intro: string,
   favorites: string,
   culture: string,
@@ -27,13 +26,13 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     likes: ['Surfing 🏄‍♀️ (サーフィン)', 'Burgers 🍔 (ハンバーガー)', 'Video Games 🎮 (ゲーム)', 'Strawberries 🍓 (静岡いちご)'],
     japaneseBio: 'アメリカ・カリフォルニア出身。サーフィンとゲームが大好きで、明るい笑顔が魅力の留学生。クリアなアメリカ英語を話します！',
     characterMessage: "Hi! I am Emma from California. Let's talk in English!",
-    starterPromptDefault: "Hi! I'm Emma from California. What is your name?",
-    topicPrompts: starters('Emma',
-      "Hi! I'm Emma from California. What is your name?",
-      "Let's talk about things we like. I like surfing and games. What do you like?",
-      "Let's talk about Shizuoka and our countries. What do you like about Shizuoka?",
-      "Let's talk about things we can do. I can surf. What can you do?",
-      "Let's talk about anything you like. What do you want to talk about?"
+    starterPromptDefault: "Hi! I'm Emma from California. What's your name?",
+    topicPrompts: topicPrompts(
+      "Hi! I'm Emma from California. What's your name?",
+      "I like surfing and games. What do you like?",
+      "I like Shizuoka. What do you like about Shizuoka?",
+      "I can surf. What can you do?",
+      "We can talk about anything. What do you like?"
     ),
   },
   {
@@ -47,13 +46,13 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     likes: ['Football ⚽ (サッカー)', 'Afternoon Tea ☕ (紅茶)', 'Mount Fuji 🗻 (富士山)', 'Shizuoka Green Tea 🍵 (静岡茶)'],
     japaneseBio: 'イギリス・オックスフォード出身。サッカーと紅茶が大好きで、とてもフレンドリー。伝統的なイギリス英語の響きが特徴です！',
     characterMessage: "Hello! I am Oliver from the UK. Let's talk in English!",
-    starterPromptDefault: "Hello! I am Oliver from the UK. What is your name?",
-    topicPrompts: starters('Oliver',
-      "Hello! I am Oliver from the UK. What is your name?",
-      "Let's talk about things we like. I like football and tea. What do you like?",
-      "Let's talk about Shizuoka and our countries. What place do you like in Shizuoka?",
-      "Let's talk about things we can do. I can play the guitar. What can you do?",
-      "Let's talk about anything you like. What do you want to talk about?"
+    starterPromptDefault: "Hello! I'm Oliver from the UK. What's your name?",
+    topicPrompts: topicPrompts(
+      "Hello! I'm Oliver from the UK. What's your name?",
+      "I like football and tea. What do you like?",
+      "I like Mt. Fuji. What do you like in Shizuoka?",
+      "I can play guitar. What can you do?",
+      "We can talk about anything. What do you like?"
     ),
   },
   {
@@ -67,13 +66,13 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     likes: ['Swimming 🏊 (水泳)', 'Koalas 🐨 (コアラ)', 'Suruga Bay 🌊 (駿河湾の海)', 'BBQ 🍖 (バーベキュー)'],
     japaneseBio: 'オーストラリア・シドニー出身。海と自然が大好きで、駿河湾の魚や海洋生物を研究しています。温かいオージー英語です！',
     characterMessage: "Hello! I am Liam from Sydney. Let's talk in English!",
-    starterPromptDefault: "Hello! I'm Liam from Sydney, Australia. What is your name?",
-    topicPrompts: starters('Liam',
-      "Hello! I'm Liam from Sydney, Australia. What is your name?",
-      "Let's talk about things we like. I like swimming and koalas. What do you like?",
-      "Let's talk about Shizuoka and our countries. What do you like about Shizuoka?",
-      "Let's talk about things we can do. I can swim fast. What can you do?",
-      "Let's talk about anything you like. What do you want to talk about?"
+    starterPromptDefault: "Hello! I'm Liam from Sydney. What's your name?",
+    topicPrompts: topicPrompts(
+      "Hello! I'm Liam from Sydney. What's your name?",
+      "I like swimming and koalas. What do you like?",
+      "I like Suruga Bay. What do you like in Shizuoka?",
+      "I can swim fast. What can you do?",
+      "We can talk about anything. What do you like?"
     ),
   },
   {
@@ -87,13 +86,13 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     likes: ['Skiing ⛷️ (スキー)', 'Maple Syrup 🥞 (メープルパンケーキ)', 'Nature 🌲 (豊かな自然)', 'Mt. Fuji 🗻 (富士山の景色)'],
     japaneseBio: 'カナダ・バンクーバー出身。山や森の自然が好きで、富士山を見て大感動。とても優しく丁寧な英語で話してくれます！',
     characterMessage: "Hello! I am Chloe from Canada. Let's talk in English!",
-    starterPromptDefault: "Hello! I am Chloe from Vancouver, Canada. What is your name?",
-    topicPrompts: starters('Chloe',
-      "Hello! I am Chloe from Vancouver, Canada. What is your name?",
-      "Let's talk about things we like. I like skiing and pancakes. What do you like?",
-      "Let's talk about Shizuoka and our countries. Have you seen Mt. Fuji?",
-      "Let's talk about things we can do. I can skate and bake cookies. What can you do?",
-      "Let's talk about anything you like. What do you want to talk about?"
+    starterPromptDefault: "Hello! I'm Chloe from Canada. What's your name?",
+    topicPrompts: topicPrompts(
+      "Hello! I'm Chloe from Canada. What's your name?",
+      "I like skiing and pancakes. What do you like?",
+      "I like Mt. Fuji. What do you like in Shizuoka?",
+      "I can skate and bake. What can you do?",
+      "We can talk about anything. What do you like?"
     ),
   },
   {
@@ -107,13 +106,13 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     likes: ['Puzzles 🧩 (パズル・ルービックキューブ)', 'Math 📐 (算数・数学)', 'Goulash Soup 🍲 (グヤーシュスープ)', 'Green Tea 🍵 (緑茶)'],
     japaneseBio: 'ハンガリー・ブダペスト出身。ルービックキューブやプログラミングが得意で、発音がとてもはっきりしていて聞き取りやすいです！',
     characterMessage: "Hello! I am Bence from Hungary. Let's talk in English!",
-    starterPromptDefault: "Hello! I am Bence from Hungary. What is your name?",
-    topicPrompts: starters('Bence',
-      "Hello! I am Bence from Budapest, Hungary. What is your name?",
-      "Let's talk about things we like. I like puzzles and games. What do you like?",
-      "Let's talk about Shizuoka and our countries. What place do you like in Shizuoka?",
-      "Let's talk about things we can do. I can solve a Rubik's cube. What can you do?",
-      "Let's talk about anything you like. What do you want to talk about?"
+    starterPromptDefault: "Hello! I'm Bence from Hungary. What's your name?",
+    topicPrompts: topicPrompts(
+      "Hello! I'm Bence from Hungary. What's your name?",
+      "I like puzzles and games. What do you like?",
+      "I like green tea. What do you like in Shizuoka?",
+      "I can solve a cube. What can you do?",
+      "We can talk about anything. What do you like?"
     ),
   },
   {
@@ -127,13 +126,13 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     likes: ['Piano 🎹 (ショパンのピアノ音楽)', 'Drawing 🎨 (絵を描くこと)', 'Pierogi 🥟 (ポーランド餃子)', 'Sushi 🍣 (お寿司)'],
     japaneseBio: 'ポーランド・ワルシャワ出身。ピアノや絵を描くのが得意で、とても優しく温かい笑顔で話してくれます！',
     characterMessage: "Hello! I am Zofia from Poland. Let's talk in English!",
-    starterPromptDefault: "Hello! I am Zofia from Poland. What is your name?",
-    topicPrompts: starters('Zofia',
-      "Hello! I am Zofia from Warsaw, Poland. What is your name?",
-      "Let's talk about things we like. I like piano music and drawing. What do you like?",
-      "Let's talk about Shizuoka and our countries. Do you like castles or parks?",
-      "Let's talk about things we can do. I can play the piano. What can you do?",
-      "Let's talk about anything you like. What do you want to talk about?"
+    starterPromptDefault: "Hello! I'm Zofia from Poland. What's your name?",
+    topicPrompts: topicPrompts(
+      "Hello! I'm Zofia from Poland. What's your name?",
+      "I like piano and drawing. What do you like?",
+      "I like parks. What do you like in Shizuoka?",
+      "I can play piano. What can you do?",
+      "We can talk about anything. What do you like?"
     ),
   },
   {
@@ -147,13 +146,13 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     likes: ['Cricket 🏏 (クリケット)', 'Tea Gardens 🌿 (お茶畑)', 'Curry 🍛 (スパイスカレー)', 'Cycling 🚲 (サイクリング)'],
     japaneseBio: 'バングラデシュ・ダッカ出身。静岡のお茶とバングラデシュの紅茶を研究しています。礼儀正しく温かい人柄です！',
     characterMessage: "Hello! I am Rahul from Bangladesh. Let's talk in English!",
-    starterPromptDefault: "Hello! I am Rahul from Bangladesh. What is your name?",
-    topicPrompts: starters('Rahul',
-      "Hello! I am Rahul from Bangladesh. What is your name?",
-      "Let's talk about things we like. I like cricket and tea. What do you like?",
-      "Let's talk about Shizuoka and our countries. Do you like green tea?",
-      "Let's talk about things we can do. I can play cricket and cook curry. What can you do?",
-      "Let's talk about anything you like. What do you want to talk about?"
+    starterPromptDefault: "Hello! I'm Rahul from Bangladesh. What's your name?",
+    topicPrompts: topicPrompts(
+      "Hello! I'm Rahul from Bangladesh. What's your name?",
+      "I like cricket and tea. What do you like?",
+      "I like green tea. What do you like in Shizuoka?",
+      "I can play cricket. What can you do?",
+      "We can talk about anything. What do you like?"
     ),
   },
   {
@@ -167,13 +166,13 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     likes: ['Pho 🍲 (ベトナムフォー)', 'Badminton 🏸 (バドミントン)', 'Lotus Flowers 🪷 (ハスの花)', 'Shizuoka Mikan 🍊 (静岡みかん)'],
     japaneseBio: 'ベトナム・ハノイ出身。バドミントンと静岡のみかんが大好き。やわらかく丁寧な英語で話してくれます！',
     characterMessage: "Hello! I am Linh from Vietnam. Let's talk in English!",
-    starterPromptDefault: "Hello! I am Linh from Vietnam. What is your name?",
-    topicPrompts: starters('Linh',
-      "Hello! I am Linh from Hanoi, Vietnam. What is your name?",
-      "Let's talk about things we like. I like pho and badminton. What do you like?",
-      "Let's talk about Shizuoka and our countries. What fruit do you like?",
-      "Let's talk about things we can do. I can play badminton. What can you do?",
-      "Let's talk about anything you like. What do you want to talk about?"
+    starterPromptDefault: "Hello! I'm Linh from Vietnam. What's your name?",
+    topicPrompts: topicPrompts(
+      "Hello! I'm Linh from Vietnam. What's your name?",
+      "I like pho and badminton. What do you like?",
+      "I like Shizuoka oranges. What fruit do you like?",
+      "I can play badminton. What can you do?",
+      "We can talk about anything. What do you like?"
     ),
   },
   {
@@ -187,13 +186,13 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     likes: ['History 🏛️ (歴史)', 'Football ⚽ (サッカー)', 'Green Tea 🍵 (緑茶)', 'Baking bread 🥖 (パン作り)'],
     japaneseBio: 'ミャンマー・ヤンゴン出身。歴史やお寺、パン作りが好きで、とても温厚で優しい留学生です！',
     characterMessage: "Hello! I am Aung from Myanmar. Let's talk in English!",
-    starterPromptDefault: "Hello! I am Aung from Myanmar. What is your name?",
-    topicPrompts: starters('Aung',
-      "Hello! I am Aung from Yangon, Myanmar. What is your name?",
-      "Let's talk about things we like. I like football and history. What do you like?",
-      "Let's talk about Shizuoka and our countries. What do you like about Shizuoka?",
-      "Let's talk about things we can do. I can bake bread. What can you do?",
-      "Let's talk about anything you like. What do you want to talk about?"
+    starterPromptDefault: "Hello! I'm Aung from Myanmar. What's your name?",
+    topicPrompts: topicPrompts(
+      "Hello! I'm Aung from Myanmar. What's your name?",
+      "I like football and history. What do you like?",
+      "I like green tea. What do you like in Shizuoka?",
+      "I can bake bread. What can you do?",
+      "We can talk about anything. What do you like?"
     ),
   },
 ];
