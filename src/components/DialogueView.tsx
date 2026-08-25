@@ -89,14 +89,6 @@ export const DialogueView: React.FC<DialogueViewProps> = ({
                   {msg.englishText}
                 </p>
 
-                {/* Cultural highlight tag if present */}
-                {isAi && msg.culturalNote && (
-                  <div className="mt-2 pt-2 border-t border-blue-200/70 flex items-center gap-1 text-[11px] text-blue-800 font-medium">
-                    <span className="text-xs">💡</span>
-                    <span>{msg.culturalNote}</span>
-                  </div>
-                )}
-
                 {/* Audio replay button for AI messages */}
                 {isAi && (
                   <div className="mt-2 flex items-center justify-end">

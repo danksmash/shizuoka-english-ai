@@ -103,6 +103,30 @@ function sanitizeStudentInput(text: string): string {
   return maskHighRiskPII(text).maskedText;
 }
 
+function isExplicitFarewell(text: string): boolean {
+  return /\b(?:goodbye|bye(?: bye)?|see you|see ya)\b/i.test(text.trim());
+}
+
+function ensureActiveTurnEndsWithQuestion(reply: string, topic: string): string {
+  const normalized = reply.replace(/\s+/g, ' ').trim();
+  if (/\?\s*$/.test(normalized)) return normalized;
+
+  const topicQuestions: Record<string, string> = {
+    intro: 'How about you?',
+    favorites: 'What do you like?',
+    shizuoka_culture: 'What do you like about Shizuoka?',
+    talents: 'What can you do?',
+    free: 'What would you like to talk about?',
+  };
+  const question = topicQuestions[topic] || 'How about you?';
+  const firstUnit = (normalized.match(/^[^.!?]+[.!?]?/)?.[0] || normalized).trim();
+  const words = firstUnit.split(/\s+/).filter(Boolean);
+  let shortStatement = words.slice(0, 14).join(' ').replace(/[?]+$/g, '').trim();
+  if (shortStatement && !/[.!]$/.test(shortStatement)) shortStatement += '.';
+  return shortStatement ? shortStatement + ' ' + question : question;
+}
+
+
 // Helper to extract student's spoken name from English introduction
 function extractSpokenName(text: string): string | null {
   if (!text) return null;
@@ -147,7 +171,7 @@ IMPORTANT CONVERSATION RULES:
 2. Respond to what the student actually said.
 3. If the student asks a question (e.g. "How are you?", "What food do you like?", "Where are you from?", "Can you play soccer?"), answer that question directly and naturally first before asking anything back.
 4. Never give an unrelated response.
-5. Usually continue the conversation by asking ONE natural question related to the student's latest message or current topic context.
+5. In EVERY normal dialogue turn, end your reply with exactly ONE natural question related to the student's latest message or current topic context.
 6. Generate the follow-up question from the conversation context.
 7. Do not use predetermined questions.
 8. Do not rely on predetermined reaction phrases or filler expressions.
@@ -156,7 +180,7 @@ IMPORTANT CONVERSATION RULES:
 11. Share a small amount of relevant information about yourself when appropriate.
 12. Do not correct the student's grammar unless correction is specifically requested.
 13. If the student's English is incomplete or imperfect, infer the intended meaning and respond naturally.
-14. If the student says "Goodbye", "See you", "Thank you", or clearly ends the conversation, say goodbye warmly and do not force a follow-up question.
+14. If the student explicitly says "Goodbye", "Bye", or "See you" and clearly ends the conversation, say goodbye warmly and do not ask a follow-up question. A simple "Thank you" by itself is not automatically the end of the dialogue.
 15. If the student asks for clarification (e.g. "Pardon?", "Sorry?", "What?"), rephrase what you previously said in simpler, clearer English.
 16. Keep the conversation friendly, encouraging, age-appropriate, and natural.
 17. Make the conversation feel like a genuine conversation, not an English test.
@@ -166,7 +190,8 @@ The student's latest message and the conversation context are more important tha
 Output strictly valid JSON:
 {
   "reply": "English response from ${p.name}",
-  "japaneseTranslation": "Natural, gentle Japanese translation suitable for 5th/6th grade student",
+  "japaneseTranslation": "Natural, gentle Japanese translation of the AI reply suitable for 5th/6th grade student",
+  "studentJapaneseTranslation": "Natural Japanese translation of the student latest English input; never copy the English input as-is",
   "mood": "happy" | "speaking" | "thinking" | "encouraging",
   "culturalNote": "Brief friendly cultural tip in Japanese if relevant (or empty string)"
 }`;
@@ -287,10 +312,12 @@ ${hasHighRiskPII ? '(Note: A private contact detail in student input was masked 
 
 CRITICAL RESPONSE MANDATES:
 1. Listen carefully to student's latest input and respond directly and naturally.
-2. If student asked a question (e.g. "How are you?", "What food do you like?", "Where are you from?", "Can you swim?"), DIRECTLY ANSWER FIRST with your persona details before asking any follow-up question.
-3. If student says "Goodbye" / "See you", respond with a warm farewell and do not force a question.
-4. If student asks for clarification (e.g. "Pardon?", "Sorry?"), rephrase your previous statement simply.
-5. Return strictly valid JSON: { "reply": "...", "japaneseTranslation": "...", "mood": "happy"|"speaking"|"encouraging", "culturalNote": "..." }`;
+2. If student asked a question, DIRECTLY ANSWER FIRST with your persona details.
+3. For every normal dialogue turn, END with exactly ONE short, natural follow-up question. Do not end a normal turn with only a statement.
+4. Only when the student explicitly says "Goodbye" / "Bye" / "See you" and clearly ends the dialogue, respond with a warm farewell and no question.
+5. If student asks for clarification, rephrase your previous statement simply and then ask one simple checking question.
+6. Translate the student latest English input into natural Japanese in studentJapaneseTranslation. It must be Japanese, not a copy of the English text.
+7. Return strictly valid JSON: { "reply": "...", "japaneseTranslation": "...", "studentJapaneseTranslation": "...", "mood": "happy"|"speaking"|"encouraging", "culturalNote": "..." }`;
 
   try {
     const claude = getAnthropicClient();
@@ -356,7 +383,15 @@ CRITICAL RESPONSE MANDATES:
         throw new Error('API_INVALID_RESPONSE: Failed to parse JSON');
       }
 
-      const sanitizedReply = sanitizeAiOutput(parsed.reply, persona.name);
+      const baseSanitizedReply = sanitizeAiOutput(parsed.reply, persona.name);
+      const sanitizedReply = isExplicitFarewell(trimmedMessage)
+        ? baseSanitizedReply
+        : ensureActiveTurnEndsWithQuestion(baseSanitizedReply, String(topic || 'favorites'));
+      const studentJapaneseTranslation =
+        typeof parsed.studentJapaneseTranslation === 'string' &&
+        /[ぁ-んァ-ヶ一-龠]/.test(parsed.studentJapaneseTranslation)
+          ? parsed.studentJapaneseTranslation.trim()
+          : '日本語訳を準備できませんでした。';
       const responseEnd = Date.now();
 
       return res.json({
@@ -365,6 +400,7 @@ CRITICAL RESPONSE MANDATES:
         data: {
           reply: sanitizedReply,
           japaneseTranslation: parsed.japaneseTranslation || '',
+          studentJapaneseTranslation,
           mood: parsed.mood || 'speaking',
           culturalNote: parsed.culturalNote || '',
           detectedName: spokenName || undefined,

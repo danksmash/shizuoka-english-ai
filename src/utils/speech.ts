@@ -348,86 +348,17 @@ export function stopSpeaking() {
  */
 export function getStudentFarewellMessage(studentId: string): { english: string; japanese: string } {
   switch (studentId) {
-    case 'oliver_uk':
-      return {
-        english: "Time is up! Thank you for the wonderful talk! Cheers and see you again!",
-        japanese: "時間になりました！素晴らしいお話をありがとう！またね、Cheers！",
-      };
-    case 'emma_usa':
-      return {
-        english: "Time is up! Awesome job talking with me today! See you soon!",
-        japanese: "時間になりました！今日はいっぱいお話しできて最高だったよ！またね！",
-      };
-    case 'liam_australia':
-      return {
-        english: "Time is up! Good on ya mate, thank you for the great chat! See ya!",
-        japanese: "時間になりました！素晴らしいお話をありがとう！また会おうね！",
-      };
-    case 'chloe_canada':
-      return {
-        english: "Time is up! Thank you so much for the lovely conversation! Have a wonderful day!",
-        japanese: "時間になりました！とっても楽しいお話をありがとう！良い一日をね！",
-      };
-    case 'bence_hungary':
-      return {
-        english: "Time is up! Fantastic job today! Szia and see you next time!",
-        japanese: "時間になりました！素晴らしい頑張りでした！Szia、また次回！",
-      };
-    case 'zofia_poland':
-      return {
-        english: "Time is up! Bravo! Thank you for the beautiful talk! Cześć!",
-        japanese: "時間になりました！ブラボー！素敵な対話をありがとう！Cześć！",
-      };
-    case 'rahul_bangladesh':
-      return {
-        english: "Time is up! Thank you very much my friend! Have a wonderful day!",
-        japanese: "時間になりました！友だち、本当にありがとう！素敵な日を過ごしてね！",
-      };
-    case 'linh_vietnam':
-      return {
-        english: "Time is up! You did amazing today! Xin chào and see you soon!",
-        japanese: "時間になりました！今日とても上手に話せたね！Xin chào、またね！",
-      };
-    case 'aung_myanmar':
-      return {
-        english: "Time is up! Thank you for the peaceful chat! Mingalaba and see you!",
-        japanese: "時間になりました！心温まるお話をありがとう！Mingalaba、またね！",
-      };
-    default:
-      return {
-        english: "Time is up! Thank you for talking with me today! See you next time!",
-        japanese: "時間になりました！今日はお話ししてくれてありがとう！またね！",
-      };
+    case 'oliver_uk': return { english: "Time is up! I was very happy to talk with you. Thank you, and see you again!", japanese: '時間になりました！あなたとお話しできてとても嬉しかったよ。ありがとう！またね！' };
+    case 'emma_usa': return { english: "Time is up! I was so happy to talk with you today. Thank you, and see you soon!", japanese: '時間になりました！今日はあなたとお話しできてとても嬉しかったよ。ありがとう！またね！' };
+    case 'liam_australia': return { english: "Time is up! I was really happy to chat with you. Thanks a lot, and see ya!", japanese: '時間になりました！あなたとお話しできて本当に嬉しかったよ。ありがとう！またね！' };
+    case 'chloe_canada': return { english: "Time is up! I was very happy to talk with you. Thank you so much, and have a wonderful day!", japanese: '時間になりました！あなたとお話しできてとても嬉しかったです。ありがとう！素敵な一日をね！' };
+    case 'bence_hungary': return { english: "Time is up! I was happy to talk with you today. Thank you! Szia, and see you next time!", japanese: '時間になりました！今日はあなたとお話しできて嬉しかったよ。ありがとう！Szia、またね！' };
+    case 'zofia_poland': return { english: "Time is up! I was so happy to talk with you. Thank you! Cześć, and see you again!", japanese: '時間になりました！あなたとお話しできてとても嬉しかったよ。ありがとう！Cześć、またね！' };
+    case 'rahul_bangladesh': return { english: "Time is up! I was very happy to talk with you, my friend. Thank you, and have a wonderful day!", japanese: '時間になりました！友だちとしてあなたとお話しできてとても嬉しかったよ。ありがとう！素敵な一日を！' };
+    case 'linh_vietnam': return { english: "Time is up! I was really happy to talk with you today. Thank you! See you soon!", japanese: '時間になりました！今日はあなたとお話しできて本当に嬉しかったよ。ありがとう！またね！' };
+    case 'aung_myanmar': return { english: "Time is up! I was very happy to talk with you. Thank you for our lovely chat. See you!", japanese: '時間になりました！あなたとお話しできてとても嬉しかったよ。楽しいお話をありがとう！またね！' };
+    default: return { english: "Time is up! I was very happy to talk with you today. Thank you, and see you next time!", japanese: '時間になりました！今日はあなたとお話しできてとても嬉しかったよ。ありがとう！またね！' };
   }
-}
-
-/**
- * Pre-authorizes hardware microphone access seamlessly for the app session
- */
-export async function requestMicrophonePermission(): Promise<boolean> {
-  try {
-    if (
-      typeof navigator !== 'undefined' &&
-      navigator.mediaDevices &&
-      typeof navigator.mediaDevices.getUserMedia === 'function'
-    ) {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
-      if (stream) {
-        // Stop tracks immediately so browser doesn't keep mic indicator on when not actively recording
-        stream.getTracks().forEach((track) => {
-          try {
-            track.stop();
-          } catch {
-            // Ignore
-          }
-        });
-        return true;
-      }
-    }
-  } catch {
-    // Graceful fallback for restricted iframes or missing devices
-  }
-  return false;
 }
 
 /**

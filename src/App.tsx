@@ -27,7 +27,6 @@ import {
   createSpeechRecognitionInstance,
   countEnglishWords,
   getStudentFarewellMessage,
-  requestMicrophonePermission,
 } from './utils/speech';
 import { STARTER_PROMPTS_JAPANESE, translateChildUtterance } from './utils/translation';
 import { motion, AnimatePresence } from 'motion/react';
@@ -158,7 +157,6 @@ export default function App() {
 
   // Start Dialogue from Setup
   const handleStartDialogue = (newProfile: StudentProfile) => {
-    requestMicrophonePermission();
     setProfile(newProfile);
     profileRef.current = newProfile;
     const durationSec = newProfile.selectedDurationMinutes * 60;
@@ -310,7 +308,10 @@ export default function App() {
     extractAndAddVocab(trimmed);
 
     const words = countEnglishWords(trimmed);
-    const childJapanese = translateChildUtterance(trimmed);
+    const localChildJapanese = translateChildUtterance(trimmed);
+    const childJapanese = /[ぁ-んァ-ヶ一-龠]/.test(localChildJapanese)
+      ? localChildJapanese
+      : '日本語訳を準備中です。';
     const childMsg: ChatMessage = {
       id: `child-${Date.now()}`,
       sender: 'child',
@@ -353,7 +354,13 @@ export default function App() {
 
       const resData = await response.json();
       if (resData.success && resData.data) {
-        const { reply, japaneseTranslation, mood: aiMood, culturalNote } = resData.data;
+        const {
+          reply,
+          japaneseTranslation,
+          studentJapaneseTranslation,
+          mood: aiMood,
+          culturalNote,
+        } = resData.data;
 
         // Detect vocabulary in AI's reply
         extractAndAddVocab(reply);
@@ -367,7 +374,14 @@ export default function App() {
           culturalNote: culturalNote || undefined,
         };
 
-        const updatedHistory = [...messagesRef.current, aiMsg];
+        const translatedHistory = messagesRef.current.map((message) =>
+          message.id === childMsg.id &&
+          typeof studentJapaneseTranslation === 'string' &&
+          studentJapaneseTranslation.trim().length > 0
+            ? { ...message, japaneseText: studentJapaneseTranslation.trim() }
+            : message
+        );
+        const updatedHistory = [...translatedHistory, aiMsg];
         setMessages(updatedHistory);
         messagesRef.current = updatedHistory;
 
@@ -489,7 +503,10 @@ export default function App() {
     ) {
       extractAndAddVocab(pendingText);
       const words = countEnglishWords(pendingText);
-      const childJapanese = translateChildUtterance(pendingText);
+      const localChildJapanese = translateChildUtterance(pendingText);
+      const childJapanese = /[ぁ-んァ-ヶ一-龠]/.test(localChildJapanese)
+        ? localChildJapanese
+        : '日本語訳を準備できませんでした。';
       const pendingChildMsg: ChatMessage = {
         id: `child-${Date.now()}`,
         sender: 'child',
