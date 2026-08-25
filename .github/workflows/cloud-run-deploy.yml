@@ -42,5 +42,10 @@ jobs:
             --source . \
             --region asia-northeast1 \
             --allow-unauthenticated \
+            --min-instances 1 \
+            --max-instances 10 \
+            --concurrency 80 \
+            --timeout 60 \
+            --memory 512Mi \
             --set-env-vars ANTHROPIC_MODEL=claude-sonnet-4-6 \
             --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest
