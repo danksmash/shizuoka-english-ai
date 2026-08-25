@@ -61,7 +61,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
               setMicMessage('マイクが拒否されています。ブラウザのサイト設定で許可してください。');
             } else {
               setMicStatus('prompt');
-              setMicMessage('対話の前に「マイクを準備する」を押してください。');
+              setMicMessage('対話の前に「マイク・音声入力をテスト」を押して、英語を一言話してください。');
             }
           };
 
@@ -75,7 +75,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
 
       if (!cancelled) {
         setMicStatus('prompt');
-        setMicMessage('対話の前に「マイクを準備する」を押してください。');
+        setMicMessage('対話の前に「マイク・音声入力をテスト」を押して、英語を一言話してください。');
       }
     };
 
