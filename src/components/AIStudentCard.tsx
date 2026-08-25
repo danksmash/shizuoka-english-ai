@@ -1,5 +1,5 @@
 import React from 'react';
-import { Volume2, Sparkles, Flag } from 'lucide-react';
+import { Volume2, Sparkles } from 'lucide-react';
 import { CharacterMood, AIStudentProfile } from '../types';
 import { StudentAvatar } from './StudentAvatar';
 
@@ -21,7 +21,6 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
   isSpeaking,
   isListening,
   speechRate,
-  latestCulturalNote,
   onReplayAudio,
   onChangeSpeechRate,
 }) => {
@@ -66,7 +65,7 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm flex flex-col items-center text-center relative overflow-hidden">
+    <div className="bg-white rounded-3xl p-3.5 sm:p-4 border border-slate-200 shadow-sm flex flex-col items-center text-center relative overflow-hidden">
       <div className="absolute top-4 left-4 flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full text-xs font-bold text-slate-700 shadow-2xs">
         <span className="text-lg leading-none">{student.flag}</span>
         <span>{student.country} ({student.countryNative})</span>
@@ -81,9 +80,9 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
         <Volume2 className="w-4 h-4" />
       </button>
 
-      <div className="relative mt-5 mb-3">
+      <div className="relative mt-4 mb-2">
         <div
-          className={`w-28 h-28 sm:w-32 sm:h-32 rounded-3xl overflow-hidden p-1 transition-all duration-300 ${
+          className={`w-24 h-24 sm:w-28 sm:h-28 rounded-3xl overflow-hidden p-1 transition-all duration-300 ${
             isSpeaking
               ? 'ring-4 ring-blue-400 ring-offset-2 scale-105 shadow-lg'
               : isListening
@@ -111,13 +110,13 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
       <p className="text-xs font-bold text-blue-700 mt-0.5 mb-1">
         {student.japaneseName} ({student.age}歳・{student.city})
       </p>
-      <p className="text-xs text-slate-600 font-medium leading-relaxed max-w-xs mb-3">
+      <p className="text-xs text-slate-600 font-medium leading-relaxed max-w-xs mb-2">
         {student.role}
       </p>
 
-      <div className="mb-3">{getStatusBadge()}</div>
+      <div className="mb-2">{getStatusBadge()}</div>
 
-      <div className="w-full bg-blue-50/70 border border-blue-200 rounded-2xl p-3 mb-3">
+      <div className="w-full bg-blue-50/70 border border-blue-200 rounded-2xl p-2.5 mb-2">
         <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 mb-2">
           <span>🔊 AIが話す速さ</span>
           <span className="font-mono text-blue-700 bg-white border border-blue-200 px-2 py-0.5 rounded-lg" aria-live="polite">
@@ -145,17 +144,9 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
         </p>
       </div>
 
-      <div className="w-full bg-slate-50 border border-slate-200/80 rounded-2xl p-2.5 text-left">
-        <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-          <Flag className="w-3 h-3 text-blue-600" />
-          <span>{student.accentName}</span>
-        </div>
-        {latestCulturalNote && (
-          <p className="text-[10px] text-blue-800 bg-blue-50/80 p-1.5 rounded-lg mt-1.5 font-medium border border-blue-200/60">
-            💡 {latestCulturalNote}
-          </p>
-        )}
-      </div>
+      <p className="text-[10px] text-slate-500 font-semibold leading-tight">
+        {student.accentName}
+      </p>
     </div>
   );
 };
