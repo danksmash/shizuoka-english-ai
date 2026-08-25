@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { DialogueTopic, StudentProfile, AIStudentProfile } from '../types';
 import { AI_STUDENTS_LIST, DIALOGUE_TOPICS } from '../data/curriculum';
-import { speakStudentVoice, stopSpeaking } from '../utils/speech';
+import { createSpeechRecognitionInstance, isSpeechRecognitionSupported, speakStudentVoice, stopSpeaking } from '../utils/speech';
 import { StudentAvatar } from './StudentAvatar';
 
 interface SetupScreenProps {
@@ -31,7 +31,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
   const [selectedTopic, setSelectedTopic] = useState<DialogueTopic>('intro');
   const [durationMinutes, setDurationMinutes] = useState<number>(1);
   const [previewPlayingId, setPreviewPlayingId] = useState<string | null>(null);
-  const [micStatus, setMicStatus] = useState<'checking' | 'prompt' | 'ready' | 'denied' | 'unsupported'>('checking');
+  const [micStatus, setMicStatus] = useState<'checking' | 'prompt' | 'testing' | 'ready' | 'denied' | 'unsupported'>('checking');
   const [micMessage, setMicMessage] = useState<string>('マイクの状態を確認しています…');
 
   useEffect(() => {
@@ -54,8 +54,8 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
 
           const syncStatus = () => {
             if (status.state === 'granted') {
-              setMicStatus('ready');
-              setMicMessage('マイクは使用できます。対話中に許可画面は出ません。');
+              setMicStatus('prompt');
+              setMicMessage('マイクは許可済みです。「マイク・音声入力をテスト」を押して、英語を一言話してください。');
             } else if (status.state === 'denied') {
               setMicStatus('denied');
               setMicMessage('マイクが拒否されています。ブラウザのサイト設定で許可してください。');
@@ -84,18 +84,81 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
   }, []);
 
   const handlePrepareMicrophone = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
+    if (!navigator.mediaDevices?.getUserMedia || !isSpeechRecognitionSupported()) {
       setMicStatus('unsupported');
-      setMicMessage('この環境ではマイク確認ができません。文字入力でも利用できます。');
+      setMicMessage('この環境では音声入力テストを実行できません。文字入力でも利用できます。');
       return;
     }
 
+    setMicStatus('testing');
+    setMicMessage('マイクを確認しています。許可画面が出たら「許可」を押してください…');
+
     try {
-      setMicMessage('マイクの使用許可を確認しています…');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((track) => track.stop());
-      setMicStatus('ready');
-      setMicMessage('マイクの準備ができました。対話をスタートできます。');
+      setMicMessage('音声入力テスト中です。「Hello」など英語を一言話してください。');
+
+      let settled = false;
+      let timeoutId: number | null = null;
+      let recognition: ReturnType<typeof createSpeechRecognitionInstance> = null;
+
+      const finishSuccess = (text: string) => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId !== null) window.clearTimeout(timeoutId);
+        try { recognition?.stop(); } catch {}
+        setMicStatus('ready');
+        setMicMessage(`✓ 音声入力OK：「${text}」と聞き取れました。対話をスタートできます。`);
+      };
+
+      const finishFailure = (message: string, denied = false) => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId !== null) window.clearTimeout(timeoutId);
+        try { recognition?.stop(); } catch {}
+        setMicStatus(denied ? 'denied' : 'prompt');
+        setMicMessage(message);
+      };
+
+      recognition = createSpeechRecognitionInstance(
+        (text) => {
+          const heard = text.trim();
+          if (heard) finishSuccess(heard);
+        },
+        (error) => {
+          const normalized = String(error || '').toLowerCase();
+          if (normalized.includes('not-allowed') || normalized.includes('service-not-allowed')) {
+            finishFailure('マイクが許可されていません。ブラウザのサイト設定でマイクを許可してください。', true);
+          } else if (normalized.includes('audio-capture')) {
+            finishFailure('マイクを使用できません。端末のマイク設定を確認して、もう一度テストしてください。');
+          } else if (normalized.includes('no-speech')) {
+            finishFailure('音声を聞き取れませんでした。もう一度テストして、英語を一言話してください。');
+          } else {
+            finishFailure('音声入力を確認できませんでした。もう一度マイクテストをしてください。');
+          }
+        },
+        () => {
+          if (!settled) {
+            finishFailure('音声を聞き取れませんでした。もう一度テストして、英語を一言話してください。');
+          }
+        }
+      );
+
+      if (!recognition) {
+        setMicStatus('unsupported');
+        setMicMessage('このブラウザでは音声認識を利用できません。文字入力でも利用できます。');
+        return;
+      }
+
+      timeoutId = window.setTimeout(() => {
+        finishFailure('音声を聞き取れませんでした。もう一度テストして、英語を一言話してください。');
+      }, 8000);
+
+      try {
+        recognition.start();
+      } catch {
+        finishFailure('音声入力を開始できませんでした。もう一度マイクテストをしてください。');
+      }
     } catch (error) {
       const name = (error as { name?: string })?.name || '';
       if (name === 'NotAllowedError' || name === 'SecurityError') {
@@ -103,7 +166,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
         setMicMessage('マイクが許可されていません。ブラウザのサイト設定でマイクを許可してください。');
       } else {
         setMicStatus('prompt');
-        setMicMessage('マイクを確認できませんでした。もう一度「マイクを準備する」を押してください。');
+        setMicMessage('マイクを確認できませんでした。もう一度マイクテストをしてください。');
       }
     }
   };
@@ -130,8 +193,8 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
   };
 
   const handleStart = () => {
-    if (micStatus === 'checking' || micStatus === 'prompt') {
-      setMicMessage('先に「マイクを準備する」を押して、許可確認を済ませてください。');
+    if (micStatus === 'checking' || micStatus === 'prompt' || micStatus === 'testing') {
+      setMicMessage('先に「マイク・音声入力をテスト」を行い、音声入力OKを確認してください。');
       return;
     }
     stopSpeaking();
@@ -378,7 +441,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
                 <p className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5">
                   <span className="flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-black shadow-2xs">4</span>
                   <Mic className="w-3.5 h-3.5 text-blue-600" />
-                  <span>マイクを準備する</span>
+                  <span>マイク・音声入力をテスト</span>
                 </p>
                 <p className={`mt-1 text-[10px] sm:text-[11px] font-semibold ${
                   micStatus === 'ready' ? 'text-emerald-700' :
@@ -390,16 +453,16 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
               <button
                 type="button"
                 onClick={handlePrepareMicrophone}
-                disabled={micStatus === 'checking' || micStatus === 'ready' || micStatus === 'unsupported'}
+                disabled={micStatus === 'checking' || micStatus === 'testing' || micStatus === 'unsupported'}
                 className={`flex-shrink-0 px-3 py-2 rounded-xl text-xs font-black border transition-all ${
                   micStatus === 'ready'
                     ? 'bg-emerald-50 border-emerald-300 text-emerald-800 cursor-default'
-                    : micStatus === 'checking' || micStatus === 'unsupported'
+                    : micStatus === 'checking' || micStatus === 'testing' || micStatus === 'unsupported'
                     ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
                     : 'bg-blue-600 hover:bg-blue-700 border-blue-600 text-white cursor-pointer'
                 }`}
               >
-                {micStatus === 'ready' ? '✓ 準備OK' : 'マイクを準備'}
+                {micStatus === 'testing' ? 'テスト中…' : micStatus === 'ready' ? '✓ 音声入力OK' : 'マイクテスト'}
               </button>
             </div>
           </div>
@@ -407,9 +470,9 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
           <button
             type="button"
             onClick={handleStart}
-            disabled={micStatus === 'checking' || micStatus === 'prompt'}
+            disabled={micStatus === 'checking' || micStatus === 'prompt' || micStatus === 'testing'}
             className={`w-full px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-98 ${
-              micStatus === 'checking' || micStatus === 'prompt'
+              micStatus === 'checking' || micStatus === 'prompt' || micStatus === 'testing'
                 ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                 : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white cursor-pointer'
             }`}
