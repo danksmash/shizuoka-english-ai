@@ -23,7 +23,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Full QA (dialogue, speech, security, type-check)
         run: npm run qa
