@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { buildAlignedReply } from '../src/utils/responseValidation';
+import { buildAlignedReply, inspectStudentJapaneseTranslation } from '../src/utils/responseValidation';
 import { generateFallbackFeedback } from '../src/utils/feedbackFallback';
 import { getAIStudentById } from '../src/data/curriculum';
 
@@ -39,6 +39,22 @@ assert(Boolean(fallback.studentMessage), 'Fallback student message is required')
 assert(
   !fallback.studentMessage.includes('Emma') && !fallback.studentMessage.includes('エマ'),
   'Fallback student message must not describe Emma in the third person'
+);
+
+const correctChildTranslation = inspectStudentJapaneseTranslation(
+  'はい、あります。浜松で一番好きな食べ物はラーメンです。ラーメンは好きですか？',
+  'Yes I have. My favorite food in Hamamatsu is Ramen do you like Ramen.'
+);
+assert(correctChildTranslation.isValid, 'Complete Japanese child translation should pass');
+
+const partialChildTranslation = inspectStudentJapaneseTranslation(
+  'Yes I have. My favorite food in Hamamatsu is ラーメン do you like ラーメン（Yes I have. My favorite food in Hamamatsu is Ramen do you like Ramen.）',
+  'Yes I have. My favorite food in Hamamatsu is Ramen do you like Ramen.'
+);
+assert(!partialChildTranslation.isValid, 'Partial English/Japanese translation must be rejected');
+assert(
+  partialChildTranslation.reason === 'SOURCE_REPEATED',
+  'Repeated source English should be identified'
 );
 
 const serverSource = readFileSync('server.ts', 'utf8');
