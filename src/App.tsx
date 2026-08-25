@@ -71,7 +71,6 @@ export default function App() {
   const [speechRate, setSpeechRate] = useState<number>(1.0);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [isAiResponding, setIsAiResponding] = useState<boolean>(false);
-  const [latestCulturalNote, setLatestCulturalNote] = useState<string>('');
 
   // Speech Recognition
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -211,7 +210,6 @@ export default function App() {
     const initialHistory = [starterMessage];
     setMessages(initialHistory);
     messagesRef.current = initialHistory;
-    setLatestCulturalNote(`${studentObj.countryJapanese}の留学生 ${studentObj.name} です！`);
     setPhase('dialogue');
 
     // Play starter audio after a brief moment
@@ -416,10 +414,6 @@ export default function App() {
         messagesRef.current = updatedHistory;
 
         setMood((aiMood as CharacterMood) || 'speaking');
-        if (culturalNote) {
-          setLatestCulturalNote(culturalNote);
-        }
-
         // Automatic Text-to-Speech readout in student's voice
         playAiVoice(reply);
       } else {
@@ -698,7 +692,6 @@ export default function App() {
     setTotalChildWords(0);
     setEncounteredVocabList([]);
     setLatestVocabItem(null);
-    setLatestCulturalNote('');
     setFarewellBanner(null);
     setMicHintMessage('');
   };
@@ -739,10 +732,6 @@ export default function App() {
                 isSpeaking={isSpeaking}
                 isListening={isListening}
                 speechRate={speechRate}
-                latestAiMessage={
-                  messages.filter((m) => m.sender === 'ai').slice(-1)[0]?.englishText
-                }
-                latestCulturalNote={latestCulturalNote}
                 onReplayAudio={() => {
                   const lastAi = messages.filter((m) => m.sender === 'ai').slice(-1)[0];
                   if (lastAi) playAiVoice(lastAi.englishText);
