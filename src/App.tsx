@@ -28,8 +28,11 @@ import {
   countEnglishWords,
   getStudentFarewellMessage,
 } from './utils/speech';
-import { STARTER_PROMPTS_JAPANESE, translateChildUtterance } from './utils/translation';
+import { STARTER_PROMPTS_JAPANESE } from './utils/translation';
 import { motion, AnimatePresence } from 'motion/react';
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const apiUrl = (path: string) => `${API_BASE_URL}${path}`;
 
 export default function App() {
   // App Phase
@@ -308,15 +311,11 @@ export default function App() {
     extractAndAddVocab(trimmed);
 
     const words = countEnglishWords(trimmed);
-    const localChildJapanese = translateChildUtterance(trimmed);
-    const childJapanese = /[ぁ-んァ-ヶ一-龠]/.test(localChildJapanese)
-      ? localChildJapanese
-      : '日本語訳を準備中です。';
     const childMsg: ChatMessage = {
       id: `child-${Date.now()}`,
       sender: 'child',
       englishText: trimmed,
-      japaneseText: childJapanese,
+      japaneseText: '',
       timestamp: Date.now(),
       wordCount: words,
     };
@@ -340,7 +339,7 @@ export default function App() {
 
     try {
       const currentProf = profileRef.current;
-      const response = await fetch('/api/chat', {
+      const response = await fetch(apiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -358,6 +357,7 @@ export default function App() {
           reply,
           japaneseTranslation,
           studentJapaneseTranslation,
+          studentTranslationStatus,
           mood: aiMood,
           culturalNote,
         } = resData.data;
@@ -374,13 +374,19 @@ export default function App() {
           culturalNote: culturalNote || undefined,
         };
 
-        const translatedHistory = messagesRef.current.map((message) =>
-          message.id === childMsg.id &&
-          typeof studentJapaneseTranslation === 'string' &&
-          studentJapaneseTranslation.trim().length > 0
-            ? { ...message, japaneseText: studentJapaneseTranslation.trim() }
-            : message
-        );
+        const translatedHistory = messagesRef.current.map((message) => {
+          if (message.id !== childMsg.id) return message;
+          if (studentTranslationStatus === 'incomplete') {
+            return { ...message, japaneseText: '日本語に訳せませんでした。' };
+          }
+          if (
+            typeof studentJapaneseTranslation === 'string' &&
+            studentJapaneseTranslation.trim().length > 0
+          ) {
+            return { ...message, japaneseText: studentJapaneseTranslation.trim() };
+          }
+          return { ...message, japaneseText: '日本語に訳せませんでした。' };
+        });
         const updatedHistory = [...translatedHistory, aiMsg];
         setMessages(updatedHistory);
         messagesRef.current = updatedHistory;
@@ -503,15 +509,11 @@ export default function App() {
     ) {
       extractAndAddVocab(pendingText);
       const words = countEnglishWords(pendingText);
-      const localChildJapanese = translateChildUtterance(pendingText);
-      const childJapanese = /[ぁ-んァ-ヶ一-龠]/.test(localChildJapanese)
-        ? localChildJapanese
-        : '日本語訳を準備できませんでした。';
       const pendingChildMsg: ChatMessage = {
         id: `child-${Date.now()}`,
         sender: 'child',
         englishText: pendingText,
-        japaneseText: childJapanese,
+        japaneseText: '日本語に訳せませんでした。',
         timestamp: Date.now(),
         wordCount: words,
       };
@@ -552,7 +554,7 @@ export default function App() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 20000); // 20-second timeout
 
-        const response = await fetch('/api/feedback', {
+        const response = await fetch(apiUrl('/api/feedback'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: controller.signal,

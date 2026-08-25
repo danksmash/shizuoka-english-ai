@@ -47,6 +47,10 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
   const [playingWordId, setPlayingWordId] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
   const aiStudent = getAIStudentById(profile.selectedAiStudentId);
+  const uniqueKeyPhrases = (feedback?.keyPhrases || []).filter((phrase, index, all) => {
+    const key = phrase.english.trim().toLowerCase();
+    return key.length > 0 && all.findIndex((candidate) => candidate.english.trim().toLowerCase() === key) === index;
+  });
 
   const formatTime = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -342,7 +346,7 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
             </div>
 
             {/* Key Expressions Learned */}
-            {feedback?.keyPhrases && feedback.keyPhrases.length > 0 && (
+            {uniqueKeyPhrases.length > 0 && (
               <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-sm">
                 <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2 mb-3">
                   <MessageSquare className="w-4 h-4 text-blue-600" />
@@ -350,7 +354,7 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
                 </h2>
 
                 <div className="space-y-2">
-                  {feedback.keyPhrases.map((phrase, idx) => (
+                  {uniqueKeyPhrases.map((phrase, idx) => (
                     <div
                       key={idx}
                       className="p-2.5 bg-blue-50/60 rounded-xl border border-blue-200/70"

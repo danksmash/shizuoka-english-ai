@@ -186,44 +186,49 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
         </section>
 
         <section className="lg:col-span-6 xl:col-span-6 grid grid-rows-[minmax(0,1fr)_auto_auto_auto] gap-2 h-full min-h-0">
-          <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200 shadow-2xs flex flex-col gap-1.5 min-h-0">
-            <div className="flex items-start gap-2.5">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-lg sm:text-xl leading-none">{selectedStudent.flag}</span>
-                  <span className="text-xs sm:text-sm font-black text-slate-800">
-                    {selectedStudent.countryJapanese} ({getStudentCountryDisplay(selectedStudent)})
-                  </span>
+          <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200 shadow-2xs min-h-0">
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(150px,42%)] gap-3 sm:gap-4 items-stretch min-h-0">
+              <div className="min-w-0 flex flex-col justify-center gap-2">
+                <div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xl sm:text-2xl leading-none">{selectedStudent.flag}</span>
+                    <span className="text-xs sm:text-sm font-black text-slate-800">
+                      {selectedStudent.countryJapanese} ({getStudentCountryDisplay(selectedStudent)})
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2 flex-wrap mt-1">
+                    <h3 className="text-base sm:text-lg font-black text-slate-900 leading-snug">{selectedStudent.name}</h3>
+                    <span className="text-xs sm:text-sm font-bold text-blue-700">{selectedStudent.japaneseName}</span>
+                  </div>
+                  <p className="text-xs sm:text-sm font-bold text-blue-700 mt-0.5">
+                    {selectedStudent.age}歳 · {selectedStudent.city}
+                  </p>
                 </div>
-                <div className="flex items-baseline gap-2 flex-wrap mt-0.5">
-                  <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug">{selectedStudent.name}</h3>
-                  <span className="text-[11px] sm:text-xs font-bold text-blue-700">{selectedStudent.japaneseName}</span>
-                </div>
-                <p className="text-[11px] sm:text-xs font-bold text-blue-700 mt-0.5">
-                  {selectedStudent.age}歳 · {selectedStudent.city}
+
+                <p className="text-[11px] sm:text-xs text-slate-700 leading-relaxed bg-blue-50/70 p-2.5 rounded-xl border border-blue-200/60 font-medium break-words">
+                  {selectedStudent.japaneseBio}
                 </p>
-              </div>
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl border-2 border-blue-200 shadow-2xs flex-shrink-0 overflow-hidden bg-slate-100">
-                <StudentAvatar student={selectedStudent} size="custom" className="w-full h-full object-cover" />
-              </div>
-            </div>
 
-            <p className="text-[11px] sm:text-xs text-slate-700 leading-relaxed bg-blue-50/70 p-2 rounded-xl border border-blue-200/60 font-medium break-words">
-              {selectedStudent.japaneseBio}
-            </p>
+                <div className="grid grid-cols-1 gap-1.5 text-[11px] sm:text-xs text-slate-700 font-medium">
+                  <div className="flex items-start gap-1.5">
+                    <span className="font-bold text-slate-900 flex-shrink-0">❤️ 好き:</span>
+                    <span className="text-slate-700 leading-snug break-words">{selectedStudent.likes.join('、')}</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <span className="font-bold text-slate-900 flex-shrink-0">🎓 専攻:</span>
+                    <span className="text-slate-700 leading-snug">{selectedStudent.major}</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <span className="font-bold text-slate-900 flex-shrink-0">🏛️ 名所:</span>
+                    <span className="text-slate-700 leading-snug">{selectedStudent.heritageLandmark}</span>
+                  </div>
+                </div>
+              </div>
 
-            <div className="grid grid-cols-1 gap-1 text-[11px] sm:text-xs text-slate-700 font-medium">
-              <div className="flex items-start gap-1.5">
-                <span className="font-bold text-slate-900 flex-shrink-0">❤️ 好き:</span>
-                <span className="text-slate-700 leading-snug break-words">{selectedStudent.likes.join('、')}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-slate-900 flex-shrink-0">🎓 専攻:</span>
-                <span className="text-slate-700 truncate">{selectedStudent.major}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-slate-900 flex-shrink-0">🏛️ 名所:</span>
-                <span className="text-slate-700 truncate">{selectedStudent.heritageLandmark}</span>
+              <div className="flex items-center justify-center min-w-0">
+                <div className="w-full max-w-[220px] aspect-[4/5] rounded-2xl border-2 border-blue-200 shadow-sm overflow-hidden bg-slate-100">
+                  <StudentAvatar student={selectedStudent} size="custom" className="w-full h-full object-cover" />
+                </div>
               </div>
             </div>
           </div>

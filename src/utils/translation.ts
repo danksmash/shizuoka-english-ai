@@ -329,7 +329,10 @@ export function getJapaneseTranslationForMessage(
 
   // If child message, use our elementary translator
   if (msg.sender === 'child') {
-    return translateChildUtterance(msg.englishText);
+    const translated = translateChildUtterance(msg.englishText);
+    return /[ぁ-んァ-ヶ一-龠]/.test(translated)
+      ? translated
+      : '日本語に訳せませんでした。';
   }
 
   // If AI message without translation, attempt to clean up or provide guidance

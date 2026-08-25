@@ -11,10 +11,28 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-// Security Middleware: Set headers compatible with iframe embedding
+// Security + CORS middleware for the GitHub Pages frontend.
+const ALLOWED_ORIGINS = new Set([
+  'https://danksmash.github.io',
+  'http://localhost:3000',
+  'http://localhost:5173',
+]);
+
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
   next();
 });
 
@@ -191,7 +209,8 @@ Output strictly valid JSON:
 {
   "reply": "English response from ${p.name}",
   "japaneseTranslation": "Natural, gentle Japanese translation of the AI reply suitable for 5th/6th grade student",
-  "studentJapaneseTranslation": "Natural Japanese translation of the student latest English input; never copy the English input as-is",
+  "studentJapaneseTranslation": "Natural Japanese translation of the student latest English input, or exactly 日本語に訳せませんでした。 when the utterance is too incomplete to translate reliably",
+  "studentTranslationStatus": "translated" | "incomplete",
   "mood": "happy" | "speaking" | "thinking" | "encouraging",
   "culturalNote": "Brief friendly cultural tip in Japanese if relevant (or empty string)"
 }`;
@@ -316,8 +335,9 @@ CRITICAL RESPONSE MANDATES:
 3. For every normal dialogue turn, END with exactly ONE short, natural follow-up question. Do not end a normal turn with only a statement.
 4. Only when the student explicitly says "Goodbye" / "Bye" / "See you" and clearly ends the dialogue, respond with a warm farewell and no question.
 5. If student asks for clarification, rephrase your previous statement simply and then ask one simple checking question.
-6. Translate the student latest English input into natural Japanese in studentJapaneseTranslation. It must be Japanese, not a copy of the English text.
-7. Return strictly valid JSON: { "reply": "...", "japaneseTranslation": "...", "studentJapaneseTranslation": "...", "mood": "happy"|"speaking"|"encouraging", "culturalNote": "..." }`;
+6. Translate the student latest English input into natural Japanese in studentJapaneseTranslation. Normal complete utterances and questions, including short expressions such as "How are you?", "Yes.", "No.", "I like soccer.", MUST be translated.
+7. Only when the latest English is so fragmentary that its intended meaning cannot be translated reliably, set studentTranslationStatus to "incomplete" and studentJapaneseTranslation to exactly "日本語に訳せませんでした。". Otherwise set studentTranslationStatus to "translated".
+8. Return strictly valid JSON: { "reply": "...", "japaneseTranslation": "...", "studentJapaneseTranslation": "...", "studentTranslationStatus": "translated"|"incomplete", "mood": "happy"|"speaking"|"encouraging", "culturalNote": "..." }`;
 
   try {
     const claude = getAnthropicClient();
@@ -387,11 +407,15 @@ CRITICAL RESPONSE MANDATES:
       const sanitizedReply = isExplicitFarewell(trimmedMessage)
         ? baseSanitizedReply
         : ensureActiveTurnEndsWithQuestion(baseSanitizedReply, String(topic || 'favorites'));
+      const studentTranslationStatus =
+        parsed.studentTranslationStatus === 'incomplete' ? 'incomplete' : 'translated';
       const studentJapaneseTranslation =
-        typeof parsed.studentJapaneseTranslation === 'string' &&
-        /[ぁ-んァ-ヶ一-龠]/.test(parsed.studentJapaneseTranslation)
-          ? parsed.studentJapaneseTranslation.trim()
-          : '日本語訳を準備できませんでした。';
+        studentTranslationStatus === 'incomplete'
+          ? '日本語に訳せませんでした。'
+          : typeof parsed.studentJapaneseTranslation === 'string' &&
+              /[ぁ-んァ-ヶ一-龠]/.test(parsed.studentJapaneseTranslation)
+            ? parsed.studentJapaneseTranslation.trim()
+            : '日本語に訳せませんでした。';
       const responseEnd = Date.now();
 
       return res.json({
@@ -401,6 +425,7 @@ CRITICAL RESPONSE MANDATES:
           reply: sanitizedReply,
           japaneseTranslation: parsed.japaneseTranslation || '',
           studentJapaneseTranslation,
+          studentTranslationStatus,
           mood: parsed.mood || 'speaking',
           culturalNote: parsed.culturalNote || '',
           detectedName: spokenName || undefined,
@@ -562,11 +587,20 @@ app.post('/api/feedback', async (req, res) => {
       }
 
       const parsed = JSON.parse(jsonStr);
+      const uniqueKeyPhrases = Array.isArray(parsed.keyPhrases)
+        ? parsed.keyPhrases.filter((phrase: any, index: number, all: any[]) => {
+            const key = String(phrase?.english || '').trim().toLowerCase();
+            return key.length > 0 && all.findIndex((candidate: any) =>
+              String(candidate?.english || '').trim().toLowerCase() === key
+            ) === index;
+          })
+        : [];
       return res.json({
         success: true,
         isFallback: false,
         data: {
           ...parsed,
+          keyPhrases: uniqueKeyPhrases,
           encounteredVocab: encounteredVocab || [],
           aiStudent: persona,
           stats: {
