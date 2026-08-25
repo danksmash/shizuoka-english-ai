@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Globe2,
   Clock,
@@ -7,6 +7,7 @@ import {
   Volume2,
   User,
   CheckCircle2,
+  Mic,
 } from 'lucide-react';
 import { DialogueTopic, StudentProfile, AIStudentProfile } from '../types';
 import { AI_STUDENTS_LIST, DIALOGUE_TOPICS } from '../data/curriculum';
@@ -30,6 +31,82 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
   const [selectedTopic, setSelectedTopic] = useState<DialogueTopic>('intro');
   const [durationMinutes, setDurationMinutes] = useState<number>(1);
   const [previewPlayingId, setPreviewPlayingId] = useState<string | null>(null);
+  const [micStatus, setMicStatus] = useState<'checking' | 'prompt' | 'ready' | 'denied' | 'unsupported'>('checking');
+  const [micMessage, setMicMessage] = useState<string>('マイクの状態を確認しています…');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkMicrophonePermission = async () => {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        if (!cancelled) {
+          setMicStatus('unsupported');
+          setMicMessage('この環境ではマイク確認ができません。文字入力でも利用できます。');
+        }
+        return;
+      }
+
+      try {
+        const permissions = navigator.permissions;
+        if (permissions?.query) {
+          const status = await permissions.query({ name: 'microphone' as PermissionName });
+          if (cancelled) return;
+
+          const syncStatus = () => {
+            if (status.state === 'granted') {
+              setMicStatus('ready');
+              setMicMessage('マイクは使用できます。対話中に許可画面は出ません。');
+            } else if (status.state === 'denied') {
+              setMicStatus('denied');
+              setMicMessage('マイクが拒否されています。ブラウザのサイト設定で許可してください。');
+            } else {
+              setMicStatus('prompt');
+              setMicMessage('対話の前に「マイクを準備する」を押してください。');
+            }
+          };
+
+          syncStatus();
+          status.onchange = syncStatus;
+          return;
+        }
+      } catch {
+        // SafariなどPermissions APIでmicrophone照会ができない環境では、明示操作で確認する。
+      }
+
+      if (!cancelled) {
+        setMicStatus('prompt');
+        setMicMessage('対話の前に「マイクを準備する」を押してください。');
+      }
+    };
+
+    checkMicrophonePermission();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handlePrepareMicrophone = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMicStatus('unsupported');
+      setMicMessage('この環境ではマイク確認ができません。文字入力でも利用できます。');
+      return;
+    }
+
+    try {
+      setMicMessage('マイクの使用許可を確認しています…');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      setMicStatus('ready');
+      setMicMessage('マイクの準備ができました。対話をスタートできます。');
+    } catch (error) {
+      const name = (error as { name?: string })?.name || '';
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        setMicStatus('denied');
+        setMicMessage('マイクが許可されていません。ブラウザのサイト設定でマイクを許可してください。');
+      } else {
+        setMicStatus('prompt');
+        setMicMessage('マイクを確認できませんでした。もう一度「マイクを準備する」を押してください。');
+      }
+    }
+  };
 
   const selectedStudent =
     AI_STUDENTS_LIST.find((student) => student.id === selectedStudentId) || AI_STUDENTS_LIST[0];
@@ -53,6 +130,10 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
   };
 
   const handleStart = () => {
+    if (micStatus === 'checking' || micStatus === 'prompt') {
+      setMicMessage('先に「マイクを準備する」を押して、許可確認を済ませてください。');
+      return;
+    }
     stopSpeaking();
     onStartDialogue({
       name: name.trim() || '5・6年生',
@@ -291,10 +372,47 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
             </div>
           </div>
 
+          <div className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200 shadow-2xs">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                  <span className="flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-black shadow-2xs">4</span>
+                  <Mic className="w-3.5 h-3.5 text-blue-600" />
+                  <span>マイクを準備する</span>
+                </p>
+                <p className={`mt-1 text-[10px] sm:text-[11px] font-semibold ${
+                  micStatus === 'ready' ? 'text-emerald-700' :
+                  micStatus === 'denied' ? 'text-rose-700' : 'text-slate-600'
+                }`}>
+                  {micMessage}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handlePrepareMicrophone}
+                disabled={micStatus === 'checking' || micStatus === 'ready' || micStatus === 'unsupported'}
+                className={`flex-shrink-0 px-3 py-2 rounded-xl text-xs font-black border transition-all ${
+                  micStatus === 'ready'
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800 cursor-default'
+                    : micStatus === 'checking' || micStatus === 'unsupported'
+                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 border-blue-600 text-white cursor-pointer'
+                }`}
+              >
+                {micStatus === 'ready' ? '✓ 準備OK' : 'マイクを準備'}
+              </button>
+            </div>
+          </div>
+
           <button
             type="button"
             onClick={handleStart}
-            className="w-full px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer"
+            disabled={micStatus === 'checking' || micStatus === 'prompt'}
+            className={`w-full px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-98 ${
+              micStatus === 'checking' || micStatus === 'prompt'
+                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white cursor-pointer'
+            }`}
           >
             <Play className="w-4 h-4 fill-white" />
             <span>対話をスタートする！ (Start)</span>
