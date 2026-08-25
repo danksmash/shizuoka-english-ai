@@ -6,7 +6,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getAIStudentById } from './src/data/curriculum';
 import { generateFallbackFeedback } from './src/utils/feedbackFallback';
 import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } from './src/utils/security';
-import { validateAiResponse, inspectAiResponse, buildAlignedReply } from './src/utils/responseValidation';
+import { validateAiResponse, inspectAiResponse, buildAlignedReply, inspectStudentJapaneseTranslation } from './src/utils/responseValidation';
 
 dotenv.config();
 
@@ -208,7 +208,7 @@ Return strictly valid JSON:
       "japanese": "そのenglishだけに対応する自然な日本語訳"
     }
   ],
-  "studentJapaneseTranslation": "児童の最新英語の自然な日本語訳",
+  "studentJapaneseTranslation": "児童の最新英語全体を、日本語だけで自然に訳した文。英語原文を残したり括弧内に繰り返したりしない",
   "studentTranslationStatus": "translated" | "incomplete",
   "mood": "happy" | "speaking" | "thinking" | "encouraging",
   "culturalNote": "必要なときだけ短い日本語。不要なら空文字"
@@ -294,13 +294,20 @@ Translate the student's latest English into Japanese too.`;
     const reply = alignedReply.english;
     const japaneseTranslation = alignedReply.japanese;
 
-    const studentTranslationStatus = parsed.studentTranslationStatus === 'incomplete' ? 'incomplete' : 'translated';
+    const requestedStudentTranslationStatus =
+      parsed.studentTranslationStatus === 'incomplete' ? 'incomplete' : 'translated';
+    const inspectedStudentTranslation = inspectStudentJapaneseTranslation(
+      parsed.studentJapaneseTranslation,
+      trimmedMessage
+    );
+    const studentTranslationStatus =
+      requestedStudentTranslationStatus === 'incomplete' || !inspectedStudentTranslation.isValid
+        ? 'incomplete'
+        : 'translated';
     const studentJapaneseTranslation =
-      studentTranslationStatus === 'incomplete'
-        ? '日本語に訳せませんでした。'
-        : typeof parsed.studentJapaneseTranslation === 'string' && /[ぁ-んァ-ヶ一-龠]/.test(parsed.studentJapaneseTranslation)
-          ? parsed.studentJapaneseTranslation.trim()
-          : '日本語に訳せませんでした。';
+      studentTranslationStatus === 'translated'
+        ? inspectedStudentTranslation.translation
+        : '日本語に訳せませんでした。';
 
     return res.json({
       success: true,
