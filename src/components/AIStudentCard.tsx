@@ -1,5 +1,5 @@
-import React from 'react';
-import { Volume2, Sparkles, User, Flag, MessageSquare } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { Volume2, Sparkles, Flag } from 'lucide-react';
 import { CharacterMood, AIStudentProfile } from '../types';
 import { StudentAvatar } from './StudentAvatar';
 
@@ -25,7 +25,16 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
   onReplayAudio,
   onChangeSpeechRate,
 }) => {
-  // Dynamic status badges
+  const didInitializeRate = useRef(false);
+
+  // The classroom default is 1.00x. Keep this independent from persona voice settings.
+  useEffect(() => {
+    if (!didInitializeRate.current) {
+      didInitializeRate.current = true;
+      onChangeSpeechRate(1.0);
+    }
+  }, [onChangeSpeechRate]);
+
   const getStatusBadge = () => {
     if (isSpeaking) {
       return (
@@ -60,13 +69,11 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
 
   return (
     <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm flex flex-col items-center text-center relative overflow-hidden">
-      {/* Country Flag Tag */}
       <div className="absolute top-4 left-4 flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full text-xs font-bold text-slate-700 shadow-2xs">
         <span className="text-lg leading-none">{student.flag}</span>
         <span>{student.country} ({student.countryNative})</span>
       </div>
 
-      {/* Voice Replay Button */}
       <button
         type="button"
         onClick={onReplayAudio}
@@ -76,7 +83,6 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
         <Volume2 className="w-4 h-4" />
       </button>
 
-      {/* Avatar Portrait with dynamic ring */}
       <div className="relative mt-5 mb-3">
         <div
           className={`w-28 h-28 sm:w-32 sm:h-32 rounded-3xl overflow-hidden p-1 transition-all duration-300 ${
@@ -96,7 +102,6 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
           />
         </div>
 
-        {/* Emotion / Status Icon overlay */}
         <div className="absolute -bottom-2 -right-2 bg-white rounded-full p-1.5 shadow-md border border-slate-200">
           <span className="text-xl">
             {isSpeaking ? '🗣️' : isListening ? '👂' : mood === 'thinking' ? '💭' : '✨'}
@@ -104,10 +109,7 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
         </div>
       </div>
 
-      {/* Name and University Bio */}
-      <h2 className="text-xl font-black text-slate-900 leading-tight">
-        {student.name}
-      </h2>
+      <h2 className="text-xl font-black text-slate-900 leading-tight">{student.name}</h2>
       <p className="text-xs font-bold text-blue-700 mt-0.5 mb-1">
         {student.japaneseName} ({student.age}歳・{student.city})
       </p>
@@ -115,50 +117,44 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
         {student.role}
       </p>
 
-      {/* Status Badge */}
-      <div className="mb-4">{getStatusBadge()}</div>
+      <div className="mb-3">{getStatusBadge()}</div>
 
-      {/* Accent & Signature Phrase Banner */}
-      <div className="w-full bg-slate-50 border border-slate-200/80 rounded-2xl p-2.5 text-left mb-3">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-            <Flag className="w-3 h-3 text-blue-600" />
-            <span>{student.accentName}</span>
+      {/* Always-visible classroom speech-speed control. */}
+      <div className="w-full bg-blue-50/70 border border-blue-200 rounded-2xl p-3 mb-3">
+        <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 mb-2">
+          <span>🔊 AIが話す速さ</span>
+          <span className="font-mono text-blue-700 bg-white border border-blue-200 px-2 py-0.5 rounded-lg">
+            {speechRate.toFixed(2)}x
           </span>
         </div>
-        <div className="flex items-center gap-1 text-xs font-bold text-slate-800">
-          <MessageSquare className="w-3 h-3 text-amber-500 flex-shrink-0" />
-          <span className="truncate">
-            {student.fillerWords.slice(0, 2).join(' ')}
-          </span>
+        <input
+          aria-label="AIが話す速さ"
+          type="range"
+          min="0.75"
+          max="1.25"
+          step="0.05"
+          value={speechRate}
+          onChange={(e) => onChangeSpeechRate(Number(e.target.value))}
+          className="w-full accent-blue-600 cursor-pointer h-2 bg-slate-200 rounded-lg"
+        />
+        <div className="flex justify-between text-[9px] text-slate-500 font-bold mt-1">
+          <span>0.75 ゆっくり</span>
+          <span>1.00 ふつう</span>
+          <span>1.25 はやい</span>
+        </div>
+      </div>
+
+      {/* Accent information only. Fixed filler/catchphrase fields are intentionally not rendered. */}
+      <div className="w-full bg-slate-50 border border-slate-200/80 rounded-2xl p-2.5 text-left">
+        <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+          <Flag className="w-3 h-3 text-blue-600" />
+          <span>{student.accentName}</span>
         </div>
         {latestCulturalNote && (
           <p className="text-[10px] text-blue-800 bg-blue-50/80 p-1.5 rounded-lg mt-1.5 font-medium border border-blue-200/60">
             💡 {latestCulturalNote}
           </p>
         )}
-      </div>
-
-      {/* Speech Rate Controller */}
-      <div className="w-full bg-slate-50/60 border border-slate-200/60 rounded-2xl p-2.5">
-        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600 mb-1">
-          <span>話すスピード (Voice Speed)</span>
-          <span className="font-mono font-bold text-blue-700">{speechRate}x</span>
-        </div>
-        <input
-          type="range"
-          min="0.7"
-          max="1.1"
-          step="0.05"
-          value={speechRate}
-          onChange={(e) => onChangeSpeechRate(parseFloat(e.target.value))}
-          className="w-full accent-blue-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
-        />
-        <div className="flex justify-between text-[9px] text-slate-400 font-medium px-0.5 mt-0.5">
-          <span>ゆっくり (Slow)</span>
-          <span>ふつう (Normal)</span>
-          <span>はやい (Fast)</span>
-        </div>
       </div>
     </div>
   );
