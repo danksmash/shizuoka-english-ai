@@ -1,9 +1,44 @@
 @import "tailwindcss";
 
+/*
+ * Responsive UI scale
+ * -------------------
+ * Tailwind spacing, typography, radii and most component dimensions are rem-based.
+ * Scaling the root size therefore keeps the existing visual proportions while letting
+ * the whole application grow on large displays and shrink modestly on compact ones.
+ *
+ *  768px viewport  -> 14px root
+ * 1440px viewport  -> ~16px root
+ * 1920px viewport  -> ~18px root
+ * 2560px+ viewport -> 20px root (capped)
+ */
+html {
+  font-size: clamp(14px, calc(10px + 0.42vw), 20px);
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* On phone-sized screens, preserve tap/readability size while the layout stacks. */
+@media (max-width: 640px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+}
+
 body {
+  margin: 0;
   font-family: 'Nunito', 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
 }
 
 /* Custom smooth scrollbar for tablet dialog */
