@@ -1,6 +1,9 @@
 name: Deploy production to Cloud Run
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
