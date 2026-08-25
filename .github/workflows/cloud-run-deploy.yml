@@ -1,6 +1,9 @@
 name: Deploy production to Cloud Run
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -24,13 +27,17 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          project_id: shizuoka-english-ai
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: shizuoka-english-ai
 
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy shizuoka-english-ai \
+            --project shizuoka-english-ai \
             --source . \
             --region asia-northeast1 \
             --allow-unauthenticated \
