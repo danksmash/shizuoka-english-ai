@@ -36,10 +36,10 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Dialogue QA (9 students x 5 topics x 5 durations)
-        run: npm run qa:dialogue
+      - name: Full QA (dialogue, speech, security, type-check)
+        run: npm run qa
 
       - name: Build project (Vite & Pages Assets)
         env:
