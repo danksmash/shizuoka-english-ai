@@ -138,13 +138,12 @@ jobs:
           grep -q 'npm run qa' .github/workflows/pages.yml
           grep -q 'npm run qa' .github/workflows/cloud-run-deploy.yml
 
-      - name: Commit cleanup and remove this temporary workflow
+      - name: Commit cleanup
         shell: bash
         run: |
           set -euo pipefail
-          rm -f .github/workflows/final-repository-cleanup.yml
-          git config user.name "danksmash"
-          git config user.email "danksmash@gmail.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Clean obsolete files and consolidate QA"
           git push
