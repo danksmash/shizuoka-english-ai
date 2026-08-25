@@ -11,7 +11,10 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "qa:speech": "tsx scripts/test_speech_accumulation_qa.ts",
+    "qa:security": "tsx scripts/qa-security.ts",
+    "qa": "npm run qa:dialogue && npm run qa:speech && npm run qa:security && npm run lint"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
