@@ -398,16 +398,13 @@ export default function App() {
 
         const translatedHistory = messagesRef.current.map((message) => {
           if (message.id !== childMsg.id) return message;
-          if (studentTranslationStatus === 'incomplete') {
-            return { ...message, japaneseText: '日本語に訳せませんでした。' };
-          }
           if (
             typeof studentJapaneseTranslation === 'string' &&
             studentJapaneseTranslation.trim().length > 0
           ) {
             return { ...message, japaneseText: studentJapaneseTranslation.trim() };
           }
-          return { ...message, japaneseText: '日本語に訳せませんでした。' };
+          return { ...message, japaneseText: '' };
         });
         const updatedHistory = [...translatedHistory, aiMsg];
         setMessages(updatedHistory);
@@ -546,7 +543,7 @@ export default function App() {
         id: `child-${Date.now()}`,
         sender: 'child',
         englishText: pendingText,
-        japaneseText: '日本語に訳せませんでした。',
+        japaneseText: '',
         timestamp: Date.now(),
         wordCount: words,
       };
