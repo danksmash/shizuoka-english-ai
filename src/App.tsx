@@ -68,7 +68,7 @@ export default function App() {
   const [mood, setMood] = useState<CharacterMood>('greeting');
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [isListening, setIsListening] = useState<boolean>(false);
-  const [speechRate, setSpeechRate] = useState<number>(0.9);
+  const [speechRate, setSpeechRate] = useState<number>(1.0);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [isAiResponding, setIsAiResponding] = useState<boolean>(false);
   const [latestCulturalNote, setLatestCulturalNote] = useState<string>('');
