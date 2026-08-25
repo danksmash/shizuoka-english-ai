@@ -281,7 +281,7 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
                   {aiStudent.name} からのメッセージ:
                 </p>
                 <p className="text-xs sm:text-sm text-slate-800 leading-relaxed">
-                  "{feedback?.overallComment}"
+                  "{feedback?.studentMessage || feedback?.overallComment}"
                 </p>
               </div>
             </div>
