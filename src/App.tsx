@@ -118,6 +118,12 @@ export default function App() {
   const speechRateRef = useRef<number>(speechRate);
   speechRateRef.current = speechRate;
 
+  // A dialogue may finish while an AI request is still in flight.
+  // Keep an imperative active flag and AbortController so a late response can never
+  // append or speak after the farewell sequence has started.
+  const dialogueActiveRef = useRef<boolean>(false);
+  const chatAbortControllerRef = useRef<AbortController | null>(null);
+
   // Speak AI text with selected student's accent and voice
   const playAiVoice = useCallback(
     (text: string) => {
@@ -160,6 +166,9 @@ export default function App() {
 
   // Start Dialogue from Setup
   const handleStartDialogue = (newProfile: StudentProfile) => {
+    chatAbortControllerRef.current?.abort();
+    chatAbortControllerRef.current = null;
+    dialogueActiveRef.current = true;
     setProfile(newProfile);
     profileRef.current = newProfile;
     const durationSec = newProfile.selectedDurationMinutes * 60;
@@ -207,7 +216,7 @@ export default function App() {
 
     // Play starter audio after a brief moment
     setTimeout(() => {
-      if (soundEnabledRef.current) {
+      if (dialogueActiveRef.current && soundEnabledRef.current) {
         setIsSpeaking(true);
         setMood('speaking');
         speakStudentVoice(
@@ -272,7 +281,7 @@ export default function App() {
   // Send message to AI Student
   const handleSendMessage = async (text: string) => {
     // 1. Guard: Check phase and active timer
-    if (phase !== 'dialogue' || remainingSeconds <= 0 || !text.trim() || isAiResponding) {
+    if (!dialogueActiveRef.current || phase !== 'dialogue' || remainingSeconds <= 0 || !text.trim() || isAiResponding) {
       return;
     }
 
@@ -337,11 +346,15 @@ export default function App() {
     setIsAiResponding(true);
     setMood('thinking');
 
+    const controller = new AbortController();
+    chatAbortControllerRef.current = controller;
+
     try {
       const currentProf = profileRef.current;
       const response = await fetch(apiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           message: trimmed,
           history: newHistory,
@@ -352,6 +365,17 @@ export default function App() {
       });
 
       const resData = await response.json();
+
+      // The timer/end button may have closed the dialogue while fetch was pending.
+      // In that case the response is stale and must never reach history or TTS.
+      if (
+        !dialogueActiveRef.current ||
+        controller.signal.aborted ||
+        chatAbortControllerRef.current !== controller
+      ) {
+        return;
+      }
+
       if (resData.success && resData.data) {
         const {
           reply,
@@ -402,12 +426,20 @@ export default function App() {
         throw new Error('API response unsuccessful, switching to local engine');
       }
     } catch (e) {
-      console.error('AI backend unavailable; no conversation fallback will be generated:', e);
-      setMood('listening');
-      setMicHintMessage('AI留学生に接続できませんでした。もう一度送ってみてね。');
-      setTimeout(() => setMicHintMessage(''), 5000);
+      const wasAborted = (e as { name?: string })?.name === 'AbortError' || controller.signal.aborted;
+      if (!wasAborted && dialogueActiveRef.current) {
+        console.error('AI backend unavailable; no conversation fallback will be generated:', e);
+        setMood('listening');
+        setMicHintMessage('AI留学生に接続できませんでした。もう一度送ってみてね。');
+        setTimeout(() => setMicHintMessage(''), 5000);
+      }
     } finally {
-      setIsAiResponding(false);
+      if (chatAbortControllerRef.current === controller) {
+        chatAbortControllerRef.current = null;
+      }
+      if (dialogueActiveRef.current) {
+        setIsAiResponding(false);
+      }
     }
   };
 
@@ -490,7 +522,14 @@ export default function App() {
 
   // Finish dialogue, speak cheerful farewell greeting, then fetch feedback advice
   const handleFinishDialogue = async () => {
-    if (phase !== 'dialogue') return;
+    if (phase !== 'dialogue' || !dialogueActiveRef.current) return;
+
+    // Close the conversation synchronously before any farewell UI/audio starts.
+    // This prevents a late /api/chat response from racing the farewell message.
+    dialogueActiveRef.current = false;
+    chatAbortControllerRef.current?.abort();
+    chatAbortControllerRef.current = null;
+    setIsAiResponding(false);
     stopSpeaking();
     stopRecordingInternal();
     if (timerRef.current) clearInterval(timerRef.current);
@@ -643,6 +682,9 @@ export default function App() {
   };
 
   const handleRestart = () => {
+    dialogueActiveRef.current = false;
+    chatAbortControllerRef.current?.abort();
+    chatAbortControllerRef.current = null;
     stopSpeaking();
     stopRecordingInternal();
     if (farewellSafetyTimerRef.current) {
