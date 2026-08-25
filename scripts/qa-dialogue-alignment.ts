@@ -57,8 +57,20 @@ assert(
   'Repeated source English should be identified'
 );
 
+const appSource = readFileSync('src/App.tsx', 'utf8');
+const translationSource = readFileSync('src/utils/translation.ts', 'utf8');
+assert(
+  !appSource.includes("japaneseText: '日本語に訳せませんでした。'"),
+  'Transcript must not substitute a fixed failed-translation phrase'
+);
+assert(
+  translationSource.includes("if (msg.sender === 'child') {\n    return '';"),
+  'Missing AI translation must remain hidden rather than use a fixed fallback'
+);
+
 const serverSource = readFileSync('server.ts', 'utf8');
 assert(serverSource.includes('"replySegments"'), 'Server must request aligned reply segments');
+assert(serverSource.includes('translateStudentInputNaturally'), 'Malformed child translation must receive a targeted AI retry');
 assert(!serverSource.includes('function ensureQuestion('), 'Server must not force a question mechanically');
 
 console.log('DIALOGUE ALIGNMENT QA PASS');
