@@ -327,12 +327,10 @@ export function getJapaneseTranslationForMessage(
     }
   }
 
-  // If child message, use our elementary translator
+  // Child translations are supplied by the AI endpoint. If none is available,
+  // leave the row hidden instead of substituting a fixed or partial translation.
   if (msg.sender === 'child') {
-    const translated = translateChildUtterance(msg.englishText);
-    return /[ぁ-んァ-ヶ一-龠]/.test(translated)
-      ? translated
-      : '日本語に訳せませんでした。';
+    return '';
   }
 
   // If AI message without translation, attempt to clean up or provide guidance
