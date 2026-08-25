@@ -6,10 +6,36 @@ export interface ValidationResult {
   reason?: string;
 }
 
-// Grade 5/6 classroom target: short, natural, easy-to-process spoken English.
+// One shared Grade 5/6 level for every topic, student, and conversation duration.
+// This deliberately matches the short, easy feel of the self-introduction topic.
 const MAX_SENTENCES = 2;
-const MAX_WORDS = 18;
-const MAX_QUESTION_WORDS = 9;
+const MAX_WORDS = 14;
+const MAX_QUESTION_WORDS = 7;
+
+const LEADING_REACTION_PATTERN = new RegExp(
+  '^\\s*(?:' +
+    [
+      'awesome', 'brilliant', 'wonderful', 'fantastic', 'totally', 'super cool', 'super',
+      'no worries', 'excellent', 'amazing', 'great', 'great job', 'very good', 'very nice',
+      'so cool', 'so nice', 'delightful', 'terrific', 'lovely', 'lovely to meet you',
+      'sounds great', 'spot on', 'right then', 'splendid', 'cheers', 'got it', 'well done',
+      'good on ya', 'glad to hear', 'welcome', 'indeed', 'peaceful', 'happy to meet you',
+      'hello friend', 'hey friend'
+    ].map((value) => value.replace(/ /g, '\\s+')).join('|') +
+  ')\\s*[!,.:-]*\\s*',
+  'i'
+);
+
+function removeLeadingReaction(text: string): string {
+  let cleaned = text.trim();
+  // Remove at most two stacked generic reactions, e.g. “Awesome! Great!”.
+  for (let i = 0; i < 2; i += 1) {
+    const next = cleaned.replace(LEADING_REACTION_PATTERN, '').trim();
+    if (next === cleaned || !next) break;
+    cleaned = next;
+  }
+  return cleaned;
+}
 
 function normalizeSentenceUnit(unit: string): string {
   return unit.replace(/\s+/g, ' ').trim();
@@ -53,7 +79,7 @@ function enforceClassroomLength(text: string): string {
 
   const question = capWords(selected[selected.length - 1], MAX_QUESTION_WORDS, '?');
   const questionWordCount = question.split(/\s+/).filter(Boolean).length;
-  const statementBudget = Math.max(6, MAX_WORDS - questionWordCount);
+  const statementBudget = Math.max(5, MAX_WORDS - questionWordCount);
   const statement = capWords(selected[0], statementBudget, '.');
   return `${statement} ${question}`.replace(/\s+/g, ' ').trim();
 }
@@ -80,6 +106,10 @@ export function inspectAiResponse(rawReply: string, personaName: string = 'AI St
     cleaned = cleaned.slice(1, -1).trim();
   }
 
+  // Deterministic final guard: persona catchphrases/generic praise may never lead normal replies.
+  const withoutReaction = removeLeadingReaction(cleaned);
+  if (withoutReaction) cleaned = withoutReaction;
+
   if (detectInappropriateContent(cleaned)) {
     return {
       isValid: false,
@@ -100,6 +130,6 @@ export function inspectAiResponse(rawReply: string, personaName: string = 'AI St
   return {
     isValid: true,
     sanitizedReply: classroomReply,
-    reason: classroomReply !== cleaned ? 'CLASSROOM_LENGTH_LIMIT_APPLIED' : undefined,
+    reason: classroomReply !== rawReply.trim() ? 'CLASSROOM_SIMPLIFICATION_APPLIED' : undefined,
   };
 }
