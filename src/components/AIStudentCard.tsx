@@ -9,8 +9,6 @@ interface AIStudentCardProps {
   isSpeaking: boolean;
   isListening: boolean;
   speechRate: number;
-  latestAiMessage?: string;
-  latestCulturalNote?: string;
   onReplayAudio: () => void;
   onChangeSpeechRate: (rate: number) => void;
 }
