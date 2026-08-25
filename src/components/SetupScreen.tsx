@@ -18,7 +18,6 @@ interface SetupScreenProps {
   onStartDialogue: (profile: StudentProfile) => void;
 }
 
-// Helper to get formatted country name: "English (Native)" as specified in curriculum
 const getStudentCountryDisplay = (student: AIStudentProfile): string => {
   if (student.country && student.countryNative) {
     return `${student.country} (${student.countryNative})`;
@@ -195,8 +194,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
           </div>
         </section>
 
-        {/* Right Section: selected student profile + the two remaining setup steps. */}
-        <section className="lg:col-span-5 xl:col-span-5 grid grid-rows-[minmax(0,1fr)_auto_auto] gap-2 h-full min-h-0">
+        <section className="lg:col-span-5 xl:col-span-5 grid grid-rows-[minmax(0,1fr)_auto_auto_auto] gap-2 h-full min-h-0 content-start">
           <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200 shadow-2xs flex flex-col gap-1.5 min-h-0">
             <div className="flex items-start gap-2.5">
               <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl border-2 border-blue-500 shadow-2xs flex-shrink-0 overflow-hidden">
@@ -293,32 +291,32 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
               ))}
             </div>
           </div>
+
+          <div className="flex justify-end pt-0.5">
+            <button
+              type="button"
+              onClick={handleStart}
+              className="w-full sm:w-auto min-w-[220px] px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer"
+            >
+              <Play className="w-4 h-4 fill-white" />
+              <span>対話をスタートする！ (Start)</span>
+            </button>
+          </div>
         </section>
       </main>
 
-      <footer className="bg-white rounded-2xl py-2 px-3 sm:py-2.5 sm:px-4 border border-slate-200 shadow-md flex flex-col sm:flex-row items-center justify-between gap-2 flex-shrink-0">
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shadow-2xs flex-shrink-0">
-            <Sparkles className="w-4 h-4 text-amber-600" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs sm:text-sm md:text-base font-bold text-slate-900 truncate">
-              {name}さん × {selectedStudent.name} ({selectedStudent.countryJapanese} {selectedStudent.flag})
-            </p>
-            <p className="text-[10px] sm:text-xs text-slate-500 font-medium truncate">
-              時間: {durationMinutes}分 | テーマ: {selectedTopicData?.title}
-            </p>
-          </div>
+      <footer className="bg-white rounded-2xl py-1.5 px-3 sm:py-2 sm:px-4 border border-slate-200 shadow-sm flex items-center gap-2.5 flex-shrink-0">
+        <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shadow-2xs flex-shrink-0">
+          <Sparkles className="w-4 h-4 text-amber-600" />
         </div>
-
-        <button
-          type="button"
-          onClick={handleStart}
-          className="w-full sm:w-auto px-6 sm:px-8 py-2 sm:py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm md:text-base shadow-md flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer flex-shrink-0"
-        >
-          <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-white" />
-          <span>対話をスタートする！ (Start)</span>
-        </button>
+        <div className="min-w-0">
+          <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+            {name}さん × {selectedStudent.name} ({selectedStudent.countryJapanese} {selectedStudent.flag})
+          </p>
+          <p className="text-[10px] sm:text-xs text-slate-500 font-medium truncate">
+            時間: {durationMinutes}分 | テーマ: {selectedTopicData?.title}
+          </p>
+        </div>
       </footer>
 
       <div className="text-center text-[10px] sm:text-[11px] text-slate-500 font-medium">
