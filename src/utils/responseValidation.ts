@@ -72,6 +72,55 @@ export function buildAlignedReply(parsed: any, personaName: string = 'AI Student
   return { english, japanese, segmentCount: selected.length };
 }
 
+
+export interface StudentTranslationResult {
+  isValid: boolean;
+  translation: string;
+  reason?: 'EMPTY' | 'TOO_LITTLE_JAPANESE' | 'ENGLISH_REMAINS' | 'SOURCE_REPEATED';
+}
+
+/**
+ * Rejects partial translations without making another AI request.
+ * Proper Japanese translations pass through unchanged.
+ */
+export function inspectStudentJapaneseTranslation(
+  value: unknown,
+  sourceEnglish: string
+): StudentTranslationResult {
+  const translation = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+  if (!translation) {
+    return { isValid: false, translation: '', reason: 'EMPTY' };
+  }
+
+  const japaneseChars = translation.match(/[ぁ-んァ-ヶ一-龠々ー]/g) || [];
+  if (japaneseChars.length < 4) {
+    return { isValid: false, translation: '', reason: 'TOO_LITTLE_JAPANESE' };
+  }
+
+  const latinTokens = translation.match(/[A-Za-z]{2,}/g) || [];
+  const latinLetters = (translation.match(/[A-Za-z]/g) || []).length;
+  const letterTotal = latinLetters + japaneseChars.length;
+  const latinRatio = letterTotal > 0 ? latinLetters / letterTotal : 1;
+
+  const sourceWords = new Set(
+    String(sourceEnglish || '')
+      .toLowerCase()
+      .match(/[a-z]{3,}/g) || []
+  );
+  const repeatedSourceWords = latinTokens.filter((token) => sourceWords.has(token.toLowerCase()));
+  const longEnglishInParentheses = /[（(][^）)]*[A-Za-z][^）)]{8,}[）)]/.test(translation);
+
+  if (repeatedSourceWords.length >= 2 || longEnglishInParentheses) {
+    return { isValid: false, translation: '', reason: 'SOURCE_REPEATED' };
+  }
+
+  if (latinTokens.length > 1 || latinRatio > 0.15) {
+    return { isValid: false, translation: '', reason: 'ENGLISH_REMAINS' };
+  }
+
+  return { isValid: true, translation };
+}
+
 export interface ValidationResult {
   isValid: boolean;
   sanitizedReply: string;
