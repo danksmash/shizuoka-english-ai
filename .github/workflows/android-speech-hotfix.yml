@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/android-speech-hotfix.yml'
+      - 'scripts/_android_speech_hotfix.py'
   workflow_dispatch:
 
 permissions:
