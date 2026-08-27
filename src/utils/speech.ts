@@ -423,22 +423,36 @@ export function createSpeechRecognitionInstance(
     recognition.interimResults = true;
     recognition.lang = 'en-US'; // Broadest accuracy for elementary English speech
 
+    // Keep finalized speech across events, while replacing (not accumulating)
+    // the current interim hypothesis. Using resultIndex avoids re-processing
+    // unchanged results, which can otherwise duplicate phrases on Android Chrome.
+    let finalizedTranscript = '';
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onresult = (event: any) => {
       try {
-        const resultsArray: Array<{ transcript: string; isFinal: boolean }> = [];
-        for (let i = 0; i < event.results.length; ++i) {
+        let interimTranscript = '';
+        const startIndex = Number.isInteger(event.resultIndex) ? event.resultIndex : 0;
+
+        for (let i = startIndex; i < event.results.length; ++i) {
           const item = event.results[i];
-          if (item && item[0]) {
-            resultsArray.push({
-              transcript: item[0].transcript,
-              isFinal: Boolean(item.isFinal),
-            });
+          if (!item || !item[0]) continue;
+
+          const piece = String(item[0].transcript || '').trim();
+          if (!piece) continue;
+
+          if (item.isFinal) {
+            finalizedTranscript = (finalizedTranscript ? `${finalizedTranscript} ` : '') + piece;
+          } else {
+            interimTranscript = (interimTranscript ? `${interimTranscript} ` : '') + piece;
           }
         }
 
-        const { formatted, combinedRaw, hasFinal } = accumulateSpeechResults(resultsArray);
-        onResult(formatted || combinedRaw, hasFinal);
+        const combinedRaw = [finalizedTranscript.trim(), interimTranscript.trim()]
+          .filter(Boolean)
+          .join(' ');
+        const formatted = formatSpeechText(combinedRaw);
+        onResult(formatted || combinedRaw, Boolean(finalizedTranscript.trim()));
       } catch (e) {
         console.warn('Speech onresult error:', e);
       }
