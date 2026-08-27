@@ -43,10 +43,7 @@ jobs:
       - name: Full QA
         run: npm run qa
 
-      - name: Type check
-        run: npm run check
-
-      - name: Build
+      - name: Production build
         env:
           VITE_API_BASE_URL: https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app
         run: npm run build
