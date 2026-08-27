@@ -51,7 +51,7 @@ new_block = """    // Keep finalized speech across events, while replacing (not 
 patched = source[:start] + new_block + source[end:]
 if patched == source:
     raise SystemExit('Patch made no change')
-if patched.count('event.resultIndex') != 1:
+if patched.count('event.resultIndex') != 2:
     raise SystemExit('Unexpected event.resultIndex count after patch')
 
 path.write_text(patched, encoding='utf-8')
