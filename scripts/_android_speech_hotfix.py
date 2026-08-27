@@ -3,28 +3,17 @@ from pathlib import Path
 path = Path('src/utils/speech.ts')
 source = path.read_text(encoding='utf-8')
 
-old = """    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (event: any) => {
-      try {
-        const resultsArray: Array<{ transcript: string; isFinal: boolean }> = [];
-        for (let i = 0; i < event.results.length; ++i) {
-          const item = event.results[i];
-          if (item && item[0]) {
-            resultsArray.push({
-              transcript: item[0].transcript,
-              isFinal: Boolean(item.isFinal),
-            });
-          }
-        }
+start_marker = "    // eslint-disable-next-line @typescript-eslint/no-explicit-any\n    recognition.onresult = (event: any) => {"
+end_marker = "\n\n    // eslint-disable-next-line @typescript-eslint/no-explicit-any\n    recognition.onerror = (event: any) => {"
 
-        const { formatted, combinedRaw, hasFinal } = accumulateSpeechResults(resultsArray);
-        onResult(formatted || combinedRaw, hasFinal);
-      } catch (e) {
-        console.warn('Speech onresult error:', e);
-      }
-    };"""
+start = source.find(start_marker)
+if start < 0:
+    raise SystemExit('SpeechRecognition onresult block start not found; refusing broad edit')
+end = source.find(end_marker, start)
+if end < 0:
+    raise SystemExit('SpeechRecognition onresult block end not found; refusing broad edit')
 
-new = """    // Keep finalized speech across events, while replacing (not accumulating)
+new_block = """    // Keep finalized speech across events, while replacing (not accumulating)
     // the current interim hypothesis. Using resultIndex avoids re-processing
     // unchanged results, which can otherwise duplicate phrases on Android Chrome.
     let finalizedTranscript = '';
@@ -59,12 +48,11 @@ new = """    // Keep finalized speech across events, while replacing (not accumu
       }
     };"""
 
-if old not in source:
-    raise SystemExit('Expected SpeechRecognition block not found; refusing broad edit')
-
-patched = source.replace(old, new, 1)
+patched = source[:start] + new_block + source[end:]
+if patched == source:
+    raise SystemExit('Patch made no change')
 if patched.count('event.resultIndex') != 1:
-    raise SystemExit('Unexpected resultIndex count after patch')
+    raise SystemExit('Unexpected event.resultIndex count after patch')
 
 path.write_text(patched, encoding='utf-8')
 print('Patched src/utils/speech.ts only.')
