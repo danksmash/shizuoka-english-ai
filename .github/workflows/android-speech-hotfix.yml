@@ -20,79 +20,11 @@ jobs:
           fetch-depth: 0
 
       - name: Patch only Web Speech result handling
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('src/utils/speech.ts')
-          s = p.read_text()
-          old = '''    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (event: any) => {
-      try {
-        const resultsArray: Array<{ transcript: string; isFinal: boolean }> = [];
-        for (let i = 0; i < event.results.length; ++i) {
-          const item = event.results[i];
-          if (item && item[0]) {
-            resultsArray.push({
-              transcript: item[0].transcript,
-              isFinal: Boolean(item.isFinal),
-            });
-          }
-        }
-
-        const { formatted, combinedRaw, hasFinal } = accumulateSpeechResults(resultsArray);
-        onResult(formatted || combinedRaw, hasFinal);
-      } catch (e) {
-        console.warn('Speech onresult error:', e);
-      }
-    };'''
-          new = '''    // Keep finalized speech across events, while replacing (not accumulating)
-    // the current interim hypothesis. Using resultIndex avoids re-processing
-    // unchanged results, which can otherwise duplicate phrases on Android Chrome.
-    let finalizedTranscript = '';
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (event: any) => {
-      try {
-        let interimTranscript = '';
-        const startIndex = Number.isInteger(event.resultIndex) ? event.resultIndex : 0;
-
-        for (let i = startIndex; i < event.results.length; ++i) {
-          const item = event.results[i];
-          if (!item || !item[0]) continue;
-
-          const piece = String(item[0].transcript || '').trim();
-          if (!piece) continue;
-
-          if (item.isFinal) {
-            finalizedTranscript = (finalizedTranscript ? `${finalizedTranscript} ` : '') + piece;
-          } else {
-            interimTranscript = (interimTranscript ? `${interimTranscript} ` : '') + piece;
-          }
-        }
-
-        const combinedRaw = [finalizedTranscript.trim(), interimTranscript.trim()]
-          .filter(Boolean)
-          .join(' ');
-        const formatted = formatSpeechText(combinedRaw);
-        onResult(formatted || combinedRaw, Boolean(finalizedTranscript.trim()));
-      } catch (e) {
-        console.warn('Speech onresult error:', e);
-      }
-    };'''
-          if old not in s:
-              raise SystemExit('Expected SpeechRecognition block not found; refusing broad edit')
-          s2 = s.replace(old, new, 1)
-          if s2.count('event.resultIndex') != 1:
-              raise SystemExit('Unexpected resultIndex count after patch')
-          p.write_text(s2)
-          PY
+        run: python3 scripts/_android_speech_hotfix.py
 
       - name: Verify patch scope
-        shell: bash
         run: |
           git diff --check
-          git diff -- src/utils/speech.ts
           test "$(git diff --name-only | wc -l)" -eq 1
           test "$(git diff --name-only)" = "src/utils/speech.ts"
           grep -q "event.resultIndex" src/utils/speech.ts
@@ -110,13 +42,15 @@ jobs:
       - name: Full QA
         run: npm run qa
 
+      - name: Type check
+        run: npm run check
+
       - name: Build
         env:
           VITE_API_BASE_URL: https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app
         run: npm run build
 
       - name: Commit tested hotfix
-        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
