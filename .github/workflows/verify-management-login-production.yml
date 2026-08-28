@@ -1,0 +1,93 @@
+name: Verify production management login
+
+on:
+  push:
+    branches:
+      - verify/management-login-production
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+      - name: Verify real production login and UI asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_URL='https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app'
+          SERVICE_JSON="$(gcloud run services describe shizuoka-english-ai --project=shizuoka-english-ai --region=asia-northeast1 --format=json)"
+          ORIGINAL_ACCOUNTS="$(printf '%s' "$SERVICE_JSON" | jq -r '.spec.template.spec.containers[0].env[] | select(.name=="MANAGEMENT_ACCOUNTS_JSON") | .value')"
+          test -n "$ORIGINAL_ACCOUNTS"
+
+          TEST_USER="qa-login-$(date +%s)"
+          TEST_PASSWORD="$(openssl rand -base64 24 | tr -d '\n')"
+          echo "::add-mask::$TEST_PASSWORD"
+          SALT="$(openssl rand -hex 24)"
+          HASH="$(node -e 'const c=require("crypto"); process.stdout.write(c.scryptSync(process.argv[1],process.argv[2],64).toString("hex"))' "$TEST_PASSWORD" "$SALT")"
+          TEST_ACCOUNTS="$(printf '%s' "$ORIGINAL_ACCOUNTS" | jq --arg u "$TEST_USER" --arg s "$SALT" --arg h "$HASH" '. + [{username:$u,role:"researcher",salt:$s,passwordHash:$h}]')"
+
+          restore_accounts() {
+            gcloud run services update shizuoka-english-ai \
+              --project=shizuoka-english-ai \
+              --region=asia-northeast1 \
+              --update-env-vars="^~^MANAGEMENT_ACCOUNTS_JSON=$ORIGINAL_ACCOUNTS" \
+              --quiet >/dev/null 2>&1 || true
+          }
+          trap restore_accounts EXIT
+
+          gcloud run services update shizuoka-english-ai \
+            --project=shizuoka-english-ai \
+            --region=asia-northeast1 \
+            --update-env-vars="^~^MANAGEMENT_ACCOUNTS_JSON=$TEST_ACCOUNTS" \
+            --quiet
+
+          for attempt in $(seq 1 24); do
+            if curl --fail --silent --show-error --max-time 15 "$API_URL/api/health" | grep -q '"managementConfigured":true'; then
+              break
+            fi
+            sleep 5
+          done
+
+          COOKIE_JAR="$(mktemp)"
+          LOGIN_JSON="$(curl --fail --silent --show-error --max-time 20 \
+            -c "$COOKIE_JAR" \
+            -X POST "$API_URL/api/management/login" \
+            -H 'Content-Type: application/json' \
+            --data "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PASSWORD\"}")"
+          echo "$LOGIN_JSON" | grep -q '"success":true'
+          echo "$LOGIN_JSON" | grep -q '"role":"researcher"'
+
+          ME_JSON="$(curl --fail --silent --show-error --max-time 20 -b "$COOKIE_JAR" "$API_URL/api/management/me")"
+          echo "$ME_JSON" | grep -q '"success":true'
+          echo "$ME_JSON" | grep -q "\"username\":\"$TEST_USER\""
+          echo "$ME_JSON" | grep -q '"role":"researcher"'
+
+          PAGE="$(curl --fail --silent --show-error --max-time 20 "$API_URL/management")"
+          echo "$PAGE" | grep -q "requiredElement('login')"
+          if echo "$PAGE" | grep -q 'login.style.display'; then
+            echo 'Old unsafe DOM reference is still deployed'
+            exit 1
+          fi
+          if echo "$PAGE" | grep -q 'onclick='; then
+            echo 'Old inline event handlers are still deployed'
+            exit 1
+          fi
+
+          rm -f "$COOKIE_JAR"
+          echo PRODUCTION_MANAGEMENT_LOGIN_OK
+          echo PRODUCTION_MANAGEMENT_COOKIE_OK
+          echo PRODUCTION_MANAGEMENT_FIXED_UI_OK
