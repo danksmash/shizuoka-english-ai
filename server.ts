@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAIStudentById } from './src/data/curriculum';
+import { detectVocabularyInText } from './src/data/vocabulary';
+import { calculateCanonicalStats, canonicalizeHistory, isAIStudentId, isDialogueDuration, isDialogueTopic } from './src/dataContract';
 import { generateFallbackFeedback } from './src/utils/feedbackFallback';
 import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } from './src/utils/security';
 import { validateAiResponse, inspectAiResponse, buildAlignedReply } from './src/utils/responseValidation';
@@ -350,6 +352,8 @@ app.post('/api/chat', async (req, res) => {
   }
 
   const { message, history, topic, aiStudentId } = req.body;
+  if (!isAIStudentId(aiStudentId)) return res.status(400).json({ success: false, error: 'INVALID_AI_STUDENT_ID' });
+  if (!isDialogueTopic(topic)) return res.status(400).json({ success: false, error: 'INVALID_TOPIC' });
   const persona = getAIStudentById(aiStudentId);
   const trimmedMessage = typeof message === 'string' ? message.trim() : '';
 
@@ -387,7 +391,7 @@ app.post('/api/chat', async (req, res) => {
 
   const { maskedText: safeUserMessage, hasHighRiskPII } = maskHighRiskPII(trimmedMessage);
   const rawHistory = Array.isArray(history) ? history : [];
-  const recentHistory = rawHistory.slice(-8);
+  const recentHistory = rawHistory.slice(-16);
   const formattedHistory = recentHistory
     .map((msg: { sender: string; englishText: string }) =>
       `${msg.sender === 'ai' ? persona.name : 'Student'}: ${sanitizeStudentInput(msg.englishText || '').slice(0, 100)}`
@@ -461,20 +465,30 @@ app.post('/api/feedback', async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (!checkRateLimit(ip)) return res.status(429).json({ success: false, error: 'Rate limited' });
 
-  const { history, durationMinutes, turns, totalWords, aiStudentId, encounteredVocab } = req.body;
+  const { history, durationMinutes, aiStudentId } = req.body;
+  if (!isAIStudentId(aiStudentId)) return res.status(400).json({ success: false, error: 'INVALID_AI_STUDENT_ID' });
+  const targetDuration = Number(durationMinutes);
+  if (!isDialogueDuration(targetDuration)) return res.status(400).json({ success: false, error: 'INVALID_DURATION' });
   const persona = getAIStudentById(aiStudentId);
-  const rawHistory = Array.isArray(history) ? history : [];
-  const childMessages = rawHistory.filter((m: any) => m.sender !== 'ai' && m.englishText?.trim());
+  const rawHistory = canonicalizeHistory(history);
+  const childMessages = rawHistory.filter((m) => m.sender === 'child' && m.englishText.trim());
   const childUtterances = childMessages
-    .slice(-8)
-    .map((m: any) => maskHighRiskPII(String(m.englishText).trim()).maskedText.slice(0, 60))
+    .map((m) => maskHighRiskPII(m.englishText.trim()).maskedText.slice(0, 100))
     .filter(Boolean);
-  const examples = childUtterances.map((t: string) => `「${t}」`).join('、');
+  const examples = childUtterances.map((t) => `「${t}」`).join('、');
+  const detectedVocabMap = new Map<string, ReturnType<typeof detectVocabularyInText>[number]>();
+  for (const message of rawHistory) {
+    for (const item of detectVocabularyInText(message.englishText)) detectedVocabMap.set(item.id, item);
+  }
+  const canonicalVocab = Array.from(detectedVocabMap.values());
+  const firstTimestamp = rawHistory[0]?.timestamp || Date.now();
+  const lastTimestamp = rawHistory[rawHistory.length - 1]?.timestamp || firstTimestamp;
+  const stats = calculateCanonicalStats(rawHistory, firstTimestamp, lastTimestamp, targetDuration, canonicalVocab);
 
   const prompt = `小学5・6年生の英会話練習を日本語で短く講評してください。
 留学生: ${persona.name}
-時間: ${durationMinutes || 1}分
-ターン: ${turns || 0}
+時間: ${targetDuration}分
+ターン: ${stats.totalTurns}
 児童の実際の発話: ${examples || '(発話なし)'}
 
 実際に出た表現だけを keyPhrases に入れ、架空の発話を追加しないでください。
@@ -498,11 +512,11 @@ ${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${perso
     const fallbackFeedback = generateFallbackFeedback(
       persona,
       'あなた',
-      turns || 0,
-      totalWords || 0,
-      (durationMinutes || 1) * 60,
-      durationMinutes || 1,
-      encounteredVocab || [],
+      stats.totalTurns,
+      stats.totalChildWords,
+      stats.actualDurationSeconds,
+      targetDuration,
+      canonicalVocab,
       rawHistory
     );
     const uniqueKeyPhrases = Array.isArray(parsed.keyPhrases)
@@ -526,13 +540,13 @@ ${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${perso
             ? parsed.studentMessage.trim()
             : fallbackFeedback.studentMessage,
         keyPhrases: uniqueKeyPhrases,
-        encounteredVocab: encounteredVocab || [],
+        encounteredVocab: canonicalVocab,
         aiStudent: persona,
         stats: {
-          totalTurns: turns || 0,
-          totalChildWords: totalWords || 0,
-          durationSeconds: (durationMinutes || 1) * 60,
-          targetDurationMinutes: durationMinutes || 1,
+          totalTurns: stats.totalTurns,
+          totalChildWords: stats.totalChildWords,
+          durationSeconds: stats.actualDurationSeconds,
+          targetDurationMinutes: targetDuration,
         },
       },
     });
@@ -540,11 +554,11 @@ ${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${perso
     const fallbackData = generateFallbackFeedback(
       persona,
       'あなた',
-      turns || 0,
-      totalWords || 0,
-      (durationMinutes || 1) * 60,
-      durationMinutes || 1,
-      encounteredVocab || [],
+      stats.totalTurns,
+      stats.totalChildWords,
+      stats.actualDurationSeconds,
+      targetDuration,
+      canonicalVocab,
       rawHistory
     );
     return res.json({ success: true, isFallback: true, fallbackReason: 'AI_RETRY_EXHAUSTED', data: fallbackData });
