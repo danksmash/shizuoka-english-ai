@@ -7,6 +7,7 @@ on:
     paths:
       - scripts/repair-functional-ui-redesign.py
       - .github/workflows/ui-redesign-repair.yml
+      - scripts/qa-data-contract.ts
 
 permissions:
   contents: write
@@ -26,6 +27,13 @@ jobs:
           cache: npm
       - name: Apply repaired UI redesign
         run: python3 scripts/repair-functional-ui-redesign.py
+      - name: Verify privacy contract inputs
+        run: |
+          echo "--- qa-data-contract privacy assertion ---"
+          grep -n "child_utterances" scripts/qa-data-contract.ts || true
+          echo "--- persistence raw-utterance search ---"
+          grep -n "child_utterances" src/server/persistence.ts || true
+          node -e "const fs=require('fs'); const s=fs.readFileSync('src/server/persistence.ts','utf8'); console.log('persistence includes child_utterances:', s.includes('child_utterances:')); if(s.includes('child_utterances:')) process.exit(7)"
       - name: Install dependencies
         run: npm ci
       - name: Run all QA
