@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Award, BarChart3, Ear, KeyRound, Lightbulb, MessageCircle, RotateCcw } from 'lucide-react';
+import { Award, BarChart3, Ear, KeyRound, Lightbulb, MessageCircle } from 'lucide-react';
 import type { AIStudentProfile, StudentProfile } from '../types';
 import type { ReflectionAnswers } from '../dataContract';
 
@@ -15,7 +15,6 @@ interface ReflectionScreenProps {
   isSaving: boolean;
   saveMessage?: string;
   onOpenHistory?: () => void;
-  onRestart: () => void;
 }
 
 const ITEMS = [
@@ -44,7 +43,6 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
   isSaving,
   saveMessage,
   onOpenHistory,
-  onRestart,
 }) => {
   const [ratings, setRatings] = useState<Partial<Record<RatingKey, number>>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -60,8 +58,7 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
     if (submitted || isSaving) return;
     const next = { ...ratings, [key]: value };
     setRatings(next);
-    const complete = ITEMS.every((item) => Number.isInteger(next[item.key]));
-    if (complete) {
+    if (ITEMS.every((item) => Number.isInteger(next[item.key]))) {
       setSubmitted(true);
       void onSubmit({
         conveyedIdeas: next.conveyedIdeas!,
@@ -103,10 +100,7 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
                 <p className="mt-1 text-sm font-semibold text-slate-600">{aiStudent.flag} {aiStudent.name} ({aiStudent.countryJapanese}) 留学生との対話練習記録</p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {onOpenHistory && <button type="button" disabled={!submitted || isSaving} onClick={onOpenHistory} className="flex min-h-12 items-center gap-2 rounded-xl border border-blue-200 bg-white px-5 text-sm font-black text-slate-800 shadow-sm disabled:opacity-40"><BarChart3 className="h-5 w-5 text-blue-600"/>わたしの学習履歴</button>}
-              <button type="button" onClick={onRestart} className="flex min-h-12 items-center gap-2 rounded-xl bg-blue-600 px-6 text-sm font-black text-white shadow"><RotateCcw className="h-5 w-5"/>もう一度練習する</button>
-            </div>
+            {onOpenHistory && <button type="button" disabled={!submitted || isSaving} onClick={onOpenHistory} className="flex min-h-12 items-center gap-2 rounded-xl border border-blue-200 bg-white px-5 text-sm font-black text-slate-800 shadow-sm disabled:opacity-40"><BarChart3 className="h-5 w-5 text-blue-600"/>わたしの学習履歴</button>}
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
@@ -130,7 +124,7 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
                 );
               })}
             </div>
-            <p className="mt-3 text-center text-xs font-semibold text-slate-500">3つすべて選ぶと、自動で学習履歴に保存します。</p>
+            <p className="mt-3 text-center text-xs font-semibold text-slate-500">3つすべて選ぶと、自動で学習履歴に保存し、次のAI対話レポートを表示します。</p>
             {(isSaving || saveMessage) && <p className="mt-2 text-center text-xs font-black text-slate-600">{isSaving ? '保存しています…' : saveMessage}</p>}
           </div>
 
