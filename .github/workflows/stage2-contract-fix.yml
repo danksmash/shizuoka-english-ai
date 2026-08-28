@@ -57,6 +57,10 @@ jobs:
           new_storage = "export function maskHistoryForStorage(history: ChatMessage[]): ChatMessage[] {\n  return maskMessagesForExternalUse(history);\n}"
           replace_once('src/dataContract.ts', old_storage, new_storage)
 
+          replace_once('src/server/persistence.ts',
+              "import { AIStudentId, DialogueDurationMinutes, ReflectionAnswers, calculateCanonicalStats, maskHistoryForStorage } from '../dataContract';\nimport type { ChatMessage, DialogueTopic, VisualVocabularyItem } from '../types';",
+              "import { ReflectionAnswers, calculateCanonicalStats, maskHistoryForStorage } from '../dataContract';\nimport type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, VisualVocabularyItem } from '../types';")
+
           replace_once('src/components/FeedbackScreen.tsx',
               "import { getJapaneseTranslationForMessage } from '../utils/translation';\nimport { StudentAvatar } from './StudentAvatar';",
               "import { getJapaneseTranslationForMessage } from '../utils/translation';\nimport { safePlainTextForClipboard } from '../utils/privacy';\nimport { StudentAvatar } from './StudentAvatar';")
@@ -84,6 +88,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/types.ts src/dataContract.ts src/components/FeedbackScreen.tsx scripts/qa-data-contract.ts
+          git add src/types.ts src/dataContract.ts src/server/persistence.ts src/components/FeedbackScreen.tsx scripts/qa-data-contract.ts
           git commit -m "refactor: complete canonical data contract and privacy paths"
           git push origin HEAD:codex/stage2-data-contract-complete
