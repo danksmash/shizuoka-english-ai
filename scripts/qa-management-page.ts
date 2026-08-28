@@ -31,8 +31,9 @@ assert.ok(serverSource.includes("requireManagementRole(['teacher'])"));
 assert.ok(serverSource.includes('getTeacherSessionsForManagement'));
 assert.ok(serverSource.includes("requireManagementRole(['researcher'])"));
 const reflectionSource = await readFile('src/components/ReflectionScreen.tsx', 'utf8');
-for (const marker of ['自分の考えを伝える','相手の話を聞いて分かる','新しい言葉や文化に気づいた','わたしの学習履歴','対話時間 (TIME)','ターン数 (TURNS)','発話語数 (WORDS)','出会った語彙 (VOCAB)']) assert.ok(reflectionSource.includes(marker), `Reflection UI marker missing: ${marker}`);
+for (const marker of ['自分の考えを伝える','相手の話を聞いて分かる','新しい言葉や文化に気づいた','対話時間 (TIME)','ターン数 (TURNS)','発話語数 (WORDS)','出会った語彙 (VOCAB)']) assert.ok(reflectionSource.includes(marker), `Reflection UI marker missing: ${marker}`);
 assert.ok(!reflectionSource.includes('もう一度練習する'), 'Retry button must not be on reflection screen');
+assert.ok(!reflectionSource.includes('わたしの学習履歴'), 'History button must not be on reflection screen');
 const feedbackSource = await readFile('src/components/FeedbackScreen.tsx', 'utf8');
 assert.ok(!feedbackSource.includes('handleCopyReport'), 'Feedback report copy action must be removed');
 assert.ok(!feedbackSource.includes('window.print()'), 'Feedback report print action must be removed');
@@ -43,13 +44,22 @@ assert.ok(!appSource.includes('setTimeout(executeTransition,4500)'), 'Farewell m
 assert.ok(appSource.includes("setIsSavingReflection(false);\n    setPhase('feedback');"), 'Reflection must advance to AI feedback report');
 assert.ok(appSource.includes("onBack={()=>setPhase('feedback')}"), 'History must return to AI feedback report');
 assert.ok(!appSource.includes('onOpenHistory={learningDataEnabled && learningCode ? handleOpenHistory : undefined} onRestart={handleRestart}/>}'), 'Reflection must not receive retry action');
+assert.ok(!appSource.includes('saveMessage={reflectionSaveMessage} onOpenHistory='), 'Reflection must not receive history action');
 
 assert.ok(!html.includes('id="teacherClassPicks"'), 'T2 redundant display-class selector must be removed');
 assert.ok(!html.includes('id="researchClassPicks"'), 'R2 must use a single class dropdown');
 for (const cls of ['5-1','5-2','5-3','6-1','6-2','6-3','テスト','予備']) assert.ok(html.includes(cls), `Class option missing: ${cls}`);
-assert.ok(html.includes('allLabel===null'), 'R2/T2 exact fixed-class dropdown behavior missing');
+assert.ok(html.includes('fillResearchScopeSelect'), 'R2 scoped class selector missing');
 assert.ok(html.includes('総対話時間'));
 assert.ok(html.includes("setSummaryQuick('all')"));
 assert.ok(html.includes("actualDurationSeconds"));
+for (const marker of ['teacherTotalDuration','teacherAvgDuration','teacherAvgTurns','teacherAvgWords','researchTotalDuration','researchAvgTurns','researchAvgWords','sumAvgDuration','sumTotalWords','r4TotalDuration','r4Themes']) assert.ok(html.includes(`id="${marker}"`), `Information-density metric missing: ${marker}`);
+for (const marker of ['grade5','grade6','canonClass','classMatches','scopeClasses','fillResearchScopeSelect','topicText']) assert.ok(html.includes(marker), `Linked dashboard logic missing: ${marker}`);
+assert.ok(html.includes('累積対話時間（分）'));
+const historySource = await readFile('src/components/LearningHistoryScreen.tsx', 'utf8');
+for (const marker of ['累計対話時間','よく話したテーマ','よく話したAI留学生','テーマ・時間・発話量','actualDurationSeconds']) assert.ok(historySource.includes(marker), `Learning history detail missing: ${marker}`);
+const setupSource = await readFile('src/components/SetupScreen.tsx', 'utf8');
+assert.ok(setupSource.includes('min-h-[198px]'));
+assert.ok(setupSource.includes('grid-cols-[84px_minmax(0,1fr)]'));
 
 console.log('Learner + teacher + researcher functional UI contract QA: PASS');
