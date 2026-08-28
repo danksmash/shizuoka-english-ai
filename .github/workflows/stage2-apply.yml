@@ -38,50 +38,42 @@ jobs:
           replace_once('server.ts',
             "import { getAIStudentById } from './src/data/curriculum';\n",
             "import { getAIStudentById } from './src/data/curriculum';\nimport { detectVocabularyInText } from './src/data/vocabulary';\nimport { calculateCanonicalStats, canonicalizeHistory, isAIStudentId, isDialogueDuration, isDialogueTopic } from './src/dataContract';\n")
-
           replace_once('server.ts',
             "  const { message, history, topic, aiStudentId } = req.body;\n  const persona = getAIStudentById(aiStudentId);\n  const trimmedMessage = typeof message === 'string' ? message.trim() : '';\n",
             "  const { message, history, topic, aiStudentId } = req.body;\n  if (!isAIStudentId(aiStudentId)) return res.status(400).json({ success: false, error: 'INVALID_AI_STUDENT_ID' });\n  if (!isDialogueTopic(topic)) return res.status(400).json({ success: false, error: 'INVALID_TOPIC' });\n  const persona = getAIStudentById(aiStudentId);\n  const trimmedMessage = typeof message === 'string' ? message.trim() : '';\n")
-
           replace_once('server.ts', "  const recentHistory = rawHistory.slice(-8);\n", "  const recentHistory = rawHistory.slice(-16);\n")
-
-          old_feedback = '''  const { history, durationMinutes, turns, totalWords, aiStudentId, encounteredVocab } = req.body;
-          const persona = getAIStudentById(aiStudentId);
-          const rawHistory = Array.isArray(history) ? history : [];
-          const childMessages = rawHistory.filter((m: any) => m.sender !== 'ai' && m.englishText?.trim());
-          const childUtterances = childMessages
-            .slice(-8)
-            .map((m: any) => maskHighRiskPII(String(m.englishText).trim()).maskedText.slice(0, 60))
-            .filter(Boolean);
-          const examples = childUtterances.map((t: string) => `「${t}」`).join('、');
-          '''
-          new_feedback = '''  const { history, durationMinutes, aiStudentId } = req.body;
-          if (!isAIStudentId(aiStudentId)) return res.status(400).json({ success: false, error: 'INVALID_AI_STUDENT_ID' });
-          const targetDuration = Number(durationMinutes);
-          if (!isDialogueDuration(targetDuration)) return res.status(400).json({ success: false, error: 'INVALID_DURATION' });
-          const persona = getAIStudentById(aiStudentId);
-          const rawHistory = canonicalizeHistory(history);
-          const childMessages = rawHistory.filter((m) => m.sender === 'child' && m.englishText.trim());
-          const childUtterances = childMessages
-            .map((m) => maskHighRiskPII(m.englishText.trim()).maskedText.slice(0, 100))
-            .filter(Boolean);
-          const examples = childUtterances.map((t) => `「${t}」`).join('、');
-          const detectedVocabMap = new Map<string, ReturnType<typeof detectVocabularyInText>[number]>();
-          for (const message of rawHistory) {
-            for (const item of detectVocabularyInText(message.englishText)) detectedVocabMap.set(item.id, item);
-          }
-          const canonicalVocab = Array.from(detectedVocabMap.values());
-          const firstTimestamp = rawHistory[0]?.timestamp || Date.now();
-          const lastTimestamp = rawHistory[rawHistory.length - 1]?.timestamp || firstTimestamp;
-          const stats = calculateCanonicalStats(rawHistory, firstTimestamp, lastTimestamp, targetDuration, canonicalVocab);
-          '''
-          replace_once('server.ts', old_feedback, new_feedback)
 
           p = Path('server.ts')
           text = p.read_text()
+          start_marker = "  const { history, durationMinutes, turns, totalWords, aiStudentId, encounteredVocab } = req.body;\n"
+          end_marker = "  const prompt = `小学5・6年生の英会話練習を日本語で短く講評してください。"
+          if text.count(start_marker) != 1 or text.count(end_marker) != 1:
+              raise SystemExit(f'feedback boundary mismatch: start={text.count(start_marker)} end={text.count(end_marker)}')
+          start = text.index(start_marker)
+          end = text.index(end_marker, start)
+          new_block = """  const { history, durationMinutes, aiStudentId } = req.body;
+  if (!isAIStudentId(aiStudentId)) return res.status(400).json({ success: false, error: 'INVALID_AI_STUDENT_ID' });
+  const targetDuration = Number(durationMinutes);
+  if (!isDialogueDuration(targetDuration)) return res.status(400).json({ success: false, error: 'INVALID_DURATION' });
+  const persona = getAIStudentById(aiStudentId);
+  const rawHistory = canonicalizeHistory(history);
+  const childMessages = rawHistory.filter((m) => m.sender === 'child' && m.englishText.trim());
+  const childUtterances = childMessages
+    .map((m) => maskHighRiskPII(m.englishText.trim()).maskedText.slice(0, 100))
+    .filter(Boolean);
+  const examples = childUtterances.map((t) => `「${t}」`).join('、');
+  const detectedVocabMap = new Map<string, ReturnType<typeof detectVocabularyInText>[number]>();
+  for (const message of rawHistory) {
+    for (const item of detectVocabularyInText(message.englishText)) detectedVocabMap.set(item.id, item);
+  }
+  const canonicalVocab = Array.from(detectedVocabMap.values());
+  const firstTimestamp = rawHistory[0]?.timestamp || Date.now();
+  const lastTimestamp = rawHistory[rawHistory.length - 1]?.timestamp || firstTimestamp;
+  const stats = calculateCanonicalStats(rawHistory, firstTimestamp, lastTimestamp, targetDuration, canonicalVocab);
+
+"""
+          text = text[:start] + new_block + text[end:]
           marker = "app.post('/api/feedback'"
-          if text.count(marker) != 1:
-              raise SystemExit('feedback marker mismatch')
           before, after = text.split(marker, 1)
           after = after.replace('${durationMinutes || 1}分', '${targetDuration}分')
           after = after.replace('${turns || 0}', '${stats.totalTurns}')
