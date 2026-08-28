@@ -1,4 +1,4 @@
-# corrected contract validation run
+# corrected embedded-script validation run
 name: UI redesign one-shot
 on:
   push:
