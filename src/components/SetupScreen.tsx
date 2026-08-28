@@ -272,8 +272,8 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
               <span>対話時間をえらぶ</span>
             </h2>
 
-            <div className="grid grid-cols-5 gap-1">
-              {[1, 2, 3, 5, 10].map((mins) => (
+            <div className="grid grid-cols-4 gap-1">
+              {[1, 2, 3, 5].map((mins) => (
                 <button
                   key={mins}
                   type="button"

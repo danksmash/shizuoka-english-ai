@@ -132,6 +132,21 @@ export function maskHistoryForStorage(history: ChatMessage[]): ChatMessage[] {
   return maskMessagesForExternalUse(history);
 }
 
+export function parseReflectionAnswers(value: unknown): ReflectionAnswers | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const source = value as Record<string, unknown>;
+  const rating = (key: string) => {
+    const number = Number(source[key]);
+    return Number.isInteger(number) && number >= 1 && number <= 5 ? number : null;
+  };
+  const conveyedIdeas = rating('conveyedIdeas');
+  const understoodPartner = rating('understoodPartner');
+  const continuedConversation = rating('continuedConversation');
+  const noticedLanguageCulture = rating('noticedLanguageCulture');
+  if ([conveyedIdeas, understoodPartner, continuedConversation, noticedLanguageCulture].some((v) => v === null)) return undefined;
+  return { conveyedIdeas: conveyedIdeas!, understoodPartner: understoodPartner!, continuedConversation: continuedConversation!, noticedLanguageCulture: noticedLanguageCulture!, freeComment: typeof source.freeComment === 'string' ? source.freeComment.trim().slice(0, 500) : undefined };
+}
+
 export function validateSessionSaveInput(body: unknown):
   | { ok: true; value: SessionSaveInput }
   | { ok: false; error: string } {
@@ -162,7 +177,7 @@ export function validateSessionSaveInput(body: unknown):
       endedAt,
       history,
       encounteredVocab: Array.isArray(source.encounteredVocab) ? (source.encounteredVocab as VisualVocabularyItem[]).slice(0, 200) : [],
-      reflection: source.reflection && typeof source.reflection === 'object' ? (source.reflection as ReflectionAnswers) : undefined,
+      reflection: parseReflectionAnswers(source.reflection),
     },
   };
 }
