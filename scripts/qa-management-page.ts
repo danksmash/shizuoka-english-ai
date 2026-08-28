@@ -9,7 +9,7 @@ if (!scriptMatch) throw new Error('Management page script not found');
 new vm.Script(scriptMatch[1], { filename: 'management-page-inline.js' });
 if (/onclick=/.test(html)) throw new Error('Inline onclick handlers are not allowed');
 for (const marker of ['teacherDashboard','studentList','studentSummary','sessionDetail','codeManagement','researchDashboard','researchList','researchSummary','researchSession','researchQuality']) assert.ok(html.includes(`id="${marker}"`), `Management screen missing: ${marker}`);
-for (const marker of ['teacherClass','teacherStart','teacherEnd','teacherMetric','teacherWeekly','teacherMonthly','teacherChart','listClass','listStart','listEnd','studentSearch','showUnused','summaryStart','summaryEnd','sumTurnsChart','sumWordsChart','newCode','newClass','reissueModal','reissueConfirm','researchStart','researchEnd','researchMetric','researchWeekly','researchMonthly','researchChart','researchClass','researchGrade','researchCompleteOnly','researchSearch','r4TurnChart','r4WordChart','r4ReflectionChart','r5Head','r5Reflection','r6Start','r6End','r6Class','r6Research','qNormal','qMissing','qDuplicate','qReview']) assert.ok(html.includes(`id="${marker}"`), `Functional UI control missing: ${marker}`);
+for (const marker of ['teacherClass','teacherStart','teacherEnd','teacherMetric','teacherWeekly','teacherMonthly','teacherChart','listClass','listStart','listEnd','studentSearch','showUnused','summaryStart','summaryEnd','sumDurationChart','sumWordsChart','newCode','newClass','reissueModal','reissueConfirm','researchStart','researchEnd','researchDashboardClass','researchMetric','researchWeekly','researchMonthly','researchChart','researchClass','researchGrade','researchCompleteOnly','researchSearch','r4TurnChart','r4WordChart','r4ReflectionChart','r5Head','r5Reflection','r6Start','r6End','r6Class','r6Research','qNormal','qMissing','qDuplicate','qReview']) assert.ok(html.includes(`id="${marker}"`), `Functional UI control missing: ${marker}`);
 assert.ok(html.includes('/api/management/research.csv'));
 assert.ok(html.includes('/api/management/student-codes'));
 assert.ok(html.includes('/api/management/sessions'));
@@ -34,10 +34,21 @@ const reflectionSource = await readFile('src/components/ReflectionScreen.tsx', '
 for (const marker of ['自分の考えを伝える','相手の話を聞いて分かる','新しい言葉や文化に気づいた','わたしの学習履歴','対話時間 (TIME)','ターン数 (TURNS)','発話語数 (WORDS)','出会った語彙 (VOCAB)']) assert.ok(reflectionSource.includes(marker), `Reflection UI marker missing: ${marker}`);
 assert.ok(!reflectionSource.includes('もう一度練習する'), 'Retry button must not be on reflection screen');
 const feedbackSource = await readFile('src/components/FeedbackScreen.tsx', 'utf8');
+assert.ok(!feedbackSource.includes('handleCopyReport'), 'Feedback report copy action must be removed');
+assert.ok(!feedbackSource.includes('window.print()'), 'Feedback report print action must be removed');
 for (const marker of ['からのメッセージ','よくできたところ (Good Points)','今回学んだ単語 (Vocab Collection)','次へのステップアップ (Next Step Advice)','重要キーフレーズ (Key Expressions)','対話の文字起こしと日本語訳','日本語訳','もう一度練習する']) assert.ok(feedbackSource.includes(marker), `Feedback UI marker missing: ${marker}`);
 assert.ok(!feedbackSource.includes('Metrics Row'), 'Feedback report must not render duplicated metric cards');
 const appSource = await readFile('src/App.tsx', 'utf8');
+assert.ok(!appSource.includes('setTimeout(executeTransition,4500)'), 'Farewell must not auto-advance before audio finishes');
 assert.ok(appSource.includes("setIsSavingReflection(false);\n    setPhase('feedback');"), 'Reflection must advance to AI feedback report');
 assert.ok(appSource.includes("onBack={()=>setPhase('feedback')}"), 'History must return to AI feedback report');
 assert.ok(!appSource.includes('onOpenHistory={learningDataEnabled && learningCode ? handleOpenHistory : undefined} onRestart={handleRestart}/>}'), 'Reflection must not receive retry action');
+
+assert.ok(!html.includes('id="teacherClassPicks"'), 'T2 redundant display-class selector must be removed');
+assert.ok(!html.includes('id="researchClassPicks"'), 'R2 must use a single class dropdown');
+for (const cls of ['5-1','5-2','5-3','6-1','6-2','6-3','テスト','予備']) assert.ok(html.includes(cls), `Class option missing: ${cls}`);
+assert.ok(html.includes('総対話時間'));
+assert.ok(html.includes("setSummaryQuick('all')"));
+assert.ok(html.includes("actualDurationSeconds"));
+
 console.log('Learner + teacher + researcher functional UI contract QA: PASS');
