@@ -6,18 +6,35 @@ const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
 if (!scriptMatch) throw new Error('Management page script not found');
 if (/onclick=/.test(html)) throw new Error('Inline onclick handlers are not allowed');
 if (/\blogin\.style\b/.test(scriptMatch[1])) throw new Error('Regression: login function/element name collision');
+for (const marker of ['teacherDashboard','studentList','studentSummary','sessionDetail','codeManagement','researchDashboard']) {
+  if (!html.includes(`id="${marker}"`)) throw new Error(`Redesigned management screen missing: ${marker}`);
+}
 
+class FakeClassList {
+  toggle(_name: string, _force?: boolean) { return true; }
+}
 class FakeElement {
   value = '';
   textContent = '';
   innerHTML = '';
   className = '';
+  disabled = false;
   style: Record<string, string> = {};
+  classList = new FakeClassList();
   listeners = new Map<string, (...args: any[]) => any>();
   addEventListener(type: string, listener: (...args: any[]) => any) { this.listeners.set(type, listener); }
+  getAttribute(_name: string) { return ''; }
 }
 
-const ids = ['login','panel','u','p','msg','who','csvBtn','rows','loginBtn','logoutBtn','refreshBtn'];
+const ids = [
+  'login','panel','u','p','msg','who','csvBtn','rows','loginBtn','logoutBtn','refreshBtn',
+  'teacherDashboardBtn','studentListBtn','codeBtn','researchDashboardBtn','modeLabel',
+  'teacherDashboard','studentList','studentSummary','sessionDetail','codeManagement','researchDashboard',
+  'teacherStudents','teacherSessions','teacherAvgSessions','researchStudents','researchSessions','researchMissing',
+  'studentRows','codeRows','dashToListBtn','listBackBtn','summaryBackBtn','detailBackBtn','issueCodeBtn',
+  'newCode','codeMessage','studentSummaryTitle','sumSessions','sumDuration','sumTurns','sumWords',
+  'r1avg','r2avg','r3avg','summaryRows','detailHead','detailReflection','detailLog',
+];
 const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement()])) as Record<string, FakeElement>;
 elements.u.value = 'qa-user';
 elements.p.value = 'qa-password';
@@ -48,6 +65,7 @@ const context = vm.createContext({
   document: {
     getElementById: (id: string) => elements[id] ?? null,
     createElement: () => new FakeElement(),
+    querySelectorAll: () => [],
   },
   fetch,
   URL: { createObjectURL: () => 'blob:qa', revokeObjectURL: () => undefined },
@@ -70,5 +88,7 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 if (displayOf('login') !== 'none') throw new Error('Successful login did not hide login card');
 if (displayOf('panel') !== 'block') throw new Error('Successful login did not show panel');
 if (elements.who.textContent !== 'qa-user (researcher)') throw new Error('Logged-in identity was not rendered');
+if (elements.researchDashboardBtn.style.display !== 'inline-block') throw new Error('Research dashboard navigation was not enabled');
+if (elements.teacherDashboardBtn.style.display !== 'none') throw new Error('Teacher navigation leaked into researcher role');
 
-console.log('Management page DOM/login regression QA: PASS');
+console.log('Management page redesigned DOM/login regression QA: PASS');
