@@ -49,9 +49,6 @@ jobs:
           project_id: shizuoka-english-ai
           version: '>= 416.0.0'
 
-      - name: Enable Cloud Text-to-Speech API
-        run: gcloud services enable texttospeech.googleapis.com --project shizuoka-english-ai
-
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy shizuoka-english-ai \
