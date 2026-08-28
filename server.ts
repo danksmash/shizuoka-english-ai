@@ -60,6 +60,77 @@ setInterval(() => {
   }
 }, 5 * 60_000);
 
+const GOOGLE_TTS_VOICES: Record<string, { languageCode: string; name: string }> = {
+  emma_usa: { languageCode: 'en-US', name: 'en-US-Chirp3-HD-Aoede' },
+  oliver_uk: { languageCode: 'en-GB', name: 'en-GB-Chirp3-HD-Orus' },
+  liam_australia: { languageCode: 'en-AU', name: 'en-AU-Chirp3-HD-Puck' },
+  chloe_canada: { languageCode: 'en-US', name: 'en-US-Chirp3-HD-Kore' },
+  bence_hungary: { languageCode: 'en-GB', name: 'en-GB-Chirp3-HD-Iapetus' },
+  zofia_poland: { languageCode: 'en-GB', name: 'en-GB-Chirp3-HD-Leda' },
+  rahul_bangladesh: { languageCode: 'en-IN', name: 'en-IN-Chirp3-HD-Orus' },
+  linh_vietnam: { languageCode: 'en-US', name: 'en-US-Chirp3-HD-Leda' },
+  aung_myanmar: { languageCode: 'en-IN', name: 'en-IN-Chirp3-HD-Puck' },
+};
+
+let googleAccessToken: { token: string; expiresAt: number } | null = null;
+
+async function getGoogleAccessToken(): Promise<string> {
+  if (googleAccessToken && Date.now() < googleAccessToken.expiresAt - 60_000) return googleAccessToken.token;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 2000);
+  try {
+    const response = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token', {
+      headers: { 'Metadata-Flavor': 'Google' },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Metadata token HTTP ${response.status}`);
+    const data = await response.json() as { access_token?: string; expires_in?: number };
+    if (!data.access_token) throw new Error('Metadata token missing');
+    googleAccessToken = {
+      token: data.access_token,
+      expiresAt: Date.now() + Math.max(60, Number(data.expires_in || 3000)) * 1000,
+    };
+    return googleAccessToken.token;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function synthesizeGoogleTts(text: string, aiStudentId: string, speakingRate: number): Promise<Buffer> {
+  const voice = GOOGLE_TTS_VOICES[aiStudentId];
+  if (!voice) throw new Error('UNKNOWN_TTS_PERSONA');
+  const token = await getGoogleAccessToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        input: { text },
+        voice,
+        audioConfig: {
+          audioEncoding: 'MP3',
+          speakingRate,
+        },
+      }),
+    });
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 500);
+      throw new Error(`Google TTS HTTP ${response.status}: ${detail}`);
+    }
+    const data = await response.json() as { audioContent?: string };
+    if (!data.audioContent) throw new Error('Google TTS returned no audio');
+    return Buffer.from(data.audioContent, 'base64');
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 let anthropicClient: Anthropic | null = null;
 function getAnthropicClient(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -105,15 +176,9 @@ function isRetryable(error: any): boolean {
 async function callClaudeJson(system: string, prompt: string, maxTokens: number) {
   const client = getAnthropicClient();
   if (!client) throw new Error('API_KEY_NOT_CONFIGURED');
-
   const configured = process.env.ANTHROPIC_MODEL?.trim();
-  const models = Array.from(new Set([
-    configured || 'claude-sonnet-4-6',
-    'claude-haiku-4-5',
-  ]));
-
+  const models = Array.from(new Set([configured || 'claude-sonnet-4-6', 'claude-haiku-4-5']));
   let lastError: any = null;
-
   for (const model of models) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
@@ -124,13 +189,11 @@ async function callClaudeJson(system: string, prompt: string, maxTokens: number)
           system,
           messages: [{ role: 'user', content: prompt }],
         });
-
         const rawText = response.content
           .filter((block: any) => block.type === 'text')
           .map((block: any) => ('text' in block ? block.text : ''))
           .join('')
           .trim();
-
         return { parsed: extractJson(rawText), model };
       } catch (error: any) {
         lastError = error;
@@ -139,7 +202,6 @@ async function callClaudeJson(system: string, prompt: string, maxTokens: number)
       }
     }
   }
-
   throw lastError || new Error('AI_UNAVAILABLE');
 }
 
@@ -221,7 +283,34 @@ app.get('/api/health', (_req, res) => {
     aiConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
     model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
     resilience: 'multi-retry-model-fallback',
+    ttsProvider: 'google-chirp3-hd',
   });
+});
+
+app.post('/api/tts', async (req, res) => {
+  const requestStart = Date.now();
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  if (!checkRateLimit(ip)) return res.status(429).json({ success: false, error: 'Rate limited' });
+
+  const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+  const aiStudentId = typeof req.body?.aiStudentId === 'string' ? req.body.aiStudentId : '';
+  const requestedRate = Number(req.body?.speakingRate || 1.0);
+  const speakingRate = Math.max(0.8, Math.min(1.15, Number.isFinite(requestedRate) ? requestedRate : 1.0));
+
+  if (!text || text.length > 300) return res.status(400).json({ success: false, error: 'Invalid TTS text' });
+  if (!GOOGLE_TTS_VOICES[aiStudentId]) return res.status(400).json({ success: false, error: 'Unknown AI student' });
+
+  try {
+    const audio = await synthesizeGoogleTts(text, aiStudentId, speakingRate);
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-TTS-Provider', 'google-chirp3-hd');
+    res.setHeader('X-TTS-Latency-Ms', String(Date.now() - requestStart));
+    return res.send(audio);
+  } catch (error: any) {
+    console.error('Google TTS failed', { message: error?.message, aiStudentId });
+    return res.status(503).json({ success: false, error: 'TTS unavailable' });
+  }
 });
 
 app.post('/api/chat', async (req, res) => {
@@ -235,45 +324,21 @@ app.post('/api/chat', async (req, res) => {
   const persona = getAIStudentById(aiStudentId);
   const trimmedMessage = typeof message === 'string' ? message.trim() : '';
 
-  if (!trimmedMessage) {
-    return res.status(400).json({ success: false, error: 'Empty message' });
-  }
+  if (!trimmedMessage) return res.status(400).json({ success: false, error: 'Empty message' });
 
   if (trimmedMessage.length > 100) {
-    return res.json({
-      success: true,
-      data: {
-        reply: 'Please use a shorter sentence. What do you want to say?',
-        japaneseTranslation: 'もう少し短い文で話してみてね。何を伝えたいですか？',
-        studentJapaneseTranslation: '',
-        studentTranslationStatus: 'translated',
-        mood: 'thinking',
-        culturalNote: '',
-      },
-    });
+    return res.json({ success: true, data: { reply: 'Please use a shorter sentence. What do you want to say?', japaneseTranslation: 'もう少し短い文で話してみてね。何を伝えたいですか？', studentJapaneseTranslation: '', studentTranslationStatus: 'translated', mood: 'thinking', culturalNote: '' } });
   }
 
   if (detectPromptInjection(trimmedMessage) || detectInappropriateContent(trimmedMessage)) {
-    return res.json({
-      success: true,
-      data: {
-        reply: `Let's keep our English friendly. What do you like?`,
-        japaneseTranslation: '楽しく英語で話そう。何が好きですか？',
-        studentJapaneseTranslation: '',
-        studentTranslationStatus: 'translated',
-        mood: 'encouraging',
-        culturalNote: '',
-      },
-    });
+    return res.json({ success: true, data: { reply: `Let's keep our English friendly. What do you like?`, japaneseTranslation: '楽しく英語で話そう。何が好きですか？', studentJapaneseTranslation: '', studentTranslationStatus: 'translated', mood: 'encouraging', culturalNote: '' } });
   }
 
   const { maskedText: safeUserMessage, hasHighRiskPII } = maskHighRiskPII(trimmedMessage);
   const rawHistory = Array.isArray(history) ? history : [];
   const recentHistory = rawHistory.slice(-8);
   const formattedHistory = recentHistory
-    .map((msg: { sender: string; englishText: string }) =>
-      `${msg.sender === 'ai' ? persona.name : 'Student'}: ${sanitizeStudentInput(msg.englishText || '').slice(0, 100)}`
-    )
+    .map((msg: { sender: string; englishText: string }) => `${msg.sender === 'ai' ? persona.name : 'Student'}: ${sanitizeStudentInput(msg.englishText || '').slice(0, 100)}`)
     .join('\n');
 
   const prompt = `Recent conversation:
@@ -293,49 +358,22 @@ Translate the student's latest English into Japanese too.`;
     const alignedReply = buildAlignedReply(parsed, persona.name);
     const reply = alignedReply.english;
     const japaneseTranslation = alignedReply.japanese;
-
     const studentTranslationStatus = parsed.studentTranslationStatus === 'incomplete' ? 'incomplete' : 'translated';
-    const studentJapaneseTranslation =
-      studentTranslationStatus === 'incomplete'
-        ? '日本語に訳せませんでした。'
-        : typeof parsed.studentJapaneseTranslation === 'string' && /[ぁ-んァ-ヶ一-龠]/.test(parsed.studentJapaneseTranslation)
-          ? parsed.studentJapaneseTranslation.trim()
-          : '日本語に訳せませんでした。';
+    const studentJapaneseTranslation = studentTranslationStatus === 'incomplete'
+      ? '日本語に訳せませんでした。'
+      : typeof parsed.studentJapaneseTranslation === 'string' && /[ぁ-んァ-ヶ一-龠]/.test(parsed.studentJapaneseTranslation)
+        ? parsed.studentJapaneseTranslation.trim()
+        : '日本語に訳せませんでした。';
 
     return res.json({
       success: true,
       isFallback: false,
-      data: {
-        reply,
-        japaneseTranslation,
-        studentJapaneseTranslation,
-        studentTranslationStatus,
-        mood: parsed.mood || 'speaking',
-        culturalNote: parsed.culturalNote || '',
-        detectedName: extractSpokenName(trimmedMessage) || undefined,
-      },
-      _diagnostics: {
-        requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        model,
-        latencyMs: Date.now() - requestStart,
-        route: 'anthropic-resilient',
-      },
+      data: { reply, japaneseTranslation, studentJapaneseTranslation, studentTranslationStatus, mood: parsed.mood || 'speaking', culturalNote: parsed.culturalNote || '', detectedName: extractSpokenName(trimmedMessage) || undefined },
+      _diagnostics: { requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, model, latencyMs: Date.now() - requestStart, route: 'anthropic-resilient' },
     });
   } catch (error: any) {
-    console.error('All Claude attempts failed', {
-      status: error?.status,
-      name: error?.name,
-      message: error?.message,
-    });
-    return res.status(503).json({
-      success: false,
-      error: 'AI service unavailable after automatic retries.',
-      _diagnostics: {
-        requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        latencyMs: Date.now() - requestStart,
-        route: 'all-ai-attempts-failed',
-      },
-    });
+    console.error('All Claude attempts failed', { status: error?.status, name: error?.name, message: error?.message });
+    return res.status(503).json({ success: false, error: 'AI service unavailable after automatic retries.', _diagnostics: { requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, latencyMs: Date.now() - requestStart, route: 'all-ai-attempts-failed' } });
   }
 });
 
@@ -377,16 +415,7 @@ ${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${perso
       prompt,
       900
     );
-    const fallbackFeedback = generateFallbackFeedback(
-      persona,
-      'あなた',
-      turns || 0,
-      totalWords || 0,
-      (durationMinutes || 1) * 60,
-      durationMinutes || 1,
-      encounteredVocab || [],
-      rawHistory
-    );
+    const fallbackFeedback = generateFallbackFeedback(persona, 'あなた', turns || 0, totalWords || 0, (durationMinutes || 1) * 60, durationMinutes || 1, encounteredVocab || [], rawHistory);
     const uniqueKeyPhrases = Array.isArray(parsed.keyPhrases)
       ? parsed.keyPhrases.filter((phrase: any, index: number, all: any[]) => {
           const key = String(phrase?.english || '').trim().toLowerCase();
@@ -399,36 +428,16 @@ ${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${perso
       isFallback: false,
       data: {
         ...parsed,
-        overallComment:
-          typeof parsed.overallComment === 'string' && parsed.overallComment.trim()
-            ? parsed.overallComment.trim()
-            : fallbackFeedback.overallComment,
-        studentMessage:
-          typeof parsed.studentMessage === 'string' && parsed.studentMessage.trim()
-            ? parsed.studentMessage.trim()
-            : fallbackFeedback.studentMessage,
+        overallComment: typeof parsed.overallComment === 'string' && parsed.overallComment.trim() ? parsed.overallComment.trim() : fallbackFeedback.overallComment,
+        studentMessage: typeof parsed.studentMessage === 'string' && parsed.studentMessage.trim() ? parsed.studentMessage.trim() : fallbackFeedback.studentMessage,
         keyPhrases: uniqueKeyPhrases,
         encounteredVocab: encounteredVocab || [],
         aiStudent: persona,
-        stats: {
-          totalTurns: turns || 0,
-          totalChildWords: totalWords || 0,
-          durationSeconds: (durationMinutes || 1) * 60,
-          targetDurationMinutes: durationMinutes || 1,
-        },
+        stats: { totalTurns: turns || 0, totalChildWords: totalWords || 0, durationSeconds: (durationMinutes || 1) * 60, targetDurationMinutes: durationMinutes || 1 },
       },
     });
   } catch {
-    const fallbackData = generateFallbackFeedback(
-      persona,
-      'あなた',
-      turns || 0,
-      totalWords || 0,
-      (durationMinutes || 1) * 60,
-      durationMinutes || 1,
-      encounteredVocab || [],
-      rawHistory
-    );
+    const fallbackData = generateFallbackFeedback(persona, 'あなた', turns || 0, totalWords || 0, (durationMinutes || 1) * 60, durationMinutes || 1, encounteredVocab || [], rawHistory);
     return res.json({ success: true, isFallback: true, fallbackReason: 'AI_RETRY_EXHAUSTED', data: fallbackData });
   }
 });
