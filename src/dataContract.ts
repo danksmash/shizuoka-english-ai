@@ -44,10 +44,10 @@ export const isDialogueTopic = (value: unknown): value is DialogueTopic => typeo
 export const isDialogueDuration = (value: unknown): value is DialogueDurationMinutes => typeof value === 'number' && (DIALOGUE_DURATIONS_MINUTES as readonly number[]).includes(value);
 
 export function normalizeLearningCode(value: unknown): string {
-  return typeof value === 'string' ? value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) : '';
+  return typeof value === 'string' ? value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) : '';
 }
 
-export function isValidLearningCode(value: unknown): boolean { return /^[A-Z0-9]{4,8}$/.test(normalizeLearningCode(value)); }
+export function isValidLearningCode(value: unknown): boolean { return /^[A-Z0-9]{4}$/.test(normalizeLearningCode(value)); }
 export function countEnglishWords(text: string): number { return (text.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g) || []).length; }
 
 export function canonicalizeHistory(history: unknown): ChatMessage[] {
