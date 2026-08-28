@@ -1,13 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Globe2,
-  Clock,
-  MessageCircle,
-  Play,
-  Volume2,
-  User,
-  CheckCircle2,
-} from 'lucide-react';
+import { CheckCircle2, KeyRound, MessageCircle, Play, User, Volume2 } from 'lucide-react';
 import { DialogueTopic, StudentProfile, AIStudentProfile } from '../types';
 import { AI_STUDENTS_LIST, DIALOGUE_TOPICS } from '../data/curriculum';
 import { speakStudentVoice, stopSpeaking } from '../utils/speech';
@@ -19,298 +11,170 @@ interface SetupScreenProps {
   onValidateLearningCode: (learningCode: string) => Promise<boolean>;
 }
 
-const getStudentCountryDisplay = (student: AIStudentProfile): string => {
-  if (student.country && student.countryNative) {
-    return `${student.country} (${student.countryNative})`;
-  }
-  return student.country;
-};
+const countryLabel = (student: AIStudentProfile) =>
+  student.countryNative ? `${student.country} (${student.countryNative})` : student.country;
 
 export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learningDataEnabled, onValidateLearningCode }) => {
-  const [selectedStudentId, setSelectedStudentId] = useState<string>('emma_usa');
-  const [learningCode, setLearningCode] = useState<string>('');
-  const [codeError, setCodeError] = useState<string>('');
-  const [checkingCode, setCheckingCode] = useState(false);
+  const [selectedStudentId, setSelectedStudentId] = useState('emma_usa');
   const [selectedTopic, setSelectedTopic] = useState<DialogueTopic>('intro');
-  const [durationMinutes, setDurationMinutes] = useState<number>(1);
+  const [durationMinutes, setDurationMinutes] = useState<1 | 2 | 3 | 5>(1);
+  const [learningCode, setLearningCode] = useState('');
+  const [codeError, setCodeError] = useState('');
+  const [checkingCode, setCheckingCode] = useState(false);
   const [previewPlayingId, setPreviewPlayingId] = useState<string | null>(null);
 
-  const selectedStudent =
-    AI_STUDENTS_LIST.find((student) => student.id === selectedStudentId) || AI_STUDENTS_LIST[0];
+  const selectedStudent = AI_STUDENTS_LIST.find((s) => s.id === selectedStudentId) || AI_STUDENTS_LIST[0];
 
-  const handlePlayVoicePreview = (
-    student: AIStudentProfile,
-    event: React.MouseEvent | React.KeyboardEvent
-  ) => {
+  const playPreview = (student: AIStudentProfile, event: React.MouseEvent) => {
     event.stopPropagation();
     stopSpeaking();
     setPreviewPlayingId(student.id);
-
-    speakStudentVoice(
-      student.characterMessage,
-      student,
-      0.9,
-      undefined,
-      () => setPreviewPlayingId(null),
-      () => setPreviewPlayingId(null)
-    );
+    speakStudentVoice(student.characterMessage, student, 0.9, undefined, () => setPreviewPlayingId(null), () => setPreviewPlayingId(null));
   };
 
   const handleStart = async () => {
     stopSpeaking();
-    const normalizedCode = learningCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+    const normalized = learningCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
     if (learningDataEnabled) {
-      if (!/^[A-Z0-9]{4,8}$/.test(normalizedCode)) { setCodeError('4〜8文字の学習コードを入力してください。'); return; }
-      setCheckingCode(true); setCodeError('');
-      const ok = await onValidateLearningCode(normalizedCode);
+      if (!/^[A-Z0-9]{4,8}$/.test(normalized)) {
+        setCodeError('先生から配られた4文字のコードを入力してね');
+        return;
+      }
+      setCheckingCode(true);
+      setCodeError('');
+      const ok = await onValidateLearningCode(normalized);
       setCheckingCode(false);
-      if (!ok) { setCodeError('学習コードを確認できませんでした。先生に確認してください。'); return; }
+      if (!ok) {
+        setCodeError('学習者用コードを確認できませんでした。先生に確認してください。');
+        return;
+      }
     }
     onStartDialogue({
       name: '5・6年生',
       grade: '小学校５・６年生',
-      selectedDurationMinutes: durationMinutes as 1 | 2 | 3 | 5,
+      selectedDurationMinutes: durationMinutes,
       selectedTopic,
-      selectedAiStudentId: selectedStudentId as any,
-    }, learningDataEnabled ? normalizedCode : '');
+      selectedAiStudentId: selectedStudentId as StudentProfile['selectedAiStudentId'],
+    }, learningDataEnabled ? normalized : '');
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto bg-gradient-to-b from-slate-50 via-blue-50/25 to-slate-100 p-2.5 sm:p-3.5 md:p-4 flex flex-col gap-2 sm:gap-2.5">
-      <header className="bg-white rounded-2xl py-2 px-3 sm:py-2.5 sm:px-4 border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-2 flex-shrink-0">
-        <div className="flex items-center gap-2.5 w-full sm:w-auto min-w-0">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-2xs flex-shrink-0">
-            <Globe2 className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-              <span className="bg-blue-100 text-blue-800 text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
-                静岡大学 留学生交流プログラム
-              </span>
-              <span className="bg-emerald-100 text-emerald-800 text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
-                小学校５・６年生向け English
-              </span>
+    <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-blue-50/40 p-2 sm:p-3 text-slate-900">
+      <div className="mx-auto max-w-[1480px] space-y-3">
+        <header className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-2xl text-white">◎</div>
+              <div className="min-w-0">
+                <div className="mb-1 flex flex-wrap gap-2 text-[11px] font-black">
+                  <span className="rounded-full bg-blue-100 px-2.5 py-1 text-blue-800">静岡大学 留学生交流プログラム</span>
+                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-800">小学校5・6年生向け English</span>
+                </div>
+                <h1 className="truncate text-lg font-black tracking-tight sm:text-xl">AI留学生 1対1 えいご対話プラクティス</h1>
+              </div>
             </div>
-            <h1 className="text-sm sm:text-base md:text-lg font-black text-slate-900 tracking-tight leading-tight truncate">
-              AI留学生 1対1 えいご対話プラクティス
-            </h1>
-          </div>
-        </div>
 
-        <div className="flex flex-col items-stretch gap-1 bg-slate-50 border border-slate-300 px-3 py-1.5 rounded-xl shadow-2xs flex-shrink-0 w-full sm:w-auto">
-          <div className="flex items-center gap-1.5">
-            <User className="w-4 h-4 text-slate-500 flex-shrink-0" />
-            <span className="text-xs sm:text-sm font-bold text-slate-700 whitespace-nowrap">{learningDataEnabled ? '学習コード:' : '利用者:'}</span>
-            {learningDataEnabled ? <input type="text" value={learningCode} onChange={(event) => { setLearningCode(event.target.value.toUpperCase()); setCodeError(''); }} placeholder="例 A7M4" autoCapitalize="characters" maxLength={8} className="bg-white border border-slate-300 rounded-lg px-2 py-0.5 text-xs sm:text-sm font-bold text-slate-900 tracking-widest uppercase focus:outline-none focus:ring-2 focus:ring-blue-500 w-32 sm:w-36" /> : <span className="text-xs sm:text-sm font-black text-slate-800">5・6年生</span>}
-          </div>
-          {codeError && <p className="text-[10px] font-bold text-rose-700 max-w-56">{codeError}</p>}
-        </div>
-      </header>
-
-      <main className="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-3 items-stretch flex-1">
-        <section className="lg:col-span-6 xl:col-span-6 flex flex-col h-full min-h-0">
-          <div className="flex items-center justify-between mb-1.5 flex-shrink-0 gap-2">
-            <h2 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5 min-w-0">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-black shadow-2xs flex-shrink-0">1</span>
-              <span className="truncate">会話するAI留学生をえらぼう（全9名）</span>
-            </h2>
-            <span className="text-[10px] sm:text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200 whitespace-nowrap flex-shrink-0">
-              {selectedStudent.flag} {selectedStudent.countryJapanese} 選択中
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 items-stretch flex-1 min-h-0">
-            {AI_STUDENTS_LIST.map((student) => {
-              const isSelected = student.id === selectedStudentId;
-              const isPlaying = previewPlayingId === student.id;
-
-              return (
-                <div
-                  key={student.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={isSelected}
-                  onClick={() => setSelectedStudentId(student.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      setSelectedStudentId(student.id);
-                    }
-                  }}
-                  className={`relative p-2 rounded-xl sm:rounded-2xl border-2 transition-all cursor-pointer flex flex-col text-left h-full min-h-0 ${
-                    isSelected
-                      ? 'bg-blue-50/95 border-blue-600 shadow-sm ring-2 ring-blue-400/40'
-                      : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-slate-50/90 shadow-2xs'
-                  }`}
-                >
-                  {isSelected && (
-                    <div className="absolute top-1.5 right-1.5 text-blue-600 z-10">
-                      <CheckCircle2 className="w-4 h-4 fill-blue-600 text-white" />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2">
+                <User className="h-4 w-4 text-slate-500" />
+                <span className="text-sm font-bold">お名前:</span>
+                <span className="min-w-28 rounded-lg border border-slate-300 bg-slate-50 px-3 py-1 text-center text-sm font-black">5・6年生</span>
+              </div>
+              {learningDataEnabled && (
+                <>
+                  <p className="hidden max-w-36 text-[11px] font-bold leading-tight text-slate-600 sm:block">先生から配られた<br/>4文字のコードを入力してね</p>
+                  <div className="relative">
+                    <div className={`flex items-center gap-2 rounded-xl border-2 bg-white px-3 py-2 shadow-sm ${codeError ? 'border-rose-400' : 'border-blue-500'}`}>
+                      <KeyRound className="h-4 w-4 text-blue-700" />
+                      <span className="text-sm font-black text-slate-700">学習者用コード</span>
+                      <input
+                        value={learningCode}
+                        onChange={(e) => { setLearningCode(e.target.value.toUpperCase()); setCodeError(''); }}
+                        maxLength={8}
+                        autoCapitalize="characters"
+                        placeholder="A7M4"
+                        className="w-20 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-center text-sm font-black tracking-widest outline-none focus:ring-2 focus:ring-blue-400"
+                      />
                     </div>
-                  )}
-
-                  <div className="flex items-center gap-1 min-w-0 pr-4 mb-1">
-                    <span className="text-base leading-none flex-shrink-0">{student.flag}</span>
-                    <span className="text-[11px] sm:text-xs font-black text-slate-900 tracking-tight truncate">
-                      {getStudentCountryDisplay(student)}
-                    </span>
+                    {codeError && <p className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-700 shadow">{codeError}</p>}
                   </div>
+                </>
+              )}
+            </div>
+          </div>
+        </header>
 
-                  <div className="grid grid-cols-[44%_56%] gap-1.5 items-center w-full min-w-0 flex-1">
-                    <div className="w-full flex items-center justify-center">
-                      <div className="w-full aspect-square border border-slate-200/90 shadow-2xs bg-slate-100 rounded-xl overflow-hidden">
-                        <StudentAvatar student={student} size="custom" className="w-full h-full object-cover" />
+        <main className="grid gap-3 lg:grid-cols-[1fr_1fr]">
+          <section className="min-w-0">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-sm font-black"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs text-white">1</span>会話するAI留学生をえらぼう（全9名）</h2>
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{selectedStudent.flag} {selectedStudent.countryJapanese} 選択中</span>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {AI_STUDENTS_LIST.map((student) => {
+                const selected = student.id === selectedStudentId;
+                return (
+                  <article key={student.id} onClick={() => setSelectedStudentId(student.id)} className={`relative flex min-h-[220px] cursor-pointer flex-col rounded-2xl border-2 bg-white p-3 shadow-sm transition ${selected ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-200 hover:border-blue-300'}`}>
+                    {selected && <CheckCircle2 className="absolute right-2 top-2 h-5 w-5 fill-blue-600 text-white" />}
+                    <div className="mb-2 truncate pr-6 text-sm font-black">{student.flag} {countryLabel(student)}</div>
+                    <div className="grid flex-1 grid-cols-[42%_58%] items-center gap-2">
+                      <StudentAvatar student={student} size="custom" className="aspect-square w-full rounded-xl border border-slate-200 object-cover" />
+                      <div className="min-w-0">
+                        <h3 className="truncate text-sm font-black">{student.name}</h3>
+                        <p className="truncate text-xs font-black text-blue-700">{student.japaneseName}</p>
+                        <p className="truncate text-[11px] font-semibold text-slate-600">{student.age}歳 · {student.city}</p>
+                        <p className="mt-1 truncate rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">🗣 {student.accentName}</p>
                       </div>
                     </div>
-
-                    <div className="flex flex-col justify-center min-w-0 gap-0.5">
-                      <h3 className="text-[11px] sm:text-xs font-black text-slate-900 leading-tight truncate">{student.name}</h3>
-                      <p className="text-[10px] sm:text-[11px] font-bold text-blue-700 leading-tight truncate">{student.japaneseName}</p>
-                      <p className="text-[9px] sm:text-[10px] font-semibold text-slate-600 leading-tight truncate">{student.age}歳 · {student.city.split(' ')[0]}</p>
-                      <span className="inline-block text-[8.5px] sm:text-[9.5px] font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-1 py-0.5 rounded truncate max-w-full mt-0.5">
-                        🗣️ {student.accentName.split(' ')[0]}
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={(event) => handlePlayVoicePreview(student, event)}
-                    aria-label={`${student.name}の声を聞く`}
-                    className={`w-full mt-1 py-1 px-2 rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer border min-h-[26px] ${
-                      isPlaying
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs animate-pulse'
-                        : 'bg-white hover:bg-blue-50 text-blue-700 border-blue-200 hover:border-blue-300 shadow-2xs'
-                    }`}
-                  >
-                    <Volume2 className="w-3 h-3 flex-shrink-0" />
-                    <span className="truncate">{isPlaying ? '再生中...' : '声を聞く'}</span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="lg:col-span-6 xl:col-span-6 grid grid-rows-[minmax(0,1fr)_auto_auto_auto] gap-2 h-full min-h-0">
-          <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200 shadow-2xs min-h-0">
-            <div className="grid grid-cols-[minmax(0,1fr)_minmax(150px,42%)] gap-3 sm:gap-4 items-stretch min-h-0">
-              <div className="min-w-0 flex flex-col justify-center gap-2">
-                <div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xl sm:text-2xl leading-none">{selectedStudent.flag}</span>
-                    <span className="text-xs sm:text-sm font-black text-slate-800">
-                      {selectedStudent.countryJapanese} ({getStudentCountryDisplay(selectedStudent)})
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-2 flex-wrap mt-1">
-                    <h3 className="text-base sm:text-lg font-black text-slate-900 leading-snug">{selectedStudent.name}</h3>
-                    <span className="text-xs sm:text-sm font-bold text-blue-700">{selectedStudent.japaneseName}</span>
-                  </div>
-                  <p className="text-xs sm:text-sm font-bold text-blue-700 mt-0.5">
-                    {selectedStudent.age}歳 · {selectedStudent.city}
-                  </p>
-                </div>
-
-                <p className="text-[11px] sm:text-xs text-slate-700 leading-relaxed bg-blue-50/70 p-2.5 rounded-xl border border-blue-200/60 font-medium break-words">
-                  {selectedStudent.japaneseBio}
-                </p>
-
-                <div className="grid grid-cols-1 gap-1.5 text-[11px] sm:text-xs text-slate-700 font-medium">
-                  <div className="flex items-start gap-1.5">
-                    <span className="font-bold text-slate-900 flex-shrink-0">❤️ 好き:</span>
-                    <span className="text-slate-700 leading-snug break-words">{selectedStudent.likes.join('、')}</span>
-                  </div>
-                  <div className="flex items-start gap-1.5">
-                    <span className="font-bold text-slate-900 flex-shrink-0">🎓 専攻:</span>
-                    <span className="text-slate-700 leading-snug">{selectedStudent.major}</span>
-                  </div>
-                  <div className="flex items-start gap-1.5">
-                    <span className="font-bold text-slate-900 flex-shrink-0">🏛️ 名所:</span>
-                    <span className="text-slate-700 leading-snug">{selectedStudent.heritageLandmark}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-center min-w-0">
-                <div className="w-full max-w-[220px] aspect-[4/5] rounded-2xl border-2 border-blue-200 shadow-sm overflow-hidden bg-slate-100">
-                  <StudentAvatar student={selectedStudent} size="custom" className="w-full h-full object-cover" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200 shadow-2xs">
-            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-1">
-              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-black shadow-2xs">2</span>
-              <MessageCircle className="w-3.5 h-3.5 text-blue-600" />
-              <span>対話テーマをえらぶ</span>
-            </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-              {DIALOGUE_TOPICS.map((topic) => {
-                const isSelected = selectedTopic === topic.id;
-                return (
-                  <button
-                    key={topic.id}
-                    type="button"
-                    onClick={() => setSelectedTopic(topic.id)}
-                    className={`py-1 px-2 rounded-xl text-left transition-all cursor-pointer flex items-center justify-between border ${
-                      isSelected
-                        ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-2 ring-emerald-400/30 font-bold shadow-2xs'
-                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1 pr-1">
-                      <p className="text-[11px] sm:text-xs font-bold text-slate-900 truncate leading-tight">{topic.title}</p>
-                      <p className="text-[9px] sm:text-[10px] text-slate-600 truncate">{topic.subTitle}</p>
-                    </div>
-                    {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />}
-                  </button>
+                    <button type="button" onClick={(e) => playPreview(student, e)} className={`mt-2 flex min-h-9 items-center justify-center gap-1 rounded-lg border text-xs font-black ${previewPlayingId === student.id ? 'border-blue-600 bg-blue-600 text-white' : 'border-blue-200 bg-white text-blue-700 hover:bg-blue-50'}`}>
+                      <Volume2 className="h-3.5 w-3.5" />{previewPlayingId === student.id ? '再生中...' : '声を聞く'}
+                    </button>
+                  </article>
                 );
               })}
             </div>
-          </div>
+          </section>
 
-          <div className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200 shadow-2xs">
-            <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5 mb-1">
-              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-black shadow-2xs">3</span>
-              <Clock className="w-3.5 h-3.5 text-blue-600" />
-              <span>対話時間をえらぶ</span>
-            </h2>
-
-            <div className="grid grid-cols-4 gap-1">
-              {[1, 2, 3, 5].map((mins) => (
-                <button
-                  key={mins}
-                  type="button"
-                  onClick={() => setDurationMinutes(mins)}
-                  className={`py-1 sm:py-1.5 rounded-xl font-bold text-xs flex flex-col items-center justify-center transition-all cursor-pointer border ${
-                    durationMinutes === mins
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs ring-2 ring-blue-400/30'
-                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                  }`}
-                >
-                  <span className="font-extrabold text-[11px] sm:text-xs">{mins}分</span>
-                  <span className="text-[8px] sm:text-[9px] opacity-80">{mins * 60}秒</span>
-                </button>
-              ))}
+          <section className="min-w-0 space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_34%] sm:items-center">
+                <div>
+                  <p className="text-2xl">{selectedStudent.flag}</p>
+                  <p className="mt-1 text-sm font-black">{selectedStudent.countryJapanese} ({countryLabel(selectedStudent)})</p>
+                  <div className="mt-1 flex flex-wrap items-baseline gap-2"><h3 className="text-xl font-black">{selectedStudent.name}</h3><span className="font-black text-blue-700">{selectedStudent.japaneseName}</span></div>
+                  <p className="font-bold text-blue-700">{selectedStudent.age}歳 · {selectedStudent.city}</p>
+                  <p className="mt-3 rounded-xl border border-blue-100 bg-blue-50/70 p-3 text-xs font-semibold leading-relaxed text-slate-700">{selectedStudent.japaneseBio}</p>
+                  <div className="mt-3 space-y-1.5 text-xs font-semibold text-slate-700">
+                    <p><b>❤️ 好き:</b> {selectedStudent.likes.join('、')}</p>
+                    <p><b>🎓 専攻:</b> {selectedStudent.major}</p>
+                    <p><b>🏛 名所:</b> {selectedStudent.heritageLandmark}</p>
+                  </div>
+                </div>
+                <StudentAvatar student={selectedStudent} size="custom" className="mx-auto aspect-[4/5] w-full max-w-60 rounded-2xl border-2 border-blue-200 object-cover shadow-sm" />
+              </div>
             </div>
-          </div>
 
-          <button
-            type="button"
-            onClick={() => void handleStart()}
-            className="w-full px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer"
-          >
-            <Play className="w-4 h-4 fill-white" />
-            <span>{checkingCode ? '学習コードを確認中…' : '対話をスタートする！ (Start)'}</span>
-          </button>
-        </section>
-      </main>
+            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+              <h2 className="mb-2 flex items-center gap-2 text-sm font-black"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs text-white">2</span><MessageCircle className="h-4 w-4 text-blue-600"/>対話テーマをえらぶ</h2>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {DIALOGUE_TOPICS.map((topic) => {
+                  const selected = selectedTopic === topic.id;
+                  return <button key={topic.id} type="button" onClick={() => setSelectedTopic(topic.id)} className={`min-h-12 rounded-xl border px-3 py-2 text-left ${selected ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'}`}><span className="block text-xs font-black">{topic.title}</span><span className="block text-[10px] font-semibold text-slate-500">{topic.subTitle}</span></button>;
+                })}
+              </div>
+            </div>
 
-      <div className="text-center text-[10px] sm:text-[11px] text-slate-500 font-medium">
-        <span>本アプリは学校での英語学習を目的として設計されています。AI（Anthropic API）を利用した英語対話練習を行います。</span>
+            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+              <h2 className="mb-2 flex items-center gap-2 text-sm font-black"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs text-white">3</span>対話時間をえらぶ</h2>
+              <div className="grid grid-cols-4 gap-2">
+                {([1,2,3,5] as const).map((minutes) => <button key={minutes} type="button" onClick={() => setDurationMinutes(minutes)} className={`rounded-xl border py-2.5 text-center ${durationMinutes === minutes ? 'border-blue-600 bg-blue-600 text-white shadow' : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-blue-50'}`}><span className="block text-sm font-black">{minutes}分</span><span className="block text-[10px] font-bold opacity-80">{minutes * 60}秒</span></button>)}
+              </div>
+            </div>
+
+            <button type="button" onClick={handleStart} disabled={checkingCode} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-6 text-base font-black text-white shadow-md disabled:opacity-60"><Play className="h-5 w-5 fill-white"/>{checkingCode ? 'コードを確認しています…' : '対話をスタートする！（Start）'}</button>
+          </section>
+        </main>
+        <p className="pb-1 text-center text-[10px] font-semibold text-slate-500">本アプリは学校での英語学習を目的として設計されています。AI（Anthropic API）を利用した英語対話練習を行います。</p>
       </div>
     </div>
   );
