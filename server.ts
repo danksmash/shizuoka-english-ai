@@ -239,6 +239,15 @@ function sanitizeStudentInput(text: string): string {
   return text ? maskHighRiskPII(text).maskedText : '';
 }
 
+function isPredominantlyJapanese(text: unknown): text is string {
+  if (typeof text !== 'string') return false;
+  const compact = text.trim().replace(/\s+/g, '');
+  if (!compact) return false;
+  const japaneseCount = (compact.match(/[ぁ-んァ-ヶ一-龯々ー]/g) || []).length;
+  const latinCount = (compact.match(/[A-Za-z]/g) || []).length;
+  return japaneseCount >= 8 && japaneseCount >= latinCount;
+}
+
 
 function extractSpokenName(text: string): string | null {
   const match = text.match(/\b(?:my name is|call me)\s+([A-Za-z]{2,15})\b/i);
@@ -502,14 +511,14 @@ JSONのみ:
  "goodPoints":["...","...","..."],
  "improvementAdvice":{"title":"...","detail":"...","examplePhrase":"..."},
  "overallComment":"指導者としての短い総合講評",
- "studentMessage":"選択された留学生本人が、実際の対話内容に触れながら児童へ直接話す自然な短いメッセージ",
+ "studentMessage":"選択された留学生本人が、実際の対話内容に触れながら児童へ直接話す自然な短い日本語メッセージ。必ず日本語で書き、英語文は書かない",
  "keyPhrases":[{"english":"...","japanese":"...","culturalNote":"..."}]
 }`;
 
   try {
     const { parsed } = await callClaudeJson(
       `あなたは小学校外国語教育の専門家です。児童を具体的かつ温かく励ましてください。
-講評部分は指導者の視点で書き、studentMessageだけは${persona.name}本人が児童に直接話しかける自然な一人称メッセージにしてください。
+講評部分は指導者の視点で書き、studentMessageだけは${persona.name}本人が児童に直接話しかける自然な一人称メッセージにしてください。studentMessageは必ず日本語で書いてください。英語の文章は禁止です。児童が使った英語に触れる場合も、日本語で内容を要約してください。
 ${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${persona.country}、好きなものは${persona.likes.join(', ')}です。`,
       prompt,
       900
@@ -541,7 +550,7 @@ ${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${perso
             ? parsed.overallComment.trim()
             : fallbackFeedback.overallComment,
         studentMessage:
-          typeof parsed.studentMessage === 'string' && parsed.studentMessage.trim()
+          isPredominantlyJapanese(parsed.studentMessage)
             ? parsed.studentMessage.trim()
             : fallbackFeedback.studentMessage,
         keyPhrases: uniqueKeyPhrases,
