@@ -9,7 +9,9 @@ import {
   isDialogueDuration,
   isDialogueTopic,
   validateSessionSaveInput,
+  maskHistoryForStorage,
 } from '../src/dataContract';
+import { safePlainTextForClipboard } from '../src/utils/privacy';
 
 assert.equal(AI_STUDENT_IDS.length, 9);
 assert.deepEqual(DIALOGUE_DURATIONS_MINUTES, [1, 2, 3, 5]);
@@ -52,5 +54,15 @@ const badDuration = validateSessionSaveInput({
   sessionId: 'session_12345678', learningCode: 'A7M4', aiStudentId: 'emma_usa', topic: 'favorites', targetDurationMinutes: 10, startedAt: 1000, endedAt: 2000, history,
 });
 assert.equal(badDuration.ok, false);
+
+const privateHistory = canonicalizeHistory([
+  { id: 'p', sender: 'child', englishText: 'My email is child@example.com and phone is 090-1234-5678.', timestamp: 1000 },
+]);
+const maskedHistory = maskHistoryForStorage(privateHistory);
+assert.equal(maskedHistory[0].englishText.includes('child@example.com'), false);
+assert.equal(maskedHistory[0].englishText.includes('090-1234-5678'), false);
+const copied = safePlainTextForClipboard('Email child@example.com phone 090-1234-5678');
+assert.equal(copied.includes('child@example.com'), false);
+assert.equal(copied.includes('090-1234-5678'), false);
 
 console.log('DATA CONTRACT QA PASS');

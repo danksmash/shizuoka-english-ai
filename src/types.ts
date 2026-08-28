@@ -22,8 +22,21 @@ export interface CulturalExpression {
   note: string;
 }
 
+export type AIStudentId =
+  | 'emma_usa'
+  | 'oliver_uk'
+  | 'liam_australia'
+  | 'chloe_canada'
+  | 'bence_hungary'
+  | 'zofia_poland'
+  | 'rahul_bangladesh'
+  | 'linh_vietnam'
+  | 'aung_myanmar';
+
+export type DialogueDurationMinutes = 1 | 2 | 3 | 5;
+
 export interface AIStudentProfile {
-  id: string;
+  id: AIStudentId;
   name: string;
   japaneseName: string;
   gender: 'male' | 'female';
@@ -135,8 +148,8 @@ export interface TopicOption {
 export interface StudentProfile {
   name: string;
   grade: string;
-  selectedDurationMinutes: number;
+  selectedDurationMinutes: DialogueDurationMinutes;
   selectedTopic: DialogueTopic;
-  selectedAiStudentId: string;
+  selectedAiStudentId: AIStudentId;
 }
 
