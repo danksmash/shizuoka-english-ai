@@ -234,9 +234,6 @@ function sanitizeStudentInput(text: string): string {
   return text ? maskHighRiskPII(text).maskedText : '';
 }
 
-function isExplicitFarewell(text: string): boolean {
-  return /\b(?:goodbye|bye(?: bye)?|see you|see ya)\b/i.test(text.trim());
-}
 
 function extractSpokenName(text: string): string | null {
   const match = text.match(/\b(?:my name is|call me)\s+([A-Za-z]{2,15})\b/i);

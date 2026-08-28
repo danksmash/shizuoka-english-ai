@@ -9,14 +9,12 @@ import {
   BookOpen,
   MessageSquare,
   Printer,
-  ChevronRight,
   Copy,
 } from 'lucide-react';
 import { ChatMessage, FeedbackData, StudentProfile, VisualVocabularyItem } from '../types';
 import { getAIStudentById } from '../data/curriculum';
 import { speakVocabularyWord } from '../utils/speech';
 import { getJapaneseTranslationForMessage } from '../utils/translation';
-import { downloadDialogueLogHTML } from '../utils/exportLog';
 import { StudentAvatar } from './StudentAvatar';
 
 interface FeedbackScreenProps {

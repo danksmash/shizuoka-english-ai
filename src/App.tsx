@@ -14,7 +14,7 @@ import {
   AIStudentProfile,
   VisualVocabularyItem,
 } from './types';
-import { DIALOGUE_TOPICS, getAIStudentById } from './data/curriculum';
+import { getAIStudentById } from './data/curriculum';
 import { detectVocabularyInText } from './data/vocabulary';
 import { generateFallbackFeedback } from './utils/feedbackFallback';
 import {

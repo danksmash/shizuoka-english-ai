@@ -15,7 +15,6 @@ export const VisualVocabularyDock: React.FC<VisualVocabularyDockProps> = ({
   onPlayWord,
 }) => {
   const [playingWordId, setPlayingWordId] = useState<string | null>(null);
-  const [selectedModalItem, setSelectedModalItem] = useState<VisualVocabularyItem | null>(null);
   const [isBankOpen, setIsBankOpen] = useState<boolean>(false);
 
   const handlePlayAudio = (item: VisualVocabularyItem, e?: React.MouseEvent) => {
