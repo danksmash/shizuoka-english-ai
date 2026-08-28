@@ -1,0 +1,110 @@
+name: Stage 2 integration runner
+
+on:
+  push:
+    branches:
+      - codex/stage2-data-contract
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/stage2-data-contract
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Apply stage 2 integration
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected 1 match, got {count}: {old[:100]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once('server.ts',
+            "import { getAIStudentById } from './src/data/curriculum';\n",
+            "import { getAIStudentById } from './src/data/curriculum';\nimport { detectVocabularyInText } from './src/data/vocabulary';\nimport { calculateCanonicalStats, canonicalizeHistory, isAIStudentId, isDialogueDuration, isDialogueTopic } from './src/dataContract';\n")
+
+          replace_once('server.ts',
+            "  const { message, history, topic, aiStudentId } = req.body;\n  const persona = getAIStudentById(aiStudentId);\n  const trimmedMessage = typeof message === 'string' ? message.trim() : '';\n",
+            "  const { message, history, topic, aiStudentId } = req.body;\n  if (!isAIStudentId(aiStudentId)) return res.status(400).json({ success: false, error: 'INVALID_AI_STUDENT_ID' });\n  if (!isDialogueTopic(topic)) return res.status(400).json({ success: false, error: 'INVALID_TOPIC' });\n  const persona = getAIStudentById(aiStudentId);\n  const trimmedMessage = typeof message === 'string' ? message.trim() : '';\n")
+
+          replace_once('server.ts', "  const recentHistory = rawHistory.slice(-8);\n", "  const recentHistory = rawHistory.slice(-16);\n")
+
+          old_feedback = """  const { history, durationMinutes, turns, totalWords, aiStudentId, encounteredVocab } = req.body;
+  const persona = getAIStudentById(aiStudentId);
+  const rawHistory = Array.isArray(history) ? history : [];
+  const childMessages = rawHistory.filter((m: any) => m.sender !== 'ai' && m.englishText?.trim());
+  const childUtterances = childMessages
+    .slice(-8)
+    .map((m: any) => maskHighRiskPII(String(m.englishText).trim()).maskedText.slice(0, 60))
+    .filter(Boolean);
+  const examples = childUtterances.map((t: string) => `「${t}」`).join('、');
+"""
+          new_feedback = """  const { history, durationMinutes, aiStudentId } = req.body;
+  if (!isAIStudentId(aiStudentId)) return res.status(400).json({ success: false, error: 'INVALID_AI_STUDENT_ID' });
+  const targetDuration = Number(durationMinutes);
+  if (!isDialogueDuration(targetDuration)) return res.status(400).json({ success: false, error: 'INVALID_DURATION' });
+  const persona = getAIStudentById(aiStudentId);
+  const rawHistory = canonicalizeHistory(history);
+  const childMessages = rawHistory.filter((m) => m.sender === 'child' && m.englishText.trim());
+  const childUtterances = childMessages
+    .map((m) => maskHighRiskPII(m.englishText.trim()).maskedText.slice(0, 100))
+    .filter(Boolean);
+  const examples = childUtterances.map((t) => `「${t}」`).join('、');
+  const detectedVocabMap = new Map<string, ReturnType<typeof detectVocabularyInText>[number]>();
+  for (const message of rawHistory) {
+    for (const item of detectVocabularyInText(message.englishText)) detectedVocabMap.set(item.id, item);
+  }
+  const canonicalVocab = Array.from(detectedVocabMap.values());
+  const firstTimestamp = rawHistory[0]?.timestamp || Date.now();
+  const lastTimestamp = rawHistory[rawHistory.length - 1]?.timestamp || firstTimestamp;
+  const stats = calculateCanonicalStats(rawHistory, firstTimestamp, lastTimestamp, targetDuration, canonicalVocab);
+"""
+          replace_once('server.ts', old_feedback, new_feedback)
+
+          p = Path('server.ts')
+          text = p.read_text()
+          marker = "app.post('/api/feedback'"
+          before, after = text.split(marker, 1)
+          after = after.replace('${durationMinutes || 1}分', '${targetDuration}分')
+          after = after.replace('${turns || 0}', '${stats.totalTurns}')
+          after = after.replace('turns || 0', 'stats.totalTurns')
+          after = after.replace('totalWords || 0', 'stats.totalChildWords')
+          after = after.replace('(durationMinutes || 1) * 60', 'stats.actualDurationSeconds')
+          after = after.replace('durationMinutes || 1', 'targetDuration')
+          after = after.replace('encounteredVocab || []', 'canonicalVocab')
+          after = after.replace('encounteredVocab: encounteredVocab || [],', 'encounteredVocab: canonicalVocab,')
+          p.write_text(before + marker + after)
+
+          replace_once('src/utils/exportLog.ts',
+            "import { maskHighRiskPII } from './security';\n",
+            "import { maskTextForExternalUse } from './privacy';\n")
+          replace_once('src/utils/exportLog.ts',
+            "  return escapeHtml(maskHighRiskPII(String(value ?? '')).maskedText);\n",
+            "  return escapeHtml(maskTextForExternalUse(String(value ?? '')));\n")
+
+      - name: Install and QA
+        run: |
+          npm ci --no-audit --no-fund
+          npm run qa
+          npm run build
+      - name: Commit stage 2 integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server.ts src/utils/exportLog.ts
+          git commit -m "feat: enforce canonical API data contract"
+          git push origin HEAD:codex/stage2-data-contract
