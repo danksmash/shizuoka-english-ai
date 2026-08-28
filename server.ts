@@ -579,14 +579,16 @@ function checkSensitiveLimit(key: string, maxRequests: number, windowMs: number)
 app.get('/management', (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.type('html').send(managementPageHtml()); });
 app.post('/api/student/resolve', async (req, res) => {
   const ip=req.ip||req.socket.remoteAddress||'unknown'; if(!checkSensitiveLimit(`student:${ip}`,15,10*60_000))return res.status(429).json({success:false,error:'TOO_MANY_CODE_ATTEMPTS'});
-  if(!persistenceConfigured())return res.status(503).json({success:false,error:'PERSISTENCE_NOT_CONFIGURED'}); const learningCode=normalizeLearningCode(req.body?.learningCode);
-  if(!isValidLearningCode(learningCode))return res.status(400).json({success:false,error:'INVALID_LEARNING_CODE'});
+  if(!persistenceConfigured())return res.status(503).json({success:false,error:'PERSISTENCE_NOT_CONFIGURED'});
+  if(!isValidLearningCode(req.body?.learningCode))return res.status(400).json({success:false,error:'INVALID_LEARNING_CODE'});
+  const learningCode=normalizeLearningCode(req.body.learningCode);
   try{const student=await resolveStudentByCode(learningCode);if(!student)return res.status(401).json({success:false,error:'LEARNING_CODE_NOT_FOUND'});res.setHeader('Cache-Control','no-store');return res.json({success:true});}
   catch(error:any){console.error('Student code resolve failed',{message:error?.message});return res.status(503).json({success:false,error:'STUDENT_LOOKUP_UNAVAILABLE'});}
 });
 app.post('/api/student/history', async (req,res)=>{
-  const ip=req.ip||req.socket.remoteAddress||'unknown';if(!checkSensitiveLimit(`history:${ip}`,30,10*60_000))return res.status(429).json({success:false,error:'RATE_LIMITED'});const learningCode=normalizeLearningCode(req.body?.learningCode);
-  if(!isValidLearningCode(learningCode))return res.status(400).json({success:false,error:'INVALID_LEARNING_CODE'});
+  const ip=req.ip||req.socket.remoteAddress||'unknown';if(!checkSensitiveLimit(`history:${ip}`,30,10*60_000))return res.status(429).json({success:false,error:'RATE_LIMITED'});
+  if(!isValidLearningCode(req.body?.learningCode))return res.status(400).json({success:false,error:'INVALID_LEARNING_CODE'});
+  const learningCode=normalizeLearningCode(req.body.learningCode);
   try{const student=await resolveStudentByCode(learningCode);if(!student)return res.status(401).json({success:false,error:'LEARNING_CODE_NOT_FOUND'});const history=await getStudentHistory(student.studentId);res.setHeader('Cache-Control','no-store');return res.json({success:true,history});}
   catch(error:any){console.error('Student history failed',{message:error?.message});return res.status(503).json({success:false,error:'HISTORY_UNAVAILABLE'});}
 });
