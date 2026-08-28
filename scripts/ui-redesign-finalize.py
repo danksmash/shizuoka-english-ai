@@ -19,6 +19,20 @@ if old not in s:
 s = s.replace(old, new, 1)
 p.write_text(s)
 
+mp = Path('src/server/managementPage.ts')
+m = mp.read_text()
+old = "else if((c==='\\n'||c==='\\r')&&!q){if(c==='\\r'&&text[i+1]==='\\n')i++;"
+new = "else if((c.charCodeAt(0)===10||c.charCodeAt(0)===13)&&!q){if(c.charCodeAt(0)===13&&text.charCodeAt(i+1)===10)i++;"
+if old not in m:
+    raise SystemExit('csv parse newline marker not found')
+m = m.replace(old, new, 1)
+old = "return h.map(q).join(',')+'\\n'+rows.map(function(r){return h.map(function(k){return q(r[k])}).join(',')}).join('\\n')}"
+new = "return h.map(q).join(',')+String.fromCharCode(10)+rows.map(function(r){return h.map(function(k){return q(r[k])}).join(',')}).join(String.fromCharCode(10))}"
+if old not in m:
+    raise SystemExit('csv output newline marker not found')
+m = m.replace(old, new, 1)
+mp.write_text(m)
+
 qa = Path('scripts/qa-management-page.ts')
 qa.write_text(r'''import vm from 'node:vm';
 import assert from 'node:assert/strict';
