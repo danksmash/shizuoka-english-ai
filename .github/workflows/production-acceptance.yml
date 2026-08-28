@@ -89,3 +89,5 @@ jobs:
           grep -q 'INVALID_CREDENTIALS' /tmp/login.json
 
           echo 'PRODUCTION ACCEPTANCE: PASS (public and unauthenticated security paths)'
+
+# rerun after production fix
