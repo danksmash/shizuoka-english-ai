@@ -23,7 +23,9 @@ jobs:
       - name: Apply reported UI fixes
         run: |
           python3 scripts/apply-ui-fixes-20260828.py
+          python3 scripts/fix-unused-feedback.py
           rm scripts/apply-ui-fixes-20260828.py
+          rm scripts/fix-unused-feedback.py
           rm .github/workflows/ui-fixes-20260828b.yml
       - name: Full QA
         run: npm run qa
