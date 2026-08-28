@@ -61,8 +61,13 @@ assert.ok(html.includes('累積対話時間（分）'));
 const historySource = await readFile('src/components/LearningHistoryScreen.tsx', 'utf8');
 for (const marker of ['累計対話時間','よく話したテーマ','よく話したAI留学生','テーマ・時間・発話量','actualDurationSeconds']) assert.ok(historySource.includes(marker), `Learning history detail missing: ${marker}`);
 const setupSource = await readFile('src/components/SetupScreen.tsx', 'utf8');
-assert.ok(setupSource.includes('min-h-[174px]'));
-assert.ok(setupSource.includes('grid-cols-[72px_minmax(0,1fr)]'));
+assert.ok(!setupSource.includes('お名前:'), 'Non-functional name field must be removed');
+assert.ok(!setupSource.includes("User className"), 'Unused name icon must be removed');
+assert.ok(setupSource.includes('items-stretch'), 'Setup columns must stretch to equal height');
+assert.ok(setupSource.includes('flex-1 auto-rows-fr'), 'AI student grid must fill the left column height');
+assert.ok(setupSource.includes('min-h-[194px]'), 'AI student cards must be tall enough to remove lower whitespace');
+assert.ok(setupSource.includes('grid-cols-[76px_minmax(0,1fr)]'));
 assert.ok(setupSource.includes('max-w-[170px]'));
+assert.ok(setupSource.includes('mt-auto flex min-h-12 w-full'), 'Start button must anchor at the bottom of the right column');
 
 console.log('Learner + teacher + researcher functional UI contract QA: PASS');
