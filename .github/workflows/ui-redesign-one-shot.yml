@@ -1,3 +1,4 @@
+# corrected contract validation run
 name: UI redesign one-shot
 on:
   push:
