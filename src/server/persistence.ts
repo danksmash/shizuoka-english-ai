@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
-import { AIStudentId, DialogueDurationMinutes, ReflectionAnswers, calculateCanonicalStats, maskHistoryForStorage } from '../dataContract';
-import type { ChatMessage, DialogueTopic, VisualVocabularyItem } from '../types';
+import { ReflectionAnswers, calculateCanonicalStats, maskHistoryForStorage } from '../dataContract';
+import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, VisualVocabularyItem } from '../types';
 import { getDocument, listCollection, queryCollection, setDocument } from './firestore';
 
 const STUDENT_COLLECTION = 'students';

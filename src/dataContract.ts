@@ -1,5 +1,5 @@
-import { ChatMessage, DialogueTopic, VisualVocabularyItem } from './types';
-import { maskHighRiskPII } from './utils/security';
+import { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, VisualVocabularyItem } from './types';
+import { maskMessagesForExternalUse } from './utils/privacy';
 
 export const AI_STUDENT_IDS = [
   'emma_usa',
@@ -11,9 +11,7 @@ export const AI_STUDENT_IDS = [
   'rahul_bangladesh',
   'linh_vietnam',
   'aung_myanmar',
-] as const;
-
-export type AIStudentId = (typeof AI_STUDENT_IDS)[number];
+] as const satisfies readonly AIStudentId[];
 
 export const DIALOGUE_TOPIC_IDS = [
   'intro',
@@ -23,8 +21,7 @@ export const DIALOGUE_TOPIC_IDS = [
   'free',
 ] as const satisfies readonly DialogueTopic[];
 
-export const DIALOGUE_DURATIONS_MINUTES = [1, 2, 3, 5] as const;
-export type DialogueDurationMinutes = (typeof DIALOGUE_DURATIONS_MINUTES)[number];
+export const DIALOGUE_DURATIONS_MINUTES = [1, 2, 3, 5] as const satisfies readonly DialogueDurationMinutes[];
 
 export interface StudentIdentity {
   learningCode: string;
@@ -132,11 +129,7 @@ export function calculateCanonicalStats(
 }
 
 export function maskHistoryForStorage(history: ChatMessage[]): ChatMessage[] {
-  return history.map((message) => ({
-    ...message,
-    englishText: maskHighRiskPII(message.englishText).maskedText,
-    japaneseText: message.japaneseText ? maskHighRiskPII(message.japaneseText).maskedText : message.japaneseText,
-  }));
+  return maskMessagesForExternalUse(history);
 }
 
 export function validateSessionSaveInput(body: unknown):

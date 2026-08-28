@@ -15,6 +15,7 @@ import { ChatMessage, FeedbackData, StudentProfile, VisualVocabularyItem } from 
 import { getAIStudentById } from '../data/curriculum';
 import { speakVocabularyWord } from '../utils/speech';
 import { getJapaneseTranslationForMessage } from '../utils/translation';
+import { safePlainTextForClipboard } from '../utils/privacy';
 import { StudentAvatar } from './StudentAvatar';
 
 interface FeedbackScreenProps {
@@ -73,7 +74,7 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
     const fullText = `--- AI留学生えいご対話レポート ---\n生徒: ${profile.name}\n留学生: ${aiStudent.name} (${aiStudent.countryJapanese})\n対話時間: ${formatTime(elapsedSeconds)} | ターン数: ${totalTurns} | 発話語数: ${totalWords}\n\n【対話トランスクリプト】\n${transcriptText}\n\n${feedbackText}`;
 
     navigator.clipboard
-      .writeText(fullText)
+      .writeText(safePlainTextForClipboard(fullText))
       .then(() => {
         setCopySuccess(true);
         setTimeout(() => setCopySuccess(false), 2500);
