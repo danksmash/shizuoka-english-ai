@@ -13,16 +13,18 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout branch
+        uses: actions/checkout@v4
         with:
           ref: codex/stage2-data-contract
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
       - name: Apply stage 2 integration
-        shell: python {0}
         run: |
+          cat > /tmp/apply_stage2.py <<'PY'
           from pathlib import Path
 
           def replace_once(path, old, new):
@@ -43,36 +45,36 @@ jobs:
 
           replace_once('server.ts', "  const recentHistory = rawHistory.slice(-8);\n", "  const recentHistory = rawHistory.slice(-16);\n")
 
-          old_feedback = """  const { history, durationMinutes, turns, totalWords, aiStudentId, encounteredVocab } = req.body;
-  const persona = getAIStudentById(aiStudentId);
-  const rawHistory = Array.isArray(history) ? history : [];
-  const childMessages = rawHistory.filter((m: any) => m.sender !== 'ai' && m.englishText?.trim());
-  const childUtterances = childMessages
-    .slice(-8)
-    .map((m: any) => maskHighRiskPII(String(m.englishText).trim()).maskedText.slice(0, 60))
-    .filter(Boolean);
-  const examples = childUtterances.map((t: string) => `「${t}」`).join('、');
-"""
-          new_feedback = """  const { history, durationMinutes, aiStudentId } = req.body;
-  if (!isAIStudentId(aiStudentId)) return res.status(400).json({ success: false, error: 'INVALID_AI_STUDENT_ID' });
-  const targetDuration = Number(durationMinutes);
-  if (!isDialogueDuration(targetDuration)) return res.status(400).json({ success: false, error: 'INVALID_DURATION' });
-  const persona = getAIStudentById(aiStudentId);
-  const rawHistory = canonicalizeHistory(history);
-  const childMessages = rawHistory.filter((m) => m.sender === 'child' && m.englishText.trim());
-  const childUtterances = childMessages
-    .map((m) => maskHighRiskPII(m.englishText.trim()).maskedText.slice(0, 100))
-    .filter(Boolean);
-  const examples = childUtterances.map((t) => `「${t}」`).join('、');
-  const detectedVocabMap = new Map<string, ReturnType<typeof detectVocabularyInText>[number]>();
-  for (const message of rawHistory) {
-    for (const item of detectVocabularyInText(message.englishText)) detectedVocabMap.set(item.id, item);
-  }
-  const canonicalVocab = Array.from(detectedVocabMap.values());
-  const firstTimestamp = rawHistory[0]?.timestamp || Date.now();
-  const lastTimestamp = rawHistory[rawHistory.length - 1]?.timestamp || firstTimestamp;
-  const stats = calculateCanonicalStats(rawHistory, firstTimestamp, lastTimestamp, targetDuration, canonicalVocab);
-"""
+          old_feedback = '''  const { history, durationMinutes, turns, totalWords, aiStudentId, encounteredVocab } = req.body;
+          const persona = getAIStudentById(aiStudentId);
+          const rawHistory = Array.isArray(history) ? history : [];
+          const childMessages = rawHistory.filter((m: any) => m.sender !== 'ai' && m.englishText?.trim());
+          const childUtterances = childMessages
+            .slice(-8)
+            .map((m: any) => maskHighRiskPII(String(m.englishText).trim()).maskedText.slice(0, 60))
+            .filter(Boolean);
+          const examples = childUtterances.map((t: string) => `「${t}」`).join('、');
+          '''
+          new_feedback = '''  const { history, durationMinutes, aiStudentId } = req.body;
+          if (!isAIStudentId(aiStudentId)) return res.status(400).json({ success: false, error: 'INVALID_AI_STUDENT_ID' });
+          const targetDuration = Number(durationMinutes);
+          if (!isDialogueDuration(targetDuration)) return res.status(400).json({ success: false, error: 'INVALID_DURATION' });
+          const persona = getAIStudentById(aiStudentId);
+          const rawHistory = canonicalizeHistory(history);
+          const childMessages = rawHistory.filter((m) => m.sender === 'child' && m.englishText.trim());
+          const childUtterances = childMessages
+            .map((m) => maskHighRiskPII(m.englishText.trim()).maskedText.slice(0, 100))
+            .filter(Boolean);
+          const examples = childUtterances.map((t) => `「${t}」`).join('、');
+          const detectedVocabMap = new Map<string, ReturnType<typeof detectVocabularyInText>[number]>();
+          for (const message of rawHistory) {
+            for (const item of detectVocabularyInText(message.englishText)) detectedVocabMap.set(item.id, item);
+          }
+          const canonicalVocab = Array.from(detectedVocabMap.values());
+          const firstTimestamp = rawHistory[0]?.timestamp || Date.now();
+          const lastTimestamp = rawHistory[rawHistory.length - 1]?.timestamp || firstTimestamp;
+          const stats = calculateCanonicalStats(rawHistory, firstTimestamp, lastTimestamp, targetDuration, canonicalVocab);
+          '''
           replace_once('server.ts', old_feedback, new_feedback)
 
           p = Path('server.ts')
@@ -96,10 +98,12 @@ jobs:
           replace_once('src/utils/exportLog.ts',
             "  return escapeHtml(maskHighRiskPII(String(value ?? '')).maskedText);\n",
             "  return escapeHtml(maskTextForExternalUse(String(value ?? '')));\n")
-
-      - name: Install and QA
+          PY
+          python /tmp/apply_stage2.py
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Full QA and build
         run: |
-          npm ci --no-audit --no-fund
           npm run qa
           npm run build
       - name: Commit stage 2 integration
