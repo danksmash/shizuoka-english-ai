@@ -1,0 +1,245 @@
+name: Issue student learning codes
+
+on:
+  push:
+    branches:
+      - ops/issue-student-codes-20260828
+    paths:
+      - .github/workflows/issue-student-codes.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: shizuoka-english-ai
+  REGION: asia-northeast1
+  SERVICE_NAME: shizuoka-english-ai
+
+jobs:
+  issue:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+
+      - name: Load production learning-code pepper without logging it
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          gcloud run services describe "$SERVICE_NAME" --region "$REGION" --project "$PROJECT_ID" --format=json > /tmp/service.json
+          node <<'NODE'
+          const fs = require('fs');
+          const service = JSON.parse(fs.readFileSync('/tmp/service.json', 'utf8'));
+          const env = service?.spec?.template?.spec?.containers?.[0]?.env || service?.spec?.template?.containers?.[0]?.env || [];
+          const entry = env.find((x) => x?.name === 'LEARNING_CODE_PEPPER');
+          if (!entry) throw new Error('LEARNING_CODE_PEPPER_NOT_FOUND');
+          if (typeof entry.value === 'string' && entry.value) {
+            fs.writeFileSync('/tmp/pepper', entry.value, { mode: 0o600 });
+          } else {
+            const ref = entry.valueFrom?.secretKeyRef;
+            if (!ref?.name) throw new Error('LEARNING_CODE_PEPPER_REFERENCE_UNREADABLE');
+            fs.writeFileSync('/tmp/pepper-secret.json', JSON.stringify({ name: ref.name, version: ref.key || 'latest' }), { mode: 0o600 });
+          }
+          NODE
+          if [ -f /tmp/pepper-secret.json ]; then
+            SECRET_NAME="$(node -p "require('/tmp/pepper-secret.json').name")"
+            SECRET_VERSION="$(node -p "require('/tmp/pepper-secret.json').version")"
+            gcloud secrets versions access "$SECRET_VERSION" --secret "$SECRET_NAME" --project "$PROJECT_ID" > /tmp/pepper
+            chmod 600 /tmp/pepper
+          fi
+          test -s /tmp/pepper
+          echo "Production learning-code configuration loaded safely."
+
+      - name: Generate, register, verify, and encrypt 169 codes
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          gcloud auth print-access-token > /tmp/access-token
+          cat > /tmp/public.pem <<'PUBKEY'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAwbv0MfTCoiVyLJKwEn23
+          SiF0Ya+h2mz6seG/h4jC2qLmBsw0wR/YzmPDa8XMYhFJ+DLpUQyBgPxka20BO6lK
+          7dwGk5P6GnBAuO5Tv9zrYwrTzgEVZBhbZFp8QWVxdKwWHVHwi0s6d02jlxPzVk68
+          Q6z+PoiVDdG/IIUDD7J4eJtO/KfL/vMPo70RZq/1VTCaLHCe/m8n6/bD167XzxGT
+          Xbvz7M47fr2foiC/GqAXrKOwVZgexX4jqLeAJ/Qw6d3IZvRil+Yp6tbfI8wZCVdg
+          LEeTxp5ZqgDpo0Ic/sHyNGXcrsUyRjCKBIUye32I2CvGW7Sl3+9aA3ImQy7dwNX4
+          J4Z0hQs7IFn20D4dENmRz7UNMJRw0i4XVxcE7TMLtAf2bo38dwxHkkCC2OzRJNMR
+          VG+sZZDTHZ7Mx65M6f+uuCN63H3mrd5AliKyQQ8UmAZEPFn8UZVkwZxksyG0LbV5
+          nCd4BeaFBnObSkIHs48oudszicxNCg/atGgVco0wl5HpAgMBAAE=
+          -----END PUBLIC KEY-----
+          PUBKEY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const crypto = require('crypto');
+
+          const project = 'shizuoka-english-ai';
+          const pepper = fs.readFileSync('/tmp/pepper', 'utf8').trim();
+          const token = fs.readFileSync('/tmp/access-token', 'utf8').trim();
+          const publicKey = fs.readFileSync('/tmp/public.pem', 'utf8');
+          const base = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
+          const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+          const roster = [];
+          function addClass(grade, klass, pupils) {
+            for (let n = 1; n <= pupils; n++) roster.push({group:`${grade}年${klass}組`, grade, klass, number:n, type:'児童'});
+            roster.push({group:`${grade}年${klass}組`, grade, klass, number:'予備', type:'予備'});
+          }
+          addClass(5, 1, 26);
+          addClass(5, 2, 25);
+          addClass(5, 3, 24);
+          addClass(6, 1, 34);
+          addClass(6, 2, 35);
+          for (let n = 1; n <= 10; n++) roster.push({group:'その他児童ゲスト', grade:'', klass:'', number:n, type:'ゲスト'});
+          for (let n = 1; n <= 10; n++) roster.push({group:'児童テスト用', grade:'', klass:'', number:n, type:'テスト'});
+          if (roster.length !== 169) throw new Error(`ROSTER_COUNT_${roster.length}`);
+
+          function randomCode() {
+            let out = '';
+            for (let i = 0; i < 4; i++) out += alphabet[crypto.randomInt(alphabet.length)];
+            return out;
+          }
+          function codeKey(code) {
+            return crypto.createHmac('sha256', pepper).update(code).digest('hex');
+          }
+          function firestoreFields(obj) {
+            const fields = {};
+            for (const [k,v] of Object.entries(obj)) {
+              if (typeof v === 'string') fields[k] = {stringValue:v};
+              else if (typeof v === 'boolean') fields[k] = {booleanValue:v};
+              else if (Number.isInteger(v)) fields[k] = {integerValue:String(v)};
+            }
+            return {fields};
+          }
+          function fieldValue(doc, name) {
+            const f = doc?.fields?.[name];
+            if (!f) return undefined;
+            if ('stringValue' in f) return f.stringValue;
+            return undefined;
+          }
+          async function api(url, options={}) {
+            const res = await fetch(url, { ...options, headers: { Authorization:`Bearer ${token}`, 'Content-Type':'application/json', ...(options.headers||{}) }});
+            return res;
+          }
+
+          (async () => {
+            const existingResearch = new Set();
+            let pageToken = '';
+            do {
+              const url = new URL(`${base}/students`);
+              url.searchParams.set('pageSize','1000');
+              if (pageToken) url.searchParams.set('pageToken',pageToken);
+              const res = await api(url);
+              if (!res.ok) throw new Error(`LIST_STUDENTS_${res.status}`);
+              const json = await res.json();
+              for (const doc of json.documents || []) {
+                const rid = fieldValue(doc,'researchId');
+                if (rid) existingResearch.add(rid);
+              }
+              pageToken = json.nextPageToken || '';
+            } while (pageToken);
+
+            const issuedCodes = new Set();
+            const issuedResearch = new Set();
+            const rows = [];
+            const createdKeys = [];
+            for (const item of roster) {
+              let code, key;
+              for (let tries = 0; tries < 1000; tries++) {
+                const candidate = randomCode();
+                if (issuedCodes.has(candidate)) continue;
+                const candidateKey = codeKey(candidate);
+                const check = await api(`${base}/students/${candidateKey}`);
+                if (check.status === 404) { code = candidate; key = candidateKey; break; }
+                if (!check.ok) throw new Error(`COLLISION_CHECK_${check.status}`);
+              }
+              if (!code || !key) throw new Error('CODE_SPACE_EXHAUSTED');
+
+              let researchId;
+              do { researchId = `R${crypto.randomInt(100000,1000000)}`; }
+              while (existingResearch.has(researchId) || issuedResearch.has(researchId));
+              const studentId = crypto.randomUUID();
+              const now = new Date().toISOString();
+              const createUrl = new URL(`${base}/students`);
+              createUrl.searchParams.set('documentId', key);
+              const create = await api(createUrl, {
+                method:'POST',
+                body:JSON.stringify(firestoreFields({studentId,researchId,active:true,createdAt:now,updatedAt:now}))
+              });
+              if (!create.ok) throw new Error(`CREATE_STUDENT_${create.status}`);
+              issuedCodes.add(code);
+              issuedResearch.add(researchId);
+              createdKeys.push(key);
+              rows.push({...item, code, researchId, studentId});
+            }
+
+            if (issuedCodes.size !== 169 || rows.length !== 169) throw new Error('ISSUANCE_COUNT_MISMATCH');
+
+            for (const key of createdKeys) {
+              const verify = await api(`${base}/students/${key}`);
+              if (!verify.ok) throw new Error(`VERIFY_DOCUMENT_${verify.status}`);
+            }
+
+            const apiUrl = 'https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app';
+            const verificationRows = [
+              ...rows.filter(r => r.type === 'テスト'),
+              rows.find(r => r.group === '5年1組' && r.number === 1),
+              rows.find(r => r.group === '5年2組' && r.number === 1),
+              rows.find(r => r.group === '5年3組' && r.number === 1),
+              rows.find(r => r.group === '6年1組' && r.number === 1),
+            ].filter(Boolean);
+            for (const r of verificationRows) {
+              const res = await fetch(`${apiUrl}/api/student/resolve`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({learningCode:r.code})});
+              const data = await res.json().catch(()=>({}));
+              if (!res.ok || data.success !== true) throw new Error(`PRODUCTION_RESOLVE_FAILED_${res.status}`);
+            }
+
+            const esc = (v) => `"${String(v ?? '').replace(/"/g,'""')}"`;
+            const headers = ['区分','学年','組','番号','種別','学習コード','研究ID','内部student_id'];
+            const csv = [headers.map(esc).join(','), ...rows.map(r => [r.group,r.grade,r.klass,r.number,r.type,r.code,r.researchId,r.studentId].map(esc).join(','))].join('\r\n');
+            fs.writeFileSync('/tmp/student_codes.csv', '\uFEFF' + csv, {mode:0o600});
+
+            const aesKey = crypto.randomBytes(32);
+            const iv = crypto.randomBytes(12);
+            const cipher = crypto.createCipheriv('aes-256-gcm', aesKey, iv);
+            const ciphertext = Buffer.concat([cipher.update(fs.readFileSync('/tmp/student_codes.csv')), cipher.final()]);
+            const tag = cipher.getAuthTag();
+            const wrappedKey = crypto.publicEncrypt({key:publicKey,oaepHash:'sha256',padding:crypto.constants.RSA_PKCS1_OAEP_PADDING},aesKey);
+            const envelope = {
+              version:1, cipher:'AES-256-GCM', keyWrap:'RSA-OAEP-SHA256',
+              wrappedKey:wrappedKey.toString('base64'), iv:iv.toString('base64'), tag:tag.toString('base64'), ciphertext:ciphertext.toString('base64')
+            };
+            fs.writeFileSync('student-codes.encrypted.json', JSON.stringify(envelope), {mode:0o600});
+            fs.writeFileSync('registration-summary.txt', [
+              'TOTAL=169','CLASS_5_1=27','CLASS_5_2=26','CLASS_5_3=25','CLASS_6_1=35','CLASS_6_2=36','GUEST=10','TEST=10','PRODUCTION_RESOLVE_CHECKS=14','PLAINTEXT_CODES_IN_LOGS=NO'
+            ].join('\n')+'\n');
+            fs.rmSync('/tmp/student_codes.csv');
+            console.log('STUDENT_CODES_REGISTERED=169');
+            console.log('PRODUCTION_RESOLVE_CHECKS=14');
+          })().catch((err) => { console.error(String(err?.message || err)); process.exit(1); });
+          NODE
+
+          rm -f /tmp/pepper /tmp/pepper-secret.json /tmp/access-token /tmp/service.json /tmp/public.pem
+
+      - name: Upload encrypted teacher handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-codes-encrypted
+          path: |
+            student-codes.encrypted.json
+            registration-summary.txt
+          retention-days: 1
+          if-no-files-found: error
