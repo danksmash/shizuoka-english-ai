@@ -159,7 +159,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
               <div className="grid gap-2 sm:grid-cols-2">
                 {DIALOGUE_TOPICS.map((topic) => {
                   const selected = selectedTopic === topic.id;
-                  return <button key={topic.id} type="button" onClick={() => setSelectedTopic(topic.id)} className={`min-h-12 rounded-xl border px-3 py-2 text-left ${selected ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'}`}><span className="block text-xs font-black">{topic.japaneseLabel}</span><span className="block text-[10px] font-semibold text-slate-500">{topic.englishLabel}</span></button>;
+                  return <button key={topic.id} type="button" onClick={() => setSelectedTopic(topic.id)} className={`min-h-12 rounded-xl border px-3 py-2 text-left ${selected ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'}`}><span className="block text-xs font-black">{topic.title}</span><span className="block text-[10px] font-semibold text-slate-500">{topic.subTitle}</span></button>;
                 })}
               </div>
             </div>
