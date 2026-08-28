@@ -79,6 +79,7 @@ jobs:
           echo "$health" | grep -q '"aiConfigured":true'
           echo "$health" | grep -q '"ttsProvider":"google-chirp3-hd"'
           echo "$health" | grep -q '"learningDataConfigured":true'
+          echo "$health" | grep -q '"managementConfigured":true'
 
           chat=""
           for attempt in 1 2 3; do
