@@ -9,7 +9,7 @@ import { calculateCanonicalStats, canonicalizeHistory, isAIStudentId, isDialogue
 import { generateFallbackFeedback } from './src/utils/feedbackFallback';
 import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } from './src/utils/security';
 import { validateAiResponse, inspectAiResponse, buildAlignedReply } from './src/utils/responseValidation';
-import { getAllSessionsForManagement, getStudentHistory, anonymizeSessionForResearch, persistenceConfigured, resolveStudentByCode, saveCanonicalSession } from './src/server/persistence';
+import { createStudentCode, getAllSessionsForManagement, getStudentHistory, anonymizeSessionForResearch, persistenceConfigured, resolveStudentByCode, saveCanonicalSession } from './src/server/persistence';
 import { authenticateManagement, clearManagementCookie, managementAuthConfigured, requireManagementRole, setManagementCookie, type AuthenticatedRequest } from './src/server/auth';
 import { managementPageHtml } from './src/server/managementPage';
 
@@ -309,6 +309,8 @@ app.get('/api/health', (_req, res) => {
     model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
     resilience: 'multi-retry-model-fallback',
     ttsProvider: 'google-chirp3-hd',
+    learningDataConfigured: persistenceConfigured(),
+    managementConfigured: managementAuthConfigured(),
   });
 });
 
@@ -596,6 +598,12 @@ app.post('/api/sessions', async (req,res)=>{
 app.post('/api/management/login',(req,res)=>{const ip=req.ip||req.socket.remoteAddress||'unknown';if(!checkSensitiveLimit(`mgmt:${ip}`,10,15*60_000))return res.status(429).json({success:false,error:'TOO_MANY_LOGIN_ATTEMPTS'});const username=typeof req.body?.username==='string'?req.body.username.slice(0,100):'';const password=typeof req.body?.password==='string'?req.body.password.slice(0,300):'';const result=authenticateManagement(username,password);if(!result)return res.status(managementAuthConfigured()?401:503).json({success:false,error:managementAuthConfigured()?'INVALID_CREDENTIALS':'MANAGEMENT_AUTH_NOT_CONFIGURED'});setManagementCookie(res,result.token);return res.json({success:true,role:result.role});});
 app.post('/api/management/logout',(_req,res)=>{clearManagementCookie(res);return res.json({success:true});});
 app.get('/api/management/me',requireManagementRole(['teacher','researcher']),(req:AuthenticatedRequest,res)=>{res.setHeader('Cache-Control','no-store');return res.json({success:true,user:req.managementUser});});
+app.post('/api/management/student-codes', requireManagementRole(['teacher','researcher']), async (req,res) => {
+  const code = normalizeLearningCode(req.body?.learningCode);
+  if (!isValidLearningCode(code)) return res.status(400).json({success:false,error:'INVALID_LEARNING_CODE'});
+  try { const created = await createStudentCode(code); return res.json({success:true,studentId:created.studentId,researchId:created.researchId}); }
+  catch(error:any) { console.error('Student code creation failed',{message:error?.message}); return res.status(503).json({success:false,error:'CODE_CREATE_UNAVAILABLE'}); }
+});
 app.get('/api/management/sessions',requireManagementRole(['teacher','researcher']),async(_req,res)=>{try{const sessions=await getAllSessionsForManagement();res.setHeader('Cache-Control','no-store');return res.json({success:true,sessions});}catch(error:any){console.error('Management sessions failed',{message:error?.message});return res.status(503).json({success:false,error:'MANAGEMENT_DATA_UNAVAILABLE'});}});
 function csvCell(value:unknown):string{const text=String(value??'');return `"${text.replace(/"/g,'""')}"`;}
 app.get('/api/management/research.csv',requireManagementRole(['researcher']),async(_req,res)=>{try{const sessions=await getAllSessionsForManagement();const rows=sessions.map(anonymizeSessionForResearch);const headers=rows.length?Object.keys(rows[0]):['research_id','session_id'];const csv=[headers.map(csvCell).join(','),...rows.map(row=>headers.map(key=>csvCell(row[key])).join(','))].join('\n');res.setHeader('Content-Type','text/csv; charset=utf-8');res.setHeader('Content-Disposition','attachment; filename="research-export.csv"');res.setHeader('Cache-Control','no-store');return res.send('\uFEFF'+csv);}catch(error:any){console.error('Research export failed',{message:error?.message});return res.status(503).json({success:false,error:'RESEARCH_EXPORT_UNAVAILABLE'});}});
