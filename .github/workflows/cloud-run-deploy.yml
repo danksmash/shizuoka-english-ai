@@ -49,6 +49,9 @@ jobs:
           project_id: shizuoka-english-ai
           version: '>= 416.0.0'
 
+      - name: Enable Cloud Text-to-Speech API
+        run: gcloud services enable texttospeech.googleapis.com --project shizuoka-english-ai
+
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy shizuoka-english-ai \
@@ -64,7 +67,7 @@ jobs:
             --set-env-vars ANTHROPIC_MODEL=claude-sonnet-4-6 \
             --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest
 
-      - name: Production health and AI smoke test
+      - name: Production health, AI and TTS smoke test
         run: |
           API_URL="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app"
 
@@ -77,6 +80,7 @@ jobs:
           done
           echo "$health" | grep -q '"status":"ok"'
           echo "$health" | grep -q '"aiConfigured":true'
+          echo "$health" | grep -q '"ttsProvider":"google-chirp3-hd"'
 
           chat=""
           for attempt in 1 2 3; do
@@ -92,3 +96,15 @@ jobs:
           done
           echo "$chat" | grep -q '"success":true'
           echo "$chat" | grep -q '"route":"anthropic-resilient"'
+
+          tts_headers=$(mktemp)
+          tts_audio=$(mktemp)
+          curl --fail --silent --show-error --max-time 20 \
+            -D "$tts_headers" \
+            -o "$tts_audio" \
+            -X POST "$API_URL/api/tts" \
+            -H 'Content-Type: application/json' \
+            --data '{"text":"Hello! I am Emma. What is your name?","aiStudentId":"emma_usa","speakingRate":0.96}'
+          grep -qi 'content-type: audio/mpeg' "$tts_headers"
+          grep -qi 'x-tts-provider: google-chirp3-hd' "$tts_headers"
+          test "$(wc -c < "$tts_audio")" -gt 1000
