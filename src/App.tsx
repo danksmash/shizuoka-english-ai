@@ -5,6 +5,8 @@ import { AIStudentCard } from './components/AIStudentCard';
 import { DialogueView } from './components/DialogueView';
 import { SpeechInputBar } from './components/SpeechInputBar';
 import { FeedbackScreen } from './components/FeedbackScreen';
+import { ReflectionScreen } from './components/ReflectionScreen';
+import { LearningHistoryScreen, type StudentHistoryRow } from './components/LearningHistoryScreen';
 import { VisualVocabularyDock } from './components/VisualVocabularyDock';
 import {
   ChatMessage,
@@ -27,12 +29,13 @@ import {
 } from './utils/speech';
 import { STARTER_PROMPTS_JAPANESE } from './utils/translation';
 import { motion, AnimatePresence } from 'motion/react';
+import type { ReflectionAnswers } from './dataContract';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const apiUrl = (path: string) => `${API_BASE_URL}${path}`;
 
 export default function App() {
-  const [phase, setPhase] = useState<'setup' | 'dialogue' | 'feedback'>('setup');
+  const [phase, setPhase] = useState<'setup' | 'dialogue' | 'reflection' | 'feedback' | 'history'>('setup');
   const [profile, setProfile] = useState<StudentProfile>({
     name: '5・6年生',
     grade: '小学校５・６年生',
@@ -65,6 +68,17 @@ export default function App() {
   const farewellSafetyTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [feedback, setFeedback] = useState<FeedbackData | null>(null);
   const [isLoadingFeedback, setIsLoadingFeedback] = useState(false);
+  const [learningDataEnabled, setLearningDataEnabled] = useState(false);
+  const [learningCode, setLearningCode] = useState('');
+  const [sessionId, setSessionId] = useState('');
+  const sessionStartedAtRef = useRef(0);
+  const sessionEndedAtRef = useRef(0);
+  const [isSavingReflection, setIsSavingReflection] = useState(false);
+  const [reflectionSaveMessage, setReflectionSaveMessage] = useState('');
+  const [historyRows, setHistoryRows] = useState<StudentHistoryRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+
 
   const messagesRef = useRef(messages); messagesRef.current = messages;
   const profileRef = useRef(profile); profileRef.current = profile;
@@ -77,6 +91,25 @@ export default function App() {
   const speechRateRef = useRef(speechRate); speechRateRef.current = speechRate;
   const dialogueActiveRef = useRef(false);
   const chatAbortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    fetch(apiUrl('/api/health')).then((response) => response.json()).then((data) => {
+      setLearningDataEnabled(Boolean(data?.learningDataConfigured));
+    }).catch(() => setLearningDataEnabled(false));
+  }, []);
+
+  const validateLearningCode = useCallback(async (code: string): Promise<boolean> => {
+    try {
+      const response = await fetch(apiUrl('/api/student/resolve'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ learningCode: code }) });
+      const data = await response.json();
+      return response.ok && data?.success === true;
+    } catch { return false; }
+  }, []);
+
+  const newSessionId = () => {
+    const id = globalThis.crypto?.randomUUID?.();
+    return id ? `session_${id.replace(/-/g, '')}` : `session_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+  };
 
   const playAiVoice = useCallback((text: string) => {
     if (!soundEnabledRef.current) return;
@@ -98,11 +131,13 @@ export default function App() {
     }
   }, []);
 
-  const handleStartDialogue = (newProfile: StudentProfile) => {
+  const handleStartDialogue = (newProfile: StudentProfile, code: string) => {
     chatAbortControllerRef.current?.abort();
     chatAbortControllerRef.current = null;
     dialogueActiveRef.current = true;
     setProfile(newProfile); profileRef.current = newProfile;
+    setLearningCode(code); setSessionId(newSessionId()); sessionStartedAtRef.current = Date.now(); sessionEndedAtRef.current = 0;
+    setReflectionSaveMessage('');
     const durationSec = newProfile.selectedDurationMinutes * 60;
     setRemainingSeconds(durationSec); setElapsedSeconds(0); elapsedSecondsRef.current = 0;
     setTurnCount(0); turnCountRef.current = 0;
@@ -245,7 +280,7 @@ export default function App() {
 
   const handleSkipFarewell = useCallback(() => {
     if (farewellTransitionRef.current) farewellTransitionRef.current();
-    else { stopSpeaking(); if (farewellSafetyTimerRef.current) { clearTimeout(farewellSafetyTimerRef.current); farewellSafetyTimerRef.current=null; } setFarewellBanner(null); setPhase('feedback'); }
+    else { stopSpeaking(); if (farewellSafetyTimerRef.current) { clearTimeout(farewellSafetyTimerRef.current); farewellSafetyTimerRef.current=null; } setFarewellBanner(null); setPhase('reflection'); }
   }, []);
 
   const handleFinishDialogue = async () => {
@@ -260,20 +295,54 @@ export default function App() {
       const pendingChildMsg:ChatMessage={id:`child-${Date.now()}`,sender:'child',englishText:pendingText,japaneseText:'日本語に訳せませんでした。',timestamp:Date.now(),wordCount:words};
       currentHistory=[...currentHistory,pendingChildMsg]; turnCountRef.current+=1; totalChildWordsRef.current+=words; setTurnCount(turnCountRef.current); setTotalChildWords(totalChildWordsRef.current); setSpeechTranscript(''); liveTranscriptRef.current='';
     }
+    sessionEndedAtRef.current = Date.now();
     const currentProf=profileRef.current; const studentObj=getAIStudentById(currentProf.selectedAiStudentId); const farewell=getStudentFarewellMessage(studentObj.id); setFarewellBanner(farewell);
     const farewellMsg:ChatMessage={id:`ai-farewell-${Date.now()}`,sender:'ai',englishText:farewell.english,japaneseText:farewell.japanese,timestamp:Date.now(),culturalNote:'時間になりました！お疲れさまでした！'};
     const finalMessages=[...currentHistory,farewellMsg]; setMessages(finalMessages); messagesRef.current=finalMessages; setIsSpeaking(true); setMood('happy'); setIsLoadingFeedback(true);
     (async()=>{ try { const controller=new AbortController(); const timeoutId=setTimeout(()=>controller.abort(),20000); const response=await fetch(apiUrl('/api/feedback'),{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,body:JSON.stringify({history:finalMessages,studentName:currentProf.name,durationMinutes:currentProf.selectedDurationMinutes,turns:turnCountRef.current,totalWords:totalChildWordsRef.current,aiStudentId:currentProf.selectedAiStudentId,encounteredVocab:encounteredVocabRef.current})}); clearTimeout(timeoutId); const resData=await response.json(); if(resData.success&&resData.data)setFeedback(resData.data); else throw new Error('Invalid feedback response'); } catch(e){ console.warn('Feedback API fetch issue:',e); setFeedback(generateFallbackFeedback(studentObj,currentProf.name,turnCountRef.current,totalChildWordsRef.current,elapsedSecondsRef.current,currentProf.selectedDurationMinutes,encounteredVocabRef.current,finalMessages)); } finally { setIsLoadingFeedback(false); } })();
-    let hasTransitioned=false; const executeTransition=()=>{if(hasTransitioned)return;hasTransitioned=true;stopSpeaking();if(farewellSafetyTimerRef.current){clearTimeout(farewellSafetyTimerRef.current);farewellSafetyTimerRef.current=null;}farewellTransitionRef.current=null;setFarewellBanner(null);setPhase('feedback');};
+    let hasTransitioned=false; const executeTransition=()=>{if(hasTransitioned)return;hasTransitioned=true;stopSpeaking();if(farewellSafetyTimerRef.current){clearTimeout(farewellSafetyTimerRef.current);farewellSafetyTimerRef.current=null;}farewellTransitionRef.current=null;setFarewellBanner(null);setPhase('reflection');};
     farewellTransitionRef.current=executeTransition; farewellSafetyTimerRef.current=setTimeout(executeTransition,4500);
     speakStudentVoice(farewell.english,studentObj,speechRateRef.current,()=>{setIsSpeaking(true);setMood('happy');},()=>{setIsSpeaking(false);executeTransition();},()=>{setIsSpeaking(false);executeTransition();});
   };
 
-  const handleRestart=()=>{dialogueActiveRef.current=false;chatAbortControllerRef.current?.abort();chatAbortControllerRef.current=null;stopSpeaking();stopRecordingInternal();if(farewellSafetyTimerRef.current){clearTimeout(farewellSafetyTimerRef.current);farewellSafetyTimerRef.current=null;}farewellTransitionRef.current=null;setPhase('setup');setMessages([]);setTurnCount(0);setTotalChildWords(0);setEncounteredVocabList([]);setLatestVocabItem(null);setFarewellBanner(null);setMicHintMessage('');};
+  const handleSubmitReflection = async (answers: ReflectionAnswers) => {
+    setIsSavingReflection(true); setReflectionSaveMessage('');
+    if (learningDataEnabled && learningCode && sessionId) {
+      try {
+        const response = await fetch(apiUrl('/api/sessions'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+          sessionId, learningCode, aiStudentId: profileRef.current.selectedAiStudentId, topic: profileRef.current.selectedTopic,
+          targetDurationMinutes: profileRef.current.selectedDurationMinutes, startedAt: sessionStartedAtRef.current,
+          endedAt: sessionEndedAtRef.current || Date.now(), history: messagesRef.current, encounteredVocab: encounteredVocabRef.current, reflection: answers,
+        }) });
+        const data = await response.json();
+        if (!response.ok || !data?.success) throw new Error(data?.error || 'SAVE_FAILED');
+        setReflectionSaveMessage('学習履歴に保存しました。');
+      } catch (error) {
+        console.warn('Session persistence unavailable:', error);
+        setReflectionSaveMessage('今回は学習履歴に保存できませんでした。レポートはそのまま見ることができます。');
+      }
+    }
+    setIsSavingReflection(false); setPhase('feedback');
+  };
+
+  const handleOpenHistory = async () => {
+    setPhase('history'); setHistoryRows([]); setHistoryError('');
+    if (!learningDataEnabled || !learningCode) { setHistoryError('学習履歴機能は現在準備中です。'); return; }
+    setHistoryLoading(true);
+    try {
+      const response = await fetch(apiUrl('/api/student/history'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ learningCode }) });
+      const data = await response.json();
+      if (!response.ok || !data?.success) throw new Error(data?.error || 'HISTORY_FAILED');
+      setHistoryRows(Array.isArray(data.history) ? data.history : []);
+    } catch (error) { console.warn('History unavailable:', error); setHistoryError('学習履歴を読み込めませんでした。もう一度試してください。'); }
+    finally { setHistoryLoading(false); }
+  };
+
+  const handleRestart=()=>{dialogueActiveRef.current=false;chatAbortControllerRef.current?.abort();chatAbortControllerRef.current=null;stopSpeaking();stopRecordingInternal();if(farewellSafetyTimerRef.current){clearTimeout(farewellSafetyTimerRef.current);farewellSafetyTimerRef.current=null;}farewellTransitionRef.current=null;setPhase('setup');setMessages([]);setTurnCount(0);setTotalChildWords(0);setEncounteredVocabList([]);setLatestVocabItem(null);setFarewellBanner(null);setMicHintMessage('');setLearningCode('');setSessionId('');setReflectionSaveMessage('');};
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-800 flex flex-col">
-      {phase==='setup' && <SetupScreen onStartDialogue={handleStartDialogue}/>} 
+      {phase==='setup' && <SetupScreen onStartDialogue={handleStartDialogue} learningDataEnabled={learningDataEnabled} onValidateLearningCode={validateLearningCode}/>} 
       {phase==='dialogue' && (
         <div className="flex-1 flex flex-col min-h-[100dvh] lg:h-screen lg:overflow-hidden">
           <Header studentName={profile.name} aiStudentName={currentAiStudent.name} aiStudentFlag={currentAiStudent.flag} remainingSeconds={remainingSeconds} totalDurationSeconds={profile.selectedDurationMinutes*60} turnCount={turnCount} wordCount={totalChildWords} soundEnabled={soundEnabled} onToggleSound={()=>{if(soundEnabled)stopSpeaking();setSoundEnabled(!soundEnabled);}} onFinishEarly={handleFinishDialogue}/>
@@ -312,7 +381,9 @@ export default function App() {
           <AnimatePresence>{farewellBanner&&<div id="farewell-overlay" onClick={handleSkipFarewell} className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer select-none"><motion.div initial={{scale:.9,opacity:0,y:10}} animate={{scale:1,opacity:1,y:0}} exit={{scale:.95,opacity:0}} onClick={(e)=>{e.stopPropagation();handleSkipFarewell();}} className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl text-center border-4 border-amber-300"><div className="text-3xl mb-2">🎉 {currentAiStudent.flag}</div><h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-1">Time is up! (対話終了)</h2><div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 my-4 text-left"><p className="text-base sm:text-lg font-black text-blue-950">“{farewellBanner.english}”</p><p className="text-xs sm:text-sm font-bold text-slate-600 mt-2">{farewellBanner.japanese}</p></div><button id="farewell-next-btn" type="button" onClick={(e)=>{e.stopPropagation();handleSkipFarewell();}} className="w-full min-h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-2xl">📊 レポート・アドバイスを見る</button></motion.div></div>}</AnimatePresence>
         </div>
       )}
-      {phase==='feedback'&&<FeedbackScreen profile={profile} messages={messages} feedback={feedback} isLoadingFeedback={isLoadingFeedback} totalTurns={turnCount} totalWords={totalChildWords} elapsedSeconds={elapsedSeconds} encounteredVocabList={encounteredVocabList} onPlayAudio={playAiVoice} onRestart={handleRestart}/>} 
+      {phase==='reflection'&&<ReflectionScreen aiStudent={currentAiStudent} onSubmit={handleSubmitReflection} isSaving={isSavingReflection} saveMessage={reflectionSaveMessage}/>}
+      {phase==='feedback'&&<FeedbackScreen profile={profile} messages={messages} feedback={feedback} isLoadingFeedback={isLoadingFeedback} totalTurns={turnCount} totalWords={totalChildWords} elapsedSeconds={elapsedSeconds} encounteredVocabList={encounteredVocabList} onPlayAudio={playAiVoice} onRestart={handleRestart} onOpenHistory={learningDataEnabled && learningCode ? handleOpenHistory : undefined}/>}
+      {phase==='history'&&<LearningHistoryScreen rows={historyRows} loading={historyLoading} error={historyError} onBack={()=>setPhase('feedback')}/>} 
     </div>
   );
 }

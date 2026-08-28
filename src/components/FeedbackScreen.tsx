@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Printer,
   Copy,
+  BarChart3,
 } from 'lucide-react';
 import { ChatMessage, FeedbackData, StudentProfile, VisualVocabularyItem } from '../types';
 import { getAIStudentById } from '../data/curriculum';
@@ -29,6 +30,7 @@ interface FeedbackScreenProps {
   encounteredVocabList: VisualVocabularyItem[];
   onPlayAudio: (text: string) => void;
   onRestart: () => void;
+  onOpenHistory?: () => void;
 }
 
 export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
@@ -42,6 +44,7 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
   encounteredVocabList,
   onPlayAudio,
   onRestart,
+  onOpenHistory,
 }) => {
   const [playingWordId, setPlayingWordId] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
@@ -127,6 +130,8 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
             <Copy className="w-4 h-4" />
             <span>{copySuccess ? 'コピーしました！' : 'コピー'}</span>
           </button>
+
+          {onOpenHistory && <button type="button" onClick={onOpenHistory} className="flex-1 md:flex-none px-3.5 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-800 font-bold text-xs rounded-2xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-blue-200"><BarChart3 className="w-4 h-4" /><span>わたしの学習履歴</span></button>}
 
           <button
             type="button"

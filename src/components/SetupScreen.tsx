@@ -14,7 +14,9 @@ import { speakStudentVoice, stopSpeaking } from '../utils/speech';
 import { StudentAvatar } from './StudentAvatar';
 
 interface SetupScreenProps {
-  onStartDialogue: (profile: StudentProfile) => void;
+  onStartDialogue: (profile: StudentProfile, learningCode: string) => void;
+  learningDataEnabled: boolean;
+  onValidateLearningCode: (learningCode: string) => Promise<boolean>;
 }
 
 const getStudentCountryDisplay = (student: AIStudentProfile): string => {
@@ -24,9 +26,11 @@ const getStudentCountryDisplay = (student: AIStudentProfile): string => {
   return student.country;
 };
 
-export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => {
+export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learningDataEnabled, onValidateLearningCode }) => {
   const [selectedStudentId, setSelectedStudentId] = useState<string>('emma_usa');
-  const [name, setName] = useState<string>('5・6年生');
+  const [learningCode, setLearningCode] = useState<string>('');
+  const [codeError, setCodeError] = useState<string>('');
+  const [checkingCode, setCheckingCode] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState<DialogueTopic>('intro');
   const [durationMinutes, setDurationMinutes] = useState<number>(1);
   const [previewPlayingId, setPreviewPlayingId] = useState<string | null>(null);
@@ -52,15 +56,23 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
     );
   };
 
-  const handleStart = () => {
+  const handleStart = async () => {
     stopSpeaking();
+    const normalizedCode = learningCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+    if (learningDataEnabled) {
+      if (!/^[A-Z0-9]{4,8}$/.test(normalizedCode)) { setCodeError('4〜8文字の学習コードを入力してください。'); return; }
+      setCheckingCode(true); setCodeError('');
+      const ok = await onValidateLearningCode(normalizedCode);
+      setCheckingCode(false);
+      if (!ok) { setCodeError('学習コードを確認できませんでした。先生に確認してください。'); return; }
+    }
     onStartDialogue({
-      name: name.trim() || '5・6年生',
+      name: '5・6年生',
       grade: '小学校５・６年生',
-      selectedDurationMinutes: durationMinutes,
+      selectedDurationMinutes: durationMinutes as 1 | 2 | 3 | 5,
       selectedTopic,
-      selectedAiStudentId: selectedStudentId,
-    });
+      selectedAiStudentId: selectedStudentId as any,
+    }, learningDataEnabled ? normalizedCode : '');
   };
 
   return (
@@ -85,18 +97,13 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 px-3 py-1 rounded-xl shadow-2xs flex-shrink-0 w-full sm:w-auto justify-between sm:justify-start">
+        <div className="flex flex-col items-stretch gap-1 bg-slate-50 border border-slate-300 px-3 py-1.5 rounded-xl shadow-2xs flex-shrink-0 w-full sm:w-auto">
           <div className="flex items-center gap-1.5">
             <User className="w-4 h-4 text-slate-500 flex-shrink-0" />
-            <span className="text-xs sm:text-sm font-bold text-slate-700 whitespace-nowrap">お名前:</span>
+            <span className="text-xs sm:text-sm font-bold text-slate-700 whitespace-nowrap">{learningDataEnabled ? '学習コード:' : '利用者:'}</span>
+            {learningDataEnabled ? <input type="text" value={learningCode} onChange={(event) => { setLearningCode(event.target.value.toUpperCase()); setCodeError(''); }} placeholder="例 A7M4" autoCapitalize="characters" maxLength={8} className="bg-white border border-slate-300 rounded-lg px-2 py-0.5 text-xs sm:text-sm font-bold text-slate-900 tracking-widest uppercase focus:outline-none focus:ring-2 focus:ring-blue-500 w-32 sm:w-36" /> : <span className="text-xs sm:text-sm font-black text-slate-800">5・6年生</span>}
           </div>
-          <input
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="ニックネーム等"
-            className="bg-white border border-slate-300 rounded-lg px-2 py-0.5 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 w-32 sm:w-36"
-          />
+          {codeError && <p className="text-[10px] font-bold text-rose-700 max-w-56">{codeError}</p>}
         </div>
       </header>
 
@@ -293,11 +300,11 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue }) => 
 
           <button
             type="button"
-            onClick={handleStart}
+            onClick={() => void handleStart()}
             className="w-full px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer"
           >
             <Play className="w-4 h-4 fill-white" />
-            <span>対話をスタートする！ (Start)</span>
+            <span>{checkingCode ? '学習コードを確認中…' : '対話をスタートする！ (Start)'}</span>
           </button>
         </section>
       </main>
