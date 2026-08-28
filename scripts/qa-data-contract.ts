@@ -8,6 +8,8 @@ import {
   isAIStudentId,
   isDialogueDuration,
   isDialogueTopic,
+  isValidLearningCode,
+  normalizeLearningCode,
   validateSessionSaveInput,
   maskHistoryForStorage,
 } from '../src/dataContract';
@@ -22,6 +24,10 @@ assert.equal(isDialogueTopic('free'), true);
 assert.equal(isDialogueTopic('invalid'), false);
 assert.equal(isDialogueDuration(5), true);
 assert.equal(isDialogueDuration(10), false);
+assert.equal(isValidLearningCode('A7M4'), true);
+assert.equal(isValidLearningCode('A7M45'), false);
+assert.equal(isValidLearningCode('A7M'), false);
+assert.equal(normalizeLearningCode('a7m45'), 'A7M4');
 
 const history = canonicalizeHistory([
   { id: 'a', sender: 'child', englishText: 'I like soccer.', timestamp: 1000 },
@@ -35,17 +41,15 @@ assert.equal(stats.actualDurationSeconds, 60);
 assert.equal(stats.uniqueVocabularyCount, 2);
 
 const valid = validateSessionSaveInput({
-  sessionId: 'session_12345678',
-  learningCode: 'A7M4',
-  aiStudentId: 'emma_usa',
-  topic: 'favorites',
-  targetDurationMinutes: 3,
-  startedAt: 1000,
-  endedAt: 181000,
-  history,
+  sessionId: 'session_12345678', learningCode: 'A7M4', aiStudentId: 'emma_usa', topic: 'favorites', targetDurationMinutes: 3,
+  startedAt: 1000, endedAt: 181000, history,
 });
 assert.equal(valid.ok, true);
-
+const badCode = validateSessionSaveInput({
+  sessionId: 'session_12345678', learningCode: 'A7M', aiStudentId: 'emma_usa', topic: 'favorites', targetDurationMinutes: 3,
+  startedAt: 1000, endedAt: 2000, history,
+});
+assert.equal(badCode.ok, false);
 const badStudent = validateSessionSaveInput({
   sessionId: 'session_12345678', learningCode: 'A7M4', aiStudentId: 'nope', topic: 'favorites', targetDurationMinutes: 3, startedAt: 1000, endedAt: 2000, history,
 });
@@ -55,14 +59,11 @@ const badDuration = validateSessionSaveInput({
 });
 assert.equal(badDuration.ok, false);
 
-const privateHistory = canonicalizeHistory([
-  { id: 'p', sender: 'child', englishText: 'My email is child@example.com and phone is 090-1234-5678.', timestamp: 1000 },
-]);
+const privateHistory = canonicalizeHistory([{ id: 'p', sender: 'child', englishText: 'My email is child@example.com and phone is 090-1234-5678.', timestamp: 1000 }]);
 const maskedHistory = maskHistoryForStorage(privateHistory);
 assert.equal(maskedHistory[0].englishText.includes('child@example.com'), false);
 assert.equal(maskedHistory[0].englishText.includes('090-1234-5678'), false);
 const copied = safePlainTextForClipboard('Email child@example.com phone 090-1234-5678');
 assert.equal(copied.includes('child@example.com'), false);
 assert.equal(copied.includes('090-1234-5678'), false);
-
 console.log('DATA CONTRACT QA PASS');
