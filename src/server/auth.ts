@@ -84,6 +84,13 @@ function readCookie(req: Request, name: string): string {
   return '';
 }
 
+function researcherRouteAllowed(req: Request): boolean {
+  const path = req.path || '';
+  if (path === '/api/management/me') return true;
+  if (path === '/api/management/research.csv') return true;
+  return false;
+}
+
 export function managementAuthConfigured(): boolean {
   return getAccounts().length > 0 && Boolean(getSessionSecret());
 }
@@ -117,6 +124,9 @@ export function requireManagementRole(roles: ManagementRole[]) {
     if (!managementAuthConfigured()) return res.status(503).json({ success: false, error: 'MANAGEMENT_AUTH_NOT_CONFIGURED' });
     const payload = verify(readCookie(req, 'mgmt_session'));
     if (!payload || !roles.includes(payload.role)) return res.status(401).json({ success: false, error: 'UNAUTHORIZED' });
+    if (payload.role === 'researcher' && !researcherRouteAllowed(req)) {
+      return res.status(403).json({ success: false, error: 'RESEARCHER_ANONYMIZED_DATA_ONLY' });
+    }
     req.managementUser = payload;
     next();
   };

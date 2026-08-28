@@ -44,10 +44,14 @@ export const isDialogueTopic = (value: unknown): value is DialogueTopic => typeo
 export const isDialogueDuration = (value: unknown): value is DialogueDurationMinutes => typeof value === 'number' && (DIALOGUE_DURATIONS_MINUTES as readonly number[]).includes(value);
 
 export function normalizeLearningCode(value: unknown): string {
-  return typeof value === 'string' ? value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) : '';
+  return typeof value === 'string' ? value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) : '';
 }
 
-export function isValidLearningCode(value: unknown): boolean { return /^[A-Z0-9]{4,8}$/.test(normalizeLearningCode(value)); }
+export function isValidLearningCode(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const cleaned = value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return /^[A-Z0-9]{4}$/.test(cleaned);
+}
 export function countEnglishWords(text: string): number { return (text.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g) || []).length; }
 
 export function canonicalizeHistory(history: unknown): ChatMessage[] {
@@ -102,8 +106,8 @@ export function parseReflectionAnswers(value: unknown): ReflectionAnswers | unde
 export function validateSessionSaveInput(body: unknown): { ok: true; value: SessionSaveInput } | { ok: false; error: string } {
   if (!body || typeof body !== 'object') return { ok: false, error: 'INVALID_BODY' };
   const source = body as Record<string, unknown>;
+  if (!isValidLearningCode(source.learningCode)) return { ok: false, error: 'INVALID_LEARNING_CODE' };
   const learningCode = normalizeLearningCode(source.learningCode);
-  if (!isValidLearningCode(learningCode)) return { ok: false, error: 'INVALID_LEARNING_CODE' };
   if (!isAIStudentId(source.aiStudentId)) return { ok: false, error: 'INVALID_AI_STUDENT_ID' };
   if (!isDialogueTopic(source.topic)) return { ok: false, error: 'INVALID_TOPIC' };
   if (!isDialogueDuration(source.targetDurationMinutes)) return { ok: false, error: 'INVALID_DURATION' };
