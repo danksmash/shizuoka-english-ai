@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { Award, BarChart3, BookOpen, CheckCircle2, Copy, MessageSquare, Printer, RotateCcw, Sparkles, TrendingUp, Volume2 } from 'lucide-react';
+import { Award, BarChart3, BookOpen, CheckCircle2, MessageSquare, RotateCcw, Sparkles, TrendingUp, Volume2 } from 'lucide-react';
 import { ChatMessage, FeedbackData, StudentProfile, VisualVocabularyItem } from '../types';
 import { getAIStudentById } from '../data/curriculum';
 import { speakVocabularyWord } from '../utils/speech';
 import { getJapaneseTranslationForMessage } from '../utils/translation';
-import { safePlainTextForClipboard } from '../utils/privacy';
 import { StudentAvatar } from './StudentAvatar';
 
 interface FeedbackScreenProps {
@@ -26,37 +25,24 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
   messages,
   feedback,
   isLoadingFeedback,
-  totalTurns,
-  totalWords,
-  elapsedSeconds,
   encounteredVocabList,
   onPlayAudio,
   onRestart,
   onOpenHistory,
 }) => {
   const [playingWordId, setPlayingWordId] = useState<string | null>(null);
-  const [copySuccess, setCopySuccess] = useState(false);
   const aiStudent = getAIStudentById(profile.selectedAiStudentId);
   const uniqueKeyPhrases = (feedback?.keyPhrases || []).filter((phrase, index, all) => {
     const key = phrase.english.trim().toLowerCase();
     return key.length > 0 && all.findIndex((candidate) => candidate.english.trim().toLowerCase() === key) === index;
   });
 
-  const formatTime = (secs: number) => `${Math.floor(secs / 60)}分${String(secs % 60).padStart(2, '0')}秒`;
-
   const handlePlayVocab = (item: VisualVocabularyItem) => {
     setPlayingWordId(item.id);
     speakVocabularyWord(item.word, aiStudent.voiceLang, () => setPlayingWordId(null));
   };
 
-  const handleCopyReport = () => {
-    const transcript = messages.map((m) => `${m.sender === 'ai' ? aiStudent.name : (profile.name || 'Student')}: ${m.englishText}\n日本語訳: ${getJapaneseTranslationForMessage(m, profile.selectedAiStudentId, profile.selectedTopic) || ''}`).join('\n\n');
-    const report = `--- AI留学生えいご対話レポート ---\n生徒: ${profile.name}\n留学生: ${aiStudent.name} (${aiStudent.countryJapanese})\n対話時間: ${formatTime(elapsedSeconds)} / ターン: ${totalTurns} / 発話語数: ${totalWords}\n\n【留学生からのメッセージ】\n${feedback?.studentMessage || feedback?.overallComment || ''}\n\n【よくできたところ】\n${(feedback?.goodPoints || []).join('\n')}\n\n【次へのアドバイス】\n${feedback?.improvementAdvice?.title || ''}\n${feedback?.improvementAdvice?.detail || ''}\n\n【対話ログと日本語訳】\n${transcript}`;
-    navigator.clipboard.writeText(safePlainTextForClipboard(report)).then(() => {
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2500);
-    }).catch(() => {});
-  };
+
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-blue-50/20 to-slate-100 p-3 sm:p-6 lg:p-8">
@@ -71,9 +57,7 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={handleCopyReport} className="flex min-h-11 items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 text-xs font-black text-emerald-800"><Copy className="h-4 w-4" />{copySuccess ? 'コピーしました！' : 'コピー'}</button>
             {onOpenHistory && <button type="button" onClick={onOpenHistory} className="flex min-h-11 items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 text-xs font-black text-blue-800"><BarChart3 className="h-4 w-4" />わたしの学習履歴</button>}
-            <button type="button" onClick={() => window.print()} className="flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-700"><Printer className="h-4 w-4" />印刷</button>
             <button type="button" onClick={onRestart} className="flex min-h-11 items-center gap-2 rounded-2xl bg-blue-600 px-5 text-xs font-black text-white shadow"><RotateCcw className="h-4 w-4" />もう一度練習する</button>
           </div>
         </div>
@@ -93,7 +77,7 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
                   <h2 className="mb-4 flex items-center gap-2 text-base font-black text-emerald-900"><CheckCircle2 className="h-5 w-5 text-emerald-600" />よくできたところ (Good Points)</h2>
                   <div className="space-y-3">{(feedback?.goodPoints || []).map((point, idx) => <div key={idx} className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-black text-white">{idx + 1}</span><p className="text-xs font-semibold leading-relaxed text-slate-800 sm:text-sm">{point}</p></div>)}</div>
                 </section>
-                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <section className="flex-1 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                   <h2 className="mb-4 flex items-center gap-2 text-base font-black text-amber-900"><TrendingUp className="h-5 w-5 text-amber-600" />次へのステップアップ (Next Step Advice)</h2>
                   <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4"><h3 className="mb-1 text-sm font-black text-amber-950">💡 {feedback?.improvementAdvice?.title}</h3><p className="mb-3 text-xs leading-relaxed text-slate-800 sm:text-sm">{feedback?.improvementAdvice?.detail}</p>{feedback?.improvementAdvice?.examplePhrase && <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-white p-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-amber-800">使ってみよう！ (Practice Phrase)</p><p className="text-sm font-black text-slate-900">“{feedback.improvementAdvice.examplePhrase}”</p></div><button type="button" onClick={() => onPlayAudio(feedback.improvementAdvice.examplePhrase!)} className="rounded-lg bg-amber-100 p-2 text-amber-800"><Volume2 className="h-4 w-4" /></button></div>}</div>
                 </section>
