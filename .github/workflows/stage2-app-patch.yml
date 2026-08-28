@@ -1,0 +1,26 @@
+name: One-shot stage2 app patch
+on:
+  push:
+    branches: [codex/reflection-ui-finalize]
+    paths:
+      - scripts/patch-stage2-app.py
+      - .github/workflows/stage2-app-patch.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/reflection-ui-finalize
+      - name: Apply App patch
+        run: python3 scripts/patch-stage2-app.py
+      - name: Commit patched app and remove one-shot files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm scripts/patch-stage2-app.py .github/workflows/stage2-app-patch.yml
+          git add src/App.tsx
+          git commit -m "ui: make reflection the final learner report"
+          git push origin HEAD:codex/reflection-ui-finalize
