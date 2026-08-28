@@ -19,7 +19,8 @@
     "lint": "tsc --noEmit",
     "qa:speech": "tsx scripts/test_speech_accumulation_qa.ts",
     "qa:security": "tsx scripts/qa-security.ts",
-    "qa": "npm run qa:dialogue && npm run qa:speech && npm run qa:security && npm run qa:alignment && npm run qa:starter-translations && npm run lint",
+    "qa:data": "tsx scripts/qa-data-contract.ts",
+    "qa": "npm run qa:dialogue && npm run qa:speech && npm run qa:security && npm run qa:alignment && npm run qa:starter-translations && npm run qa:data && npm run lint",
     "qa:starter-translations": "tsx scripts/qa-starter-translations.ts",
     "qa:alignment": "tsx scripts/qa-dialogue-alignment.ts"
   },

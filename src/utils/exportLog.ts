@@ -1,7 +1,7 @@
 import { ChatMessage, FeedbackData, StudentProfile } from '../types';
 import { getAIStudentById } from '../data/curriculum';
 import { getJapaneseTranslationForMessage } from './translation';
-import { maskHighRiskPII } from './security';
+import { maskTextForExternalUse } from './privacy';
 
 // User- and AI-generated text is escaped before insertion into exported HTML.
 function escapeHtml(value: unknown): string {
@@ -14,7 +14,7 @@ function escapeHtml(value: unknown): string {
 }
 
 function safeDisplayText(value: unknown): string {
-  return escapeHtml(maskHighRiskPII(String(value ?? '')).maskedText);
+  return escapeHtml(maskTextForExternalUse(String(value ?? '')));
 }
 
 export function downloadDialogueLogHTML(
