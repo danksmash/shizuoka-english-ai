@@ -30,6 +30,8 @@ const serverSource = await readFile('server.ts', 'utf8');
 assert.ok(serverSource.includes("requireManagementRole(['teacher'])"));
 assert.ok(serverSource.includes('getTeacherSessionsForManagement'));
 assert.ok(serverSource.includes("requireManagementRole(['researcher'])"));
+assert.ok(serverSource.includes('isPredominantlyJapanese'), 'Japanese feedback guard missing');
+assert.ok(serverSource.includes('studentMessageは必ず日本語で書いてください'), 'Japanese feedback prompt requirement missing');
 const reflectionSource = await readFile('src/components/ReflectionScreen.tsx', 'utf8');
 for (const marker of ['自分の考えを伝える','相手の話を聞いて分かる','新しい言葉や文化に気づいた','対話時間 (TIME)','ターン数 (TURNS)','発話語数 (WORDS)','出会った語彙 (VOCAB)']) assert.ok(reflectionSource.includes(marker), `Reflection UI marker missing: ${marker}`);
 assert.ok(!reflectionSource.includes('もう一度練習する'), 'Retry button must not be on reflection screen');
@@ -53,13 +55,14 @@ assert.ok(html.includes('fillResearchScopeSelect'), 'R2 scoped class selector mi
 assert.ok(html.includes('総対話時間'));
 assert.ok(html.includes("setSummaryQuick('all')"));
 assert.ok(html.includes("actualDurationSeconds"));
-for (const marker of ['teacherTotalDuration','teacherAvgDuration','teacherAvgTurns','teacherAvgWords','researchTotalDuration','researchAvgTurns','researchAvgWords','sumAvgDuration','sumTotalWords','r4TotalDuration','r4Themes']) assert.ok(html.includes(`id="${marker}"`), `Information-density metric missing: ${marker}`);
-for (const marker of ['grade5','grade6','canonClass','classMatches','scopeClasses','fillResearchScopeSelect','topicText']) assert.ok(html.includes(marker), `Linked dashboard logic missing: ${marker}`);
+for (const marker of ['teacherTotalDuration','teacherAvgDuration','teacherAvgTurns','teacherAvgWords','teacherClassSummary','teacherUsageSummary','researchTotalDuration','researchAvgTurns','researchAvgWords','researchClassSummary','researchUsageSummary','sumAvgDuration','sumTotalWords','r4TotalDuration','r4Themes']) assert.ok(html.includes(`id="${marker}"`), `Information-density metric missing: ${marker}`);
+for (const marker of ['grade5','grade6','canonClass','classMatches','scopeClasses','fillResearchScopeSelect','topicText','UNASSIGNED_CLASS','rowClass','学級未設定']) assert.ok(html.includes(marker), `Linked dashboard logic missing: ${marker}`);
 assert.ok(html.includes('累積対話時間（分）'));
 const historySource = await readFile('src/components/LearningHistoryScreen.tsx', 'utf8');
 for (const marker of ['累計対話時間','よく話したテーマ','よく話したAI留学生','テーマ・時間・発話量','actualDurationSeconds']) assert.ok(historySource.includes(marker), `Learning history detail missing: ${marker}`);
 const setupSource = await readFile('src/components/SetupScreen.tsx', 'utf8');
-assert.ok(setupSource.includes('min-h-[198px]'));
-assert.ok(setupSource.includes('grid-cols-[84px_minmax(0,1fr)]'));
+assert.ok(setupSource.includes('min-h-[174px]'));
+assert.ok(setupSource.includes('grid-cols-[72px_minmax(0,1fr)]'));
+assert.ok(setupSource.includes('max-w-[170px]'));
 
 console.log('Learner + teacher + researcher functional UI contract QA: PASS');
