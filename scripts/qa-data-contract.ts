@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   AI_STUDENT_IDS,
   DIALOGUE_DURATIONS_MINUTES,
@@ -66,4 +67,15 @@ assert.equal(maskedHistory[0].englishText.includes('090-1234-5678'), false);
 const copied = safePlainTextForClipboard('Email child@example.com phone 090-1234-5678');
 assert.equal(copied.includes('child@example.com'), false);
 assert.equal(copied.includes('090-1234-5678'), false);
+
+const persistenceSource = await readFile('src/server/persistence.ts', 'utf8');
+assert.ok(persistenceSource.includes("const TEACHER_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'"));
+assert.ok(persistenceSource.includes('teacherStudentId: tid'));
+assert.ok(persistenceSource.includes('class_id: session.classId'));
+assert.equal(persistenceSource.includes('child_utterances:'), false, 'Research export must not contain raw learner utterances');
+const serverSource = await readFile('server.ts', 'utf8');
+assert.ok(serverSource.includes('teacherStudentId:created.teacherStudentId'));
+const managementSource = await readFile('src/server/managementPage.ts', 'utf8');
+assert.ok(managementSource.includes("String(d.teacherStudentId||'----')"));
+
 console.log('DATA CONTRACT QA PASS');
