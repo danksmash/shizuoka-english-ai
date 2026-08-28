@@ -21,7 +21,7 @@ jobs:
           node-version: 20
           cache: npm
       - name: Apply stage 2 integration
-        shell: python
+        shell: python {0}
         run: |
           from pathlib import Path
 
@@ -78,6 +78,8 @@ jobs:
           p = Path('server.ts')
           text = p.read_text()
           marker = "app.post('/api/feedback'"
+          if text.count(marker) != 1:
+              raise SystemExit('feedback marker mismatch')
           before, after = text.split(marker, 1)
           after = after.replace('${durationMinutes || 1}分', '${targetDuration}分')
           after = after.replace('${turns || 0}', '${stats.totalTurns}')
@@ -86,7 +88,6 @@ jobs:
           after = after.replace('(durationMinutes || 1) * 60', 'stats.actualDurationSeconds')
           after = after.replace('durationMinutes || 1', 'targetDuration')
           after = after.replace('encounteredVocab || []', 'canonicalVocab')
-          after = after.replace('encounteredVocab: encounteredVocab || [],', 'encounteredVocab: canonicalVocab,')
           p.write_text(before + marker + after)
 
           replace_once('src/utils/exportLog.ts',
