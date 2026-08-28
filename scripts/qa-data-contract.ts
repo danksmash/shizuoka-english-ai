@@ -73,5 +73,9 @@ assert.ok(persistenceSource.includes("const TEACHER_ID_ALPHABET = 'ABCDEFGHJKLMN
 assert.ok(persistenceSource.includes('teacherStudentId: tid'));
 assert.ok(persistenceSource.includes('class_id: session.classId'));
 assert.equal(persistenceSource.includes('child_utterances:'), false, 'Research export must not contain raw learner utterances');
+const serverSource = await readFile('server.ts', 'utf8');
+assert.ok(serverSource.includes('teacherStudentId:created.teacherStudentId'));
+const managementSource = await readFile('src/server/managementPage.ts', 'utf8');
+assert.ok(managementSource.includes("String(d.teacherStudentId||'----')"));
 
 console.log('DATA CONTRACT QA PASS');
