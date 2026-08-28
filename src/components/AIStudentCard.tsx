@@ -64,21 +64,23 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
 
   return (
     <div className="bg-white rounded-3xl p-3.5 sm:p-4 border border-slate-200 shadow-sm flex flex-col items-center text-center relative overflow-hidden">
-      <div className="absolute top-4 left-4 flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full text-xs font-bold text-slate-700 shadow-2xs">
-        <span className="text-lg leading-none">{student.flag}</span>
-        <span>{student.country} ({student.countryNative})</span>
+      <div className="w-full min-h-9 flex items-center justify-between gap-2 mb-2">
+        <div className="min-w-0 flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full text-xs font-bold text-slate-700 shadow-2xs">
+          <span className="text-lg leading-none flex-shrink-0">{student.flag}</span>
+          <span className="truncate">{student.country} ({student.countryNative})</span>
+        </div>
+
+        <button
+          type="button"
+          onClick={onReplayAudio}
+          className="p-2 bg-blue-50 hover:bg-blue-100 active:scale-95 text-blue-700 rounded-full border border-blue-200 transition-all cursor-pointer shadow-2xs flex-shrink-0"
+          title="もう一度音声を聞く"
+        >
+          <Volume2 className="w-4 h-4" />
+        </button>
       </div>
 
-      <button
-        type="button"
-        onClick={onReplayAudio}
-        className="absolute top-4 right-4 p-2 bg-blue-50 hover:bg-blue-100 active:scale-95 text-blue-700 rounded-full border border-blue-200 transition-all cursor-pointer shadow-2xs"
-        title="もう一度音声を聞く"
-      >
-        <Volume2 className="w-4 h-4" />
-      </button>
-
-      <div className="relative mt-4 mb-2">
+      <div className="relative mb-2">
         <div
           className={`w-24 h-24 sm:w-28 sm:h-28 rounded-3xl overflow-hidden p-1 transition-all duration-300 ${
             isSpeaking
