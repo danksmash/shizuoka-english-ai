@@ -185,10 +185,19 @@ const PERSONA_VOICE_MAP: Record<string, PersonaVoiceConfig> = {
 };
 
 function cleanupCloudAudio() {
-  if (activeCloudAudio) {
-    activeCloudAudio.pause();
-    activeCloudAudio.src = '';
-    activeCloudAudio = null;
+  const audio = activeCloudAudio;
+  activeCloudAudio = null;
+  if (audio) {
+    // Detach lifecycle handlers before intentionally unloading the media.
+    // Some browsers emit `error` after `src` is cleared; leaving onerror
+    // attached would incorrectly start device TTS after a successful cloud
+    // playback or an intentional stop.
+    audio.onplay = null;
+    audio.onended = null;
+    audio.onerror = null;
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
   }
   if (activeCloudAudioUrl) {
     URL.revokeObjectURL(activeCloudAudioUrl);
@@ -335,6 +344,23 @@ export function speakStudentVoice(
   const rate = Math.max(0.8, Math.min(1.15, customRate || student.voiceRate || 1.0));
 
   void (async () => {
+    let cloudPlaybackCompleted = false;
+    let localFallbackStarted = false;
+
+    const startLocalFallbackOnce = (error: unknown) => {
+      if (
+        requestId !== activeCloudRequestId ||
+        cloudPlaybackCompleted ||
+        localFallbackStarted
+      ) {
+        return;
+      }
+      localFallbackStarted = true;
+      console.warn('Google Cloud TTS unavailable; using device TTS fallback:', error);
+      cleanupCloudAudio();
+      speakStudentVoiceLocal(text, student, customRate, onStart, onEnd, onError);
+    };
+
     try {
       const controller = new AbortController();
       const timeoutId = window.setTimeout(() => controller.abort(), 5_000);
@@ -362,20 +388,16 @@ export function speakStudentVoice(
       audio.onplay = () => onStart?.();
       audio.onended = () => {
         if (requestId !== activeCloudRequestId) return;
+        cloudPlaybackCompleted = true;
         cleanupCloudAudio();
         onEnd?.();
       };
-      audio.onerror = () => {
-        if (requestId !== activeCloudRequestId) return;
-        cleanupCloudAudio();
-        speakStudentVoiceLocal(text, student, customRate, onStart, onEnd, onError);
+      audio.onerror = (event) => {
+        startLocalFallbackOnce(event);
       };
       await audio.play();
     } catch (error) {
-      if (requestId !== activeCloudRequestId) return;
-      console.warn('Google Cloud TTS unavailable; using device TTS fallback:', error);
-      cleanupCloudAudio();
-      speakStudentVoiceLocal(text, student, customRate, onStart, onEnd, onError);
+      startLocalFallbackOnce(error);
     }
   })();
 
