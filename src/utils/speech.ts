@@ -693,7 +693,7 @@ export function formatSpeechText(text: string): string {
   // Tokenize or separate sentences intelligently
   for (const starter of sentenceStarters) {
     const regex = new RegExp(`(?<=[a-zA-Z0-9])\\s+(${starter})\\b`, 'gi');
-    trimmed = trimmed.replace(regex, (match, p1, offset, fullStr) => {
+    trimmed = trimmed.replace(regex, (_match, p1, offset, fullStr) => {
       // Check if previous character before space was already punctuation
       const beforeMatch = fullStr.slice(0, offset).trim();
       const lastC = beforeMatch.slice(-1);
@@ -719,7 +719,7 @@ export function formatSpeechText(text: string): string {
   }
 
   // Capitalize after every sentence boundary (. or ? or !)
-  trimmed = trimmed.replace(/(?:^|[.?!]\s+)([a-z])/g, (match, letter) => match.toUpperCase());
+  trimmed = trimmed.replace(/(?:^|[.?!]\s+)([a-z])/g, (match) => match.toUpperCase());
 
   // Capitalize common proper nouns, country names, city names
   trimmed = trimmed.replace(/\bmt\.?\s*fuji\b/gi, 'Mt. Fuji');
