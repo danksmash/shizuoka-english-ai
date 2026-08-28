@@ -1,0 +1,84 @@
+name: Stage 3 cleanup runner
+
+on:
+  push:
+    branches:
+      - codex/stage3-cleanup
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/stage3-cleanup
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply audited unused-code cleanup
+        shell: python
+        run: |
+          from pathlib import Path
+          import json
+
+          replacements = {
+              Path('server.ts'): [
+                  ("\nfunction isExplicitFarewell(text: string): boolean {\n  return /\\b(?:goodbye|bye(?: bye)?|see you|see ya)\\b/i.test(text.trim());\n}\n", "\n"),
+              ],
+              Path('src/App.tsx'): [
+                  ("import { DIALOGUE_TOPICS, getAIStudentById } from './data/curriculum';", "import { getAIStudentById } from './data/curriculum';"),
+              ],
+              Path('src/components/FeedbackScreen.tsx'): [
+                  ("  ChevronRight,\n", ""),
+                  ("import { downloadDialogueLogHTML } from '../utils/exportLog';\n", ""),
+              ],
+              Path('src/components/VisualVocabularyDock.tsx'): [
+                  ("  const [selectedModalItem, setSelectedModalItem] = useState<VisualVocabularyItem | null>(null);\n", ""),
+              ],
+              Path('src/utils/speech.ts'): [
+                  ("trimmed = trimmed.replace(regex, (match, p1, offset, fullStr) => {", "trimmed = trimmed.replace(regex, (_match, p1, offset, fullStr) => {"),
+                  ("trimmed = trimmed.replace(/(?:^|[.?!]\\s+)([a-z])/g, (match, letter) => match.toUpperCase());", "trimmed = trimmed.replace(/(?:^|[.?!]\\s+)([a-z])/g, (match) => match.toUpperCase());"),
+              ],
+          }
+
+          for path, edits in replacements.items():
+              text = path.read_text()
+              for old, new in edits:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f'{path}: expected exactly one match, found {count}: {old!r}')
+                  text = text.replace(old, new, 1)
+              path.write_text(text)
+
+          tsconfig_path = Path('tsconfig.json')
+          tsconfig = json.loads(tsconfig_path.read_text())
+          opts = tsconfig['compilerOptions']
+          opts['noUnusedLocals'] = True
+          opts['noUnusedParameters'] = True
+          tsconfig_path.write_text(json.dumps(tsconfig, ensure_ascii=False, indent=2) + '\n')
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Full QA with strict unused checks
+        run: npm run qa
+
+      - name: Production build
+        run: npm run build
+
+      - name: Commit cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server.ts src/App.tsx src/components/FeedbackScreen.tsx src/components/VisualVocabularyDock.tsx src/utils/speech.ts tsconfig.json
+          git commit -m "chore: remove audited unused code"
+          git push origin HEAD:codex/stage3-cleanup
