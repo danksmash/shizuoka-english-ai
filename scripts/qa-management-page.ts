@@ -21,6 +21,7 @@ const ids = ['login','panel','u','p','msg','who','csvBtn','rows','loginBtn','log
 const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement()])) as Record<string, FakeElement>;
 elements.u.value = 'qa-user';
 elements.p.value = 'qa-password';
+const displayOf = (id: string): string => String(elements[id]?.style.display ?? '');
 
 let meCalls = 0;
 const jsonResponse = (status: number, body: unknown) => ({
@@ -60,14 +61,14 @@ const context = vm.createContext({
 vm.runInContext(scriptMatch[1], context, { filename: 'management-page-inline.js' });
 await new Promise((resolve) => setTimeout(resolve, 0));
 
-if (elements.login.style.display !== 'block') throw new Error('Logged-out view did not show login card');
-if (elements.panel.style.display !== 'none') throw new Error('Logged-out view did not hide panel');
+if (displayOf('login') !== 'block') throw new Error('Logged-out view did not show login card');
+if (displayOf('panel') !== 'none') throw new Error('Logged-out view did not hide panel');
 const click = elements.loginBtn.listeners.get('click');
 if (!click) throw new Error('Login button listener was not registered');
 await click();
 await new Promise((resolve) => setTimeout(resolve, 0));
-if (elements.login.style.display !== 'none') throw new Error('Successful login did not hide login card');
-if (elements.panel.style.display !== 'block') throw new Error('Successful login did not show panel');
+if (displayOf('login') !== 'none') throw new Error('Successful login did not hide login card');
+if (displayOf('panel') !== 'block') throw new Error('Successful login did not show panel');
 if (elements.who.textContent !== 'qa-user (researcher)') throw new Error('Logged-in identity was not rendered');
 
 console.log('Management page DOM/login regression QA: PASS');
