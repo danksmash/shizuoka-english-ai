@@ -214,8 +214,5 @@ export function anonymizeSessionForResearch(session: Record<string, any>): Recor
     reflection_conveyed_ideas: session.reflection?.conveyedIdeas ?? '',
     reflection_understood_partner: session.reflection?.understoodPartner ?? '',
     reflection_noticed_language_culture: session.reflection?.noticedLanguageCulture ?? '',
-    child_utterances: Array.isArray(session.history)
-      ? session.history.filter((message: any) => message?.sender === 'child').map((message: any) => String(message.englishText || '')).join(' | ')
-      : '',
   };
 }
