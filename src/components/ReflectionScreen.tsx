@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Award, BarChart3, Ear, KeyRound, Lightbulb, MessageCircle } from 'lucide-react';
+import { Award, Ear, KeyRound, Lightbulb, MessageCircle } from 'lucide-react';
 import type { AIStudentProfile, StudentProfile } from '../types';
 import type { ReflectionAnswers } from '../dataContract';
 
@@ -14,7 +14,6 @@ interface ReflectionScreenProps {
   onSubmit: (answers: ReflectionAnswers) => Promise<void> | void;
   isSaving: boolean;
   saveMessage?: string;
-  onOpenHistory?: () => void;
 }
 
 const ITEMS = [
@@ -42,7 +41,6 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
   onSubmit,
   isSaving,
   saveMessage,
-  onOpenHistory,
 }) => {
   const [ratings, setRatings] = useState<Partial<Record<RatingKey, number>>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -69,7 +67,7 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-blue-50/30 p-3 sm:p-5 text-slate-900">
+    <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-blue-50/30 p-3 text-slate-900 sm:p-5">
       <div className="mx-auto max-w-[1480px] space-y-4">
         <header className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -85,22 +83,19 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <div className="rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-black">お名前：{profile.name || '5・6年生'}</div>
-              {learningCode && <div className="flex items-center gap-2 rounded-xl border-2 border-blue-500 bg-white px-4 py-2 text-sm font-black"><KeyRound className="h-4 w-4 text-blue-700"/>学習者用コード <span className="rounded-lg bg-blue-50 px-2 py-1 tracking-widest text-blue-800">{learningCode}</span></div>}
+              {learningCode && <div className="flex items-center gap-2 rounded-xl border-2 border-blue-500 bg-white px-4 py-2 text-sm font-black"><KeyRound className="h-4 w-4 text-blue-700" />学習者用コード <span className="rounded-lg bg-blue-50 px-2 py-1 tracking-widest text-blue-800">{learningCode}</span></div>}
             </div>
           </div>
         </header>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-500 text-white shadow"><Award className="h-9 w-9" /></div>
-              <div>
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">Great Job! 対話ふりかえり</span>
-                <h2 className="mt-2 text-2xl font-black text-slate-900">{profile.name || '5・6年生'}さんの英会話レポート</h2>
-                <p className="mt-1 text-sm font-semibold text-slate-600">{aiStudent.flag} {aiStudent.name} ({aiStudent.countryJapanese}) 留学生との対話練習記録</p>
-              </div>
+          <div className="mb-5 flex items-center gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-500 text-white shadow"><Award className="h-9 w-9" /></div>
+            <div>
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">Great Job! 対話ふりかえり</span>
+              <h2 className="mt-2 text-2xl font-black text-slate-900">{profile.name || '5・6年生'}さんの英会話レポート</h2>
+              <p className="mt-1 text-sm font-semibold text-slate-600">{aiStudent.flag} {aiStudent.name} ({aiStudent.countryJapanese}) 留学生との対話練習記録</p>
             </div>
-            {onOpenHistory && <button type="button" disabled={!submitted || isSaving} onClick={onOpenHistory} className="flex min-h-12 items-center gap-2 rounded-xl border border-blue-200 bg-white px-5 text-sm font-black text-slate-800 shadow-sm disabled:opacity-40"><BarChart3 className="h-5 w-5 text-blue-600"/>わたしの学習履歴</button>}
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
