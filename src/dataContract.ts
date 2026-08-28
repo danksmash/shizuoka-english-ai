@@ -92,16 +92,17 @@ export function canonicalizeHistory(history: unknown): ChatMessage[] {
       if (!sender || !englishText) return null;
       const japaneseText = typeof item.japaneseText === 'string' ? item.japaneseText.trim().slice(0, 500) : '';
       const timestamp = Number.isFinite(Number(item.timestamp)) ? Number(item.timestamp) : Date.now() + index;
-      return {
+      const message: ChatMessage = {
         id: typeof item.id === 'string' && item.id.trim() ? item.id.trim().slice(0, 120) : `msg-${timestamp}-${index}`,
         sender,
         englishText,
         japaneseText,
         timestamp,
         wordCount: sender === 'child' ? countEnglishWords(englishText) : undefined,
-      } satisfies ChatMessage;
+      };
+      return message;
     })
-    .filter((item): item is ChatMessage => Boolean(item));
+    .filter((item) => item !== null) as ChatMessage[];
 }
 
 export function calculateCanonicalStats(
