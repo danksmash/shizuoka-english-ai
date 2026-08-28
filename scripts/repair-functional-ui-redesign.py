@@ -66,3 +66,4 @@ if old_message_class in feedback:
 feedback_path.write_text(feedback, encoding='utf-8')
 
 print('Functional UI repair applied')
+# trigger latest-branch verification after direct UI file updates
