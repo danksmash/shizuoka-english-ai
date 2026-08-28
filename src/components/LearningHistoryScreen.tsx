@@ -16,7 +16,6 @@ export interface StudentHistoryRow {
   reflection?: {
     conveyedIdeas?: number;
     understoodPartner?: number;
-    continuedConversation?: number;
     noticedLanguageCulture?: number;
   } | null;
 }
@@ -31,7 +30,6 @@ interface LearningHistoryScreenProps {
 const reflectionKeys = [
   ['conveyedIdeas', '伝える'],
   ['understoodPartner', 'わかり合う'],
-  ['continuedConversation', '会話を続ける'],
   ['noticedLanguageCulture', 'ことば・文化'],
 ] as const;
 
@@ -55,7 +53,7 @@ export const LearningHistoryScreen: React.FC<LearningHistoryScreenProps> = ({ ro
         {loading ? <div className="bg-white rounded-3xl border border-slate-200 p-10 text-center font-bold text-slate-600">学習履歴を読み込んでいます…</div> : error ? <div className="bg-rose-50 rounded-3xl border border-rose-200 p-5 text-rose-800 font-bold">{error}</div> : <>
           <section className="bg-white border border-slate-200 rounded-3xl p-5 shadow-2xs">
             <h2 className="font-black text-slate-900 flex items-center gap-2"><Sparkles className="w-5 h-5 text-amber-500" />わたしのコミュニケーション</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">{averages.map((item) => <div key={item.label} className="rounded-2xl bg-blue-50 border border-blue-100 p-3 text-center"><p className="text-xs font-bold text-slate-700">{item.label}</p><p className="text-2xl font-black text-blue-700 mt-1">{item.value === null ? '—' : item.value.toFixed(1)}</p><p className="text-[10px] text-slate-500">5段階の平均</p></div>)}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">{averages.map((item) => <div key={item.label} className="rounded-2xl bg-blue-50 border border-blue-100 p-3 text-center"><p className="text-xs font-bold text-slate-700">{item.label}</p><p className="text-2xl font-black text-blue-700 mt-1">{item.value === null ? '—' : item.value.toFixed(1)}</p><p className="text-[10px] text-slate-500">ふりかえり平均</p></div>)}</div>
           </section>
 
           <section className="grid grid-cols-3 gap-2">
