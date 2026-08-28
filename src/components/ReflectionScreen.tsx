@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { CheckCircle2, MessageCircleHeart, Send } from 'lucide-react';
+import { Award, CheckCircle2, Ear, Lightbulb, MessageCircle, Send } from 'lucide-react';
 import type { AIStudentProfile } from '../types';
 import type { ReflectionAnswers } from '../dataContract';
-import { StudentAvatar } from './StudentAvatar';
 
 interface ReflectionScreenProps {
   aiStudent: AIStudentProfile;
@@ -11,66 +10,92 @@ interface ReflectionScreenProps {
   saveMessage?: string;
 }
 
-const QUESTIONS = [
-  { key: 'conveyedIdeas', title: '伝える', text: '自分の考えや気持ちを英語で伝えられた' },
-  { key: 'understoodPartner', title: 'わかり合う', text: '相手の話を聞いて、相手のことが分かった' },
-  { key: 'continuedConversation', title: '会話を続ける', text: '質問・聞き返し・言いかえなどで会話を続けられた' },
-  { key: 'noticedLanguageCulture', title: 'ことば・文化に気づく', text: '英語の表現や文化について新しい発見があった' },
+const ITEMS = [
+  { key: 'conveyedIdeas', label: '自分の考えを伝える', icon: MessageCircle, iconClass: 'bg-emerald-600' },
+  { key: 'understoodPartner', label: '相手の話を聞いて分かる', icon: Ear, iconClass: 'bg-blue-600' },
+  { key: 'noticedLanguageCulture', label: '新しい言葉や文化に気づいた', icon: Lightbulb, iconClass: 'bg-amber-600' },
+] as const;
+
+const CHOICES = [
+  { value: 5, label: 'できた', className: 'border-emerald-400 text-emerald-700 bg-emerald-50' },
+  { value: 3, label: '少しできた', className: 'border-blue-400 text-blue-700 bg-blue-50' },
+  { value: 1, label: '次はがんばる', className: 'border-orange-400 text-orange-700 bg-orange-50' },
 ] as const;
 
 export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({ aiStudent, onSubmit, isSaving, saveMessage }) => {
   const [ratings, setRatings] = useState<Record<string, number>>({});
-  const [freeComment, setFreeComment] = useState('');
-  const complete = useMemo(() => QUESTIONS.every((q) => Number.isInteger(ratings[q.key])), [ratings]);
+  const complete = useMemo(() => ITEMS.every((item) => Number.isInteger(ratings[item.key])), [ratings]);
 
   const submit = async () => {
     if (!complete || isSaving) return;
     await onSubmit({
       conveyedIdeas: ratings.conveyedIdeas,
       understoodPartner: ratings.understoodPartner,
-      continuedConversation: ratings.continuedConversation,
       noticedLanguageCulture: ratings.noticedLanguageCulture,
-      freeComment: freeComment.trim() || undefined,
     });
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-3 sm:p-6">
-      <div className="max-w-4xl mx-auto space-y-4">
-        <header className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm flex items-center gap-4">
-          <StudentAvatar student={aiStudent} size="sm" className="w-14 h-14" />
-          <div>
-            <div className="flex items-center gap-2 text-emerald-700 font-black text-sm"><MessageCircleHeart className="w-5 h-5" />対話のふりかえり</div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-1">今日の会話をふりかえろう</h1>
-            <p className="text-xs sm:text-sm text-slate-600 mt-1">正解はありません。自分が感じたことを選んでください。</p>
+    <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-blue-50/30 p-3 sm:p-5">
+      <div className="mx-auto max-w-[1460px] space-y-4">
+        <header className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white">◎</div>
+              <div>
+                <div className="mb-1 flex flex-wrap gap-2 text-[11px] font-black">
+                  <span className="rounded-full bg-blue-100 px-2.5 py-1 text-blue-800">静岡大学 留学生交流プログラム</span>
+                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-800">小学校5・6年生向け English</span>
+                </div>
+                <h1 className="text-lg font-black sm:text-xl">AI留学生 1対1 えいご対話プラクティス</h1>
+              </div>
+            </div>
+            <div className="rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-black">お名前：5・6年生</div>
           </div>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {QUESTIONS.map((q) => (
-            <section key={q.key} className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 shadow-2xs">
-              <h2 className="font-black text-slate-900 text-base">{q.title}</h2>
-              <p className="text-xs sm:text-sm text-slate-600 mt-1 min-h-10">{q.text}</p>
-              <div className="grid grid-cols-5 gap-1.5 mt-4" aria-label={`${q.title}の自己評価`}>
-                {[1,2,3,4,5].map((value) => {
-                  const selected = ratings[q.key] === value;
-                  return <button key={value} type="button" onClick={() => setRatings((prev) => ({ ...prev, [q.key]: value }))} className={`min-h-11 rounded-xl border font-black text-sm transition ${selected ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-blue-50'}`} aria-pressed={selected}>{value}</button>;
-                })}
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-500 text-white shadow"><Award className="h-9 w-9" /></div>
+              <div>
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">Great Job! 対話ふりかえり</span>
+                <h2 className="mt-2 text-2xl font-black text-slate-900">5・6年生さんの英会話レポート</h2>
+                <p className="mt-1 text-sm font-semibold text-slate-600">{aiStudent.flag} {aiStudent.name} ({aiStudent.countryJapanese}) 留学生との対話練習記録</p>
               </div>
-              <div className="flex justify-between text-[10px] text-slate-500 mt-1"><span>まだこれから</span><span>よくできた</span></div>
-            </section>
-          ))}
-        </div>
+            </div>
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-800">自分の対話をふりかえろう</div>
+          </div>
 
-        <section className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 shadow-2xs">
-          <label className="font-black text-slate-900 text-sm" htmlFor="reflection-comment">今日の発見・次にやってみたいこと（書ける人だけ）</label>
-          <textarea id="reflection-comment" value={freeComment} onChange={(e) => setFreeComment(e.target.value.slice(0, 300))} rows={3} className="mt-2 w-full rounded-2xl border border-slate-300 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="例：次は自分から質問してみたい。" />
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
+            <h3 className="mb-3 text-lg font-black text-emerald-700">自分の対話をふりかえろう</h3>
+            <div className="overflow-hidden rounded-2xl border border-slate-200">
+              {ITEMS.map((item, index) => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.key} className={`grid gap-3 p-3 sm:grid-cols-[minmax(240px,1fr)_2.3fr] sm:items-center ${index ? 'border-t border-slate-200' : ''}`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white ${item.iconClass}`}><Icon className="h-6 w-6" /></div>
+                      <span className="text-base font-black text-slate-800">{item.label}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                      {CHOICES.map((choice) => {
+                        const selected = ratings[item.key] === choice.value;
+                        return <button key={choice.value} type="button" aria-pressed={selected} onClick={() => setRatings((prev) => ({ ...prev, [item.key]: choice.value }))} className={`min-h-12 rounded-xl border-2 px-2 text-sm font-black transition ${selected ? `${choice.className} ring-2 ring-offset-1` : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>{choice.label}</button>;
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl bg-slate-50 p-3 text-center text-xs font-semibold text-slate-600">正解はありません。今日の自分にいちばん近いものを選んでください。</div>
+          {saveMessage && <p className="mt-3 text-center text-xs font-bold text-slate-600">{saveMessage}</p>}
+          <button type="button" disabled={!complete || isSaving} onClick={submit} className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 text-base font-black text-white shadow disabled:bg-slate-300">
+            {isSaving ? '保存しています…' : <><CheckCircle2 className="h-5 w-5" />ふりかえりを決定してレポートを見る<Send className="h-4 w-4" /></>}
+          </button>
         </section>
-
-        {saveMessage && <p className="text-center text-xs font-bold text-slate-600">{saveMessage}</p>}
-        <button type="button" disabled={!complete || isSaving} onClick={submit} className="w-full min-h-14 rounded-2xl bg-blue-600 disabled:bg-slate-300 text-white font-black text-base flex items-center justify-center gap-2 shadow-sm">
-          {isSaving ? '保存しています…' : <><CheckCircle2 className="w-5 h-5" />ふりかえりを決定してレポートを見る<Send className="w-4 h-4" /></>}
-        </button>
       </div>
     </div>
   );
