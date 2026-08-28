@@ -6,6 +6,11 @@ import { getDocument, listCollection, queryCollection, setDocument } from './fir
 const STUDENT_COLLECTION = 'students';
 const SESSION_COLLECTION = 'sessions';
 
+function retentionDays(): number {
+  const value = Number(process.env.SESSION_RETENTION_DAYS || 1095);
+  return Number.isFinite(value) ? Math.max(30, Math.min(3650, Math.round(value))) : 1095;
+}
+
 function pepper(): string {
   return process.env.LEARNING_CODE_PEPPER || '';
 }
@@ -96,6 +101,7 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
     reflection: args.reflection || null,
     updatedAt: new Date().toISOString(),
     createdAt: existing?.createdAt || new Date().toISOString(),
+    retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000).toISOString(),
   };
   await setDocument(SESSION_COLLECTION, args.sessionId, document);
   return document;
