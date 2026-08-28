@@ -97,14 +97,26 @@ jobs:
           echo "$chat" | grep -q '"success":true'
           echo "$chat" | grep -q '"route":"anthropic-resilient"'
 
-          tts_headers=$(mktemp)
-          tts_audio=$(mktemp)
-          curl --fail --silent --show-error --max-time 20 \
-            -D "$tts_headers" \
-            -o "$tts_audio" \
-            -X POST "$API_URL/api/tts" \
-            -H 'Content-Type: application/json' \
-            --data '{"text":"Hello! I am Emma. What is your name?","aiStudentId":"emma_usa","speakingRate":0.96}'
-          grep -qi 'content-type: audio/mpeg' "$tts_headers"
-          grep -qi 'x-tts-provider: google-chirp3-hd' "$tts_headers"
-          test "$(wc -c < "$tts_audio")" -gt 1000
+          for student in \
+            emma_usa \
+            oliver_uk \
+            liam_australia \
+            chloe_canada \
+            bence_hungary \
+            zofia_poland \
+            rahul_bangladesh \
+            linh_vietnam \
+            aung_myanmar; do
+            tts_headers=$(mktemp)
+            tts_audio=$(mktemp)
+            curl --fail --silent --show-error --max-time 20 \
+              -D "$tts_headers" \
+              -o "$tts_audio" \
+              -X POST "$API_URL/api/tts" \
+              -H 'Content-Type: application/json' \
+              --data "{\"text\":\"Hello. Nice to meet you.\",\"aiStudentId\":\"$student\",\"speakingRate\":0.95}"
+            grep -qi 'content-type: audio/mpeg' "$tts_headers"
+            grep -qi 'x-tts-provider: google-chirp3-hd' "$tts_headers"
+            test "$(wc -c < "$tts_audio")" -gt 500
+            rm -f "$tts_headers" "$tts_audio"
+          done
