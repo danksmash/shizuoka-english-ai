@@ -47,6 +47,7 @@ assert.ok(!appSource.includes('onOpenHistory={learningDataEnabled && learningCod
 assert.ok(!html.includes('id="teacherClassPicks"'), 'T2 redundant display-class selector must be removed');
 assert.ok(!html.includes('id="researchClassPicks"'), 'R2 must use a single class dropdown');
 for (const cls of ['5-1','5-2','5-3','6-1','6-2','6-3','テスト','予備']) assert.ok(html.includes(cls), `Class option missing: ${cls}`);
+assert.ok(html.includes('allLabel===null'), 'R2/T2 exact fixed-class dropdown behavior missing');
 assert.ok(html.includes('総対話時間'));
 assert.ok(html.includes("setSummaryQuick('all')"));
 assert.ok(html.includes("actualDurationSeconds"));
