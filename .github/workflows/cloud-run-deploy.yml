@@ -61,7 +61,7 @@ jobs:
             --concurrency 80 \
             --timeout 60 \
             --memory 512Mi \
-            --set-env-vars ANTHROPIC_MODEL=claude-sonnet-4-6 \
+            --update-env-vars ANTHROPIC_MODEL=claude-sonnet-4-6,SESSION_RETENTION_DAYS=1095 \
             --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest
 
       - name: Production health and AI smoke test
@@ -78,6 +78,8 @@ jobs:
           echo "$health" | grep -q '"status":"ok"'
           echo "$health" | grep -q '"aiConfigured":true'
           echo "$health" | grep -q '"ttsProvider":"google-chirp3-hd"'
+          echo "$health" | grep -q '"learningDataConfigured":true'
+          echo "$health" | grep -q '"managementConfigured":true'
 
           chat=""
           for attempt in 1 2 3; do
