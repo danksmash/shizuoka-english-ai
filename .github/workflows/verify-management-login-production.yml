@@ -32,6 +32,8 @@ jobs:
           SERVICE_JSON="$(gcloud run services describe shizuoka-english-ai --project=shizuoka-english-ai --region=asia-northeast1 --format=json)"
           ORIGINAL_ACCOUNTS="$(printf '%s' "$SERVICE_JSON" | jq -r '.spec.template.spec.containers[0].env[] | select(.name=="MANAGEMENT_ACCOUNTS_JSON") | .value')"
           test -n "$ORIGINAL_ACCOUNTS"
+          ORIGINAL_COUNT="$(printf '%s' "$ORIGINAL_ACCOUNTS" | jq 'length')"
+          test "$ORIGINAL_COUNT" = "14"
 
           TEST_USER="qa-login-$(date +%s)"
           TEST_PASSWORD="$(openssl rand -base64 24 | tr -d '\n')"
@@ -88,6 +90,15 @@ jobs:
           fi
 
           rm -f "$COOKIE_JAR"
+          restore_accounts
+          trap - EXIT
+
+          RESTORED_JSON="$(gcloud run services describe shizuoka-english-ai --project=shizuoka-english-ai --region=asia-northeast1 --format=json)"
+          RESTORED_ACCOUNTS="$(printf '%s' "$RESTORED_JSON" | jq -r '.spec.template.spec.containers[0].env[] | select(.name=="MANAGEMENT_ACCOUNTS_JSON") | .value')"
+          test "$(printf '%s' "$RESTORED_ACCOUNTS" | jq 'length')" = "14"
+          test "$(printf '%s' "$RESTORED_ACCOUNTS" | jq '[.[] | select(.username | startswith("qa-login-"))] | length')" = "0"
+
           echo PRODUCTION_MANAGEMENT_LOGIN_OK
           echo PRODUCTION_MANAGEMENT_COOKIE_OK
           echo PRODUCTION_MANAGEMENT_FIXED_UI_OK
+          echo PRODUCTION_MANAGEMENT_ACCOUNTS_RESTORED_OK
