@@ -35,12 +35,8 @@ jobs:
                   raise SystemExit(f'{path}: expected 1 match, got {count}: {old[:100]!r}')
               p.write_text(text.replace(old, new, 1))
 
-          replace_once('server.ts',
-            "import { getAIStudentById } from './src/data/curriculum';\n",
-            "import { getAIStudentById } from './src/data/curriculum';\nimport { detectVocabularyInText } from './src/data/vocabulary';\nimport { calculateCanonicalStats, canonicalizeHistory, isAIStudentId, isDialogueDuration, isDialogueTopic } from './src/dataContract';\n")
-          replace_once('server.ts',
-            "  const { message, history, topic, aiStudentId } = req.body;\n  const persona = getAIStudentById(aiStudentId);\n  const trimmedMessage = typeof message === 'string' ? message.trim() : '';\n",
-            "  const { message, history, topic, aiStudentId } = req.body;\n  if (!isAIStudentId(aiStudentId)) return res.status(400).json({ success: false, error: 'INVALID_AI_STUDENT_ID' });\n  if (!isDialogueTopic(topic)) return res.status(400).json({ success: false, error: 'INVALID_TOPIC' });\n  const persona = getAIStudentById(aiStudentId);\n  const trimmedMessage = typeof message === 'string' ? message.trim() : '';\n")
+          replace_once('server.ts', "import { getAIStudentById } from './src/data/curriculum';\n", "import { getAIStudentById } from './src/data/curriculum';\nimport { detectVocabularyInText } from './src/data/vocabulary';\nimport { calculateCanonicalStats, canonicalizeHistory, isAIStudentId, isDialogueDuration, isDialogueTopic } from './src/dataContract';\n")
+          replace_once('server.ts', "  const { message, history, topic, aiStudentId } = req.body;\n  const persona = getAIStudentById(aiStudentId);\n  const trimmedMessage = typeof message === 'string' ? message.trim() : '';\n", "  const { message, history, topic, aiStudentId } = req.body;\n  if (!isAIStudentId(aiStudentId)) return res.status(400).json({ success: false, error: 'INVALID_AI_STUDENT_ID' });\n  if (!isDialogueTopic(topic)) return res.status(400).json({ success: false, error: 'INVALID_TOPIC' });\n  const persona = getAIStudentById(aiStudentId);\n  const trimmedMessage = typeof message === 'string' ? message.trim() : '';\n")
           replace_once('server.ts', "  const recentHistory = rawHistory.slice(-8);\n", "  const recentHistory = rawHistory.slice(-16);\n")
 
           p = Path('server.ts')
@@ -51,27 +47,27 @@ jobs:
               raise SystemExit(f'feedback boundary mismatch: start={text.count(start_marker)} end={text.count(end_marker)}')
           start = text.index(start_marker)
           end = text.index(end_marker, start)
-          new_block = """  const { history, durationMinutes, aiStudentId } = req.body;
-  if (!isAIStudentId(aiStudentId)) return res.status(400).json({ success: false, error: 'INVALID_AI_STUDENT_ID' });
-  const targetDuration = Number(durationMinutes);
-  if (!isDialogueDuration(targetDuration)) return res.status(400).json({ success: false, error: 'INVALID_DURATION' });
-  const persona = getAIStudentById(aiStudentId);
-  const rawHistory = canonicalizeHistory(history);
-  const childMessages = rawHistory.filter((m) => m.sender === 'child' && m.englishText.trim());
-  const childUtterances = childMessages
-    .map((m) => maskHighRiskPII(m.englishText.trim()).maskedText.slice(0, 100))
-    .filter(Boolean);
-  const examples = childUtterances.map((t) => `「${t}」`).join('、');
-  const detectedVocabMap = new Map<string, ReturnType<typeof detectVocabularyInText>[number]>();
-  for (const message of rawHistory) {
-    for (const item of detectVocabularyInText(message.englishText)) detectedVocabMap.set(item.id, item);
-  }
-  const canonicalVocab = Array.from(detectedVocabMap.values());
-  const firstTimestamp = rawHistory[0]?.timestamp || Date.now();
-  const lastTimestamp = rawHistory[rawHistory.length - 1]?.timestamp || firstTimestamp;
-  const stats = calculateCanonicalStats(rawHistory, firstTimestamp, lastTimestamp, targetDuration, canonicalVocab);
-
-"""
+          new_block = (
+              "  const { history, durationMinutes, aiStudentId } = req.body;\n"
+              "  if (!isAIStudentId(aiStudentId)) return res.status(400).json({ success: false, error: 'INVALID_AI_STUDENT_ID' });\n"
+              "  const targetDuration = Number(durationMinutes);\n"
+              "  if (!isDialogueDuration(targetDuration)) return res.status(400).json({ success: false, error: 'INVALID_DURATION' });\n"
+              "  const persona = getAIStudentById(aiStudentId);\n"
+              "  const rawHistory = canonicalizeHistory(history);\n"
+              "  const childMessages = rawHistory.filter((m) => m.sender === 'child' && m.englishText.trim());\n"
+              "  const childUtterances = childMessages\n"
+              "    .map((m) => maskHighRiskPII(m.englishText.trim()).maskedText.slice(0, 100))\n"
+              "    .filter(Boolean);\n"
+              "  const examples = childUtterances.map((t) => `「${t}」`).join('、');\n"
+              "  const detectedVocabMap = new Map<string, ReturnType<typeof detectVocabularyInText>[number]>();\n"
+              "  for (const message of rawHistory) {\n"
+              "    for (const item of detectVocabularyInText(message.englishText)) detectedVocabMap.set(item.id, item);\n"
+              "  }\n"
+              "  const canonicalVocab = Array.from(detectedVocabMap.values());\n"
+              "  const firstTimestamp = rawHistory[0]?.timestamp || Date.now();\n"
+              "  const lastTimestamp = rawHistory[rawHistory.length - 1]?.timestamp || firstTimestamp;\n"
+              "  const stats = calculateCanonicalStats(rawHistory, firstTimestamp, lastTimestamp, targetDuration, canonicalVocab);\n\n"
+          )
           text = text[:start] + new_block + text[end:]
           marker = "app.post('/api/feedback'"
           before, after = text.split(marker, 1)
@@ -84,12 +80,8 @@ jobs:
           after = after.replace('encounteredVocab || []', 'canonicalVocab')
           p.write_text(before + marker + after)
 
-          replace_once('src/utils/exportLog.ts',
-            "import { maskHighRiskPII } from './security';\n",
-            "import { maskTextForExternalUse } from './privacy';\n")
-          replace_once('src/utils/exportLog.ts',
-            "  return escapeHtml(maskHighRiskPII(String(value ?? '')).maskedText);\n",
-            "  return escapeHtml(maskTextForExternalUse(String(value ?? '')));\n")
+          replace_once('src/utils/exportLog.ts', "import { maskHighRiskPII } from './security';\n", "import { maskTextForExternalUse } from './privacy';\n")
+          replace_once('src/utils/exportLog.ts', "  return escapeHtml(maskHighRiskPII(String(value ?? '')).maskedText);\n", "  return escapeHtml(maskTextForExternalUse(String(value ?? '')));\n")
           PY
           python /tmp/apply_stage2.py
       - name: Install dependencies
