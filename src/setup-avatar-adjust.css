@@ -12,6 +12,63 @@
   .setup-student-info-grid {
     column-gap: clamp(0.72rem, 0.78vw, 0.95rem) !important;
   }
+
+  /*
+   * Keep the two setup columns synchronized by the actual rendered height of
+   * the left AI-student section. The left side remains natural-height; the
+   * right side stretches to the same grid-row height and distributes that
+   * available height across its four existing blocks in nearly the same visual
+   * proportions. This removes bottom-only whitespace without tying the layout
+   * to a particular viewport height or one set of card copy lengths.
+   */
+  .setup-main {
+    align-items: stretch !important;
+  }
+
+  .setup-student-section {
+    align-self: start;
+  }
+
+  .setup-controls {
+    align-self: stretch;
+    height: 100% !important;
+    display: grid !important;
+    grid-template-rows:
+      minmax(max-content, 2.05fr)
+      minmax(max-content, 1.35fr)
+      minmax(max-content, 0.72fr)
+      minmax(clamp(44px, 3.25vw, 54px), 0.38fr);
+    gap: clamp(0.48rem, 0.6vw, 0.72rem) !important;
+  }
+
+  .setup-profile,
+  .setup-topic,
+  .setup-duration,
+  .setup-start {
+    height: 100% !important;
+    min-height: 0;
+    margin-block: 0 !important;
+  }
+
+  .setup-profile {
+    display: flex;
+    align-items: center;
+  }
+
+  .setup-profile > div {
+    width: 100%;
+  }
+
+  .setup-topic,
+  .setup-duration {
+    display: flex !important;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .setup-start {
+    align-self: stretch;
+  }
 }
 
 /* Smaller landscape laptops need a slightly more conservative portrait so the
