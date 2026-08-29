@@ -13,6 +13,11 @@ const management = managementPageHtml();
 
 assert.ok(setup.includes('学習者ID'));
 assert.ok(!setup.includes('学習者用コード</span>'));
+assert.ok(setup.includes("LEARNING_ID_SESSION_KEY = 'ai-exchange-learning-id'"), 'validated learner ID must use tab-scoped session storage');
+assert.ok(setup.includes('window.sessionStorage.getItem(LEARNING_ID_SESSION_KEY)'), 'setup must restore the learner ID when practice restarts');
+assert.ok(setup.includes('window.sessionStorage.setItem(LEARNING_ID_SESSION_KEY, learningId)'), 'validated learner ID must be retained for another practice');
+assert.ok(setup.includes('useState(readRetainedLearningId)'), 'setup input must initialize from the retained learner ID');
+assert.ok(setup.includes('retainLearningId(normalized)'), 'only the validated normalized learner ID should be retained');
 assert.ok(header.includes('learningId?: string') && header.includes('学習者ID'));
 assert.ok(reflection.includes("reportOwner") && reflection.includes('学習者ID'));
 assert.ok(feedback.includes("reportOwner") && feedback.includes('learningId?: string'));
@@ -34,4 +39,6 @@ assert.ok(management.includes("rows.length?['すべて']:[]"));
 assert.ok(management.includes("addEventListener('input',updateResearchDashboard)"));
 assert.ok(management.includes("addEventListener('input',updateTeacherDashboard)"));
 assert.ok(!management.includes('researchListShortcut'), 'duplicate lower research navigation should be removed');
+assert.ok(!management.includes('JSET向け'), 'research export copy must not name a specific journal');
+assert.ok(management.includes('向いている分析：学習プロセス、支援機能利用、学校内外での利用行動'), 'system event export copy must use generic research wording');
 console.log('Learner identity and dashboard synchronization QA: PASS');
