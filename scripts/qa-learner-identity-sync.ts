@@ -13,6 +13,11 @@ const management = managementPageHtml();
 
 assert.ok(setup.includes('学習者ID'));
 assert.ok(!setup.includes('学習者用コード</span>'));
+assert.ok(setup.includes("LEARNING_ID_SESSION_KEY = 'ai-exchange-learning-id'"), 'validated learner ID must use tab-scoped session storage');
+assert.ok(setup.includes('window.sessionStorage.getItem(LEARNING_ID_SESSION_KEY)'), 'setup must restore the learner ID when practice restarts');
+assert.ok(setup.includes('window.sessionStorage.setItem(LEARNING_ID_SESSION_KEY, learningId)'), 'validated learner ID must be retained for another practice');
+assert.ok(setup.includes('useState(readRetainedLearningId)'), 'setup input must initialize from the retained learner ID');
+assert.ok(setup.includes('retainLearningId(normalized)'), 'only the validated normalized learner ID should be retained');
 assert.ok(header.includes('learningId?: string') && header.includes('学習者ID'));
 assert.ok(reflection.includes("reportOwner") && reflection.includes('学習者ID'));
 assert.ok(feedback.includes("reportOwner") && feedback.includes('learningId?: string'));
