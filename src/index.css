@@ -95,6 +95,7 @@ body {
   }
 
   .setup-student-card {
+    --setup-student-avatar-size: clamp(60px, 4.45vw, 76px);
     min-height: clamp(168px, 12.2vw, 198px) !important;
     height: auto !important;
     overflow: hidden;
@@ -107,13 +108,32 @@ body {
   }
 
   .setup-student-card > div:nth-of-type(2) {
-    grid-template-columns: clamp(60px, 4.45vw, 76px) minmax(0, 1fr) !important;
-    gap: clamp(0.45rem, 0.56vw, 0.7rem) !important;
+    grid-template-columns: var(--setup-student-avatar-size) minmax(0, 1fr) !important;
+    gap: clamp(0.55rem, 0.62vw, 0.78rem) !important;
   }
 
-  .setup-student-card img {
-    width: clamp(60px, 4.45vw, 76px) !important;
-    height: clamp(60px, 4.45vw, 76px) !important;
+  /*
+   * StudentAvatar renders a wrapper <div> around its <img>. The wrapper,
+   * grid column and inner image must share one size. If the grid column is
+   * allowed to shrink independently while the wrapper stays 76px, the portrait
+   * overlaps the name column on Safari / scaled desktop viewports.
+   */
+  .setup-student-card > div:nth-of-type(2) > div:first-child {
+    width: var(--setup-student-avatar-size) !important;
+    height: var(--setup-student-avatar-size) !important;
+    min-width: var(--setup-student-avatar-size) !important;
+    min-height: var(--setup-student-avatar-size) !important;
+    max-width: var(--setup-student-avatar-size) !important;
+    max-height: var(--setup-student-avatar-size) !important;
+    justify-self: start;
+    flex: 0 0 var(--setup-student-avatar-size);
+  }
+
+  .setup-student-card > div:nth-of-type(2) > div:first-child > img {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
   }
 
   .setup-student-card h3 {
