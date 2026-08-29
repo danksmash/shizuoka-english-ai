@@ -12,6 +12,24 @@ interface SetupScreenProps {
   onValidateLearningCode: (learningCode: string) => Promise<boolean>;
 }
 
+const LEARNING_ID_SESSION_KEY = 'ai-exchange-learning-id';
+
+const readRetainedLearningId = () => {
+  try {
+    return normalizeLearningCode(window.sessionStorage.getItem(LEARNING_ID_SESSION_KEY) || '');
+  } catch {
+    return '';
+  }
+};
+
+const retainLearningId = (learningId: string) => {
+  try {
+    window.sessionStorage.setItem(LEARNING_ID_SESSION_KEY, learningId);
+  } catch {
+    // Session storage can be unavailable in restricted browser modes; the dialogue still works normally.
+  }
+};
+
 const countryLabel = (student: AIStudentProfile) =>
   student.countryNative ? `${student.country} (${student.countryNative})` : student.country;
 
@@ -19,7 +37,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
   const [selectedStudentId, setSelectedStudentId] = useState('emma_usa');
   const [selectedTopic, setSelectedTopic] = useState<DialogueTopic>('intro');
   const [durationMinutes, setDurationMinutes] = useState<1 | 2 | 3 | 5>(1);
-  const [learningCode, setLearningCode] = useState('');
+  const [learningCode, setLearningCode] = useState(readRetainedLearningId);
   const [codeError, setCodeError] = useState('');
   const [checkingCode, setCheckingCode] = useState(false);
   const [previewPlayingId, setPreviewPlayingId] = useState<string | null>(null);
@@ -48,6 +66,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
         setCodeError('学習者IDを確認できませんでした。先生に確認してください。');
         return;
       }
+      retainLearningId(normalized);
     }
     onStartDialogue(
       {
