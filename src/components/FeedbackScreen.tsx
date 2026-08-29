@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Award, BarChart3, BookOpen, CheckCircle2, MessageSquare, RotateCcw, Sparkles, TrendingUp, Volume2 } from 'lucide-react';
 import { ChatMessage, FeedbackData, StudentProfile, VisualVocabularyItem } from '../types';
 import { getAIStudentById } from '../data/curriculum';
+import { detectVocabularyInText } from '../data/vocabulary';
 import { speakVocabularyWord } from '../utils/speech';
 import { getJapaneseTranslationForMessage } from '../utils/translation';
 import { StudentAvatar } from './StudentAvatar';
@@ -20,6 +21,43 @@ interface FeedbackScreenProps {
   onOpenHistory?: () => void;
 }
 
+interface VocabularyEvidence {
+  item: VisualVocabularyItem;
+  messageId: string;
+  evidenceText: string;
+}
+
+interface EvidenceListProps {
+  items: VocabularyEvidence[];
+  emptyText: string;
+  playingWordId: string | null;
+  onPlay: (item: VisualVocabularyItem) => void;
+}
+
+const EvidenceList: React.FC<EvidenceListProps> = ({ items, emptyText, playingWordId, onPlay }) => {
+  if (items.length === 0) {
+    return <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-[11px] font-semibold text-slate-500">{emptyText}</p>;
+  }
+
+  return <div className="space-y-2.5">{items.map(({ item, messageId, evidenceText }) => <div key={`${messageId}-${item.id}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="shrink-0 text-2xl">{item.emoji}</span>
+        <div className="min-w-0">
+          <p className="truncate text-xs font-black text-slate-900">{item.word}</p>
+          <p className="text-[11px] font-semibold text-slate-600">{item.japanese}</p>
+          {item.mitsumuraUnit && <span className="text-[9px] font-black text-emerald-700">{item.mitsumuraUnit}</span>}
+        </div>
+      </div>
+      <button type="button" onClick={() => onPlay(item)} className={`flex shrink-0 items-center gap-1 rounded-xl border border-amber-200 bg-white px-2 py-2 text-[10px] font-black text-amber-800 ${playingWordId === item.id ? 'animate-pulse' : ''}`}><Volume2 className="h-3.5 w-3.5" />発音</button>
+    </div>
+    <div className="mt-2 rounded-xl border border-blue-100 bg-white px-2.5 py-2">
+      <p className="text-[9px] font-black text-blue-700">根拠となる実際の発話</p>
+      <p className="mt-0.5 line-clamp-2 text-[10px] font-semibold leading-relaxed text-slate-700">“{evidenceText}”</p>
+    </div>
+  </div>)}</div>;
+};
+
 export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
   profile,
   messages,
@@ -37,13 +75,40 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
     return key.length > 0 && all.findIndex((candidate) => candidate.english.trim().toLowerCase() === key) === index;
   });
 
+  const { childVocabulary, aiVocabulary } = useMemo(() => {
+    const order = new Map<string, number>(encounteredVocabList.map((item, index) => [item.id, index] as const));
+    const childMap = new Map<string, VocabularyEvidence>();
+    const aiMap = new Map<string, VocabularyEvidence>();
+
+    messages.forEach((message, messageIndex) => {
+      const target = message.sender === 'child' ? childMap : aiMap;
+      detectVocabularyInText(message.englishText).forEach((item) => {
+        if (!target.has(item.id)) {
+          target.set(item.id, {
+            item,
+            messageId: message.id || `${message.sender}-${messageIndex}`,
+            evidenceText: message.englishText,
+          });
+        }
+      });
+    });
+
+    const sortEvidence = (items: VocabularyEvidence[]) => items.sort((a, b) => {
+      const aOrder = order.get(a.item.id) ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = order.get(b.item.id) ?? Number.MAX_SAFE_INTEGER;
+      return aOrder - bOrder;
+    });
+
+    return {
+      childVocabulary: sortEvidence(Array.from(childMap.values())),
+      aiVocabulary: sortEvidence(Array.from(aiMap.values())),
+    };
+  }, [encounteredVocabList, messages]);
 
   const handlePlayVocab = (item: VisualVocabularyItem) => {
     setPlayingWordId(item.id);
     speakVocabularyWord(item.word, aiStudent.voiceLang, () => setPlayingWordId(null));
   };
-
-
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-blue-50/20 to-slate-100 p-3 sm:p-6 lg:p-8">
@@ -85,7 +150,16 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
               </div>
 
               <div className="flex flex-col gap-4 lg:col-span-5">
-                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><div className="mb-3 flex items-center justify-between"><h2 className="flex items-center gap-2 text-base font-black text-slate-900"><BookOpen className="h-5 w-5 text-amber-600" />今回学んだ単語 (Vocab Collection)</h2><span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-black text-amber-700">{encounteredVocabList.length}語</span></div><div className="space-y-2.5">{encounteredVocabList.map((item) => <div key={item.id} className="flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3"><div className="flex items-center gap-3"><span className="text-2xl">{item.emoji}</span><div><p className="text-xs font-black text-slate-900">{item.word}</p><p className="text-[11px] font-semibold text-slate-600">{item.japanese}</p>{item.mitsumuraUnit && <span className="text-[9px] font-black text-emerald-700">{item.mitsumuraUnit}</span>}</div></div><button type="button" onClick={() => handlePlayVocab(item)} className={`flex items-center gap-1 rounded-xl border border-amber-200 bg-white px-2 py-2 text-[10px] font-black text-amber-800 ${playingWordId === item.id ? 'animate-pulse' : ''}`}><Volume2 className="h-3.5 w-3.5" />発音</button></div>)}</div></section>
+                <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="mb-3 flex items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-sm font-black text-slate-900"><BookOpen className="h-4 w-4 text-emerald-600" />🗣 自分が使ったことば</h2><span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-black text-emerald-700">{childVocabulary.length}語</span></div>
+                  <EvidenceList items={childVocabulary} emptyText="今回は、辞書に登録された語彙の中で児童自身の発話から確認できる語はありませんでした。" playingWordId={playingWordId} onPlay={handlePlayVocab} />
+                </section>
+
+                <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="mb-3 flex items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-sm font-black text-slate-900"><Sparkles className="h-4 w-4 text-amber-600" />💡 AI留学生から出会ったことば</h2><span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-black text-amber-700">{aiVocabulary.length}語</span></div>
+                  <EvidenceList items={aiVocabulary} emptyText="今回は、辞書に登録された新しい語彙はAI留学生の発話から確認されませんでした。" playingWordId={playingWordId} onPlay={handlePlayVocab} />
+                </section>
+
                 {uniqueKeyPhrases.length > 0 && <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><h2 className="mb-2 flex items-center gap-2 text-sm font-black text-slate-900"><MessageSquare className="h-4 w-4 text-blue-600" />重要キーフレーズ (Key Expressions)</h2><div className="space-y-1.5">{uniqueKeyPhrases.map((phrase, idx) => <div key={idx} className="rounded-xl border border-blue-200 bg-blue-50/60 p-2.5"><div className="flex items-center justify-between"><span className="text-xs font-black text-blue-950">{phrase.english}</span><button type="button" onClick={() => onPlayAudio(phrase.english)} className="p-1 text-blue-700"><Volume2 className="h-4 w-4" /></button></div><p className="text-[11px] font-semibold text-slate-600">{phrase.japanese}</p>{phrase.culturalNote && <p className="mt-1 text-[10px] text-blue-700">💡 {phrase.culturalNote}</p>}</div>)}</div></section>}
               </div>
             </div>

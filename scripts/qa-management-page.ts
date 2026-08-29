@@ -66,7 +66,7 @@ for (const marker of ['自分の考えを伝える','相手の話を聞いて分
 assert.ok(!reflectionSource.includes('もう一度練習する'));
 assert.ok(!reflectionSource.includes('わたしの学習履歴'));
 const feedbackSource = await readFile('src/components/FeedbackScreen.tsx', 'utf8');
-for (const marker of ['からのメッセージ','よくできたところ (Good Points)','今回学んだ単語 (Vocab Collection)','次へのステップアップ (Next Step Advice)','重要キーフレーズ (Key Expressions)','対話の文字起こしと日本語訳','日本語訳','もう一度練習する']) assert.ok(feedbackSource.includes(marker), `Feedback UI marker missing: ${marker}`);
+for (const marker of ['からのメッセージ','よくできたところ (Good Points)','自分が使ったことば','AI留学生から出会ったことば','根拠となる実際の発話','次へのステップアップ (Next Step Advice)','重要キーフレーズ (Key Expressions)','対話の文字起こしと日本語訳','日本語訳','もう一度練習する']) assert.ok(feedbackSource.includes(marker), `Feedback UI marker missing: ${marker}`);
 assert.ok(!feedbackSource.includes('handleCopyReport'));
 assert.ok(!feedbackSource.includes('window.print()'));
 const appSource = await readFile('src/App.tsx', 'utf8');
@@ -76,9 +76,6 @@ const historySource = await readFile('src/components/LearningHistoryScreen.tsx',
 for (const marker of ['累計対話時間','よく話したテーマ','よく話したAI留学生','テーマ・時間・発話量','actualDurationSeconds']) assert.ok(historySource.includes(marker), `Learning history detail missing: ${marker}`);
 const setupSource = await readFile('src/components/SetupScreen.tsx', 'utf8');
 assert.ok(!setupSource.includes('お名前:'), 'Non-functional name field must be removed');
-assert.ok(setupSource.includes('items-stretch'));
-assert.ok(setupSource.includes('flex-1 auto-rows-fr'));
-assert.ok(setupSource.includes('min-h-[194px]'));
-assert.ok(setupSource.includes('mt-auto flex min-h-12 w-full'));
+for (const marker of ['setup-screen','setup-shell','setup-main','setup-student-grid','setup-controls','items-stretch','flex-1 auto-rows-fr','mt-auto flex min-h-12 w-full']) assert.ok(setupSource.includes(marker), `Responsive Setup marker missing: ${marker}`);
 
 console.log('Role-differentiated learner + teacher + researcher UI contract QA: PASS');
