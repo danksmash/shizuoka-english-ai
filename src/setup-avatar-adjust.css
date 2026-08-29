@@ -9,8 +9,8 @@
     --setup-student-avatar-size: clamp(76px, 5.2vw, 92px);
   }
 
-  .setup-student-card > div:nth-of-type(2) {
-    gap: clamp(0.72rem, 0.78vw, 0.95rem) !important;
+  .setup-student-info-grid {
+    column-gap: clamp(0.72rem, 0.78vw, 0.95rem) !important;
   }
 }
 

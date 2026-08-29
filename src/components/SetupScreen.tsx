@@ -120,15 +120,15 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
                 const selected = student.id === selectedStudentId;
                 return <article key={student.id} onClick={() => setSelectedStudentId(student.id)} className={`setup-student-card relative flex min-h-[174px] cursor-pointer flex-col rounded-2xl border-2 bg-white p-2.5 shadow-sm transition sm:min-h-[184px] ${selected ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-200 hover:border-blue-300'}`}>
                   {selected && <CheckCircle2 className="absolute right-2 top-2 h-5 w-5 fill-blue-600 text-white" />}
-                  <div className="mb-1.5 truncate pr-7 text-[12px] font-black" title={countryLabel(student)}>{student.flag} {countryLabel(student)}</div>
-                  <div className="grid flex-1 grid-cols-[72px_minmax(0,1fr)] items-center gap-2.5 sm:grid-cols-[76px_minmax(0,1fr)]">
-                    <StudentAvatar student={student} size="custom" className="h-[72px] w-[72px] rounded-xl border border-slate-200 object-cover sm:h-[76px] sm:w-[76px]" />
-                    <div className="min-w-0">
-                      <h3 className="truncate text-[13px] font-black">{student.name}</h3>
-                      <p className="truncate text-[11px] font-black text-blue-700">{student.japaneseName}</p>
-                      <p className="truncate text-[10px] font-semibold text-slate-600">{student.age}歳 · {student.city}</p>
-                      <p className="mt-1 line-clamp-2 rounded-md bg-slate-100 px-2 py-1 text-[9px] font-bold leading-tight text-slate-600">🗣 {student.accentName}</p>
+                  <div className="setup-student-country pr-7 text-[12px] font-black" title={countryLabel(student)}>{student.flag} {countryLabel(student)}</div>
+                  <div className="setup-student-info-grid grid flex-1 items-start">
+                    <StudentAvatar student={student} size="custom" className="setup-student-avatar h-[72px] w-[72px] rounded-xl border border-slate-200 object-cover sm:h-[76px] sm:w-[76px]" />
+                    <div className="setup-student-copy min-w-0">
+                      <h3 className="setup-student-name text-[13px] font-black">{student.name}</h3>
+                      <p className="setup-student-japanese text-[11px] font-black text-blue-700">{student.japaneseName}</p>
+                      <p className="setup-student-origin text-[10px] font-semibold text-slate-600">{student.age}歳 · {student.city}</p>
                     </div>
+                    <p className="setup-student-accent rounded-md bg-slate-100 px-2 py-1 text-[9px] font-bold leading-tight text-slate-600">🗣 {student.accentName}</p>
                   </div>
                   <button type="button" onClick={(e) => playPreview(student, e)} className={`mt-2 flex min-h-8 items-center justify-center gap-1 rounded-lg border text-[11px] font-black ${previewPlayingId === student.id ? 'border-blue-600 bg-blue-600 text-white' : 'border-blue-200 bg-white text-blue-700 hover:bg-blue-50'}`}><Volume2 className="h-3.5 w-3.5" />{previewPlayingId === student.id ? '再生中...' : '声を聞く'}</button>
                 </article>;
