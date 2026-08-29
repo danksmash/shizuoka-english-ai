@@ -121,6 +121,8 @@ assert.equal(unordered.sessions.find((r)=>r.session_id==='seq_a')?.lifetime_sess
 assert.equal(unordered.sessions.find((r)=>r.session_id==='seq_b')?.lifetime_session_number,2,'research lifetime sequence must not trust stored count+1 values');
 const unassigned = buildResearchDataSets([{...clustered[0],sessionId:'unassigned_class',classId:''}]).sessions[0];
 assert.equal(unassigned.usage_context_inferred,'unknown','school-hours sessions without class_id must not be classified as out-of-class');
+assert.equal(inClass.academic_year,2026,'Japanese academic year must be available for longitudinal analysis');
+assert.equal(inClass.grade_level,5,'grade level must be derived from class_id for legacy-compatible export');
 assert.equal(maskTextForResearchExport("I'm Taro."),"I'm [name omitted].",'bare self-introduction names must be masked');
 assert.equal(maskTextForResearchExport("I'm good."),"I'm good.",'common self-description must remain analyzable');
 const serverHardening=fs.readFileSync('server.ts','utf8');
@@ -132,6 +134,9 @@ assert.ok(serverHardening.includes("express.json({ limit: '512kb' })"),'session 
 assert.ok(firestoreHardening.includes('nextPageToken'),'Firestore management reads must paginate beyond 1000 documents');
 assert.ok(firestoreHardening.includes('createDocumentIfAbsent'),'atomic create-if-absent helper must exist');
 assert.ok(persistenceHardening.includes("RESEARCH_ID_COLLECTION = 'research_ids'"),'research IDs must have an atomic uniqueness index');
+assert.ok(persistenceHardening.includes("TEACHER_ID_COLLECTION = 'teacher_ids'"),'teacher-facing student IDs must also be atomically reserved');
+assert.ok(persistenceHardening.includes('createDocumentIfAbsent(STUDENT_COLLECTION, key'),'learning-code documents must not overwrite concurrent issuance');
+assert.ok(persistenceHardening.includes("queryCollection(SESSION_COLLECTION, 'studentId', studentId, 5000)"),'student longitudinal history must exceed the old 500-session ceiling');
 assert.ok(persistenceHardening.includes('updateStudentClass'),'grade/class progression must preserve student and research identity');
 assert.ok(authHardening.includes('/api/management/research.bundle.zip'),'researcher must be allowed to download the protected one-snapshot bundle');
 assert.ok(serverHardening.includes('/api/management/research.bundle.zip'),'one-snapshot ZIP export endpoint must exist');

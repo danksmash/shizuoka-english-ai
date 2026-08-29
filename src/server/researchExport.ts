@@ -202,11 +202,21 @@ function sessionSequenceNumbers(sessions: Record<string, any>[]): Map<string, { 
   return result;
 }
 
+function academicYearFromDate(localDate: string): number | '' {
+  const [yearText, monthText] = localDate.split('-'); const year = Number(yearText); const month = Number(monthText);
+  return Number.isInteger(year) && Number.isInteger(month) ? (month >= 4 ? year : year - 1) : '';
+}
+function gradeFromClassId(classId: unknown): number | '' {
+  const value = String(classId || ''); return value.startsWith('5-') ? 5 : value.startsWith('6-') ? 6 : '';
+}
+
 function commonFields(session: Record<string, any>, meta: ContextMeta) {
   return {
     research_id: session.researchId || '',
     class_id: session.classId || '',
     session_id: session.sessionId || '',
+    academic_year: session.academicYear || academicYearFromDate(meta.localDate),
+    grade_level: session.gradeLevel || gradeFromClassId(session.classId),
     local_date: meta.localDate,
     local_start_time: meta.localStartTime,
     local_end_time: meta.localEndTime,
@@ -245,6 +255,8 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
       class_id: session.classId || '',
       session_id: sessionId,
       schema_version: session.schemaVersion || 2,
+      academic_year: session.academicYear || academicYearFromDate(meta.localDate),
+      grade_level: session.gradeLevel || gradeFromClassId(session.classId),
       local_date: meta.localDate,
       local_start_time: meta.localStartTime,
       local_end_time: meta.localEndTime,
