@@ -149,11 +149,15 @@ assert.ok(serverHardening.includes("express.json({ limit: '512kb' })"),'session 
 assert.ok(firestoreHardening.includes('nextPageToken'),'Firestore management reads must paginate beyond 1000 documents');
 assert.ok(firestoreHardening.includes('createDocumentIfAbsent'),'atomic create-if-absent helper must exist');
 assert.ok(persistenceHardening.includes("RESEARCH_ID_COLLECTION = 'research_ids'"),'research IDs must have an atomic uniqueness index');
-assert.ok(persistenceHardening.includes("TEACHER_ID_COLLECTION = 'teacher_ids'"),'teacher-facing student IDs must also be atomically reserved');
+assert.ok(!persistenceHardening.includes("TEACHER_ID_COLLECTION = 'teacher_ids'"),'opaque teacher-only IDs must not be generated in the learner-ID architecture');
+assert.ok(persistenceHardening.includes('learningId: normalized'),'teacher views must use the distributed learner ID');
 assert.ok(persistenceHardening.includes('createDocumentIfAbsent(STUDENT_COLLECTION, key'),'learning-code documents must not overwrite concurrent issuance');
 assert.ok(persistenceHardening.includes("queryCollection(SESSION_COLLECTION, 'studentId', studentId, 5000)"),'student longitudinal history must exceed the old 500-session ceiling');
 assert.ok(persistenceHardening.includes('updateStudentClass'),'grade/class progression must preserve student and research identity');
-assert.ok(persistenceHardening.indexOf('const created = await createStudentCode(newCode') < persistenceHardening.indexOf('teacherStudentId: tid, active: false'),'new learning code must be created successfully before old codes are deactivated');
+const reissueStart = persistenceHardening.indexOf('export async function reissueStudentCode');
+const reissueEnd = persistenceHardening.indexOf('function academicYearForLocalDate', reissueStart);
+const reissueSource = persistenceHardening.slice(reissueStart, reissueEnd);
+assert.ok(reissueSource.indexOf('const created = await createStudentCode(newCode') < reissueSource.indexOf('active: false'),'new learner ID must be created successfully before old learner IDs are deactivated');
 assert.ok(authHardening.includes('/api/management/research.bundle.zip'),'researcher must be allowed to download the protected one-snapshot bundle');
 assert.ok(serverHardening.includes('/api/management/research.bundle.zip'),'one-snapshot ZIP export endpoint must exist');
 assert.ok(managementHardening.includes("data_quality_flag||'')!=='complete"),'complete-case filters must include reflection/data-quality status');

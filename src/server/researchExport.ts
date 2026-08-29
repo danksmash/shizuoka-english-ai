@@ -248,8 +248,9 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
     const hasReflection = Boolean(session.reflection && typeof session.reflection === 'object');
     const hasSessionFinish = systemEvents.some((event: any) => event?.type === 'session_finish');
     const schemaVersion = Number(session.schemaVersion || 0);
-    const legacyCompletionEvidence = Boolean(session.endedAt) && hasReflection && (systemEvents.length === 0 || schemaVersion < 3);
-    const dialogueCompleted = hasSessionFinish || legacyCompletionEvidence;
+    const reflectionCompletionEvidence = Boolean(session.endedAt) && hasReflection;
+    const legacyCompletionEvidence = Boolean(session.endedAt) && schemaVersion < 3 && childMessages.length > 0;
+    const dialogueCompleted = hasSessionFinish || reflectionCompletionEvidence || legacyCompletionEvidence;
     const dataQuality = !sessionId || !session.researchId || history.length === 0 || childMessages.length === 0
       ? 'missing_core'
       : !dialogueCompleted ? 'interrupted'

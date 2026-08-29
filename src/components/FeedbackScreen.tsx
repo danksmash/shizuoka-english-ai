@@ -2,12 +2,13 @@ import React from 'react';
 import { Award, BarChart3, BookOpen, CheckCircle2, RotateCcw, Sparkles, TrendingUp, Volume2 } from 'lucide-react';
 import { ChatMessage, FeedbackData, FeedbackExpressionItem, StudentProfile, VisualVocabularyItem } from '../types';
 import { getAIStudentById } from '../data/curriculum';
-import { detectVocabularyInText } from '../data/vocabulary';
+import { detectVocabularyInText } from '../data/vocabulary56';
 import { getJapaneseTranslationForMessage } from '../utils/translation';
 import { StudentAvatar } from './StudentAvatar';
 
 interface FeedbackScreenProps {
   profile: StudentProfile;
+  learningId?: string;
   messages: ChatMessage[];
   feedback: FeedbackData | null;
   isLoadingFeedback: boolean;
@@ -54,6 +55,7 @@ const LearningItemList: React.FC<LearningItemListProps> = ({ items, emptyText, o
 
 export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
   profile,
+  learningId,
   messages,
   feedback,
   isLoadingFeedback,
@@ -62,6 +64,7 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
   onOpenHistory,
 }) => {
   const aiStudent = getAIStudentById(profile.selectedAiStudentId);
+  const reportOwner = profile.name && profile.name !== '5・6年生' ? profile.name : 'あなた';
 
 
   return (
@@ -72,11 +75,12 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
             <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-md"><Award className="h-9 w-9" /></div>
             <div>
               <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-800">Great Job! 対話ふりかえり</span></div>
-              <h1 className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">{profile.name || '5・6年生'}さんの英会話レポート</h1>
+              <h1 className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">{reportOwner}の英会話レポート</h1>
               <p className="text-xs font-semibold text-slate-600 sm:text-sm">{aiStudent.flag} {aiStudent.name} ({aiStudent.countryJapanese}) 留学生との対話練習記録</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {learningId && <span className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-800">学習者ID <span className="tracking-widest">{learningId}</span></span>}
             {onOpenHistory && <button type="button" onClick={onOpenHistory} className="flex min-h-11 items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 text-xs font-black text-blue-800"><BarChart3 className="h-4 w-4" />わたしの学習履歴</button>}
             <button type="button" onClick={onRestart} className="flex min-h-11 items-center gap-2 rounded-2xl bg-blue-600 px-5 text-xs font-black text-white shadow"><RotateCcw className="h-4 w-4" />もう一度練習する</button>
           </div>
@@ -86,11 +90,6 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
           <div className="my-6 flex flex-col items-center justify-center rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-sm"><Sparkles className="mb-3 h-8 w-8 animate-spin text-blue-600" /><h3 className="font-black text-slate-900">{aiStudent.name} との対話を分析中...</h3><p className="mt-1 text-xs text-slate-500">AI評価と留学生からのメッセージを作成しています</p></div>
         ) : (
           <>
-            <div className="mb-6 flex items-start gap-4 rounded-3xl border border-blue-200 bg-blue-50/80 p-5 shadow-sm sm:p-6">
-              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-blue-300"><StudentAvatar student={aiStudent} size="sm" className="h-14 w-14" /></div>
-              <div><p className="mb-1 text-sm font-black text-blue-900">{aiStudent.name} からのメッセージ</p><p className="text-sm font-semibold leading-relaxed text-slate-800">“{feedback?.studentMessage || feedback?.overallComment || '話してくれてありがとう！また一緒に英語で話そうね。'}”</p></div>
-            </div>
-
             <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
               <div className="flex flex-col gap-4 lg:col-span-7">
                 <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -100,6 +99,9 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
                 <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                   <h2 className="mb-4 flex items-center gap-2 text-base font-black text-amber-900"><TrendingUp className="h-5 w-5 text-amber-600" />次へのステップアップ (Next Step Advice)</h2>
                   <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4"><h3 className="mb-1 text-sm font-black text-amber-950">💡 {feedback?.improvementAdvice?.title}</h3><p className="mb-3 text-xs leading-relaxed text-slate-800 sm:text-sm">{feedback?.improvementAdvice?.detail}</p>{feedback?.improvementAdvice?.examplePhrase && <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-white p-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-amber-800">使ってみよう！ (Practice Phrase)</p><p className="text-sm font-black text-slate-900">“{feedback.improvementAdvice.examplePhrase}”</p></div><button type="button" onClick={() => onPlayAudio(feedback.improvementAdvice.examplePhrase!)} className="rounded-lg bg-amber-100 p-2 text-amber-800"><Volume2 className="h-4 w-4" /></button></div>}</div>
+                </section>
+                <section className="rounded-3xl border border-blue-200 bg-blue-50/80 p-5 shadow-sm sm:p-6">
+                  <div className="flex items-start gap-4"><div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-blue-300"><StudentAvatar student={aiStudent} size="sm" className="h-14 w-14" /></div><div><h2 className="mb-1 text-sm font-black text-blue-900">{aiStudent.name} からのメッセージ</h2><p className="text-sm font-semibold leading-relaxed text-slate-800">“{feedback?.studentMessage || feedback?.overallComment || '話してくれてありがとう！また一緒に英語で話そうね。'}”</p></div></div>
                 </section>
               </div>
 
