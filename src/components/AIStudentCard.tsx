@@ -63,7 +63,7 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-3xl p-3.5 sm:p-4 border border-slate-200 shadow-sm flex flex-col items-center text-center relative overflow-hidden">
+    <div className="bg-white rounded-3xl p-3.5 sm:p-4 border border-slate-200 shadow-sm flex shrink-0 flex-col items-center text-center relative overflow-hidden">
       <div className="w-full min-h-9 flex items-center justify-between gap-2 mb-2">
         <div className="min-w-0 flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full text-xs font-bold text-slate-700 shadow-2xs">
           <span className="text-lg leading-none flex-shrink-0">{student.flag}</span>

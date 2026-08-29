@@ -395,7 +395,7 @@ export default function App() {
           <main className="flex-1 max-w-7xl w-full mx-auto p-2.5 sm:p-4 lg:p-5 grid grid-cols-1 md:grid-cols-12 gap-3 lg:gap-5 min-h-0 lg:overflow-hidden pb-[calc(7.5rem+env(safe-area-inset-bottom))] lg:pb-5">
             <div className="hidden md:flex col-span-12 md:col-span-4 lg:col-span-3 flex-col gap-4 overflow-y-auto min-h-0">
               <AIStudentCard student={currentAiStudent} mood={mood} isSpeaking={isSpeaking} isListening={isListening} speechRate={speechRate} onReplayAudio={()=>{recordResearchEvent('ai_replay','profile');const lastAi=messages.filter((m)=>m.sender==='ai').slice(-1)[0];if(lastAi)playAiVoice(lastAi.englishText);}} onChangeSpeechRate={(rate)=>{recordResearchEvent('speech_rate_change',rate.toFixed(2));setSpeechRate(rate);}}/>
-              <div className="bg-slate-800 p-5 rounded-3xl text-white shadow-sm">
+              <div className="shrink-0 bg-slate-800 p-5 rounded-3xl text-white shadow-sm">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Session Stats (対話記録)</p>
                 <div className="flex items-center justify-between mb-2"><span className="text-xs text-slate-300">Turns</span><span className="font-mono font-bold text-lg">{turnCount}</span></div>
                 <div className="flex items-center justify-between mb-2"><span className="text-xs text-slate-300">Words</span><span className="font-mono font-bold text-lg text-emerald-400">{totalChildWords}</span></div>

@@ -101,7 +101,7 @@ assert.ok(feedback.includes('自分が使ったことば・表現'), 'AI-selecte
 assert.ok(feedback.includes('AI留学生から出会ったことば・表現'), 'AI-selected exchange-student learning section must exist');
 assert.ok(feedback.includes('根拠となる実際の発話'), 'each displayed learning item must show utterance evidence');
 assert.ok(feedback.includes('なぜ大切？'), 'learning items must explain their educational value');
-assert.ok(feedback.includes('なぜ重要？'), 'key phrases must explain why they are reusable');
+assert.equal(feedback.includes('重要キーフレーズ (Key Expressions)'), false, 'redundant Key Expressions display must stay removed');
 
 const server = fs.readFileSync('server.ts', 'utf8');
 assert.ok(server.includes('childLearningItems'), 'feedback API must request child learning items');
