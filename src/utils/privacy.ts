@@ -13,10 +13,12 @@ export function maskTextForExternalUse(text: string): string {
 export function maskTextForResearchExport(text: string): string {
   let masked = maskTextForExternalUse(text);
 
-  // Explicit learner/person names in common self-introduction frames.
-  masked = masked.replace(/\b(my name is|call me)\s+([A-Za-z][A-Za-z'’-]{1,30})\b/gi, '$1 [name omitted]');
-  masked = masked.replace(/\b(his name is|her name is|their name is)\s+([A-Za-z][A-Za-z'’-]{1,30})\b/gi, '$1 [name omitted]');
-  masked = masked.replace(/(私の名前は|ぼくの名前は|僕の名前は|わたしの名前は)\s*[^。！？,.]{1,30}?(です|だよ|。|$)/g, '$1 [name omitted] $2');
+  // Explicit learner/person names. Stop before likely continuation words so the
+  // surrounding communicative structure remains available for later coding.
+  const nameBoundary = '(?=\\s+(?:and|but|from|i|my|how|what|where|when|who|why|can|do|like|am|is|are)\\b|[,.!?]|$)';
+  masked = masked.replace(new RegExp(`\\b(my name is|call me)\\s+.{1,60}?${nameBoundary}`, 'gi'), '$1 [name omitted]');
+  masked = masked.replace(new RegExp(`\\b(his name is|her name is|their name is)\\s+.{1,60}?${nameBoundary}`, 'gi'), '$1 [name omitted]');
+  masked = masked.replace(/(私の名前は|ぼくの名前は|僕の名前は|わたしの名前は)\s*[^。！？,.]{1,40}?(です|だよ|。|$)/g, '$1 [name omitted] $2');
 
   // Exact age is not needed because grade/class are retained as research variables.
   masked = masked.replace(/\b(i am|i'm)\s+(?:9|10|11|12|13)\s*(?:years? old)?\b/gi, '$1 [age omitted]');
