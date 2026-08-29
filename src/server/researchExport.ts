@@ -246,9 +246,12 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
     const childMessages = history.filter((message) => message.sender === 'child');
     const systemEvents = Array.isArray(session.systemEvents) ? session.systemEvents : [];
     const hasReflection = Boolean(session.reflection && typeof session.reflection === 'object');
-    const dataQuality = !sessionId || !session.researchId || history.length === 0 || childMessages.length === 0 || !session.endedAt
+    const hasSessionFinish = systemEvents.some((event: any) => event?.type === 'session_finish');
+    const dataQuality = !sessionId || !session.researchId || history.length === 0 || childMessages.length === 0
       ? 'missing_core'
+      : !hasSessionFinish ? 'interrupted'
       : !hasReflection ? 'missing_reflection' : 'complete';
+    const sessionStatus = hasSessionFinish ? (hasReflection ? 'complete' : 'dialogue_complete') : 'in_progress_or_interrupted';
 
     sessionRows.push({
       research_id: session.researchId || '',
@@ -299,7 +302,8 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
       reflection_understood_partner: session.reflection?.understoodPartner ?? '',
       reflection_noticed_language_culture: session.reflection?.noticedLanguageCulture ?? '',
       system_event_count: systemEvents.length,
-      session_completed: childMessages.length > 0 && session.endedAt ? 1 : 0,
+      session_completed: hasSessionFinish ? 1 : 0,
+      session_status: sessionStatus,
       data_quality_flag: dataQuality,
     });
 
