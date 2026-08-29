@@ -1,10 +1,12 @@
 import crypto from 'node:crypto';
 import { ReflectionAnswers, ResearchSystemEvent, calculateCanonicalStats, maskHistoryForStorage } from '../dataContract';
 import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, VisualVocabularyItem } from '../types';
-import { getDocument, listCollection, queryCollection, setDocument } from './firestore';
+import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, setDocument } from './firestore';
 
 const STUDENT_COLLECTION = 'students';
 const SESSION_COLLECTION = 'sessions';
+const RESEARCH_ID_COLLECTION = 'research_ids';
+const RESEARCH_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TEACHER_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 function retentionDays(): number {
@@ -33,6 +35,18 @@ function randomTeacherStudentId(): string {
   let out = '';
   for (let i = 0; i < 4; i += 1) out += TEACHER_ID_ALPHABET[crypto.randomInt(0, TEACHER_ID_ALPHABET.length)];
   return out;
+}
+function randomResearchId(): string {
+  let out = 'R-';
+  for (let i = 0; i < 12; i += 1) out += RESEARCH_ID_ALPHABET[crypto.randomInt(0, RESEARCH_ID_ALPHABET.length)];
+  return out;
+}
+async function generateUniqueResearchId(studentId: string): Promise<string> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const candidate = randomResearchId();
+    if (await createDocumentIfAbsent(RESEARCH_ID_COLLECTION, candidate, { studentId, createdAt: new Date().toISOString() })) return candidate;
+  }
+  throw new Error('RESEARCH_ID_EXHAUSTED');
 }
 async function generateUniqueTeacherStudentId(records?: Record<string, any>[]): Promise<string> {
   const source = records || await listCollection(STUDENT_COLLECTION, 1000);
@@ -65,7 +79,7 @@ export async function createStudentCode(
   const existing = await getDocument(STUDENT_COLLECTION, key);
   if (existing) throw new Error('LEARNING_CODE_ALREADY_EXISTS');
   const sid = studentId || crypto.randomUUID();
-  const rid = researchId || `R${crypto.randomInt(100000, 999999)}`;
+  const rid = researchId || await generateUniqueResearchId(sid);
   const cid = normalizeClassId(classId);
   const tid = validTeacherStudentId(teacherId) || await generateUniqueTeacherStudentId();
   const now = new Date().toISOString();
@@ -137,6 +151,20 @@ export async function setStudentActive(studentId: string, active: boolean): Prom
   for (const record of records) {
     const id = documentId(record); if (!id) continue;
     await setDocument(STUDENT_COLLECTION, id, { ...withoutInternal(record), active: id === latestId, updatedAt: new Date().toISOString() });
+  }
+}
+
+
+export async function updateStudentClass(studentId: string, classId: string): Promise<void> {
+  const cid = normalizeClassId(classId);
+  if (!/^(?:5-[123]|6-[123]|テスト|予備)$/.test(cid)) throw new Error('INVALID_CLASS_ID');
+  const records = (await listCollection(STUDENT_COLLECTION, 1000)).filter((row) => row.studentId === studentId);
+  if (!records.length) throw new Error('STUDENT_NOT_FOUND');
+  const now = new Date().toISOString();
+  for (const record of records) {
+    const id = documentId(record);
+    if (!id) continue;
+    await setDocument(STUDENT_COLLECTION, id, { ...withoutInternal(record), classId: cid, updatedAt: now });
   }
 }
 

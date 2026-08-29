@@ -20,6 +20,14 @@ export function maskTextForResearchExport(text: string): string {
   masked = masked.replace(new RegExp(`\\b(his name is|her name is|their name is)\\s+.{1,60}?${nameBoundary}`, 'gi'), '$1 [name omitted]');
   masked = masked.replace(/(私の名前は|ぼくの名前は|僕の名前は|わたしの名前は)\s*[^。！？,.]{1,40}?(です|だよ|。|$)/g, '$1 [name omitted] $2');
 
+  // Speech recognition may produce a bare self-introduction ("I'm Taro.") even
+  // when the learner did not say "My name is". Mask likely single-token names,
+  // while preserving common grade-appropriate descriptions such as "I'm good.".
+  const commonSelfWords = new Set(['good','fine','happy','sad','tired','ready','hungry','thirsty','japanese','american','canadian','british','australian','eleven','twelve','ten','fifth','sixth','student']);
+  masked = masked.replace(/\b(i(?:'|’)m|i am)\s+([a-z][a-z'’-]{1,24})(?=[,.!?]|$)/gi, (full, prefix, value) => commonSelfWords.has(String(value).toLowerCase()) ? full : `${prefix} [name omitted]`);
+  const commonJapaneseSelfWords = new Set(['元気','げんき','日本人','にほんじん','小学生','しょうがくせい','五年生','六年生','5年生','6年生']);
+  masked = masked.replace(/(私は|わたしは|僕は|ぼくは)\s*([ぁ-んァ-ヶ一-龯々ー]{1,12})\s*(です|だよ)(?=[。！？,.]|$)/g, (full, prefix, value, ending) => commonJapaneseSelfWords.has(String(value)) ? full : `${prefix} [name omitted] ${ending}`);
+
   // Exact age is not needed because grade/class are retained as research variables.
   masked = masked.replace(/\b(i am|i'm)\s+(?:9|10|11|12|13)\s*(?:years? old)?\b/gi, '$1 [age omitted]');
   masked = masked.replace(/(?:私は|わたしは|僕は|ぼくは)\s*(?:9|10|11|12|13|９|１０|１１|１２|１３)\s*歳/g, '私は [age omitted]');

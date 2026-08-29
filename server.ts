@@ -9,7 +9,7 @@ import { calculateCanonicalStats, canonicalizeHistory, isAIStudentId, isDialogue
 import { generateFallbackFeedback } from './src/utils/feedbackFallback';
 import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } from './src/utils/security';
 import { validateAiResponse, inspectAiResponse, buildAlignedReply } from './src/utils/responseValidation';
-import { createStudentCode, getAllSessionsForManagement, getTeacherSessionsForManagement, getStudentHistory, getStudentRecordsForManagement, reissueStudentCode, setStudentActive, persistenceConfigured, resolveStudentByCode, saveCanonicalSession } from './src/server/persistence';
+import { createStudentCode, getAllSessionsForManagement, getTeacherSessionsForManagement, getStudentHistory, getStudentRecordsForManagement, reissueStudentCode, setStudentActive, updateStudentClass, persistenceConfigured, resolveStudentByCode, saveCanonicalSession } from './src/server/persistence';
 import { buildResearchDataSets, type ResearchDatasetName } from './src/server/researchExport';
 import { authenticateManagement, clearManagementCookie, managementAuthConfigured, requireManagementRole, setManagementCookie, type AuthenticatedRequest } from './src/server/auth';
 import { managementPageHtml } from './src/server/managementPage';
@@ -39,7 +39,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '512kb' }));
 app.use('/images', express.static(path.join(process.cwd(), 'src', 'assets', 'images')));
 
 interface RateRecord { count: number; resetTime: number; }
@@ -718,32 +718,66 @@ app.get('/api/management/student-codes', requireManagementRole(['teacher']), asy
 app.post('/api/management/student-codes', requireManagementRole(['teacher']), async (req,res) => {
   const action=typeof req.body?.action==='string'?req.body.action:'create';
   try {
-    if(action==='create'){const code=normalizeLearningCode(req.body?.learningCode);if(!isValidLearningCode(req.body?.learningCode))return res.status(400).json({success:false,error:'INVALID_LEARNING_CODE'});const created=await createStudentCode(code,undefined,undefined,req.body?.classId);return res.json({success:true,studentId:created.studentId,teacherStudentId:created.teacherStudentId,classId:created.classId});}
+    if(action==='create'){const code=normalizeLearningCode(req.body?.learningCode);const classId=typeof req.body?.classId==='string'?req.body.classId.trim():'';if(!isValidLearningCode(req.body?.learningCode))return res.status(400).json({success:false,error:'INVALID_LEARNING_CODE'});if(!/^(?:5-[123]|6-[123]|テスト|予備)$/.test(classId))return res.status(400).json({success:false,error:'CLASS_ID_REQUIRED'});const created=await createStudentCode(code,undefined,undefined,classId);return res.json({success:true,studentId:created.studentId,teacherStudentId:created.teacherStudentId,classId:created.classId});}
     if(action==='reissue'){const studentId=typeof req.body?.studentId==='string'?req.body.studentId:'';if(!studentId||!isValidLearningCode(req.body?.learningCode))return res.status(400).json({success:false,error:'INVALID_REISSUE_REQUEST'});const created=await reissueStudentCode(studentId,normalizeLearningCode(req.body.learningCode));return res.json({success:true,studentId:created.studentId,teacherStudentId:created.teacherStudentId,classId:created.classId});}
+    if(action==='update-class'){const studentId=typeof req.body?.studentId==='string'?req.body.studentId:'';const classId=typeof req.body?.classId==='string'?req.body.classId.trim():'';if(!studentId||!/^(?:5-[123]|6-[123]|テスト|予備)$/.test(classId))return res.status(400).json({success:false,error:'INVALID_CLASS_UPDATE'});await updateStudentClass(studentId,classId);return res.json({success:true,classId});}
     if(action==='set-active'){const studentId=typeof req.body?.studentId==='string'?req.body.studentId:'';if(!studentId||typeof req.body?.active!=='boolean')return res.status(400).json({success:false,error:'INVALID_ACTIVE_REQUEST'});await setStudentActive(studentId,req.body.active);return res.json({success:true});}
     return res.status(400).json({success:false,error:'INVALID_CODE_ACTION'});
   } catch(error:any){console.error('Student code mutation failed',{message:error?.message});const conflict=error?.message==='LEARNING_CODE_ALREADY_EXISTS';return res.status(conflict?409:503).json({success:false,error:conflict?'LEARNING_CODE_ALREADY_EXISTS':'CODE_MUTATION_UNAVAILABLE'});}
 });
 app.get('/api/management/sessions',requireManagementRole(['teacher']),async(_req,res)=>{try{const sessions=await getTeacherSessionsForManagement();res.setHeader('Cache-Control','no-store');return res.json({success:true,sessions});}catch(error:any){console.error('Management sessions failed',{message:error?.message});return res.status(503).json({success:false,error:'MANAGEMENT_DATA_UNAVAILABLE'});}});
 function csvCell(value:unknown):string{const text=String(value??'');return `"${text.replace(/"/g,'""')}"`;}
+
+const RESEARCH_DEFAULT_HEADERS:Record<ResearchDatasetName,string[]>={
+  sessions:['research_id','class_id','session_id','local_date','local_start_time','usage_context_inferred'],
+  turns:['research_id','class_id','session_id','turn_sequence','speaker','english_text_anonymized'],
+  expressions:['research_id','class_id','session_id','turn_sequence','speaker','expression'],
+  system_events:['research_id','class_id','session_id','event_sequence','local_timestamp','event_type'],
+};
+function researchCsvString(rows:Record<string,unknown>[],dataset:ResearchDatasetName):string{
+  const headers=rows.length?Object.keys(rows[0]):RESEARCH_DEFAULT_HEADERS[dataset];
+  return '\uFEFF'+[headers.map(csvCell).join(','),...rows.map(row=>headers.map(key=>csvCell(row[key])).join(','))].join('\n');
+}
+function crc32(buffer:Buffer):number{
+  let crc=0xffffffff;
+  for(const byte of buffer){crc^=byte;for(let bit=0;bit<8;bit+=1)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}
+  return (crc^0xffffffff)>>>0;
+}
+function buildStoredZip(files:Array<{name:string;content:string}>):Buffer{
+  const localParts:Buffer[]=[];const centralParts:Buffer[]=[];let offset=0;
+  for(const file of files){
+    const name=Buffer.from(file.name,'utf8');const data=Buffer.from(file.content,'utf8');const crc=crc32(data);
+    const local=Buffer.alloc(30);local.writeUInt32LE(0x04034b50,0);local.writeUInt16LE(20,4);local.writeUInt16LE(0,6);local.writeUInt16LE(0,8);local.writeUInt32LE(crc,14);local.writeUInt32LE(data.length,18);local.writeUInt32LE(data.length,22);local.writeUInt16LE(name.length,26);local.writeUInt16LE(0,28);
+    localParts.push(local,name,data);
+    const central=Buffer.alloc(46);central.writeUInt32LE(0x02014b50,0);central.writeUInt16LE(20,4);central.writeUInt16LE(20,6);central.writeUInt16LE(0,8);central.writeUInt16LE(0,10);central.writeUInt32LE(crc,16);central.writeUInt32LE(data.length,20);central.writeUInt32LE(data.length,24);central.writeUInt16LE(name.length,28);central.writeUInt16LE(0,30);central.writeUInt16LE(0,32);central.writeUInt16LE(0,34);central.writeUInt16LE(0,36);central.writeUInt32LE(0,38);central.writeUInt32LE(offset,42);
+    centralParts.push(central,name);offset+=local.length+name.length+data.length;
+  }
+  const centralSize=centralParts.reduce((sum,part)=>sum+part.length,0);const end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50,0);end.writeUInt16LE(files.length,8);end.writeUInt16LE(files.length,10);end.writeUInt32LE(centralSize,12);end.writeUInt32LE(offset,16);
+  return Buffer.concat([...localParts,...centralParts,end]);
+}
+app.get('/api/management/research.bundle.zip',requireManagementRole(['researcher']),async(req,res)=>{
+  try{
+    const raw=buildResearchDataSets(await getAllSessionsForManagement());
+    const start=typeof req.query?.start==='string'?req.query.start:'';const end=typeof req.query?.end==='string'?req.query.end:'';const classId=typeof req.query?.classId==='string'?req.query.classId:'';const researchId=typeof req.query?.researchId==='string'?req.query.researchId:'';const completeOnly=req.query?.completeOnly==='1';
+    const sessions=raw.sessions.filter(row=>{const date=String(row.local_date||'');return(!start||date>=start)&&(!end||date<=end)&&(!classId||classId==='all'||String(row.class_id||'')===classId)&&(!researchId||researchId==='all'||String(row.research_id||'')===researchId)&&(!completeOnly||String(row.data_quality_flag||'')==='complete');});
+    const allowed=new Set(sessions.map(row=>String(row.session_id||'')));const datasets={sessions,turns:raw.turns.filter(row=>allowed.has(String(row.session_id||''))),expressions:raw.expressions.filter(row=>allowed.has(String(row.session_id||''))),system_events:raw.system_events.filter(row=>allowed.has(String(row.session_id||'')))};
+    const exportedAt=new Date().toISOString();const manifest={export_id:`export_${Date.now()}`,exported_at:exportedAt,schema_version:3,classification_rule_version:String(sessions[0]?.classification_rule_version||'time-cluster-v1'),filters:{start,end,class_id:classId||'all',research_id:researchId||'all',complete_only:completeOnly},row_counts:{sessions:datasets.sessions.length,turns:datasets.turns.length,expressions:datasets.expressions.length,system_events:datasets.system_events.length}};
+    const zip=buildStoredZip([{name:'sessions.csv',content:researchCsvString(datasets.sessions,'sessions')},{name:'turns.csv',content:researchCsvString(datasets.turns,'turns')},{name:'expressions.csv',content:researchCsvString(datasets.expressions,'expressions')},{name:'system_events.csv',content:researchCsvString(datasets.system_events,'system_events')},{name:'manifest.json',content:JSON.stringify(manifest,null,2)}]);
+    res.setHeader('Content-Type','application/zip');res.setHeader('Content-Disposition',`attachment; filename="research-bundle-${exportedAt.slice(0,10).replace(/-/g,'')}.zip"`);res.setHeader('Cache-Control','no-store');return res.send(zip);
+  }catch(error:any){console.error('Research bundle export failed',{message:error?.message});return res.status(503).json({success:false,error:'RESEARCH_BUNDLE_UNAVAILABLE'});}
+});
+
 app.get('/api/management/research.csv',requireManagementRole(['researcher']),async(req,res)=>{
   try {
     const sessions=await getAllSessionsForManagement();
     const requested=typeof req.query?.dataset==='string'?req.query.dataset:'sessions';
     const dataset:ResearchDatasetName=(['sessions','turns','expressions','system_events'] as string[]).includes(requested)?requested as ResearchDatasetName:'sessions';
     const rows=buildResearchDataSets(sessions)[dataset];
-    const defaultHeaders:Record<ResearchDatasetName,string[]>={
-      sessions:['research_id','class_id','session_id','local_date','local_start_time','usage_context_inferred'],
-      turns:['research_id','class_id','session_id','turn_sequence','speaker','english_text_anonymized'],
-      expressions:['research_id','class_id','session_id','turn_sequence','speaker','expression'],
-      system_events:['research_id','class_id','session_id','event_sequence','local_timestamp','event_type'],
-    };
-    const headers=rows.length?Object.keys(rows[0]):defaultHeaders[dataset];
-    const csv=[headers.map(csvCell).join(','),...rows.map(row=>headers.map(key=>csvCell(row[key])).join(','))].join('\n');
+    const csv=researchCsvString(rows,dataset);
     res.setHeader('Content-Type','text/csv; charset=utf-8');
     res.setHeader('Content-Disposition',`attachment; filename="research-${dataset}.csv"`);
     res.setHeader('Cache-Control','no-store');
-    return res.send('\uFEFF'+csv);
+    return res.send(csv);
   }catch(error:any){console.error('Research export failed',{message:error?.message});return res.status(503).json({success:false,error:'RESEARCH_EXPORT_UNAVAILABLE'});}
 });
 

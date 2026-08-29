@@ -111,4 +111,33 @@ assert.ok(appSource.includes('initialSessionSaveRef'), 'dialogue-end snapshot pe
 assert.ok(appSource.includes('Initial research session snapshot unavailable'), 'snapshot failure handling must exist');
 assert.ok(appSource.includes("recordResearchEvent('ai_response_latency_ms'"), 'AI response latency must be captured');
 
+
+// Research-data hardening regression checks.
+const unordered = buildResearchDataSets([
+  {...clustered[0], sessionId:'seq_b', researchId:'RSEQ', lifetimeSessionNumber:99, dailySessionNumber:99, startedAt:'2026-09-02T01:00:00.000Z', endedAt:'2026-09-02T01:03:00.000Z'},
+  {...clustered[0], sessionId:'seq_a', researchId:'RSEQ', lifetimeSessionNumber:42, dailySessionNumber:42, startedAt:'2026-09-01T01:00:00.000Z', endedAt:'2026-09-01T01:03:00.000Z'},
+]);
+assert.equal(unordered.sessions.find((r)=>r.session_id==='seq_a')?.lifetime_session_number,1,'research lifetime sequence must be recalculated from timestamps');
+assert.equal(unordered.sessions.find((r)=>r.session_id==='seq_b')?.lifetime_session_number,2,'research lifetime sequence must not trust stored count+1 values');
+const unassigned = buildResearchDataSets([{...clustered[0],sessionId:'unassigned_class',classId:''}]).sessions[0];
+assert.equal(unassigned.usage_context_inferred,'unknown','school-hours sessions without class_id must not be classified as out-of-class');
+assert.equal(maskTextForResearchExport("I'm Taro."),"I'm [name omitted].",'bare self-introduction names must be masked');
+assert.equal(maskTextForResearchExport("I'm good."),"I'm good.",'common self-description must remain analyzable');
+const serverHardening=fs.readFileSync('server.ts','utf8');
+const firestoreHardening=fs.readFileSync('src/server/firestore.ts','utf8');
+const persistenceHardening=fs.readFileSync('src/server/persistence.ts','utf8');
+const authHardening=fs.readFileSync('src/server/auth.ts','utf8');
+const managementHardening=fs.readFileSync('src/server/managementPage.ts','utf8');
+assert.ok(serverHardening.includes("express.json({ limit: '512kb' })"),'session payload limit must support complete five-minute histories');
+assert.ok(firestoreHardening.includes('nextPageToken'),'Firestore management reads must paginate beyond 1000 documents');
+assert.ok(firestoreHardening.includes('createDocumentIfAbsent'),'atomic create-if-absent helper must exist');
+assert.ok(persistenceHardening.includes("RESEARCH_ID_COLLECTION = 'research_ids'"),'research IDs must have an atomic uniqueness index');
+assert.ok(persistenceHardening.includes('updateStudentClass'),'grade/class progression must preserve student and research identity');
+assert.ok(authHardening.includes('/api/management/research.bundle.zip'),'researcher must be allowed to download the protected one-snapshot bundle');
+assert.ok(serverHardening.includes('/api/management/research.bundle.zip'),'one-snapshot ZIP export endpoint must exist');
+assert.ok(managementHardening.includes("data_quality_flag||'')!=='complete"),'complete-case filters must include reflection/data-quality status');
+assert.ok(managementHardening.includes('bundleCsvBtn'),'research management UI must expose the same-snapshot ZIP export');
+assert.ok(appSource.includes('sessionSaveQueueRef'),'checkpoint writes must be serialized to avoid stale overwrite races');
+assert.ok(appSource.includes('Research session checkpoint unavailable'),'in-progress session checkpoints must be attempted');
+
 console.log('Integrated research dataset QA: PASS');

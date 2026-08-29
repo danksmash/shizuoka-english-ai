@@ -94,6 +94,7 @@ export default function App() {
   const chatAbortControllerRef = useRef<AbortController | null>(null);
   const systemEventsRef = useRef<ResearchSystemEvent[]>([]);
   const initialSessionSaveRef = useRef<Promise<void> | null>(null);
+  const sessionSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const recordResearchEvent = useCallback((type: ResearchSystemEventType, value?: string) => {
     const event: ResearchSystemEvent = { type, timestamp: Date.now(), ...(value ? { value: value.slice(0, 80) } : {}) };
     systemEventsRef.current = [...systemEventsRef.current.slice(-499), event];
@@ -138,14 +139,24 @@ export default function App() {
     }
   }, []);
 
+  const enqueueSessionSnapshot = useCallback((payload: Record<string, unknown>): Promise<void> => {
+    const task = sessionSaveQueueRef.current.catch(() => undefined).then(async () => {
+      const response = await fetch(apiUrl('/api/sessions'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data?.error || 'SESSION_CHECKPOINT_FAILED'); }
+    });
+    sessionSaveQueueRef.current = task.catch((error) => { console.warn('Research session checkpoint unavailable:', error); });
+    return task;
+  }, []);
+
   const handleStartDialogue = (newProfile: StudentProfile, code: string) => {
     chatAbortControllerRef.current?.abort();
     chatAbortControllerRef.current = null;
     dialogueActiveRef.current = true;
     setProfile(newProfile); profileRef.current = newProfile;
     const startedAt = Date.now();
-    setLearningCode(code); setSessionId(newSessionId()); sessionStartedAtRef.current = startedAt; sessionEndedAtRef.current = 0;
-    initialSessionSaveRef.current = null;
+    const nextSessionId = newSessionId();
+    setLearningCode(code); setSessionId(nextSessionId); sessionStartedAtRef.current = startedAt; sessionEndedAtRef.current = 0;
+    initialSessionSaveRef.current = null; sessionSaveQueueRef.current = Promise.resolve();
     systemEventsRef.current = [{ type: 'session_start', timestamp: startedAt }];
     setReflectionSaveMessage('');
     const durationSec = newProfile.selectedDurationMinutes * 60;
@@ -162,6 +173,9 @@ export default function App() {
     const starterMessage: ChatMessage = { id: `ai-start-${Date.now()}`, sender: 'ai', englishText: starterPrompt, japaneseText: starterPromptJapanese, timestamp: Date.now(), culturalNote: `${studentObj.countryJapanese}の留学生 ${studentObj.name} です！` };
     const initialHistory = [starterMessage];
     setMessages(initialHistory); messagesRef.current = initialHistory; setPhase('dialogue');
+    if (learningDataEnabled && code && nextSessionId) {
+      void enqueueSessionSnapshot({ sessionId: nextSessionId, learningCode: code, aiStudentId: newProfile.selectedAiStudentId, topic: newProfile.selectedTopic, targetDurationMinutes: newProfile.selectedDurationMinutes, startedAt, endedAt: startedAt, history: initialHistory, encounteredVocab: [], systemEvents: systemEventsRef.current });
+    }
     setTimeout(() => {
       if (dialogueActiveRef.current && soundEnabledRef.current) {
         setIsSpeaking(true); setMood('speaking');
@@ -230,6 +244,9 @@ export default function App() {
           return { ...message, japaneseText:'日本語に訳せませんでした。' };
         });
         const updatedHistory = [...translatedHistory, aiMsg]; setMessages(updatedHistory); messagesRef.current=updatedHistory;
+        if (learningDataEnabled && learningCode && sessionId) {
+          void enqueueSessionSnapshot({ sessionId, learningCode, aiStudentId: currentProf.selectedAiStudentId, topic: currentProf.selectedTopic, targetDurationMinutes: currentProf.selectedDurationMinutes, startedAt: sessionStartedAtRef.current, endedAt: Date.now(), history: updatedHistory, encounteredVocab: encounteredVocabRef.current, systemEvents: systemEventsRef.current });
+        }
         setMood((aiMood as CharacterMood) || 'speaking'); playAiVoice(reply);
       } else throw new Error('API response unsuccessful');
     } catch (e) {
@@ -321,8 +338,7 @@ export default function App() {
         targetDurationMinutes: currentProf.selectedDurationMinutes, startedAt: sessionStartedAtRef.current,
         endedAt: sessionEndedAtRef.current || Date.now(), history: finalMessages, encounteredVocab: encounteredVocabRef.current, systemEvents: systemEventsRef.current,
       };
-      initialSessionSaveRef.current = fetch(apiUrl('/api/sessions'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(snapshotPayload) })
-        .then(async (response) => { if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data?.error || 'SNAPSHOT_SAVE_FAILED'); } })
+      initialSessionSaveRef.current = enqueueSessionSnapshot(snapshotPayload)
         .catch((error) => { console.warn('Initial research session snapshot unavailable:', error); });
     } else {
       initialSessionSaveRef.current = null;
@@ -340,13 +356,11 @@ export default function App() {
     if (initialSessionSaveRef.current) { await initialSessionSaveRef.current; initialSessionSaveRef.current = null; }
     if (learningDataEnabled && learningCode && sessionId) {
       try {
-        const response = await fetch(apiUrl('/api/sessions'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        await enqueueSessionSnapshot({
           sessionId, learningCode, aiStudentId: profileRef.current.selectedAiStudentId, topic: profileRef.current.selectedTopic,
           targetDurationMinutes: profileRef.current.selectedDurationMinutes, startedAt: sessionStartedAtRef.current,
           endedAt: sessionEndedAtRef.current || Date.now(), history: messagesRef.current, encounteredVocab: encounteredVocabRef.current, reflection: answers, systemEvents: systemEventsRef.current,
-        }) });
-        const data = await response.json();
-        if (!response.ok || !data?.success) throw new Error(data?.error || 'SAVE_FAILED');
+        });
         setReflectionSaveMessage('学習履歴に保存しました。');
       } catch (error) {
         console.warn('Session persistence unavailable:', error);
@@ -370,7 +384,7 @@ export default function App() {
     finally { setHistoryLoading(false); }
   };
 
-  const handleRestart=()=>{dialogueActiveRef.current=false;chatAbortControllerRef.current?.abort();chatAbortControllerRef.current=null;stopSpeaking();stopRecordingInternal();if(farewellSafetyTimerRef.current){clearTimeout(farewellSafetyTimerRef.current);farewellSafetyTimerRef.current=null;}farewellTransitionRef.current=null;setPhase('setup');setMessages([]);setTurnCount(0);setTotalChildWords(0);setEncounteredVocabList([]);setLatestVocabItem(null);setFarewellBanner(null);setMicHintMessage('');setLearningCode('');setSessionId('');initialSessionSaveRef.current=null;setReflectionSaveMessage('');};
+  const handleRestart=()=>{dialogueActiveRef.current=false;chatAbortControllerRef.current?.abort();chatAbortControllerRef.current=null;stopSpeaking();stopRecordingInternal();if(farewellSafetyTimerRef.current){clearTimeout(farewellSafetyTimerRef.current);farewellSafetyTimerRef.current=null;}farewellTransitionRef.current=null;setPhase('setup');setMessages([]);setTurnCount(0);setTotalChildWords(0);setEncounteredVocabList([]);setLatestVocabItem(null);setFarewellBanner(null);setMicHintMessage('');setLearningCode('');setSessionId('');initialSessionSaveRef.current=null;sessionSaveQueueRef.current=Promise.resolve();setReflectionSaveMessage('');};
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-800 flex flex-col">

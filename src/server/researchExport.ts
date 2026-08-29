@@ -94,6 +94,9 @@ function buildContextMeta(sessions: Record<string, any>[]): Map<string, ContextM
       } else if (!schoolHoursFlag) {
         usageContext = 'out_of_school_hours';
         confidence = 'high';
+      } else if (!item.classId) {
+        usageContext = 'unknown';
+        confidence = 'low';
       } else if (same5 >= CLASS_CLUSTER_5_MIN) {
         usageContext = 'in_class';
         confidence = 'high';
@@ -179,6 +182,26 @@ function previousSessionDays(sessions: Record<string, any>[]): Map<string, numbe
   return result;
 }
 
+function sessionSequenceNumbers(sessions: Record<string, any>[]): Map<string, { lifetime: number; daily: number }> {
+  const byResearch = new Map<string, Record<string, any>[]>();
+  for (const session of sessions) {
+    const rid = String(session.researchId || '');
+    if (!rid) continue;
+    const list = byResearch.get(rid) || []; list.push(session); byResearch.set(rid, list);
+  }
+  const result = new Map<string, { lifetime: number; daily: number }>();
+  for (const list of byResearch.values()) {
+    list.sort((a, b) => (timestampMs(a.startedAt) - timestampMs(b.startedAt)) || String(a.sessionId || '').localeCompare(String(b.sessionId || '')));
+    const dailyCounts = new Map<string, number>();
+    list.forEach((session, index) => {
+      const date = tokyoParts(session.startedAt || session.endedAt).date;
+      const daily = (dailyCounts.get(date) || 0) + 1; dailyCounts.set(date, daily);
+      result.set(String(session.sessionId || ''), { lifetime: index + 1, daily });
+    });
+  }
+  return result;
+}
+
 function commonFields(session: Record<string, any>, meta: ContextMeta) {
   return {
     research_id: session.researchId || '',
@@ -195,6 +218,7 @@ function commonFields(session: Record<string, any>, meta: ContextMeta) {
 export function buildResearchDataSets(sessions: Record<string, any>[]) {
   const context = buildContextMeta(sessions);
   const previousDays = previousSessionDays(sessions);
+  const sequenceNumbers = sessionSequenceNumbers(sessions);
   const sessionRows: Record<string, unknown>[] = [];
   const turnRows: Record<string, unknown>[] = [];
   const expressionRows: Record<string, unknown>[] = [];
@@ -212,7 +236,7 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
     const childMessages = history.filter((message) => message.sender === 'child');
     const systemEvents = Array.isArray(session.systemEvents) ? session.systemEvents : [];
     const hasReflection = Boolean(session.reflection && typeof session.reflection === 'object');
-    const dataQuality = !sessionId || !session.researchId || history.length === 0
+    const dataQuality = !sessionId || !session.researchId || history.length === 0 || childMessages.length === 0 || !session.endedAt
       ? 'missing_core'
       : !hasReflection ? 'missing_reflection' : 'complete';
 
@@ -234,8 +258,10 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
       usage_context_inferred: meta.usageContext,
       usage_context_confidence: meta.usageContextConfidence,
       classification_rule_version: CLASSIFICATION_RULE_VERSION,
-      lifetime_session_number: session.lifetimeSessionNumber || 0,
-      daily_session_number: session.dailySessionNumber || 0,
+      lifetime_session_number: sequenceNumbers.get(sessionId)?.lifetime || 0,
+      daily_session_number: sequenceNumbers.get(sessionId)?.daily || 0,
+      source_lifetime_session_number: session.lifetimeSessionNumber || 0,
+      source_daily_session_number: session.dailySessionNumber || 0,
       days_since_previous_session: previousDays.get(sessionId) ?? '',
       ai_student_id: session.aiStudentId || '',
       topic: session.topic || '',
