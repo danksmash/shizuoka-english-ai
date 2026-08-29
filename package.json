@@ -21,7 +21,8 @@
     "qa:security": "tsx scripts/qa-security.ts",
     "qa:data": "tsx scripts/qa-data-contract.ts",
     "qa:management": "tsx scripts/qa-management-page.ts",
-    "qa": "npm run qa:dialogue && npm run qa:speech && npm run qa:security && npm run qa:alignment && npm run qa:starter-translations && npm run qa:data && npm run qa:management && npm run lint",
+    "qa:responsive-vocab": "tsx scripts/qa-responsive-vocabulary.ts",
+    "qa": "npm run qa:dialogue && npm run qa:speech && npm run qa:security && npm run qa:alignment && npm run qa:starter-translations && npm run qa:data && npm run qa:management && npm run qa:responsive-vocab && npm run lint",
     "qa:starter-translations": "tsx scripts/qa-starter-translations.ts",
     "qa:alignment": "tsx scripts/qa-dialogue-alignment.ts"
   },
