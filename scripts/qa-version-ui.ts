@@ -1,12 +1,18 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import { getAppVersionMetadata, injectManagementVersionIntoBundle } from './app-version';
+import { getAppVersionMetadata, injectManagementVersionIntoBundle, isVersionedCommit } from './app-version';
 
 const metadata = getAppVersionMetadata(new Date('2026-08-30T00:00:00+09:00'));
 assert.match(metadata.version, /^1\.0\.\d+$/);
 assert.equal(metadata.build, '2026-08-30');
 assert.ok(metadata.history.length >= 4);
 assert.equal(metadata.history[0].version, metadata.version);
+
+// One logical change must increment Version once. A two-parent merge is never another change.
+assert.equal(isVersionedCommit('fix: 教師・研究者画面のナビとVersion表示を整理', ['base', 'feature']), false);
+assert.equal(isVersionedCommit('fix: 教師・研究者画面のナビとVersion表示を整理', ['base']), true);
+assert.equal(isVersionedCommit('test: verify version history', ['base']), false);
+assert.equal(metadata.history.filter((entry) => entry.changes === '教師・研究者画面のナビとVersion表示を整理').length, 1);
 
 const viteConfig = fs.readFileSync('vite.config.ts', 'utf8');
 const setupSource = fs.readFileSync('src/components/SetupScreen.tsx', 'utf8');
@@ -61,4 +67,4 @@ assert.ok(decorated.includes("versionInfo:'versionInfoBtn'"));
 assert.equal((decorated.match(/id="lastUpdated"/g) || []).length, 1);
 assert.equal((decorated.match(/id="versionInfoBtn"/g) || []).length, 1);
 
-console.log(`Version UI QA PASS: ${metadata.version} / ${metadata.build} / ${metadata.history.length} history rows; learner UI has no Version/Build display; management login has one footer and grouped navigation`);
+console.log(`Version UI QA PASS: ${metadata.version} / ${metadata.build} / ${metadata.history.length} history rows; merge commits do not bump Version; learner UI has no Version/Build display; management login has one footer and grouped navigation`);

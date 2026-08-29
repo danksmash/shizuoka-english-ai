@@ -44,9 +44,12 @@ function buildDateInJapan(date = new Date()): string {
   return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
-function isVersionedCommit(subject: string): boolean {
+export function isVersionedCommit(subject: string, parentShas: string[] = []): boolean {
   const text = subject.trim();
   if (!text) return false;
+  // A merge combines an already-counted feature/fix commit into main. Never count it again,
+  // even when the repository is configured to use the PR title (e.g. "fix: ...") as merge subject.
+  if (parentShas.length > 1) return false;
   if (/^Merge\b/i.test(text)) return false;
   if (/^(chore|ci|docs|test|build)\s*:/i.test(text)) return false;
   if (/^(tmp|temporary|noop)\b/i.test(text)) return false;
@@ -65,7 +68,7 @@ function readVersionedCommits(): Array<{ date: string; subject: string }> {
   try {
     const output = execFileSync(
       'git',
-      ['log', '--reverse', '--format=%cs%x1f%s', `${BASE_COMMIT}..HEAD`],
+      ['log', '--reverse', '--format=%cs%x1f%P%x1f%s', `${BASE_COMMIT}..HEAD`],
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
     );
     return output
@@ -73,10 +76,12 @@ function readVersionedCommits(): Array<{ date: string; subject: string }> {
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => {
-        const [date, ...subjectParts] = line.split('\x1f');
-        return { date, subject: subjectParts.join('\x1f') };
+        const [date, parentsText = '', ...subjectParts] = line.split('\x1f');
+        const parentShas = parentsText.trim().split(/\s+/).filter(Boolean);
+        return { date, parentShas, subject: subjectParts.join('\x1f') };
       })
-      .filter((entry) => isVersionedCommit(entry.subject));
+      .filter((entry) => isVersionedCommit(entry.subject, entry.parentShas))
+      .map(({ date, subject }) => ({ date, subject }));
   } catch {
     return [];
   }
