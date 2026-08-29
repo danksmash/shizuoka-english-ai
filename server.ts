@@ -4,12 +4,13 @@ import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAIStudentById } from './src/data/curriculum';
-import { detectVocabularyInText } from './src/data/vocabulary';
+import { detectVocabularyInText } from './src/data/vocabulary56';
 import { calculateCanonicalStats, canonicalizeHistory, isAIStudentId, isDialogueDuration, isDialogueTopic, isValidLearningCode, normalizeLearningCode, validateSessionSaveInput } from './src/dataContract';
 import { generateFallbackFeedback } from './src/utils/feedbackFallback';
 import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } from './src/utils/security';
 import { validateAiResponse, inspectAiResponse, buildAlignedReply } from './src/utils/responseValidation';
-import { createStudentCode, getAllSessionsForManagement, getTeacherSessionsForManagement, getStudentHistory, getStudentRecordsForManagement, reissueStudentCode, setStudentActive, anonymizeSessionForResearch, persistenceConfigured, resolveStudentByCode, saveCanonicalSession } from './src/server/persistence';
+import { createStudentCode, getAllSessionsForManagement, getTeacherSessionsForManagement, getStudentHistory, getStudentRecordsForManagement, reissueStudentCode, setStudentActive, persistenceConfigured, resolveStudentByCode, saveCanonicalSession } from './src/server/persistence';
+import { buildResearchDataSets, type ResearchDatasetName } from './src/server/researchExport';
 import { authenticateManagement, clearManagementCookie, managementAuthConfigured, requireManagementRole, setManagementCookie, type AuthenticatedRequest } from './src/server/auth';
 import { managementPageHtml } from './src/server/managementPage';
 
@@ -704,7 +705,7 @@ app.post('/api/student/history', async (req,res)=>{
 });
 app.post('/api/sessions', async (req,res)=>{
   const validated=validateSessionSaveInput(req.body);if('error' in validated)return res.status(400).json({success:false,error:validated.error});
-  try{const student=await resolveStudentByCode(validated.value.learningCode);if(!student)return res.status(401).json({success:false,error:'LEARNING_CODE_NOT_FOUND'});const saved=await saveCanonicalSession({sessionId:validated.value.sessionId,studentId:student.studentId,researchId:student.researchId,classId:student.classId,aiStudentId:validated.value.aiStudentId,topic:validated.value.topic,targetDurationMinutes:validated.value.targetDurationMinutes,startedAt:validated.value.startedAt,endedAt:validated.value.endedAt,history:validated.value.history,encounteredVocab:validated.value.encounteredVocab||[],reflection:validated.value.reflection});res.setHeader('Cache-Control','no-store');return res.json({success:true,session:{sessionId:saved.sessionId,lifetimeSessionNumber:saved.lifetimeSessionNumber}});}
+  try{const student=await resolveStudentByCode(validated.value.learningCode);if(!student)return res.status(401).json({success:false,error:'LEARNING_CODE_NOT_FOUND'});const saved=await saveCanonicalSession({sessionId:validated.value.sessionId,studentId:student.studentId,researchId:student.researchId,classId:student.classId,aiStudentId:validated.value.aiStudentId,topic:validated.value.topic,targetDurationMinutes:validated.value.targetDurationMinutes,startedAt:validated.value.startedAt,endedAt:validated.value.endedAt,history:validated.value.history,encounteredVocab:validated.value.encounteredVocab||[],reflection:validated.value.reflection,systemEvents:validated.value.systemEvents||[]});res.setHeader('Cache-Control','no-store');return res.json({success:true,session:{sessionId:saved.sessionId,lifetimeSessionNumber:saved.lifetimeSessionNumber}});}
   catch(error:any){console.error('Session save failed',{message:error?.message});const conflict=error?.message==='SESSION_ID_CONFLICT';return res.status(conflict?409:503).json({success:false,error:conflict?'SESSION_ID_CONFLICT':'SESSION_SAVE_UNAVAILABLE'});}
 });
 app.post('/api/management/login',(req,res)=>{const ip=req.ip||req.socket.remoteAddress||'unknown';if(!checkSensitiveLimit(`mgmt:${ip}`,10,15*60_000))return res.status(429).json({success:false,error:'TOO_MANY_LOGIN_ATTEMPTS'});const username=typeof req.body?.username==='string'?req.body.username.slice(0,100):'';const password=typeof req.body?.password==='string'?req.body.password.slice(0,300):'';const result=authenticateManagement(username,password);if(!result)return res.status(managementAuthConfigured()?401:503).json({success:false,error:managementAuthConfigured()?'INVALID_CREDENTIALS':'MANAGEMENT_AUTH_NOT_CONFIGURED'});setManagementCookie(res,result.token);return res.json({success:true,role:result.role});});
@@ -725,7 +726,26 @@ app.post('/api/management/student-codes', requireManagementRole(['teacher']), as
 });
 app.get('/api/management/sessions',requireManagementRole(['teacher']),async(_req,res)=>{try{const sessions=await getTeacherSessionsForManagement();res.setHeader('Cache-Control','no-store');return res.json({success:true,sessions});}catch(error:any){console.error('Management sessions failed',{message:error?.message});return res.status(503).json({success:false,error:'MANAGEMENT_DATA_UNAVAILABLE'});}});
 function csvCell(value:unknown):string{const text=String(value??'');return `"${text.replace(/"/g,'""')}"`;}
-app.get('/api/management/research.csv',requireManagementRole(['researcher']),async(_req,res)=>{try{const sessions=await getAllSessionsForManagement();const rows=sessions.map(anonymizeSessionForResearch);const headers=rows.length?Object.keys(rows[0]):['research_id','session_id'];const csv=[headers.map(csvCell).join(','),...rows.map(row=>headers.map(key=>csvCell(row[key])).join(','))].join('\n');res.setHeader('Content-Type','text/csv; charset=utf-8');res.setHeader('Content-Disposition','attachment; filename="research-export.csv"');res.setHeader('Cache-Control','no-store');return res.send('\uFEFF'+csv);}catch(error:any){console.error('Research export failed',{message:error?.message});return res.status(503).json({success:false,error:'RESEARCH_EXPORT_UNAVAILABLE'});}});
+app.get('/api/management/research.csv',requireManagementRole(['researcher']),async(req,res)=>{
+  try {
+    const sessions=await getAllSessionsForManagement();
+    const requested=typeof req.query?.dataset==='string'?req.query.dataset:'sessions';
+    const dataset:ResearchDatasetName=(['sessions','turns','expressions','system_events'] as string[]).includes(requested)?requested as ResearchDatasetName:'sessions';
+    const rows=buildResearchDataSets(sessions)[dataset];
+    const defaultHeaders:Record<ResearchDatasetName,string[]>={
+      sessions:['research_id','class_id','session_id','local_date','local_start_time','usage_context_inferred'],
+      turns:['research_id','class_id','session_id','turn_sequence','speaker','english_text_anonymized'],
+      expressions:['research_id','class_id','session_id','turn_sequence','speaker','expression'],
+      system_events:['research_id','class_id','session_id','event_sequence','local_timestamp','event_type'],
+    };
+    const headers=rows.length?Object.keys(rows[0]):defaultHeaders[dataset];
+    const csv=[headers.map(csvCell).join(','),...rows.map(row=>headers.map(key=>csvCell(row[key])).join(','))].join('\n');
+    res.setHeader('Content-Type','text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition',`attachment; filename="research-${dataset}.csv"`);
+    res.setHeader('Cache-Control','no-store');
+    return res.send('\uFEFF'+csv);
+  }catch(error:any){console.error('Research export failed',{message:error?.message});return res.status(503).json({success:false,error:'RESEARCH_EXPORT_UNAVAILABLE'});}
+});
 
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {

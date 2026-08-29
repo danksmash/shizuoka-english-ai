@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { ReflectionAnswers, calculateCanonicalStats, maskHistoryForStorage } from '../dataContract';
+import { ReflectionAnswers, ResearchSystemEvent, calculateCanonicalStats, maskHistoryForStorage } from '../dataContract';
 import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, VisualVocabularyItem } from '../types';
 import { getDocument, listCollection, queryCollection, setDocument } from './firestore';
 
@@ -156,7 +156,7 @@ export async function reissueStudentCode(studentId: string, newCode: string): Pr
 export interface SaveCanonicalSessionArgs {
   sessionId: string; studentId: string; researchId: string; classId?: string; aiStudentId: AIStudentId; topic: DialogueTopic;
   targetDurationMinutes: DialogueDurationMinutes; startedAt: number; endedAt: number; history: ChatMessage[];
-  encounteredVocab: VisualVocabularyItem[]; reflection?: ReflectionAnswers;
+  encounteredVocab: VisualVocabularyItem[]; reflection?: ReflectionAnswers; systemEvents?: ResearchSystemEvent[];
 }
 
 export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
@@ -166,15 +166,18 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
   if (existing && existing.studentId && existing.studentId !== args.studentId) throw new Error('SESSION_ID_CONFLICT');
   const studentSessions = await queryCollection(SESSION_COLLECTION, 'studentId', args.studentId, 1000);
   const lifetimeSessionNumber = existing?.lifetimeSessionNumber || studentSessions.length + 1;
-  const localDate = new Date(args.endedAt).toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+  const localDate = new Date(args.startedAt).toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
   const dailySessionNumber = existing?.dailySessionNumber || studentSessions.filter((session) => session.localDate === localDate).length + 1;
   const document = {
-    schemaVersion: 2, sessionId: args.sessionId, studentId: args.studentId, researchId: args.researchId,
+    schemaVersion: 3, sessionId: args.sessionId, studentId: args.studentId, researchId: args.researchId,
     classId: normalizeClassId(args.classId), aiStudentId: args.aiStudentId, topic: args.topic,
     targetDurationMinutes: args.targetDurationMinutes, actualDurationSeconds: stats.actualDurationSeconds,
     startedAt: new Date(args.startedAt).toISOString(), endedAt: new Date(args.endedAt).toISOString(), localDate,
     lifetimeSessionNumber, dailySessionNumber, totalTurns: stats.totalTurns, totalChildWords: stats.totalChildWords,
-    uniqueVocabularyCount: stats.uniqueVocabularyCount, history: safeHistory,
+    uniqueVocabularyCount: stats.uniqueVocabularyCount,
+    childUniqueWordTypes: stats.childUniqueWordTypes, meanChildWordsPerTurn: stats.meanChildWordsPerTurn, maxChildWordsPerTurn: stats.maxChildWordsPerTurn,
+    childQuestionCount: stats.childQuestionCount, childReciprocalQuestionCount: stats.childReciprocalQuestionCount, childRepairCount: stats.childRepairCount, childReasonExpressionCount: stats.childReasonExpressionCount,
+    history: safeHistory, systemEvents: (args.systemEvents || []).slice(0, 500),
     encounteredVocab: args.encounteredVocab.slice(0, 200).map((item) => ({ id: item.id, word: item.word, japanese: item.japanese, category: item.category })),
     reflection: args.reflection || null, updatedAt: new Date().toISOString(), createdAt: existing?.createdAt || new Date().toISOString(),
     retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000).toISOString(),

@@ -22,9 +22,10 @@
     "qa:data": "tsx scripts/qa-data-contract.ts",
     "qa:management": "tsx scripts/qa-management-page.ts",
     "qa:responsive-vocab": "tsx scripts/qa-responsive-vocabulary.ts",
-    "qa": "npm run qa:dialogue && npm run qa:speech && npm run qa:security && npm run qa:alignment && npm run qa:starter-translations && npm run qa:data && npm run qa:management && npm run qa:responsive-vocab && npm run lint",
+    "qa": "npm run qa:dialogue && npm run qa:speech && npm run qa:security && npm run qa:alignment && npm run qa:starter-translations && npm run qa:data && npm run qa:management && npm run qa:responsive-vocab && npm run qa:research && npm run lint",
     "qa:starter-translations": "tsx scripts/qa-starter-translations.ts",
-    "qa:alignment": "tsx scripts/qa-dialogue-alignment.ts"
+    "qa:alignment": "tsx scripts/qa-dialogue-alignment.ts",
+    "qa:research": "tsx scripts/qa-research-integrated.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
