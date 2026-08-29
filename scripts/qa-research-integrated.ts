@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { buildResearchDataSets } from '../src/server/researchExport';
 import { analyzeChildCommunication, parseResearchSystemEvents } from '../src/dataContract';
+import { maskTextForResearchExport } from '../src/utils/privacy';
+import fs from 'node:fs';
 
 const base = Date.parse('2026-09-01T01:00:00Z'); // 10:00 JST, Tuesday
 const clustered = Array.from({ length: 8 }, (_, index) => ({
@@ -32,7 +34,7 @@ const clustered = Array.from({ length: 8 }, (_, index) => ({
 
 const evening = {
   ...clustered[0], researchId: 'R200001', classId: '5-2', sessionId: 'session_evening',
-  startedAt: '2026-09-01T09:30:00.000Z', endedAt: '2026-09-01T09:33:00.000Z',
+  startedAt: '2026-09-01T09:30:00.000Z', endedAt: '2026-09-01T09:33:00.000Z', reflection: null,
 }; // 18:30 JST
 const weekend = {
   ...clustered[0], researchId: 'R200002', classId: '5-2', sessionId: 'session_weekend',
@@ -68,6 +70,7 @@ assert.ok(!('learningCode' in inClass));
 
 const eveningRow = data.sessions.find((row) => row.session_id === 'session_evening')!;
 assert.equal(eveningRow.usage_context_inferred, 'out_of_school_hours');
+assert.equal(eveningRow.data_quality_flag, 'missing_reflection');
 const weekendRow = data.sessions.find((row) => row.session_id === 'session_weekend')!;
 assert.equal(weekendRow.usage_context_inferred, 'non_school_day');
 
@@ -84,11 +87,28 @@ assert.equal(metrics.childRepairCount, 1);
 assert.equal(metrics.childReasonExpressionCount, 1);
 assert.ok(metrics.childUniqueWordTypes > 0);
 
+const maskedResearch = maskTextForResearchExport('My name is Jonah Smith. I am 11 years old. I go to Kitahama Elementary School. My code is A7M4. My birthday is May 10.');
+for (const secret of ['Jonah Smith','11 years old','Kitahama Elementary School','A7M4','May 10']) assert.equal(maskedResearch.includes(secret), false, `research export must mask ${secret}`);
+assert.equal(maskTextForResearchExport('I like soccer because it is fun.'), 'I like soccer because it is fun.');
+
+const nameContextData = buildResearchDataSets([{...clustered[0], sessionId:'session_name_context', history:[
+  {id:'ai-name',sender:'ai',englishText:"What's your name?",japaneseText:'名前は何ですか。',timestamp:base},
+  {id:'child-name',sender:'child',englishText:"I'm Jonah. I like soccer.",japaneseText:'私はジョナです。サッカーが好きです。',timestamp:base+1000},
+]}]);
+const nameTurn = nameContextData.turns.find((row) => row.speaker === 'child')!;
+assert.equal(String(nameTurn.english_text_anonymized).includes('Jonah'), false, 'name response after explicit name question must be masked');
+assert.ok(String(nameTurn.english_text_anonymized).includes('I like soccer'), 'non-identifying remainder must be preserved');
+
 const parsedEvents = parseResearchSystemEvents([
   { type: 'mic_start', timestamp: base, value: 'microphone' },
+  { type: 'ai_response_latency_ms', timestamp: base + 1, value: '420' },
   { type: 'not_allowed', timestamp: base },
   { type: 'help_open', timestamp: 'bad' },
 ]);
-assert.equal(parsedEvents.length, 1, 'only whitelisted events with valid timestamps may be stored');
+assert.equal(parsedEvents.length, 2, 'only whitelisted events with valid timestamps may be stored');
+const appSource = fs.readFileSync('src/App.tsx','utf8');
+assert.ok(appSource.includes('initialSessionSaveRef'), 'dialogue-end snapshot persistence must exist');
+assert.ok(appSource.includes('Initial research session snapshot unavailable'), 'snapshot failure handling must exist');
+assert.ok(appSource.includes("recordResearchEvent('ai_response_latency_ms'"), 'AI response latency must be captured');
 
 console.log('Integrated research dataset QA: PASS');

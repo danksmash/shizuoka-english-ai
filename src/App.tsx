@@ -93,6 +93,7 @@ export default function App() {
   const dialogueActiveRef = useRef(false);
   const chatAbortControllerRef = useRef<AbortController | null>(null);
   const systemEventsRef = useRef<ResearchSystemEvent[]>([]);
+  const initialSessionSaveRef = useRef<Promise<void> | null>(null);
   const recordResearchEvent = useCallback((type: ResearchSystemEventType, value?: string) => {
     const event: ResearchSystemEvent = { type, timestamp: Date.now(), ...(value ? { value: value.slice(0, 80) } : {}) };
     systemEventsRef.current = [...systemEventsRef.current.slice(-499), event];
@@ -144,6 +145,7 @@ export default function App() {
     setProfile(newProfile); profileRef.current = newProfile;
     const startedAt = Date.now();
     setLearningCode(code); setSessionId(newSessionId()); sessionStartedAtRef.current = startedAt; sessionEndedAtRef.current = 0;
+    initialSessionSaveRef.current = null;
     systemEventsRef.current = [{ type: 'session_start', timestamp: startedAt }];
     setReflectionSaveMessage('');
     const durationSec = newProfile.selectedDurationMinutes * 60;
@@ -210,10 +212,12 @@ export default function App() {
     const nextTotalWords = totalChildWordsRef.current + words; totalChildWordsRef.current = nextTotalWords; setTotalChildWords(nextTotalWords);
     setSpeechTranscript(''); liveTranscriptRef.current = ''; setIsAiResponding(true); setMood('thinking');
     const controller = new AbortController(); chatAbortControllerRef.current = controller;
+    const aiRequestStartedAt = Date.now();
     try {
       const currentProf = profileRef.current;
       const response = await fetch(apiUrl('/api/chat'), { method:'POST', headers:{'Content-Type':'application/json'}, signal:controller.signal, body:JSON.stringify({ message:trimmed, history:newHistory, topic:currentProf.selectedTopic, studentName:currentProf.name, aiStudentId:currentProf.selectedAiStudentId }) });
       const resData = await response.json();
+      recordResearchEvent('ai_response_latency_ms', String(Math.max(0, Date.now() - aiRequestStartedAt)));
       if (!dialogueActiveRef.current || controller.signal.aborted || chatAbortControllerRef.current !== controller) return;
       if (resData.success && resData.data) {
         const { reply, japaneseTranslation, studentJapaneseTranslation, studentTranslationStatus, mood: aiMood, culturalNote } = resData.data;
@@ -311,6 +315,18 @@ export default function App() {
     const currentProf=profileRef.current; const studentObj=getAIStudentById(currentProf.selectedAiStudentId); const farewell=getStudentFarewellMessage(studentObj.id); setFarewellBanner(farewell);
     const farewellMsg:ChatMessage={id:`ai-farewell-${Date.now()}`,sender:'ai',englishText:farewell.english,japaneseText:farewell.japanese,timestamp:Date.now(),culturalNote:'時間になりました！お疲れさまでした！'};
     const finalMessages=[...currentHistory,farewellMsg]; setMessages(finalMessages); messagesRef.current=finalMessages; setIsSpeaking(true); setMood('happy'); setIsLoadingFeedback(true);
+    if (learningDataEnabled && learningCode && sessionId) {
+      const snapshotPayload = {
+        sessionId, learningCode, aiStudentId: currentProf.selectedAiStudentId, topic: currentProf.selectedTopic,
+        targetDurationMinutes: currentProf.selectedDurationMinutes, startedAt: sessionStartedAtRef.current,
+        endedAt: sessionEndedAtRef.current || Date.now(), history: finalMessages, encounteredVocab: encounteredVocabRef.current, systemEvents: systemEventsRef.current,
+      };
+      initialSessionSaveRef.current = fetch(apiUrl('/api/sessions'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(snapshotPayload) })
+        .then(async (response) => { if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data?.error || 'SNAPSHOT_SAVE_FAILED'); } })
+        .catch((error) => { console.warn('Initial research session snapshot unavailable:', error); });
+    } else {
+      initialSessionSaveRef.current = null;
+    }
     (async()=>{ try { const controller=new AbortController(); const timeoutId=setTimeout(()=>controller.abort(),20000); const response=await fetch(apiUrl('/api/feedback'),{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,body:JSON.stringify({history:finalMessages,studentName:currentProf.name,durationMinutes:currentProf.selectedDurationMinutes,turns:turnCountRef.current,totalWords:totalChildWordsRef.current,aiStudentId:currentProf.selectedAiStudentId,encounteredVocab:encounteredVocabRef.current})}); clearTimeout(timeoutId); const resData=await response.json(); if(resData.success&&resData.data)setFeedback(resData.data); else throw new Error('Invalid feedback response'); } catch(e){ console.warn('Feedback API fetch issue:',e); setFeedback(generateFallbackFeedback(studentObj,currentProf.name,turnCountRef.current,totalChildWordsRef.current,elapsedSecondsRef.current,currentProf.selectedDurationMinutes,encounteredVocabRef.current,finalMessages)); } finally { setIsLoadingFeedback(false); } })();
     let hasTransitioned=false; const executeTransition=()=>{if(hasTransitioned)return;hasTransitioned=true;stopSpeaking();if(farewellSafetyTimerRef.current){clearTimeout(farewellSafetyTimerRef.current);farewellSafetyTimerRef.current=null;}farewellTransitionRef.current=null;setFarewellBanner(null);setPhase('reflection');};
     farewellTransitionRef.current=executeTransition;
@@ -321,6 +337,7 @@ export default function App() {
   const handleSubmitReflection = async (answers: ReflectionAnswers) => {
     recordResearchEvent('reflection_submit');
     setIsSavingReflection(true); setReflectionSaveMessage('');
+    if (initialSessionSaveRef.current) { await initialSessionSaveRef.current; initialSessionSaveRef.current = null; }
     if (learningDataEnabled && learningCode && sessionId) {
       try {
         const response = await fetch(apiUrl('/api/sessions'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
@@ -353,7 +370,7 @@ export default function App() {
     finally { setHistoryLoading(false); }
   };
 
-  const handleRestart=()=>{dialogueActiveRef.current=false;chatAbortControllerRef.current?.abort();chatAbortControllerRef.current=null;stopSpeaking();stopRecordingInternal();if(farewellSafetyTimerRef.current){clearTimeout(farewellSafetyTimerRef.current);farewellSafetyTimerRef.current=null;}farewellTransitionRef.current=null;setPhase('setup');setMessages([]);setTurnCount(0);setTotalChildWords(0);setEncounteredVocabList([]);setLatestVocabItem(null);setFarewellBanner(null);setMicHintMessage('');setLearningCode('');setSessionId('');setReflectionSaveMessage('');};
+  const handleRestart=()=>{dialogueActiveRef.current=false;chatAbortControllerRef.current?.abort();chatAbortControllerRef.current=null;stopSpeaking();stopRecordingInternal();if(farewellSafetyTimerRef.current){clearTimeout(farewellSafetyTimerRef.current);farewellSafetyTimerRef.current=null;}farewellTransitionRef.current=null;setPhase('setup');setMessages([]);setTurnCount(0);setTotalChildWords(0);setEncounteredVocabList([]);setLatestVocabItem(null);setFarewellBanner(null);setMicHintMessage('');setLearningCode('');setSessionId('');initialSessionSaveRef.current=null;setReflectionSaveMessage('');};
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-800 flex flex-col">

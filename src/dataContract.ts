@@ -21,7 +21,7 @@ export interface ReflectionAnswers {
 export const RESEARCH_SYSTEM_EVENT_TYPES = [
   'session_start','session_finish','reflection_submit','mic_start','mic_stop_send','mic_error',
   'text_input_open','text_message_send','help_open','help_phrase_select','ai_replay','vocab_bank_open',
-  'vocab_audio_play','speech_rate_change','ai_request_failure',
+  'vocab_audio_play','speech_rate_change','ai_response_latency_ms','ai_request_failure',
 ] as const;
 export type ResearchSystemEventType = typeof RESEARCH_SYSTEM_EVENT_TYPES[number];
 export interface ResearchSystemEvent {
