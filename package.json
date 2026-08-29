@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "qa:dialogue": "tsx scripts/qa-dialogue.ts",
-    "build:pages": "vite build && tsx scripts/app-version-postbuild.ts pages && cp dist/index.html dist/404.html",
+    "build:pages": "vite build && cp dist/index.html dist/404.html",
     "build:server": "tsx scripts/build-server.ts",
     "build": "npm run build:pages && npm run build:server",
     "start": "node dist/server.cjs",
