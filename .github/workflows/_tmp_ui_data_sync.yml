@@ -22,7 +22,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Apply audited fixes
-        run: python3 scripts/_tmp_fix_ui_data_sync.py
+        run: |
+          python3 scripts/_tmp_fix_ui_data_sync.py
+          python3 scripts/_tmp_fix_ui_data_sync_followup.py
       - name: Full QA
         run: npm run qa
       - name: Production build
@@ -31,6 +33,6 @@ jobs:
         run: |
           git config user.name "danksmash"
           git config user.email "danksmash@gmail.com"
-          git add src/App.tsx src/components/AIStudentCard.tsx src/components/FeedbackScreen.tsx src/server/researchExport.ts src/server/managementPage.ts scripts/qa-management-page.ts scripts/qa-research-integrated.ts scripts/qa-dashboard-data-sync.ts package.json
+          git add src/App.tsx src/components/AIStudentCard.tsx src/components/FeedbackScreen.tsx src/server/researchExport.ts src/server/managementPage.ts scripts/qa-management-page.ts scripts/qa-research-integrated.ts scripts/qa-responsive-vocabulary.ts scripts/qa-dashboard-data-sync.ts package.json
           git commit -m "feat: synchronize UI and data dashboards"
           git push origin HEAD:codex/ui-data-sync-audit
