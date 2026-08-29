@@ -1,0 +1,40 @@
+name: Codex adaptive setup patch
+
+on:
+  push:
+    branches:
+      - codex/adaptive-setup-ai-learning-items
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/adaptive-setup-ai-learning-items
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Apply patch
+        run: python3 scripts/codex-apply-adaptive-setup.py
+      - name: Install
+        run: npm ci
+      - name: Full QA
+        run: npm run qa
+      - name: Production build
+        run: npm run build
+      - name: Remove one-shot helpers
+        run: rm -f scripts/codex-apply-adaptive-setup.py .github/workflows/codex-adaptive-setup.yml
+      - name: Commit tested implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: adaptive setup and grounded AI learning expressions"
+          git push origin HEAD:codex/adaptive-setup-ai-learning-items
