@@ -1,8 +1,9 @@
 import React from 'react';
-import { Volume2, VolumeX, Clock, CheckCircle2, MessageCircle } from 'lucide-react';
+import { Volume2, VolumeX, Clock, CheckCircle2, MessageCircle, KeyRound } from 'lucide-react';
 
 interface HeaderProps {
   studentName: string;
+  learningId?: string;
   aiStudentName?: string;
   aiStudentFlag?: string;
   remainingSeconds: number;
@@ -16,6 +17,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   studentName,
+  learningId,
   aiStudentName = 'Oliver',
   aiStudentFlag = '🇬🇧',
   remainingSeconds,
@@ -50,6 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          {learningId && <div className="flex min-h-11 items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 text-[11px] font-black text-blue-800 sm:px-3"><KeyRound className="h-4 w-4" /><span className="hidden sm:inline">学習者ID</span><span className="tracking-widest">{learningId}</span></div>}
           <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2 sm:py-1.5 rounded-full border shadow-xs font-mono transition-all ${isTimeLow ? 'bg-rose-50 border-rose-300 text-rose-700 animate-pulse' : 'bg-white border-slate-200 text-slate-700'}`}>
             <Clock className={`w-4 h-4 ${isTimeLow ? 'text-rose-600' : 'text-blue-600'}`} />
             <span className="text-sm sm:text-base font-bold text-slate-800">{timeDisplay}</span>

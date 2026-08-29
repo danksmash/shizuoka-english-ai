@@ -37,7 +37,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
     const normalized = normalizeLearningCode(learningCode);
     if (learningDataEnabled) {
       if (!isValidLearningCode(normalized)) {
-        setCodeError('先生から配られた4文字のコードを入力してね');
+        setCodeError('先生から配られた4文字の学習者IDを入力してね');
         return;
       }
       setCheckingCode(true);
@@ -45,7 +45,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
       const ok = await onValidateLearningCode(normalized);
       setCheckingCode(false);
       if (!ok) {
-        setCodeError('学習者用コードを確認できませんでした。先生に確認してください。');
+        setCodeError('学習者IDを確認できませんでした。先生に確認してください。');
         return;
       }
     }
@@ -77,11 +77,11 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
               </div>
             </div>
             {learningDataEnabled && <div className="flex items-center justify-end gap-2">
-              <p className="hidden max-w-32 text-[10px] font-bold leading-tight text-slate-600 sm:block">先生から配られた<br />4文字のコードを入力してね</p>
+              <p className="hidden max-w-32 text-[10px] font-bold leading-tight text-slate-600 sm:block">先生から配られた<br />4文字の学習者IDを入力してね</p>
               <div className="relative">
                 <div className={`flex items-center gap-2 rounded-xl border-2 bg-white px-3 py-1.5 shadow-sm ${codeError ? 'border-rose-400' : 'border-blue-500'}`}>
                   <KeyRound className="h-4 w-4 text-blue-700" />
-                  <span className="text-sm font-black text-slate-700">学習者用コード</span>
+                  <span className="text-sm font-black text-slate-700">学習者ID</span>
                   <input value={learningCode} onChange={(e) => { setLearningCode(normalizeLearningCode(e.target.value)); setCodeError(''); }} maxLength={4} autoCapitalize="characters" placeholder="A7M4" className="w-20 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-center text-sm font-black tracking-widest outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
                 {codeError && <p className="absolute right-0 top-full z-20 mt-1 w-72 max-w-[85vw] rounded-lg bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-700 shadow">{codeError}</p>}

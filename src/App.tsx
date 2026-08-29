@@ -391,7 +391,7 @@ export default function App() {
       {phase==='setup' && <SetupScreen onStartDialogue={handleStartDialogue} learningDataEnabled={learningDataEnabled} onValidateLearningCode={validateLearningCode}/>} 
       {phase==='dialogue' && (
         <div className="flex-1 flex flex-col min-h-[100dvh] lg:h-screen lg:overflow-hidden">
-          <Header studentName={profile.name} aiStudentName={currentAiStudent.name} aiStudentFlag={currentAiStudent.flag} remainingSeconds={remainingSeconds} totalDurationSeconds={profile.selectedDurationMinutes*60} turnCount={turnCount} wordCount={totalChildWords} soundEnabled={soundEnabled} onToggleSound={()=>{if(soundEnabled)stopSpeaking();setSoundEnabled(!soundEnabled);}} onFinishEarly={handleFinishDialogue}/>
+          <Header studentName={profile.name} learningId={learningCode} aiStudentName={currentAiStudent.name} aiStudentFlag={currentAiStudent.flag} remainingSeconds={remainingSeconds} totalDurationSeconds={profile.selectedDurationMinutes*60} turnCount={turnCount} wordCount={totalChildWords} soundEnabled={soundEnabled} onToggleSound={()=>{if(soundEnabled)stopSpeaking();setSoundEnabled(!soundEnabled);}} onFinishEarly={handleFinishDialogue}/>
           <main className="flex-1 max-w-7xl w-full mx-auto p-2.5 sm:p-4 lg:p-5 grid grid-cols-1 md:grid-cols-12 gap-3 lg:gap-5 min-h-0 lg:overflow-hidden pb-[calc(7.5rem+env(safe-area-inset-bottom))] lg:pb-5">
             <div className="hidden md:flex col-span-12 md:col-span-4 lg:col-span-3 flex-col gap-4 overflow-y-auto min-h-0">
               <AIStudentCard student={currentAiStudent} mood={mood} isSpeaking={isSpeaking} isListening={isListening} speechRate={speechRate} onReplayAudio={()=>{recordResearchEvent('ai_replay','profile');const lastAi=messages.filter((m)=>m.sender==='ai').slice(-1)[0];if(lastAi)playAiVoice(lastAi.englishText);}} onChangeSpeechRate={(rate)=>{recordResearchEvent('speech_rate_change',rate.toFixed(2));setSpeechRate(rate);}}/>
@@ -425,8 +425,8 @@ export default function App() {
         </div>
       )}
       {phase==='reflection'&&<ReflectionScreen aiStudent={currentAiStudent} profile={profile} learningCode={learningCode} totalTurns={turnCount} totalWords={totalChildWords} elapsedSeconds={elapsedSeconds} vocabCount={encounteredVocabList.length} onSubmit={handleSubmitReflection} isSaving={isSavingReflection} saveMessage={reflectionSaveMessage}/>}
-      {phase==='feedback'&&<FeedbackScreen profile={profile} messages={messages} feedback={feedback} isLoadingFeedback={isLoadingFeedback} totalTurns={turnCount} totalWords={totalChildWords} elapsedSeconds={elapsedSeconds} encounteredVocabList={encounteredVocabList} onPlayAudio={playAiVoice} onRestart={handleRestart} onOpenHistory={learningDataEnabled && learningCode ? handleOpenHistory : undefined}/>}
-      {phase==='history'&&<LearningHistoryScreen rows={historyRows} loading={historyLoading} error={historyError} onBack={()=>setPhase('feedback')}/>} 
+      {phase==='feedback'&&<FeedbackScreen profile={profile} learningId={learningCode} messages={messages} feedback={feedback} isLoadingFeedback={isLoadingFeedback} totalTurns={turnCount} totalWords={totalChildWords} elapsedSeconds={elapsedSeconds} encounteredVocabList={encounteredVocabList} onPlayAudio={playAiVoice} onRestart={handleRestart} onOpenHistory={learningDataEnabled && learningCode ? handleOpenHistory : undefined}/>}
+      {phase==='history'&&<LearningHistoryScreen learningId={learningCode} rows={historyRows} loading={historyLoading} error={historyError} onBack={()=>setPhase('feedback')}/>} 
     </div>
   );
 }

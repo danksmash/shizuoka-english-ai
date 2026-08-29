@@ -44,6 +44,7 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
 }) => {
   const [ratings, setRatings] = useState<Partial<Record<RatingKey, number>>>({});
   const [submitted, setSubmitted] = useState(false);
+  const reportOwner = profile.name && profile.name !== '5・6年生' ? profile.name : 'あなた';
 
   const formatTime = (seconds: number) => {
     const safe = Math.max(0, Math.round(seconds));
@@ -82,8 +83,8 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <div className="rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-black">お名前：{profile.name || '5・6年生'}</div>
-              {learningCode && <div className="flex items-center gap-2 rounded-xl border-2 border-blue-500 bg-white px-4 py-2 text-sm font-black"><KeyRound className="h-4 w-4 text-blue-700" />学習者用コード <span className="rounded-lg bg-blue-50 px-2 py-1 tracking-widest text-blue-800">{learningCode}</span></div>}
+              {profile.name && profile.name !== '5・6年生' && <div className="rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-black">対話で話した名前：{profile.name}</div>}
+              {learningCode && <div className="flex items-center gap-2 rounded-xl border-2 border-blue-500 bg-white px-4 py-2 text-sm font-black"><KeyRound className="h-4 w-4 text-blue-700" />学習者ID <span className="rounded-lg bg-blue-50 px-2 py-1 tracking-widest text-blue-800">{learningCode}</span></div>}
             </div>
           </div>
         </header>
@@ -93,7 +94,7 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
             <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-500 text-white shadow"><Award className="h-9 w-9" /></div>
             <div>
               <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">Great Job! 対話ふりかえり</span>
-              <h2 className="mt-2 text-2xl font-black text-slate-900">{profile.name || '5・6年生'}さんの英会話レポート</h2>
+              <h2 className="mt-2 text-2xl font-black text-slate-900">{reportOwner}の英会話レポート</h2>
               <p className="mt-1 text-sm font-semibold text-slate-600">{aiStudent.flag} {aiStudent.name} ({aiStudent.countryJapanese}) 留学生との対話練習記録</p>
             </div>
           </div>

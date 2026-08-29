@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { managementPageHtml } from '../src/server/managementPage';
+
+const setup = fs.readFileSync('src/components/SetupScreen.tsx','utf8');
+const header = fs.readFileSync('src/components/Header.tsx','utf8');
+const reflection = fs.readFileSync('src/components/ReflectionScreen.tsx','utf8');
+const feedback = fs.readFileSync('src/components/FeedbackScreen.tsx','utf8');
+const history = fs.readFileSync('src/components/LearningHistoryScreen.tsx','utf8');
+const persistence = fs.readFileSync('src/server/persistence.ts','utf8');
+const server = fs.readFileSync('server.ts','utf8');
+const management = managementPageHtml();
+
+assert.ok(setup.includes('学習者ID'));
+assert.ok(!setup.includes('学習者用コード</span>'));
+assert.ok(header.includes('learningId?: string') && header.includes('学習者ID'));
+assert.ok(reflection.includes("reportOwner") && reflection.includes('学習者ID'));
+assert.ok(feedback.includes("reportOwner") && feedback.includes('learningId?: string'));
+assert.ok(history.includes('これまでのAI留学生との対話を振り返って，自分の学びに生かそう。'));
+assert.ok(history.includes('topicCounts.map') && history.includes('partnerCounts.map'));
+assert.ok(persistence.includes('learningId: normalized'));
+assert.ok(persistence.includes('attendanceNumber'));
+assert.ok(persistence.includes('rows.filter(learnerTeacherVisibleSession)'));
+assert.ok(server.includes('attendanceNumber'));
+assert.ok(management.includes('↻ 最新データを再読込'));
+assert.ok(management.includes('学習者ID'));
+assert.ok(!management.includes('児童ID管理'));
+assert.ok(management.includes("rows.length?['すべて']:[]"));
+assert.ok(management.includes("addEventListener('input',updateResearchDashboard)"));
+assert.ok(management.includes("addEventListener('input',updateTeacherDashboard)"));
+assert.ok(!management.includes('researchListShortcut'), 'duplicate lower research navigation should be removed');
+console.log('Learner identity and dashboard synchronization QA: PASS');

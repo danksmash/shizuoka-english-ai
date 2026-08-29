@@ -21,6 +21,7 @@ export interface StudentHistoryRow {
 }
 
 interface LearningHistoryScreenProps {
+  learningId?: string;
   rows: StudentHistoryRow[];
   loading: boolean;
   error?: string;
@@ -42,7 +43,7 @@ const formatDuration = (seconds: number) => {
 
 const topicLabel = (topicId: string) => DIALOGUE_TOPICS.find((topic) => topic.id === topicId)?.title || topicId || '—';
 
-export const LearningHistoryScreen: React.FC<LearningHistoryScreenProps> = ({ rows, loading, error, onBack }) => {
+export const LearningHistoryScreen: React.FC<LearningHistoryScreenProps> = ({ learningId, rows, loading, error, onBack }) => {
   const averages = useMemo(() => reflectionKeys.map(([key, label]) => {
     const values = rows.map((r) => Number(r.reflection?.[key])).filter((v) => Number.isFinite(v) && v >= 1 && v <= 5);
     return { label, value: values.length ? values.reduce((a, b) => a + b, 0) / values.length : null };
@@ -54,28 +55,20 @@ export const LearningHistoryScreen: React.FC<LearningHistoryScreenProps> = ({ ro
   const totalDurationSeconds = rows.reduce((sum, r) => sum + Number(r.actualDurationSeconds || 0), 0);
   const totalVocab = rows.reduce((sum, r) => sum + Number(r.uniqueVocabularyCount || 0), 0);
 
-  const mostFrequentTopic = useMemo(() => {
-    const counts = new Map<string, number>();
-    rows.forEach((row) => counts.set(row.topic, (counts.get(row.topic) || 0) + 1));
-    const entry = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
-    return entry ? { label: topicLabel(entry[0]), count: entry[1] } : null;
-  }, [rows]);
+  const topicCounts = useMemo(() => DIALOGUE_TOPICS.map((topic) => ({
+    id: topic.id, label: topic.title, count: rows.filter((row) => row.topic === topic.id).length,
+  })), [rows]);
 
-  const mostFrequentPartner = useMemo(() => {
-    const counts = new Map<string, number>();
-    rows.forEach((row) => counts.set(row.aiStudentId, (counts.get(row.aiStudentId) || 0) + 1));
-    const entry = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
-    if (!entry) return null;
-    const student = AI_STUDENTS_LIST.find((item) => item.id === entry[0]);
-    return { label: student?.name || entry[0], count: entry[1] };
-  }, [rows]);
+  const partnerCounts = useMemo(() => AI_STUDENTS_LIST.map((student) => ({
+    id: student.id, label: student.name, count: rows.filter((row) => row.aiStudentId === student.id).length,
+  })), [rows]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-3 sm:p-6">
       <div className="mx-auto max-w-6xl space-y-4">
         <header className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <button type="button" onClick={onBack} className="flex items-center gap-1 text-sm font-bold text-blue-700"><ArrowLeft className="h-4 w-4" />レポートにもどる</button>
-          <div className="mt-3 flex items-center gap-3"><BarChart3 className="h-8 w-8 text-blue-600" /><div><h1 className="text-xl font-black text-slate-900 sm:text-2xl">わたしの学習履歴</h1><p className="text-xs text-slate-600 sm:text-sm">これまでの自分の対話をふりかえります。ほかの人との比較はしません。</p></div></div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><BarChart3 className="h-8 w-8 text-blue-600" /><div><h1 className="text-xl font-black text-slate-900 sm:text-2xl">わたしの学習履歴</h1><p className="text-xs text-slate-600 sm:text-sm">これまでのAI留学生との対話を振り返って，自分の学びに生かそう。</p></div></div>{learningId && <span className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-800">学習者ID <span className="tracking-widest">{learningId}</span></span>}</div>
         </header>
 
         {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center font-bold text-slate-600">学習履歴を読み込んでいます…</div> : error ? <div className="rounded-3xl border border-rose-200 bg-rose-50 p-5 font-bold text-rose-800">{error}</div> : <>
@@ -93,8 +86,8 @@ export const LearningHistoryScreen: React.FC<LearningHistoryScreenProps> = ({ ro
           </section>
 
           <section className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4"><p className="text-[11px] font-bold text-emerald-800">よく話したテーマ</p><p className="mt-1 text-base font-black text-slate-900">{mostFrequentTopic?.label || '—'}</p><p className="text-xs text-slate-600">{mostFrequentTopic ? `${mostFrequentTopic.count}回` : 'まだ記録がありません'}</p></div>
-            <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4"><p className="text-[11px] font-bold text-blue-800">よく話したAI留学生</p><p className="mt-1 text-base font-black text-slate-900">{mostFrequentPartner?.label || '—'}</p><p className="text-xs text-slate-600">{mostFrequentPartner ? `${mostFrequentPartner.count}回` : 'まだ記録がありません'}</p></div>
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4"><p className="text-[11px] font-bold text-emerald-800">よく話したテーマ</p><div className="mt-2 grid gap-1.5">{topicCounts.map((item) => <div key={item.id} className="flex items-center justify-between rounded-xl border border-emerald-100 bg-white/80 px-3 py-2"><span className="text-xs font-bold text-slate-800">{item.label}</span><span className="text-xs font-black text-emerald-700">{item.count}回</span></div>)}</div></div>
+            <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4"><p className="text-[11px] font-bold text-blue-800">よく話したAI留学生</p><div className="mt-2 grid gap-1.5">{partnerCounts.map((item) => <div key={item.id} className="flex items-center justify-between rounded-xl border border-blue-100 bg-white/80 px-3 py-2"><span className="text-xs font-bold text-slate-800">{item.label}</span><span className="text-xs font-black text-blue-700">{item.count}回</span></div>)}</div></div>
           </section>
 
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">

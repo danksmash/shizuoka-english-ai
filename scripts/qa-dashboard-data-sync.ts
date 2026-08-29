@@ -34,7 +34,7 @@ vm.createContext(context);
 vm.runInContext(match[1], context, { filename: 'management-data-sync.js' });
 
 assert.equal(context.periodKey('2026-08-28', 'day'), '2026-08-28');
-assert.equal(context.periodKey('2026-08-28', 'week'), '2026-08-24', 'Friday in JST week must start Monday without UTC day shift');
+assert.equal(context.periodKey('2026-08-28', 'week'), '2026-08-24~2026-08-30', 'Weekly key must display the full Monday-Sunday range');
 assert.equal(context.periodKey('2026-08-29', 'month'), '2026-08');
 
 context.researchData = [
