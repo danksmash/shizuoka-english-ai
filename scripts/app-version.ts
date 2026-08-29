@@ -122,14 +122,6 @@ function escapeHtml(value: string): string {
   }[char] || char));
 }
 
-export function injectLearnerVersionIntoIndex(indexHtml: string, metadata: AppVersionMetadata): string {
-  if (indexHtml.includes('id="app-version-runtime"')) return indexHtml;
-  const payload = JSON.stringify({ version: metadata.version, build: metadata.build }).replace(/</g, '\\u003c');
-  const runtime = `<script id="app-version-runtime">(()=>{const info=${payload};const apply=()=>{document.querySelectorAll('.setup-footer').forEach((footer)=>{let span=footer.querySelector('[data-app-version]');if(!span){span=document.createElement('span');span.setAttribute('data-app-version','true');span.style.marginLeft='.9em';span.style.font='inherit';span.style.fontWeight='500';span.style.color='inherit';span.style.opacity='.78';footer.appendChild(span)}span.textContent='AI留学生えいご対話　Version '+info.version+'　Build '+info.build})};apply();new MutationObserver(apply).observe(document.documentElement,{childList:true,subtree:true})})();</script>`;
-  if (!indexHtml.includes('</body>')) throw new Error('VERSION_INDEX_BODY_ANCHOR_NOT_FOUND');
-  return indexHtml.replace('</body>', `${runtime}</body>`);
-}
-
 function insertBeforeSectionEnd(source: string, sectionId: string, html: string): string {
   const start = source.indexOf(`<section id="${sectionId}"`);
   if (start < 0) throw new Error(`VERSION_SECTION_NOT_FOUND:${sectionId}`);
