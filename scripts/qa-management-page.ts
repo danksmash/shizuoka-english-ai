@@ -12,7 +12,7 @@ if (/onclick=/.test(html)) throw new Error('Inline onclick handlers are not allo
 for (const marker of ['teacherDashboard','studentList','studentSummary','sessionDetail','codeManagement','researchDashboard','researchList','researchSummary','researchSession','researchQuality']) {
   assert.ok(html.includes(`id="${marker}"`), `Management screen missing: ${marker}`);
 }
-for (const marker of ['teacherClass','teacherStart','teacherEnd','teacherMetric','teacherWeekly','teacherMonthly','teacherChart','listClass','listStart','listEnd','studentSearch','showUnused','summaryStart','summaryEnd','sumDurationChart','sumWordsChart','newCode','newClass','reissueModal','reissueConfirm','researchStart','researchEnd','researchDashboardClass','researchMetric','researchWeekly','researchMonthly','researchChart','researchClass','researchGrade','researchCompleteOnly','researchSearch','r4TurnChart','r4WordChart','r4ReflectionChart','r5Head','r5Reflection','r6Start','r6End','r6Class','r6Research','qNormal','qMissing','qDuplicate','qReview']) {
+for (const marker of ['teacherClass','teacherStart','teacherEnd','teacherMetric','teacherWeekly','teacherMonthly','teacherChart','listClass','listStart','listEnd','studentSearch','showUnused','summaryStart','summaryEnd','sumDurationChart','sumWordsChart','newCode','newClass','reissueModal','reissueConfirm','researchStart','researchEnd','researchDashboardClass','researchMetric','researchWeekly','researchMonthly','researchChart','researchClass','researchGrade','researchCompleteOnly','researchSearch','r4TurnChart','r4WordChart','r4ReflectionChart','r5Head','r5Reflection','r6Start','r6End','r6Class','r6Research','qNormal','qMissing','qDuplicate','qReview','turnsCsvBtn','expressionsCsvBtn','eventsCsvBtn']) {
   assert.ok(html.includes(`id="${marker}"`), `Functional UI control missing: ${marker}`);
 }
 
@@ -59,6 +59,8 @@ assert.ok(serverSource.includes('getTeacherSessionsForManagement'));
 assert.ok(serverSource.includes("requireManagementRole(['researcher'])"));
 assert.ok(serverSource.includes('isPredominantlyJapanese'), 'Japanese feedback guard missing');
 assert.ok(serverSource.includes('studentMessageは必ず日本語で書いてください'), 'Japanese feedback prompt requirement missing');
+assert.ok(serverSource.includes('buildResearchDataSets'), 'Integrated research dataset builder must be used');
+assert.ok(serverSource.includes("dataset==='string'"), 'Research CSV dataset selector must exist');
 
 // Existing learner contracts must not regress.
 const reflectionSource = await readFile('src/components/ReflectionScreen.tsx', 'utf8');

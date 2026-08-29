@@ -30,7 +30,7 @@ import {
 } from './utils/speech';
 import { STARTER_PROMPTS_JAPANESE } from './utils/translation';
 import { motion, AnimatePresence } from 'motion/react';
-import type { ReflectionAnswers } from './dataContract';
+import type { ReflectionAnswers, ResearchSystemEvent, ResearchSystemEventType } from './dataContract';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const apiUrl = (path: string) => `${API_BASE_URL}${path}`;
@@ -92,6 +92,11 @@ export default function App() {
   const speechRateRef = useRef(speechRate); speechRateRef.current = speechRate;
   const dialogueActiveRef = useRef(false);
   const chatAbortControllerRef = useRef<AbortController | null>(null);
+  const systemEventsRef = useRef<ResearchSystemEvent[]>([]);
+  const recordResearchEvent = useCallback((type: ResearchSystemEventType, value?: string) => {
+    const event: ResearchSystemEvent = { type, timestamp: Date.now(), ...(value ? { value: value.slice(0, 80) } : {}) };
+    systemEventsRef.current = [...systemEventsRef.current.slice(-499), event];
+  }, []);
 
   useEffect(() => {
     fetch(apiUrl('/api/health')).then((response) => response.json()).then((data) => {
@@ -137,7 +142,9 @@ export default function App() {
     chatAbortControllerRef.current = null;
     dialogueActiveRef.current = true;
     setProfile(newProfile); profileRef.current = newProfile;
-    setLearningCode(code); setSessionId(newSessionId()); sessionStartedAtRef.current = Date.now(); sessionEndedAtRef.current = 0;
+    const startedAt = Date.now();
+    setLearningCode(code); setSessionId(newSessionId()); sessionStartedAtRef.current = startedAt; sessionEndedAtRef.current = 0;
+    systemEventsRef.current = [{ type: 'session_start', timestamp: startedAt }];
     setReflectionSaveMessage('');
     const durationSec = newProfile.selectedDurationMinutes * 60;
     setRemainingSeconds(durationSec); setElapsedSeconds(0); elapsedSecondsRef.current = 0;
@@ -223,7 +230,7 @@ export default function App() {
       } else throw new Error('API response unsuccessful');
     } catch (e) {
       const wasAborted = (e as {name?:string})?.name === 'AbortError' || controller.signal.aborted;
-      if (!wasAborted && dialogueActiveRef.current) { console.error('AI backend unavailable:', e); setMood('listening'); setMicHintMessage('AI留学生に接続できませんでした。もう一度送ってみてね。'); setTimeout(() => setMicHintMessage(''), 5000); }
+      if (!wasAborted && dialogueActiveRef.current) { recordResearchEvent('ai_request_failure'); console.error('AI backend unavailable:', e); setMood('listening'); setMicHintMessage('AI留学生に接続できませんでした。もう一度送ってみてね。'); setTimeout(() => setMicHintMessage(''), 5000); }
     } finally {
       if (chatAbortControllerRef.current === controller) chatAbortControllerRef.current = null;
       if (dialogueActiveRef.current) setIsAiResponding(false);
@@ -245,6 +252,7 @@ export default function App() {
     if (isAiResponding) return;
     if (isRecording) {
       const spokenText = liveTranscriptRef.current.trim();
+      recordResearchEvent('mic_stop_send', spokenText ? 'with_speech' : 'empty');
       stopRecordingInternal();
       if (spokenText) { await handleSendMessage(spokenText); liveTranscriptRef.current=''; setSpeechTranscript(''); }
       else { setMicHintMessage('英語が聞き取れませんでした。もう1度マイクを押して話してみてね！'); setTimeout(() => setMicHintMessage(''), 4000); }
@@ -258,23 +266,26 @@ export default function App() {
         stream.getTracks().forEach((track) => track.stop());
       }
     } catch {
+      recordResearchEvent('mic_error', 'permission');
       setMicHintMessage('マイクの使用が許可されていません。ブラウザのマイク設定を「許可」にしてください。');
       setTimeout(() => setMicHintMessage(''), 6000);
       return;
     }
 
+    recordResearchEvent('mic_start');
     liveTranscriptRef.current=''; setSpeechTranscript(''); setIsRecording(true); setIsListening(true);
     await new Promise((resolve) => setTimeout(resolve, 180));
     const recognition = createSpeechRecognitionInstance(
       (text) => { liveTranscriptRef.current=text; setSpeechTranscript(text); },
-      (err) => { console.warn('Speech Rec Error:', err); setMicHintMessage(mapSpeechError(err)); setIsRecording(false); setIsListening(false); setTimeout(() => setMicHintMessage(''), 6000); },
+      (err) => { recordResearchEvent('mic_error', String(err).slice(0, 40)); console.warn('Speech Rec Error:', err); setMicHintMessage(mapSpeechError(err)); setIsRecording(false); setIsListening(false); setTimeout(() => setMicHintMessage(''), 6000); },
       () => { setIsRecording(false); setIsListening(false); }
     );
     if (recognition) {
       recognitionRef.current = recognition;
       try { recognition.start(); }
-      catch (e) { console.warn('Speech Rec start error:', e); setMicHintMessage('マイクを開始できませんでした。もう一度試してください。'); setIsRecording(false); setIsListening(false); }
+      catch (e) { recordResearchEvent('mic_error', 'start'); console.warn('Speech Rec start error:', e); setMicHintMessage('マイクを開始できませんでした。もう一度試してください。'); setIsRecording(false); setIsListening(false); }
     } else {
+      recordResearchEvent('mic_error', 'unsupported');
       setMicHintMessage('このブラウザでは音声認識が制限されています。文字入力を使ってください。'); setIsRecording(false); setIsListening(false); setTimeout(() => setMicHintMessage(''), 5000);
     }
   };
@@ -296,7 +307,7 @@ export default function App() {
       const pendingChildMsg:ChatMessage={id:`child-${Date.now()}`,sender:'child',englishText:pendingText,japaneseText:'日本語に訳せませんでした。',timestamp:Date.now(),wordCount:words};
       currentHistory=[...currentHistory,pendingChildMsg]; turnCountRef.current+=1; totalChildWordsRef.current+=words; setTurnCount(turnCountRef.current); setTotalChildWords(totalChildWordsRef.current); setSpeechTranscript(''); liveTranscriptRef.current='';
     }
-    sessionEndedAtRef.current = Date.now();
+    sessionEndedAtRef.current = Date.now(); recordResearchEvent('session_finish');
     const currentProf=profileRef.current; const studentObj=getAIStudentById(currentProf.selectedAiStudentId); const farewell=getStudentFarewellMessage(studentObj.id); setFarewellBanner(farewell);
     const farewellMsg:ChatMessage={id:`ai-farewell-${Date.now()}`,sender:'ai',englishText:farewell.english,japaneseText:farewell.japanese,timestamp:Date.now(),culturalNote:'時間になりました！お疲れさまでした！'};
     const finalMessages=[...currentHistory,farewellMsg]; setMessages(finalMessages); messagesRef.current=finalMessages; setIsSpeaking(true); setMood('happy'); setIsLoadingFeedback(true);
@@ -308,13 +319,14 @@ export default function App() {
   };
 
   const handleSubmitReflection = async (answers: ReflectionAnswers) => {
+    recordResearchEvent('reflection_submit');
     setIsSavingReflection(true); setReflectionSaveMessage('');
     if (learningDataEnabled && learningCode && sessionId) {
       try {
         const response = await fetch(apiUrl('/api/sessions'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
           sessionId, learningCode, aiStudentId: profileRef.current.selectedAiStudentId, topic: profileRef.current.selectedTopic,
           targetDurationMinutes: profileRef.current.selectedDurationMinutes, startedAt: sessionStartedAtRef.current,
-          endedAt: sessionEndedAtRef.current || Date.now(), history: messagesRef.current, encounteredVocab: encounteredVocabRef.current, reflection: answers,
+          endedAt: sessionEndedAtRef.current || Date.now(), history: messagesRef.current, encounteredVocab: encounteredVocabRef.current, reflection: answers, systemEvents: systemEventsRef.current,
         }) });
         const data = await response.json();
         if (!response.ok || !data?.success) throw new Error(data?.error || 'SAVE_FAILED');
@@ -351,7 +363,7 @@ export default function App() {
           <Header studentName={profile.name} aiStudentName={currentAiStudent.name} aiStudentFlag={currentAiStudent.flag} remainingSeconds={remainingSeconds} totalDurationSeconds={profile.selectedDurationMinutes*60} turnCount={turnCount} wordCount={totalChildWords} soundEnabled={soundEnabled} onToggleSound={()=>{if(soundEnabled)stopSpeaking();setSoundEnabled(!soundEnabled);}} onFinishEarly={handleFinishDialogue}/>
           <main className="flex-1 max-w-7xl w-full mx-auto p-2.5 sm:p-4 lg:p-5 grid grid-cols-1 md:grid-cols-12 gap-3 lg:gap-5 min-h-0 lg:overflow-hidden pb-[calc(7.5rem+env(safe-area-inset-bottom))] lg:pb-5">
             <div className="hidden md:flex col-span-12 md:col-span-4 lg:col-span-3 flex-col gap-4 overflow-y-auto min-h-0">
-              <AIStudentCard student={currentAiStudent} mood={mood} isSpeaking={isSpeaking} isListening={isListening} speechRate={speechRate} onReplayAudio={()=>{const lastAi=messages.filter((m)=>m.sender==='ai').slice(-1)[0];if(lastAi)playAiVoice(lastAi.englishText);}} onChangeSpeechRate={setSpeechRate}/>
+              <AIStudentCard student={currentAiStudent} mood={mood} isSpeaking={isSpeaking} isListening={isListening} speechRate={speechRate} onReplayAudio={()=>{recordResearchEvent('ai_replay','profile');const lastAi=messages.filter((m)=>m.sender==='ai').slice(-1)[0];if(lastAi)playAiVoice(lastAi.englishText);}} onChangeSpeechRate={(rate)=>{recordResearchEvent('speech_rate_change',rate.toFixed(2));setSpeechRate(rate);}}/>
               <div className="bg-slate-800 p-5 rounded-3xl text-white shadow-sm">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Session Stats (対話記録)</p>
                 <div className="flex items-center justify-between mb-2"><span className="text-xs text-slate-300">Turns</span><span className="font-mono font-bold text-lg">{turnCount}</span></div>
@@ -362,11 +374,11 @@ export default function App() {
             </div>
 
             <div className="col-span-12 md:col-span-8 lg:col-span-6 flex flex-col bg-white rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[65dvh] md:min-h-0 md:h-full relative">
-              <div className="hidden sm:block p-2.5 sm:p-3 border-b border-slate-100 bg-slate-50/50"><VisualVocabularyDock vocabularyList={encounteredVocabList} latestItem={latestVocabItem} onPlayWord={(word)=>speakVocabularyWord(word,currentAiStudent.voiceLang)}/></div>
+              <div className="hidden sm:block p-2.5 sm:p-3 border-b border-slate-100 bg-slate-50/50"><VisualVocabularyDock vocabularyList={encounteredVocabList} latestItem={latestVocabItem} onPlayWord={(word)=>speakVocabularyWord(word,currentAiStudent.voiceLang)} onResearchEvent={recordResearchEvent}/></div>
               <div className="sm:hidden flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50 text-xs font-bold text-slate-700"><span className="text-xl">{currentAiStudent.flag}</span><span>{currentAiStudent.name}</span><span className="ml-auto text-slate-500">Turns {turnCount} · Words {totalChildWords}</span></div>
-              <DialogueView messages={messages} studentName={profile.name} aiStudent={currentAiStudent} isAiResponding={isAiResponding} onPlayAudio={playAiVoice}/>
+              <DialogueView messages={messages} studentName={profile.name} aiStudent={currentAiStudent} isAiResponding={isAiResponding} onPlayAudio={(text)=>{recordResearchEvent('ai_replay','transcript');playAiVoice(text);}}/>
               <AnimatePresence>{micHintMessage&&<motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:10}} className="mx-3 sm:mx-4 mb-2 bg-amber-50 border border-amber-300 rounded-xl p-2.5 text-xs font-bold text-amber-900 text-center shadow-xs">{micHintMessage}</motion.div>}</AnimatePresence>
-              <div className="hidden lg:block"><SpeechInputBar isRecording={isRecording} transcript={speechTranscript} isAiResponding={isAiResponding} onToggleRecording={handleToggleRecording} onSendMessage={handleSendMessage} onClearTranscript={()=>{setSpeechTranscript('');liveTranscriptRef.current='';}}/></div>
+              <div className="hidden lg:block"><SpeechInputBar isRecording={isRecording} transcript={speechTranscript} isAiResponding={isAiResponding} onToggleRecording={handleToggleRecording} onSendMessage={handleSendMessage} onClearTranscript={()=>{setSpeechTranscript('');liveTranscriptRef.current='';}} onResearchEvent={recordResearchEvent}/></div>
             </div>
 
             <div className="col-span-12 lg:col-span-3 hidden lg:flex flex-col gap-4 overflow-y-auto min-h-0">
@@ -375,7 +387,7 @@ export default function App() {
           </main>
 
           <div className="lg:hidden fixed left-0 right-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur-md shadow-[0_-8px_24px_rgba(15,23,42,0.10)] pb-[env(safe-area-inset-bottom)]">
-            <SpeechInputBar compact isRecording={isRecording} transcript={speechTranscript} isAiResponding={isAiResponding} onToggleRecording={handleToggleRecording} onSendMessage={handleSendMessage} onClearTranscript={()=>{setSpeechTranscript('');liveTranscriptRef.current='';}}/>
+            <SpeechInputBar compact isRecording={isRecording} transcript={speechTranscript} isAiResponding={isAiResponding} onToggleRecording={handleToggleRecording} onSendMessage={handleSendMessage} onClearTranscript={()=>{setSpeechTranscript('');liveTranscriptRef.current='';}} onResearchEvent={recordResearchEvent}/>
           </div>
 
           <AnimatePresence>{farewellBanner&&<div id="farewell-overlay" onClick={handleSkipFarewell} className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer select-none"><motion.div initial={{scale:.9,opacity:0,y:10}} animate={{scale:1,opacity:1,y:0}} exit={{scale:.95,opacity:0}} onClick={(e)=>{e.stopPropagation();handleSkipFarewell();}} className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl text-center border-4 border-amber-300"><div className="text-3xl mb-2">🎉 {currentAiStudent.flag}</div><h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-1">Time is up! (対話終了)</h2><div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 my-4 text-left"><p className="text-base sm:text-lg font-black text-blue-950">“{farewellBanner.english}”</p><p className="text-xs sm:text-sm font-bold text-slate-600 mt-2">{farewellBanner.japanese}</p></div><button id="farewell-next-btn" type="button" onClick={(e)=>{e.stopPropagation();handleSkipFarewell();}} className="w-full min-h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-2xl">📊 レポート・アドバイスを見る</button></motion.div></div>}</AnimatePresence>
