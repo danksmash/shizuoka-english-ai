@@ -22,7 +22,9 @@ jobs:
           node-version: '20'
           cache: npm
       - name: Apply patch
-        run: python3 scripts/codex-apply-adaptive-setup.py
+        run: |
+          python3 scripts/codex-apply-adaptive-setup.py
+          python3 scripts/codex-fix-adaptive-qa.py
       - name: Install
         run: npm ci
       - name: Full QA
@@ -30,7 +32,7 @@ jobs:
       - name: Production build
         run: npm run build
       - name: Remove one-shot helpers
-        run: rm -f scripts/codex-apply-adaptive-setup.py .github/workflows/codex-adaptive-setup.yml
+        run: rm -f scripts/codex-apply-adaptive-setup.py scripts/codex-fix-adaptive-qa.py .github/workflows/codex-adaptive-setup.yml
       - name: Commit tested implementation
         run: |
           git config user.name "github-actions[bot]"
