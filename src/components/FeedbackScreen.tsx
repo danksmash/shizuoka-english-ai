@@ -65,7 +65,8 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
 }) => {
   const aiStudent = getAIStudentById(profile.selectedAiStudentId);
   const reportOwner = profile.name && profile.name !== '5・6年生' ? profile.name : 'あなた';
-
+  const childLearningItems = feedback?.childLearningItems || [];
+  const aiLearningItems = feedback?.aiLearningItems || [];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-blue-50/20 to-slate-100 p-3 sm:p-6 lg:p-8">
@@ -107,13 +108,13 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
 
               <div className="flex flex-col gap-4 lg:col-span-5">
                 <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                  <div className="mb-3 flex items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-sm font-black text-slate-900"><BookOpen className="h-4 w-4 text-emerald-600" />🗣 自分が使ったことば・表現</h2><span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-black text-emerald-700">{feedback?.childLearningItems?.length || 0}件</span></div>
-                  <LearningItemList items={feedback?.childLearningItems || []} emptyText="今回は実発話から学習価値の高いことば・表現を選べませんでした。" onPlay={onPlayAudio} accent="emerald" />
+                  <div className="mb-3 flex items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-sm font-black text-slate-900"><BookOpen className="h-4 w-4 text-emerald-600" />🗣 自分が使ったことば・表現</h2><span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-black text-emerald-700">{childLearningItems.length}件</span></div>
+                  <LearningItemList items={childLearningItems} emptyText="今回は実発話から学習価値の高いことば・表現を選べませんでした。" onPlay={onPlayAudio} accent="emerald" />
                 </section>
 
                 <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                  <div className="mb-3 flex items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-sm font-black text-slate-900"><Sparkles className="h-4 w-4 text-amber-600" />💡 AI留学生から出会ったことば・表現</h2><span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-black text-amber-700">{feedback?.aiLearningItems?.length || 0}件</span></div>
-                  <LearningItemList items={feedback?.aiLearningItems || []} emptyText="今回は実発話から新しく学ぶ価値の高いことば・表現を選べませんでした。" onPlay={onPlayAudio} accent="amber" />
+                  <div className="mb-3 flex items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-sm font-black text-slate-900"><Sparkles className="h-4 w-4 text-amber-600" />💡 AI留学生から出会ったことば・表現</h2><span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-black text-amber-700">{aiLearningItems.length}件</span></div>
+                  <LearningItemList items={aiLearningItems} emptyText="今回は実発話から新しく学ぶ価値の高いことば・表現を選べませんでした。" onPlay={onPlayAudio} accent="amber" />
                 </section>
               </div>
             </div>

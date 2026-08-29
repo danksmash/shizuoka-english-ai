@@ -196,7 +196,7 @@ export function generateFallbackFeedback(
   const studentMessage = `${topicSummary}について一緒に話せて楽しかったよ！また英語でお話ししようね！`;
 
 
-  const childLearningItems: FeedbackData['childLearningItems'] = childMsgs.slice(0, 3).map((message) => ({
+  const childLearningItems: FeedbackData['childLearningItems'] = childMsgs.slice(0, 1).map((message) => ({
     english: maskHighRiskPII(message.englishText.trim()).maskedText.slice(0, 100),
     japanese: message.japaneseText?.trim() || '自分が対話で実際に使った表現',
     reason: '今回の対話で自分から実際に使えた英語です。',
@@ -207,7 +207,7 @@ export function generateFallbackFeedback(
 
   const aiLearningItems: FeedbackData['aiLearningItems'] = history
     .filter((message) => message.sender === 'ai' && message.englishText?.trim())
-    .slice(0, 3)
+    .slice(0, 2)
     .map((message) => ({
       english: message.englishText.trim().slice(0, 100),
       japanese: message.japaneseText?.trim() || 'AI留学生が対話で実際に使った表現',

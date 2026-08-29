@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAIStudentById } from './src/data/curriculum';
 import { detectVocabularyInText } from './src/data/vocabulary56';
+import { getTopicLearningGoals } from './src/data/topicLearningGoals';
 import { calculateCanonicalStats, canonicalizeHistory, isAIStudentId, isDialogueDuration, isDialogueTopic, isValidLearningCode, normalizeLearningCode, validateSessionSaveInput } from './src/dataContract';
 import { generateFallbackFeedback } from './src/utils/feedbackFallback';
 import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } from './src/utils/security';
@@ -566,11 +567,17 @@ app.post('/api/feedback', async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (!checkRateLimit(ip)) return res.status(429).json({ success: false, error: 'Rate limited' });
 
-  const { history, durationMinutes, aiStudentId } = req.body;
+  const { history, durationMinutes, aiStudentId, topic } = req.body;
   if (!isAIStudentId(aiStudentId)) return res.status(400).json({ success: false, error: 'INVALID_AI_STUDENT_ID' });
   const targetDuration = Number(durationMinutes);
   if (!isDialogueDuration(targetDuration)) return res.status(400).json({ success: false, error: 'INVALID_DURATION' });
   const persona = getAIStudentById(aiStudentId);
+  const feedbackTopic = isDialogueTopic(topic) ? topic : undefined;
+  const learningGoalContext = feedbackTopic
+    ? getTopicLearningGoals(feedbackTopic)
+        .map((goal) => `- ${goal.label}（例: ${goal.examples}）`)
+        .join('\n')
+    : 'テーマ情報なし。実際の対話全体から学習上の焦点を判断してください。';
   const rawHistory = canonicalizeHistory(history);
   const childMessages = rawHistory.filter((m) => m.sender === 'child' && m.englishText.trim());
   const childUtterances = childMessages
@@ -596,16 +603,28 @@ app.post('/api/feedback', async (req, res) => {
 留学生: ${persona.name}
 時間: ${targetDuration}分
 ターン: ${stats.totalTurns}
-児童の実際の発話: ${examples || '(発話なし)'}
+選択テーマ: ${feedbackTopic || '会話内容から判断'}
+
+【今回のテーマで画面に示している学習のめあて・表現例】
+${learningGoalContext}
+
+【児童の実際の発話】
+${examples || '(発話なし)'}
 
 【実際の対話ログ】
 ${feedbackTranscript || '(発話なし)'}
 
-次の3種類を、実際の対話ログだけを根拠に選んでください。架空の語・表現は禁止です。
-1. childLearningItems: 児童自身が実際に使った語・短いチャンク・表現から、今後も役立つものを最大3件。細かな固定辞書には縛られない。
-2. aiLearningItems: AI留学生が実際に使った語・短いチャンク・表現から、児童が今後使えそうなものを最大3件。
-3. keyPhrases: 児童またはAIが実際に使った表現のうち、別の相手・別のテーマでも再利用価値が特に高い重要表現を最大3件。会話をつなぐ、質問する、自分を伝える、理由を伝える、聞き返す表現を優先する。
-適切なものが1〜2件しかなければ無理に3件作らないでください。englishは必ずログ中の連続した実際の語句をそのまま抜き出してください。
+対話全体を一つのやり取りとして読み、小学5・6年生の児童に今回の学びとして返す価値が最も高いことば・表現を選んでください。
+固定スコア、単純なキーワード一致、発話順だけで機械的に選ばず、対話の文脈、今回のテーマやめあてとの関係、その表現が会話を成立・発展させた役割、別の相手にも使える価値、児童にとっての学びやすさを総合して判断してください。
+上のめあてや表現例は判断材料であり、そこに表面的に一致させる必要はありません。実際の対話で別の表現の方が学習価値が高いなら、そちらを選んでください。
+
+1. childLearningItems: 児童自身が実際に使った語・短いチャンク・表現から、今回もっとも価値の高いものを1件だけ選ぶ。
+2. aiLearningItems: AI留学生が実際に使った語・短いチャンク・表現から、児童が次の会話で取り入れる価値が高いものを2件選ぶ。2件は、できるだけ異なる学びをもたらすものにする。
+3. keyPhrases: 児童またはAIが実際に使った表現のうち、別の相手・別のテーマでも再利用価値が特に高い重要表現を最大3件。
+
+childLearningItemsとaiLearningItemsは、十分な実発話がある限り指定件数を選んでください。妥当な実発話がない場合は架空の表現を作らず、少ない件数または空配列にしてください。
+englishはログ中に実際に連続して現れた語句を抜き出してください。長い発話全体より、児童が意味を理解して次に使いやすい自然なチャンクを選んでも構いません。
+AIの運営上の指示やメタ発話より、児童自身のコミュニケーションに役立つ表現を優先してください。
 
 JSONのみ:
 {
@@ -636,8 +655,8 @@ ${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${perso
       canonicalVocab,
       rawHistory
     );
-    const childLearningItems = groundFeedbackExpressions(parsed.childLearningItems, 'child', rawHistory, 3);
-    const aiLearningItems = groundFeedbackExpressions(parsed.aiLearningItems, 'ai', rawHistory, 3);
+    const childLearningItems = groundFeedbackExpressions(parsed.childLearningItems, 'child', rawHistory, 1);
+    const aiLearningItems = groundFeedbackExpressions(parsed.aiLearningItems, 'ai', rawHistory, 2);
     const uniqueKeyPhrases = groundKeyPhrases(parsed.keyPhrases, rawHistory, 3);
 
     return res.json({
