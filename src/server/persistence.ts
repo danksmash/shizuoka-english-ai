@@ -166,7 +166,7 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
   if (existing && existing.studentId && existing.studentId !== args.studentId) throw new Error('SESSION_ID_CONFLICT');
   const studentSessions = await queryCollection(SESSION_COLLECTION, 'studentId', args.studentId, 1000);
   const lifetimeSessionNumber = existing?.lifetimeSessionNumber || studentSessions.length + 1;
-  const localDate = new Date(args.endedAt).toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+  const localDate = new Date(args.startedAt).toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
   const dailySessionNumber = existing?.dailySessionNumber || studentSessions.filter((session) => session.localDate === localDate).length + 1;
   const document = {
     schemaVersion: 3, sessionId: args.sessionId, studentId: args.studentId, researchId: args.researchId,
