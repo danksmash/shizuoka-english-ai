@@ -40,14 +40,14 @@ function buildDateInJapan(date = new Date()): string {
     month: '2-digit',
     day: '2-digit',
   }).formatToParts(date);
-  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || '';
+  const value = (type: 'year' | 'month' | 'day') => parts.find((part) => part.type === type)?.value || '';
   return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
 function isVersionedCommit(subject: string): boolean {
   const text = subject.trim();
   if (!text) return false;
-  if (/^Merge pull request\b/i.test(text)) return false;
+  if (/^Merge\b/i.test(text)) return false;
   if (/^(chore|ci|docs|test|build)\s*:/i.test(text)) return false;
   if (/^(tmp|temporary|noop)\b/i.test(text)) return false;
   return true;
