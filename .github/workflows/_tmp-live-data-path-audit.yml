@@ -38,7 +38,6 @@ jobs:
 
           echo '4) Firestore-backed learner-code lookup (read-only)'
           status=$(curl --silent --show-error -o resolve.json -w '%{http_code}' -X POST "$API/api/student/resolve" -H 'Content-Type: application/json' --data '{"learningCode":"Z9Q7"}')
-          # 401 means Firestore read completed and the random code was not found; 200 would mean it happened to exist.
           if [[ "$status" != '401' && "$status" != '200' ]]; then cat resolve.json; exit 1; fi
           if [[ "$status" == '401' ]]; then grep -q 'LEARNING_CODE_NOT_FOUND' resolve.json; fi
           echo "FIRESTORE_LOOKUP=PASS_HTTP_${status}"
@@ -46,7 +45,8 @@ jobs:
           echo '5) Session-save route reaches learner resolution without writing for unknown code'
           now=$(date +%s%3N)
           later=$((now+60000))
-          status=$(curl --silent --show-error -o session.json -w '%{http_code}' -X POST "$API/api/sessions" -H 'Content-Type: application/json' --data "{\"sessionId\":\"audit_session_readonly_12345678\",\"learningCode\":\"Z9Q7\",\"aiStudentId\":\"emma_usa\",\"topic\":\"intro\",\"targetDurationMinutes\":1,\"startedAt\":$now,\"endedAt\":$later,\"history\":[{\"id\":\"a1\",\"sender\":\"ai\",\"englishText\":\"Hello.\",\"japaneseText\":\"こんにちは。\",\"timestamp\":$now}]}"
+          payload=$(printf '{"sessionId":"audit_session_readonly_12345678","learningCode":"Z9Q7","aiStudentId":"emma_usa","topic":"intro","targetDurationMinutes":1,"startedAt":%s,"endedAt":%s,"history":[{"id":"a1","sender":"ai","englishText":"Hello.","japaneseText":"こんにちは。","timestamp":%s}]}' "$now" "$later" "$now")
+          status=$(curl --silent --show-error -o session.json -w '%{http_code}' -X POST "$API/api/sessions" -H 'Content-Type: application/json' --data "$payload")
           if [[ "$status" != '401' ]]; then cat session.json; exit 1; fi
           grep -q 'LEARNING_CODE_NOT_FOUND' session.json
           echo 'SESSION_ROUTE_TO_FIRESTORE=PASS_NO_WRITE'
