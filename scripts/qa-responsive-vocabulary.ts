@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { detectVocabularyInText } from '../src/data/vocabulary';
+import { detectVocabularyInText } from '../src/data/vocabulary56';
+import { TOPIC_LEARNING_GOALS } from '../src/data/topicLearningGoals';
 
 const ids = (text: string) => new Set(detectVocabularyInText(text).map((item) => item.id));
 
@@ -21,17 +22,45 @@ for (const sentence of [
 }
 assert.equal(ids('I go to the gymnasium.').has('vocab-pe'), false, 'gymnasium must not trigger P.E.');
 
-// Other exact-token vocabulary should continue to work.
+// Grade 5 vocabulary remains available.
 assert.equal(ids('I like art.').has('vocab-art'), true);
 assert.equal(ids('I can swim.').has('vocab-can-do'), true);
 assert.equal(ids('I can swim.').has('vocab-swimming'), true);
 assert.equal(ids('Breakfast is delicious.').has('vocab-breakfast'), true);
+
+// Grade 6 vocabulary must be available through the unified detector.
+assert.equal(ids("I'm good at swimming.").has('vocab6-good-at'), true);
+assert.equal(ids("I'm interested in animals.").has('vocab6-interested-in'), true);
+assert.equal(ids('I usually get up at seven.').has('vocab6-usually'), true);
+assert.equal(ids('I usually get up at seven.').has('vocab6-get-up'), true);
+assert.equal(ids('I went to Kyoto and enjoyed the festival.').has('vocab6-went-to'), true);
+assert.equal(ids('I went to Kyoto and enjoyed the festival.').has('vocab6-enjoyed'), true);
+assert.equal(ids('I want to go to Australia.').has('vocab6-want-go'), true);
+assert.equal(ids('I want to be a teacher.').has('vocab6-want-be'), true);
+assert.equal(ids("What's your best memory?").has('vocab6-memory'), true);
+
+// Every dialogue theme must have three distinct, theme-specific goals.
+const topicEntries = Object.entries(TOPIC_LEARNING_GOALS);
+assert.equal(topicEntries.length, 5, 'all five dialogue themes must have goals');
+for (const [topic, goals] of topicEntries) {
+  assert.equal(goals.length, 3, `${topic} must have exactly three pupil-friendly goals`);
+  assert.equal(new Set(goals.map((goal) => goal.label)).size, 3, `${topic} goals must be distinct`);
+  assert.ok(goals.every((goal) => goal.examples.trim().length > 0), `${topic} goals need target expressions`);
+}
+assert.notDeepEqual(
+  TOPIC_LEARNING_GOALS.intro.map((goal) => goal.label),
+  TOPIC_LEARNING_GOALS.shizuoka_culture.map((goal) => goal.label),
+  'intro and culture goals must not be the same fixed list',
+);
 
 const setup = fs.readFileSync('src/components/SetupScreen.tsx', 'utf8');
 const css = fs.readFileSync('src/index.css', 'utf8');
 const avatarTuning = fs.readFileSync('src/setup-avatar-adjust.css', 'utf8');
 const main = fs.readFileSync('src/main.tsx', 'utf8');
 const feedback = fs.readFileSync('src/components/FeedbackScreen.tsx', 'utf8');
+const app = fs.readFileSync('src/App.tsx', 'utf8');
+const goalComponent = fs.readFileSync('src/components/TodayGoals.tsx', 'utf8');
+const vocabDock = fs.readFileSync('src/components/VisualVocabularyDock.tsx', 'utf8');
 
 for (const marker of ['setup-screen', 'setup-shell', 'setup-main', 'setup-student-grid', 'setup-controls']) {
   assert.ok(setup.includes(marker), `SetupScreen must expose ${marker}`);
@@ -50,9 +79,9 @@ assert.ok(css.includes('width: var(--setup-student-avatar-size) !important'), 'a
 assert.ok(css.includes('min-width: var(--setup-student-avatar-size) !important'), 'avatar wrapper must never overflow a narrower grid column');
 assert.ok(css.includes('> div:first-child > img') && css.includes('width: 100% !important') && css.includes('height: 100% !important'), 'avatar image must stay inside the synchronized wrapper');
 assert.ok(main.includes("import './setup-avatar-adjust.css';"), 'final avatar visual tuning must load after index.css');
-assert.ok(avatarTuning.includes('--setup-student-avatar-size: clamp(76px, 5.2vw, 92px)'), 'desktop portraits must be visibly larger than the old 60-76px range');
-assert.ok(avatarTuning.includes('--setup-student-avatar-size: clamp(68px, 5.8vw, 78px)'), 'small landscape laptops must keep a safe but readable portrait size');
-assert.ok(avatarTuning.includes('gap: clamp(0.72rem, 0.78vw, 0.95rem)'), 'larger portrait must include a wider protected gap before text');
+assert.ok(avatarTuning.includes('--setup-student-avatar-size: clamp(76px, 5.2vw, 92px)'), 'desktop portraits must stay readable');
+assert.ok(avatarTuning.includes('--setup-student-avatar-size: clamp(68px, 5.8vw, 78px)'), 'small landscape laptops need safe portrait sizing');
+assert.ok(avatarTuning.includes('gap: clamp(0.72rem, 0.78vw, 0.95rem)'), 'portrait needs a protected gap before text');
 assert.ok(css.includes('grid-template-columns: minmax(0, 1fr) clamp(126px, 10.4vw, 168px)'), 'selected-student portrait must scale proportionally');
 assert.ok(css.includes('@media (max-width: 1023px), (orientation: portrait)'), 'phone/tablet portrait fallback must exist');
 assert.equal(css.includes('grid-template-rows: auto minmax(0, 1fr) auto'), false, 'setup shell must not allocate all remaining viewport height');
@@ -61,6 +90,12 @@ assert.equal(css.includes('height: 100%;\n    display: grid !important'), false,
 assert.equal(css.includes('min(4.7vw, 7.2vh)'), false, 'setup card scaling must not shrink/grow from viewport height');
 assert.equal(css.includes('#root > .bg-gradient-to-b > main'), false, 'obsolete brittle setup selector must be removed');
 assert.equal(setup.includes('setup-start mt-auto'), false, 'start button must not create an artificial vertical spacer');
+
+assert.ok(app.includes("import { TodayGoals } from './components/TodayGoals'"), 'dialogue must render the theme-goal component');
+assert.ok(app.includes('<TodayGoals topic={profile.selectedTopic} />'), 'selected dialogue theme must drive today goals');
+assert.ok(app.includes("from './data/vocabulary56'"), 'dialogue vocabulary must use the unified Grade 5-6 detector');
+assert.ok(goalComponent.includes('getTopicLearningGoals'), 'goal component must read theme-specific goals');
+assert.ok(vocabDock.includes('5・6年生の学習内容'), 'vocabulary dock must describe Grade 5-6 coverage');
 
 assert.ok(feedback.includes('自分が使ったことば・表現'), 'AI-selected child learning section must exist');
 assert.ok(feedback.includes('AI留学生から出会ったことば・表現'), 'AI-selected exchange-student learning section must exist');
@@ -75,4 +110,4 @@ assert.ok(server.includes('groundFeedbackExpressions'), 'AI-selected items must 
 assert.ok(server.includes('groundKeyPhrases'), 'key phrases must be grounded against actual utterances');
 assert.ok(server.includes('最大3件'), 'feedback prompt must cap each learning list');
 
-console.log('Responsive + vocabulary evidence QA: PASS');
+console.log('Responsive + Grade 5-6 goals/vocabulary QA: PASS');
