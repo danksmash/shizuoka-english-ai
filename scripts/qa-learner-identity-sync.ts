@@ -39,4 +39,6 @@ assert.ok(management.includes("rows.length?['すべて']:[]"));
 assert.ok(management.includes("addEventListener('input',updateResearchDashboard)"));
 assert.ok(management.includes("addEventListener('input',updateTeacherDashboard)"));
 assert.ok(!management.includes('researchListShortcut'), 'duplicate lower research navigation should be removed');
+assert.ok(!management.includes('JSET向け'), 'research export copy must not name a specific journal');
+assert.ok(management.includes('向いている分析：学習プロセス、支援機能利用、学校内外での利用行動'), 'system event export copy must use generic research wording');
 console.log('Learner identity and dashboard synchronization QA: PASS');
