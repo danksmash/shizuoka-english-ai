@@ -31,7 +31,7 @@
 
   .setup-controls {
     align-self: stretch;
-    height: auto !important;
+    height: 100% !important;
     display: grid !important;
     grid-template-rows:
       minmax(max-content, 2.05fr)
