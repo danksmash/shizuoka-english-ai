@@ -1,6 +1,7 @@
 import { analyzeChildCommunication, countEnglishWords } from '../dataContract';
 import { detectVocabularyInText } from '../data/vocabulary56';
 import type { ChatMessage, VisualVocabularyItem } from '../types';
+import { maskTextForResearchExport } from '../utils/privacy';
 
 export type ResearchDatasetName = 'sessions' | 'turns' | 'expressions' | 'system_events';
 
@@ -269,14 +270,21 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
       speakerCounts[message.sender] += 1;
       const flags = turnFlags(message);
       const local = tokyoParts(message.timestamp);
+      const previousText = index > 0 ? history[index - 1]?.englishText || '' : '';
+      let researchEnglish = maskTextForResearchExport(message.englishText || '');
+      let researchJapanese = maskTextForResearchExport(message.japaneseText || '');
+      if (message.sender === 'child' && /what(?:'|’)s your name|what is your name/i.test(previousText)) {
+        researchEnglish = researchEnglish.replace(/^\s*(i(?:'|’)m|i am)\s+.{1,40}?(?=\s+(?:and|but|how|what|where|when|i|my)\b|[,.!?]|$)/i, '$1 [name omitted]');
+        researchJapanese = researchJapanese.replace(/^\s*(私は|わたしは|僕は|ぼくは)\s*[^。！？,.]{1,30}?(です|だよ)(?=[。！？,.]|$)/, '$1 [name omitted] $2');
+      }
       turnRows.push({
         ...commonFields(session, meta),
         turn_sequence: index + 1,
         speaker_turn_number: speakerCounts[message.sender],
         speaker: message.sender,
         local_timestamp: local.valid ? `${local.date} ${local.time}` : '',
-        english_text_anonymized: message.englishText || '',
-        japanese_translation: message.japaneseText || '',
+        english_text_anonymized: researchEnglish,
+        japanese_translation: researchJapanese,
         word_count: countEnglishWords(message.englishText || ''),
         is_question: flags.isQuestion,
         question_type: flags.questionType,
