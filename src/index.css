@@ -74,6 +74,109 @@ body {
   box-sizing: border-box;
 }
 
+/*
+ * Each AI-student card owns its responsive decision. This avoids relying on the
+ * whole viewport width after the large-desktop 1.22x presentation zoom.
+ * Portrait size stays fixed; only the text layout changes when a card becomes
+ * narrow.
+ */
+.setup-student-card {
+  --setup-student-avatar-size: 76px;
+  container-type: inline-size;
+  container-name: student-card;
+}
+
+.setup-student-country,
+.setup-student-name,
+.setup-student-japanese,
+.setup-student-origin,
+.setup-student-accent {
+  min-width: 0;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.setup-student-country {
+  margin-bottom: 0.375rem;
+  line-height: 1.18;
+}
+
+.setup-student-info-grid {
+  grid-template-columns: var(--setup-student-avatar-size) minmax(0, 1fr);
+  grid-template-areas:
+    "avatar copy"
+    "avatar accent";
+  column-gap: 0.625rem;
+  row-gap: 0.3rem;
+  align-content: start;
+}
+
+.setup-student-avatar {
+  grid-area: avatar;
+  width: var(--setup-student-avatar-size) !important;
+  height: var(--setup-student-avatar-size) !important;
+  min-width: var(--setup-student-avatar-size) !important;
+  min-height: var(--setup-student-avatar-size) !important;
+  max-width: var(--setup-student-avatar-size) !important;
+  max-height: var(--setup-student-avatar-size) !important;
+  justify-self: start;
+  flex: 0 0 var(--setup-student-avatar-size);
+}
+
+.setup-student-avatar > img {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+}
+
+.setup-student-copy {
+  grid-area: copy;
+  align-self: start;
+}
+
+.setup-student-name,
+.setup-student-japanese,
+.setup-student-origin {
+  line-height: 1.16;
+}
+
+.setup-student-japanese,
+.setup-student-origin {
+  margin-top: 0.16rem;
+}
+
+.setup-student-accent {
+  grid-area: accent;
+  margin: 0;
+  align-self: start;
+}
+
+/*
+ * When a three-column card becomes narrow, the language/accent chip no longer
+ * competes with the portrait for the text column. It moves to a full-width row
+ * while the portrait itself remains unchanged.
+ */
+@container student-card (max-width: 250px) {
+  .setup-student-info-grid {
+    grid-template-areas:
+      "avatar copy"
+      "accent accent";
+    row-gap: 0.42rem;
+  }
+
+  .setup-student-country {
+    min-height: 2.2em;
+  }
+
+  .setup-student-accent {
+    width: 100%;
+  }
+}
+
 @media (min-width: 1024px) and (orientation: landscape) {
   .setup-main {
     height: auto;
@@ -102,54 +205,29 @@ body {
     padding: clamp(0.58rem, 0.68vw, 0.78rem) !important;
   }
 
-  .setup-student-card > div:first-of-type {
+  .setup-student-country {
     margin-bottom: clamp(0.3rem, 0.34vw, 0.45rem) !important;
     font-size: clamp(10.5px, 0.76vw, 12px) !important;
   }
 
-  .setup-student-card > div:nth-of-type(2) {
+  .setup-student-info-grid {
     grid-template-columns: var(--setup-student-avatar-size) minmax(0, 1fr) !important;
-    gap: clamp(0.55rem, 0.62vw, 0.78rem) !important;
+    column-gap: clamp(0.55rem, 0.62vw, 0.78rem) !important;
   }
 
-  /*
-   * StudentAvatar renders a wrapper <div> around its <img>. The wrapper,
-   * grid column and inner image must share one size. If the grid column is
-   * allowed to shrink independently while the wrapper stays 76px, the portrait
-   * overlaps the name column on Safari / scaled desktop viewports.
-   */
-  .setup-student-card > div:nth-of-type(2) > div:first-child {
-    width: var(--setup-student-avatar-size) !important;
-    height: var(--setup-student-avatar-size) !important;
-    min-width: var(--setup-student-avatar-size) !important;
-    min-height: var(--setup-student-avatar-size) !important;
-    max-width: var(--setup-student-avatar-size) !important;
-    max-height: var(--setup-student-avatar-size) !important;
-    justify-self: start;
-    flex: 0 0 var(--setup-student-avatar-size);
-  }
-
-  .setup-student-card > div:nth-of-type(2) > div:first-child > img {
-    width: 100% !important;
-    height: 100% !important;
-    max-width: 100% !important;
-    max-height: 100% !important;
-  }
-
-  .setup-student-card h3 {
+  .setup-student-name {
     font-size: clamp(11px, 0.82vw, 13px) !important;
   }
 
-  .setup-student-card h3 + p {
+  .setup-student-japanese {
     font-size: clamp(9.8px, 0.7vw, 11px) !important;
   }
 
-  .setup-student-card h3 + p + p {
+  .setup-student-origin {
     font-size: clamp(8.8px, 0.64vw, 10px) !important;
   }
 
-  .setup-student-card h3 + p + p + p {
-    margin-top: clamp(0.25rem, 0.28vw, 0.38rem) !important;
+  .setup-student-accent {
     padding: clamp(0.23rem, 0.25vw, 0.34rem) clamp(0.38rem, 0.42vw, 0.58rem) !important;
     font-size: clamp(8px, 0.57vw, 9px) !important;
   }
@@ -302,6 +380,7 @@ body {
   }
 
   .setup-student-card {
+    --setup-student-avatar-size: 72px;
     min-height: 156px !important;
   }
 }
