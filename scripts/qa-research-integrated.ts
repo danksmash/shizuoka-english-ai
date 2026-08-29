@@ -29,6 +29,7 @@ const clustered = Array.from({ length: 8 }, (_, index) => ({
     { type: 'session_start', timestamp: base + index * 15_000 },
     { type: 'mic_start', timestamp: base + index * 15_000 + 20_000 },
     { type: 'vocab_bank_open', timestamp: base + index * 15_000 + 40_000, value: 'bank' },
+    { type: 'session_finish', timestamp: base + index * 15_000 + 179_000 },
   ],
 }));
 
@@ -71,6 +72,14 @@ assert.ok(!('learningCode' in inClass));
 const eveningRow = data.sessions.find((row) => row.session_id === 'session_evening')!;
 assert.equal(eveningRow.usage_context_inferred, 'out_of_school_hours');
 assert.equal(eveningRow.data_quality_flag, 'missing_reflection');
+assert.equal(eveningRow.session_status, 'dialogue_complete');
+const interruptedData = buildResearchDataSets([{...clustered[0], sessionId:'session_interrupted', reflection:null, systemEvents:[
+  { type:'session_start', timestamp:base },
+  { type:'mic_start', timestamp:base+20_000 },
+]}]);
+assert.equal(interruptedData.sessions[0].data_quality_flag, 'interrupted', 'checkpoint without session_finish must be distinguishable from reflection missing');
+assert.equal(interruptedData.sessions[0].session_status, 'in_progress_or_interrupted');
+assert.equal(interruptedData.sessions[0].session_completed, 0);
 const weekendRow = data.sessions.find((row) => row.session_id === 'session_weekend')!;
 assert.equal(weekendRow.usage_context_inferred, 'non_school_day');
 
