@@ -16,6 +16,8 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
+      - name: Correct patch targeting
+        run: python3 scripts/_tmp_fix_identity_patch.py
       - name: Apply implementation patch
         run: python3 scripts/_tmp_apply_learner_id_sync.py
       - name: Full QA
