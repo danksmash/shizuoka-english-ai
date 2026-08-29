@@ -153,7 +153,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{([1, 2, 3, 5] as const).map((minutes) => <button key={minutes} type="button" onClick={() => setDurationMinutes(minutes)} className={`rounded-xl border py-1.5 text-center ${durationMinutes === minutes ? 'border-blue-600 bg-blue-600 text-white shadow' : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-blue-50'}`}><span className="block text-sm font-black">{minutes}分</span><span className="block text-[9px] font-bold opacity-80">{minutes * 60}秒</span></button>)}</div>
             </div>
 
-            <button type="button" onClick={handleStart} disabled={checkingCode} className="setup-start mt-auto flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-6 text-base font-black text-white shadow-md disabled:opacity-60"><Play className="h-5 w-5 fill-white" />{checkingCode ? 'コードを確認しています…' : '対話をスタートする！（Start）'}</button>
+            <button type="button" onClick={handleStart} disabled={checkingCode} className="setup-start flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-6 text-base font-black text-white shadow-md disabled:opacity-60"><Play className="h-5 w-5 fill-white" />{checkingCode ? 'コードを確認しています…' : '対話をスタートする！（Start）'}</button>
           </section>
         </main>
         <p className="setup-footer pb-0.5 text-center text-[9px] font-semibold text-slate-500">本アプリは学校での英語学習を目的として設計されています。AI（Anthropic API）を利用した英語対話練習を行います。</p>

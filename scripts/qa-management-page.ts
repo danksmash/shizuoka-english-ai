@@ -76,6 +76,7 @@ const historySource = await readFile('src/components/LearningHistoryScreen.tsx',
 for (const marker of ['累計対話時間','よく話したテーマ','よく話したAI留学生','テーマ・時間・発話量','actualDurationSeconds']) assert.ok(historySource.includes(marker), `Learning history detail missing: ${marker}`);
 const setupSource = await readFile('src/components/SetupScreen.tsx', 'utf8');
 assert.ok(!setupSource.includes('お名前:'), 'Non-functional name field must be removed');
-for (const marker of ['setup-screen','setup-shell','setup-main','setup-student-grid','setup-controls','items-stretch','flex-1 auto-rows-fr','mt-auto flex min-h-12 w-full']) assert.ok(setupSource.includes(marker), `Responsive Setup marker missing: ${marker}`);
+for (const marker of ['setup-screen','setup-shell','setup-main','setup-student-grid','setup-controls','items-stretch','flex-1 auto-rows-fr','setup-start flex min-h-12 w-full']) assert.ok(setupSource.includes(marker), `Responsive Setup marker missing: ${marker}`);
+assert.ok(!setupSource.includes('setup-start mt-auto'), 'Start button must not create an artificial vertical spacer');
 
 console.log('Role-differentiated learner + teacher + researcher UI contract QA: PASS');

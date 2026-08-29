@@ -110,6 +110,16 @@ export interface ConversationTurn {
   childMessage: ChatMessage;
 }
 
+export interface FeedbackExpressionItem {
+  english: string;
+  japanese: string;
+  reason: string;
+  evidenceText: string;
+  speaker: 'child' | 'ai';
+  messageId?: string;
+  culturalNote?: string;
+}
+
 export interface FeedbackData {
   goodPoints: [string, string, string];
   improvementAdvice: {
@@ -119,11 +129,9 @@ export interface FeedbackData {
   };
   overallComment: string;
   studentMessage: string;
-  keyPhrases: Array<{
-    english: string;
-    japanese: string;
-    culturalNote?: string;
-  }>;
+  childLearningItems: FeedbackExpressionItem[];
+  aiLearningItems: FeedbackExpressionItem[];
+  keyPhrases: FeedbackExpressionItem[];
   encounteredVocab: VisualVocabularyItem[];
   aiStudent: AIStudentProfile;
   stats: {

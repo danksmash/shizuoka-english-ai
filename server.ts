@@ -475,6 +475,92 @@ Translate the student's latest English into Japanese too.`;
   }
 });
 
+
+
+type FeedbackExpressionCandidate = {
+  english?: unknown;
+  japanese?: unknown;
+  reason?: unknown;
+  speaker?: unknown;
+  culturalNote?: unknown;
+};
+
+function normalizeFeedbackEvidence(value: unknown): string {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[’‘]/g, "'")
+    .replace(/[^a-z0-9' ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function groundFeedbackExpressions(
+  candidates: unknown,
+  speaker: 'child' | 'ai',
+  history: ReturnType<typeof canonicalizeHistory>,
+  limit = 3,
+) {
+  if (!Array.isArray(candidates)) return [];
+  const sourceMessages = history.filter((message) => message.sender === speaker && message.englishText.trim());
+  const seen = new Set<string>();
+  const grounded: Array<{
+    english: string;
+    japanese: string;
+    reason: string;
+    evidenceText: string;
+    speaker: 'child' | 'ai';
+    messageId?: string;
+    culturalNote?: string;
+  }> = [];
+
+  for (const raw of candidates as FeedbackExpressionCandidate[]) {
+    if (grounded.length >= limit) break;
+    const english = typeof raw?.english === 'string' ? raw.english.trim().slice(0, 100) : '';
+    const normalized = normalizeFeedbackEvidence(english);
+    if (!english || normalized.length < 2 || seen.has(normalized)) continue;
+    const source = sourceMessages.find((message) => normalizeFeedbackEvidence(message.englishText).includes(normalized));
+    if (!source) continue;
+    seen.add(normalized);
+    grounded.push({
+      english,
+      japanese: typeof raw?.japanese === 'string' && raw.japanese.trim() ? raw.japanese.trim().slice(0, 100) : '対話で使われたことば・表現',
+      reason: typeof raw?.reason === 'string' && raw.reason.trim() ? raw.reason.trim().slice(0, 160) : '別の英会話でも使いやすい表現です。',
+      evidenceText: source.sender === 'child' ? maskHighRiskPII(source.englishText).maskedText.slice(0, 180) : source.englishText.slice(0, 180),
+      speaker,
+      messageId: source.id,
+      culturalNote: typeof raw?.culturalNote === 'string' && raw.culturalNote.trim() ? raw.culturalNote.trim().slice(0, 160) : undefined,
+    });
+  }
+  return grounded;
+}
+
+function groundKeyPhrases(
+  candidates: unknown,
+  history: ReturnType<typeof canonicalizeHistory>,
+  limit = 3,
+) {
+  if (!Array.isArray(candidates)) return [];
+  const result: ReturnType<typeof groundFeedbackExpressions> = [];
+  const seen = new Set<string>();
+  for (const candidate of candidates as FeedbackExpressionCandidate[]) {
+    if (result.length >= limit) break;
+    const preferredSpeaker = candidate?.speaker === 'ai' ? 'ai' : 'child';
+    let grounded = groundFeedbackExpressions([candidate], preferredSpeaker, history, 1);
+    if (grounded.length === 0) {
+      const otherSpeaker = preferredSpeaker === 'child' ? 'ai' : 'child';
+      grounded = groundFeedbackExpressions([candidate], otherSpeaker, history, 1);
+    }
+    const item = grounded[0];
+    if (!item) continue;
+    const key = normalizeFeedbackEvidence(item.english);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
 app.post('/api/feedback', async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (!checkRateLimit(ip)) return res.status(429).json({ success: false, error: 'Rate limited' });
@@ -490,6 +576,12 @@ app.post('/api/feedback', async (req, res) => {
     .map((m) => maskHighRiskPII(m.englishText.trim()).maskedText.slice(0, 100))
     .filter(Boolean);
   const examples = childUtterances.map((t) => `「${t}」`).join('、');
+  const feedbackTranscript = rawHistory.map((message, index) => {
+    const safeText = message.sender === 'child'
+      ? maskHighRiskPII(message.englishText.trim()).maskedText.slice(0, 180)
+      : message.englishText.trim().slice(0, 180);
+    return `${index + 1}. ${message.sender === 'child' ? '児童' : 'AI留学生'}: ${safeText}`;
+  }).filter((line) => !line.endsWith(': ')).join('\n');
   const detectedVocabMap = new Map<string, ReturnType<typeof detectVocabularyInText>[number]>();
   for (const message of rawHistory) {
     for (const item of detectVocabularyInText(message.englishText)) detectedVocabMap.set(item.id, item);
@@ -505,14 +597,24 @@ app.post('/api/feedback', async (req, res) => {
 ターン: ${stats.totalTurns}
 児童の実際の発話: ${examples || '(発話なし)'}
 
-実際に出た表現だけを keyPhrases に入れ、架空の発話を追加しないでください。
+【実際の対話ログ】
+${feedbackTranscript || '(発話なし)'}
+
+次の3種類を、実際の対話ログだけを根拠に選んでください。架空の語・表現は禁止です。
+1. childLearningItems: 児童自身が実際に使った語・短いチャンク・表現から、今後も役立つものを最大3件。細かな固定辞書には縛られない。
+2. aiLearningItems: AI留学生が実際に使った語・短いチャンク・表現から、児童が今後使えそうなものを最大3件。
+3. keyPhrases: 児童またはAIが実際に使った表現のうち、別の相手・別のテーマでも再利用価値が特に高い重要表現を最大3件。会話をつなぐ、質問する、自分を伝える、理由を伝える、聞き返す表現を優先する。
+適切なものが1〜2件しかなければ無理に3件作らないでください。englishは必ずログ中の連続した実際の語句をそのまま抜き出してください。
+
 JSONのみ:
 {
  "goodPoints":["...","...","..."],
  "improvementAdvice":{"title":"...","detail":"...","examplePhrase":"..."},
  "overallComment":"指導者としての短い総合講評",
  "studentMessage":"選択された留学生本人が、実際の対話内容に触れながら児童へ直接話す自然な短い日本語メッセージ。必ず日本語で書き、英語文は書かない",
- "keyPhrases":[{"english":"...","japanese":"...","culturalNote":"..."}]
+ "childLearningItems":[{"english":"実発話から抜き出した語・表現","japanese":"意味","reason":"なぜ今後役立つか"}],
+ "aiLearningItems":[{"english":"実発話から抜き出した語・表現","japanese":"意味","reason":"なぜ児童に役立つか"}],
+ "keyPhrases":[{"english":"実発話から抜き出した重要表現","japanese":"意味","reason":"なぜ重要か","speaker":"child または ai","culturalNote":"必要な場合だけ"}]
 }`;
 
   try {
@@ -521,7 +623,7 @@ JSONのみ:
 講評部分は指導者の視点で書き、studentMessageだけは${persona.name}本人が児童に直接話しかける自然な一人称メッセージにしてください。studentMessageは必ず日本語で書いてください。英語の文章は禁止です。児童が使った英語に触れる場合も、日本語で内容を要約してください。
 ${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${persona.country}、好きなものは${persona.likes.join(', ')}です。`,
       prompt,
-      900
+      1400
     );
     const fallbackFeedback = generateFallbackFeedback(
       persona,
@@ -533,12 +635,9 @@ ${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${perso
       canonicalVocab,
       rawHistory
     );
-    const uniqueKeyPhrases = Array.isArray(parsed.keyPhrases)
-      ? parsed.keyPhrases.filter((phrase: any, index: number, all: any[]) => {
-          const key = String(phrase?.english || '').trim().toLowerCase();
-          return key && all.findIndex((p: any) => String(p?.english || '').trim().toLowerCase() === key) === index;
-        })
-      : [];
+    const childLearningItems = groundFeedbackExpressions(parsed.childLearningItems, 'child', rawHistory, 3);
+    const aiLearningItems = groundFeedbackExpressions(parsed.aiLearningItems, 'ai', rawHistory, 3);
+    const uniqueKeyPhrases = groundKeyPhrases(parsed.keyPhrases, rawHistory, 3);
 
     return res.json({
       success: true,
@@ -553,6 +652,8 @@ ${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${perso
           isPredominantlyJapanese(parsed.studentMessage)
             ? parsed.studentMessage.trim()
             : fallbackFeedback.studentMessage,
+        childLearningItems,
+        aiLearningItems,
         keyPhrases: uniqueKeyPhrases,
         encounteredVocab: canonicalVocab,
         aiStudent: persona,

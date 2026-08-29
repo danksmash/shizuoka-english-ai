@@ -38,9 +38,21 @@ assert.ok(css.includes('grid-template-rows: auto minmax(0, 1fr) auto'), 'desktop
 assert.ok(css.includes('@media (max-width: 1023px), (orientation: portrait)'), 'phone/tablet portrait fallback must exist');
 assert.equal(css.includes('#root > .bg-gradient-to-b > main'), false, 'obsolete brittle setup selector must be removed');
 
-assert.ok(feedback.includes('自分が使ったことば'), 'child-produced vocabulary section must exist');
-assert.ok(feedback.includes('AI留学生から出会ったことば'), 'AI-provided vocabulary section must exist');
-assert.ok(feedback.includes('根拠となる実際の発話'), 'each displayed vocabulary item must show utterance evidence');
-assert.ok(feedback.includes("message.sender === 'child' ? childMap : aiMap"), 'vocabulary must be split by actual speaker');
+assert.ok(feedback.includes('自分が使ったことば・表現'), 'AI-selected child learning section must exist');
+assert.ok(feedback.includes('AI留学生から出会ったことば・表現'), 'AI-selected exchange-student learning section must exist');
+assert.ok(feedback.includes('根拠となる実際の発話'), 'each displayed learning item must show utterance evidence');
+assert.ok(feedback.includes('なぜ大切？'), 'learning items must explain their educational value');
+assert.ok(feedback.includes('なぜ重要？'), 'key phrases must explain why they are reusable');
 
 console.log('Responsive + vocabulary evidence QA: PASS');
+
+const server = fs.readFileSync('server.ts', 'utf8');
+assert.ok(server.includes('childLearningItems'), 'feedback API must request child learning items');
+assert.ok(server.includes('aiLearningItems'), 'feedback API must request AI learning items');
+assert.ok(server.includes('groundFeedbackExpressions'), 'AI-selected items must be grounded against actual utterances');
+assert.ok(server.includes('groundKeyPhrases'), 'key phrases must be grounded against actual utterances');
+assert.ok(server.includes('最大3件'), 'feedback prompt must cap each learning list');
+assert.equal(setup.includes('setup-start mt-auto'), false, 'start button must not create an artificial vertical spacer');
+assert.ok(css.includes('grid-template-rows: minmax(0, 1.45fr)'), 'right setup column must proportionally share available height');
+assert.ok(css.includes('clamp(52px, min(4.7vw, 7.2vh), 76px)'), 'student avatar must scale with viewport while preserving proportions');
+assert.equal(css.includes('min-height: min(760px'), false, 'setup layout must not use old fixed desktop height contract');
