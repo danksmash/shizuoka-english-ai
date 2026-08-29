@@ -17,6 +17,8 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
+      - name: Correct QA-compatible function signatures
+        run: python3 scripts/_tmp_fix_management_refresh_patch.py
       - name: Apply management refresh semantics
         run: python3 scripts/_tmp_apply_management_refresh.py
       - name: Full QA
