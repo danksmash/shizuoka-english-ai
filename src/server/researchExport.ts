@@ -247,9 +247,9 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
     const systemEvents = Array.isArray(session.systemEvents) ? session.systemEvents : [];
     const hasReflection = Boolean(session.reflection && typeof session.reflection === 'object');
     const hasSessionFinish = systemEvents.some((event: any) => event?.type === 'session_finish');
-    const schemaVersion = Number(session.schemaVersion || 0);
-    const legacyCompletionEvidence = Boolean(session.endedAt) && hasReflection && (systemEvents.length === 0 || schemaVersion < 3);
-    const dialogueCompleted = hasSessionFinish || legacyCompletionEvidence;
+    // Reflection is submitted only after the dialogue has ended, so it is valid completion evidence
+    // for sessions saved before session_finish event logging was introduced.
+    const dialogueCompleted = hasSessionFinish || hasReflection;
     const dataQuality = !sessionId || !session.researchId || history.length === 0 || childMessages.length === 0
       ? 'missing_core'
       : !dialogueCompleted ? 'interrupted'

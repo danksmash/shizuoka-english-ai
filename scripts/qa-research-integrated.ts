@@ -85,6 +85,11 @@ const legacyComplete = buildResearchDataSets([{...clustered[0], schemaVersion:2,
 assert.equal(legacyComplete.data_quality_flag,'complete','pre-event legacy session with reflection must remain a complete case');
 assert.equal(legacyComplete.session_status,'complete','legacy completed session status must be inferred');
 assert.equal(legacyComplete.session_completed,1,'legacy completed session must not be reclassified as interrupted');
+const legacyWithEvents = buildResearchDataSets([{...clustered[0], schemaVersion:3, sessionId:'legacy_complete_with_events', reflection:{conveyedIdeas:3,understoodPartner:4,noticedLanguageCulture:3}, systemEvents:[{type:'session_start',timestamp:base},{type:'mic_start',timestamp:base+1000}]}]).sessions[0];
+assert.equal(legacyWithEvents.data_quality_flag,'complete','reflection must prove dialogue completion even when older event logs lack session_finish');
+assert.equal(legacyWithEvents.session_status,'complete');
+assert.equal(legacyWithEvents.session_completed,1);
+
 
 const weekendRow = data.sessions.find((row) => row.session_id === 'session_weekend')!;
 assert.equal(weekendRow.usage_context_inferred, 'non_school_day');
