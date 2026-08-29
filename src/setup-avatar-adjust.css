@@ -1,0 +1,23 @@
+/*
+ * Final visual tuning for the nine AI-student cards.
+ * Loaded after index.css so the portrait can be slightly larger while the
+ * synchronized grid-column / wrapper / image contract from index.css remains
+ * intact. This changes only the canonical size variable and spacing.
+ */
+@media (min-width: 1024px) and (orientation: landscape) {
+  .setup-student-card {
+    --setup-student-avatar-size: clamp(76px, 5.2vw, 92px);
+  }
+
+  .setup-student-card > div:nth-of-type(2) {
+    gap: clamp(0.72rem, 0.78vw, 0.95rem) !important;
+  }
+}
+
+/* Smaller landscape laptops need a slightly more conservative portrait so the
+ * text column stays readable, but the portrait remains larger than before. */
+@media (min-width: 1024px) and (max-width: 1240px) and (orientation: landscape) {
+  .setup-student-card {
+    --setup-student-avatar-size: clamp(68px, 5.8vw, 78px);
+  }
+}
