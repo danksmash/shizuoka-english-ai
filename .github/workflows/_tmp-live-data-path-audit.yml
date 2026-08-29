@@ -1,0 +1,68 @@
+name: Temporary read-only production data path audit
+on:
+  push:
+    branches: [codex/research-final-privacy-completeness]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Audit public frontend and API paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          PAGES='https://danksmash.github.io/shizuoka-english-ai/'
+          API='https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app'
+
+          echo '1) GitHub Pages'
+          curl --fail --silent --show-error --location "$PAGES" -o pages.html
+          grep -q 'AI留学生' pages.html
+          asset=$(grep -oE 'src="[^"]+\.js' pages.html | head -1 | cut -d'"' -f2)
+          if [[ "$asset" == /* ]]; then bundle="https://danksmash.github.io${asset}"; else bundle="${PAGES}${asset}"; fi
+          curl --fail --silent --show-error "$bundle" -o bundle.js
+          grep -q 'shizuoka-english-ai-1075707511474.asia-northeast1.run.app' bundle.js
+          echo 'PAGES_API_LINK=PASS'
+
+          echo '2) Health + configuration'
+          health=$(curl --fail --silent --show-error "$API/api/health")
+          echo "$health" | grep -q '"status":"ok"'
+          echo "$health" | grep -q '"learningDataConfigured":true'
+          echo "$health" | grep -q '"managementConfigured":true'
+          echo 'HEALTH_CONFIG=PASS'
+
+          echo '3) CORS from GitHub Pages origin'
+          curl --fail --silent --show-error -D cors.headers -o /dev/null -H 'Origin: https://danksmash.github.io' "$API/api/health"
+          grep -qi '^access-control-allow-origin: https://danksmash.github.io' cors.headers
+          echo 'CORS=PASS'
+
+          echo '4) Firestore-backed learner-code lookup (read-only)'
+          status=$(curl --silent --show-error -o resolve.json -w '%{http_code}' -X POST "$API/api/student/resolve" -H 'Content-Type: application/json' --data '{"learningCode":"Z9Q7"}')
+          # 401 means Firestore read completed and the random code was not found; 200 would mean it happened to exist.
+          if [[ "$status" != '401' && "$status" != '200' ]]; then cat resolve.json; exit 1; fi
+          if [[ "$status" == '401' ]]; then grep -q 'LEARNING_CODE_NOT_FOUND' resolve.json; fi
+          echo "FIRESTORE_LOOKUP=PASS_HTTP_${status}"
+
+          echo '5) Session-save route reaches learner resolution without writing for unknown code'
+          now=$(date +%s%3N)
+          later=$((now+60000))
+          status=$(curl --silent --show-error -o session.json -w '%{http_code}' -X POST "$API/api/sessions" -H 'Content-Type: application/json' --data "{\"sessionId\":\"audit_session_readonly_12345678\",\"learningCode\":\"Z9Q7\",\"aiStudentId\":\"emma_usa\",\"topic\":\"intro\",\"targetDurationMinutes\":1,\"startedAt\":$now,\"endedAt\":$later,\"history\":[{\"id\":\"a1\",\"sender\":\"ai\",\"englishText\":\"Hello.\",\"japaneseText\":\"こんにちは。\",\"timestamp\":$now}]}"
+          if [[ "$status" != '401' ]]; then cat session.json; exit 1; fi
+          grep -q 'LEARNING_CODE_NOT_FOUND' session.json
+          echo 'SESSION_ROUTE_TO_FIRESTORE=PASS_NO_WRITE'
+
+          echo '6) Management HTML and auth protection'
+          curl --fail --silent --show-error "$API/management" -o management.html
+          grep -q '教師用管理' management.html
+          grep -q '研究者用管理' management.html
+          grep -q 'turns.csv を作成' management.html
+          grep -q 'system_events.csv を作成' management.html
+          status=$(curl --silent --show-error -o me.json -w '%{http_code}' "$API/api/management/me")
+          [[ "$status" == '401' ]]
+          grep -q 'UNAUTHORIZED' me.json
+          status=$(curl --silent --show-error -o research.json -w '%{http_code}' "$API/api/management/research.csv?dataset=turns")
+          [[ "$status" == '401' ]]
+          grep -q 'UNAUTHORIZED' research.json
+          echo 'MANAGEMENT_ROUTES=PASS'
+
+          echo 'READ_ONLY_PRODUCTION_DATA_PATH_AUDIT=PASS'
