@@ -1,0 +1,30 @@
+name: Temporary legacy completion fix
+on:
+  push:
+    branches:
+      - codex/legacy-completion-fix
+permissions:
+  contents: write
+jobs:
+  verify:
+    if: "${{ !contains(github.event.head_commit.message, 'fix: treat reflection as completion evidence') }}"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/legacy-completion-fix
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: python3 scripts/_tmp_legacy_completion_fix.py
+      - run: npm run qa
+      - run: npm run build
+      - name: Commit fix
+        run: |
+          git config user.name "danksmash"
+          git config user.email "danksmash@gmail.com"
+          git add src/server/researchExport.ts scripts/qa-research-integrated.ts
+          git commit -m "fix: treat reflection as completion evidence"
+          git push origin HEAD:codex/legacy-completion-fix
