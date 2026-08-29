@@ -13,16 +13,19 @@ const setupSource = fs.readFileSync('src/components/SetupScreen.tsx', 'utf8');
 const versionSource = fs.readFileSync('scripts/app-version.ts', 'utf8');
 const packageSource = fs.readFileSync('package.json', 'utf8');
 
-assert.ok(viteConfig.includes("name: 'learner-version-footer'"));
-assert.ok(viteConfig.includes('transformIndexHtml'));
-assert.ok(viteConfig.includes('.setup-footer::after'));
-assert.ok(viteConfig.includes('id="app-version-style"'));
-assert.ok(viteConfig.includes('getAppVersionMetadata'));
+// Learner UI must remain identical to the pre-version layout: no Version/Build injection or runtime DOM mutation.
 assert.ok(setupSource.includes('className="setup-footer'));
+assert.ok(!setupSource.includes('Version '));
+assert.ok(!setupSource.includes('Build '));
+assert.ok(!viteConfig.includes('learner-version-footer'));
+assert.ok(!viteConfig.includes('.setup-footer::after'));
+assert.ok(!viteConfig.includes('app-version-style'));
+assert.ok(!viteConfig.includes('getAppVersionMetadata'));
 assert.ok(!viteConfig.includes('MutationObserver'));
 assert.ok(!versionSource.includes('MutationObserver'));
 assert.ok(!packageSource.includes('app-version-postbuild'));
 
+// Teacher/researcher Version/Build and version-history UI remain enabled.
 const managementSource = fs.readFileSync('src/server/managementPage.ts', 'utf8');
 const decorated = injectManagementVersionIntoBundle(managementSource, metadata);
 assert.ok(decorated.includes('id="versionInfoBtn"'));
@@ -35,4 +38,4 @@ assert.ok(decorated.indexOf('class="version-footer"') > decorated.indexOf('id="t
 assert.ok(decorated.lastIndexOf('class="version-footer"') > decorated.indexOf('id="researchDashboard"'));
 assert.ok(decorated.includes('<th>Version</th><th>Build</th><th>主な変更内容</th>'));
 
-console.log(`Version UI QA PASS: ${metadata.version} / ${metadata.build} / ${metadata.history.length} history rows; learner footer uses static build-time CSS`);
+console.log(`Version UI QA PASS: ${metadata.version} / ${metadata.build} / ${metadata.history.length} history rows; learner UI has no Version/Build display`);
