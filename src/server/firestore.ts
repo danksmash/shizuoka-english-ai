@@ -127,8 +127,24 @@ export async function queryCollection(collection: string, field: string, value: 
 }
 
 export async function listCollection(collection: string, pageSize = 200): Promise<Record<string, any>[]> {
-  const response = await firestoreFetch(`/${encodeURIComponent(collection)}?pageSize=${Math.max(1, Math.min(1000, pageSize))}`);
-  if (!response.ok) throw new Error(`FIRESTORE_LIST_${response.status}:${(await response.text()).slice(0, 500)}`);
-  const data = await response.json() as { documents?: Array<{ fields?: Record<string, any>; name?: string }> };
-  return (data.documents || []).map((doc) => ({ ...fromFirestoreFields(doc.fields || {}), _name: doc.name }));
+  const safePageSize = Math.max(1, Math.min(1000, pageSize));
+  const rows: Record<string, any>[] = [];
+  let pageToken = '';
+  do {
+    const suffix = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+    const response = await firestoreFetch(`/${encodeURIComponent(collection)}?pageSize=${safePageSize}${suffix}`);
+    if (!response.ok) throw new Error(`FIRESTORE_LIST_${response.status}:${(await response.text()).slice(0, 500)}`);
+    const data = await response.json() as { documents?: Array<{ fields?: Record<string, any>; name?: string }>; nextPageToken?: string };
+    rows.push(...(data.documents || []).map((doc) => ({ ...fromFirestoreFields(doc.fields || {}), _name: doc.name })));
+    pageToken = typeof data.nextPageToken === 'string' ? data.nextPageToken : '';
+  } while (pageToken);
+  return rows;
+}
+
+export async function createDocumentIfAbsent(collection: string, id: string, data: Record<string, unknown>): Promise<boolean> {
+  const fields = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined).map(([key, value]) => [key, toFirestoreValue(value)]));
+  const response = await firestoreFetch(`/${encodeURIComponent(collection)}?documentId=${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify({ fields }) });
+  if (response.status === 409) return false;
+  if (!response.ok) throw new Error(`FIRESTORE_CREATE_${response.status}:${(await response.text()).slice(0, 500)}`);
+  return true;
 }

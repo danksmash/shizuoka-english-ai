@@ -96,6 +96,41 @@ jobs:
           echo "$chat" | grep -q '"success":true'
           echo "$chat" | grep -q '"route":"anthropic-resilient"'
 
+          # A realistic five-minute research payload must pass Express JSON parsing.
+          # The deliberately unknown learning code guarantees that this smoke test cannot write a session.
+          python3 - <<'PY'
+          import json,time
+          now=int(time.time()*1000)
+          history=[]
+          for i in range(80):
+              history.append({
+                  'id':f'm{i}',
+                  'sender':'child' if i%2 else 'ai',
+                  'englishText':'I like soccer because it is fun. How about you?',
+                  'japaneseText':'私はサッカーが好きです。楽しいからです。あなたはどうですか？',
+                  'timestamp':now+i*1000,
+              })
+          payload={
+              'sessionId':'production_payload_probe_12345678',
+              'learningCode':'Z9Q7',
+              'aiStudentId':'emma_usa',
+              'topic':'favorites',
+              'targetDurationMinutes':5,
+              'startedAt':now,
+              'endedAt':now+300000,
+              'history':history,
+          }
+          open('/tmp/session-payload.json','w').write(json.dumps(payload,ensure_ascii=False))
+          PY
+          payload_status=$(curl --silent --show-error --max-time 20 \
+            -o /tmp/session-payload-response.json \
+            -w '%{http_code}' \
+            -X POST "$API_URL/api/sessions" \
+            -H 'Content-Type: application/json' \
+            --data-binary @/tmp/session-payload.json)
+          test "$payload_status" = '401'
+          grep -q 'LEARNING_CODE_NOT_FOUND' /tmp/session-payload-response.json
+
       - name: Production Google TTS voice check
         continue-on-error: true
         run: |
