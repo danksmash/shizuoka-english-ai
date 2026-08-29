@@ -1,11 +1,13 @@
 name: Temporary learner ID sync implementation
 on:
-  push:
-    branches: [codex/learner-id-unification]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
 permissions:
   contents: write
 jobs:
   implement:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
