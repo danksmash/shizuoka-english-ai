@@ -42,7 +42,11 @@ assert.ok(css.includes('grid-template-rows: repeat(3, auto)'), 'student rows mus
 assert.ok(css.includes('flex: 0 0 auto !important'), 'student grid must not stretch into spare height');
 assert.ok(css.includes('display: flex !important;') && css.includes('flex-direction: column'), 'right setup controls must use natural vertical flow');
 assert.ok(css.includes('min-height: clamp(168px, 12.2vw, 198px)'), 'student card height must be width-driven and capped');
-assert.ok(css.includes('clamp(60px, 4.45vw, 76px)'), 'student avatar must scale with width while preserving proportions');
+assert.ok(css.includes('--setup-student-avatar-size: clamp(60px, 4.45vw, 76px)'), 'student avatar must have one canonical responsive size');
+assert.ok(css.includes('grid-template-columns: var(--setup-student-avatar-size) minmax(0, 1fr)'), 'avatar grid column must use the canonical avatar size');
+assert.ok(css.includes('width: var(--setup-student-avatar-size) !important'), 'avatar wrapper width must equal its grid column');
+assert.ok(css.includes('min-width: var(--setup-student-avatar-size) !important'), 'avatar wrapper must never overflow a narrower grid column');
+assert.ok(css.includes('> div:first-child > img') && css.includes('width: 100% !important') && css.includes('height: 100% !important'), 'avatar image must stay inside the synchronized wrapper');
 assert.ok(css.includes('grid-template-columns: minmax(0, 1fr) clamp(126px, 10.4vw, 168px)'), 'selected-student portrait must scale proportionally');
 assert.ok(css.includes('@media (max-width: 1023px), (orientation: portrait)'), 'phone/tablet portrait fallback must exist');
 assert.equal(css.includes('grid-template-rows: auto minmax(0, 1fr) auto'), false, 'setup shell must not allocate all remaining viewport height');
