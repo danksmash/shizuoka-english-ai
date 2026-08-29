@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message != 'fix: let AI select contextual learning expressions'
+    if: ${{ github.event.head_commit.message != 'fix: let AI select contextual learning expressions' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
