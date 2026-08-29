@@ -37,7 +37,7 @@ export const VisualVocabularyDock: React.FC<VisualVocabularyDockProps> = ({
         <div>
           <span className="font-bold text-amber-950">Visual Vocabulary Builder</span>
           <p className="text-[11px] text-amber-800">
-            留学生が話した大切な英単語（5年生の教科書単語など）がここにカードで表示されます！
+            対話に出てきた大切な英単語や表現（5・6年生の学習内容など）がここにカードで表示されます！
           </p>
         </div>
       </div>
@@ -46,7 +46,6 @@ export const VisualVocabularyDock: React.FC<VisualVocabularyDockProps> = ({
 
   return (
     <div className="bg-gradient-to-r from-amber-50/90 via-orange-50/80 to-amber-50/90 border border-amber-200 rounded-2xl p-3 shadow-2xs">
-      {/* Header row */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Sparkles className="w-4 h-4 text-amber-600 animate-pulse" />
@@ -69,7 +68,6 @@ export const VisualVocabularyDock: React.FC<VisualVocabularyDockProps> = ({
         </button>
       </div>
 
-      {/* Horizontal Scrollable Vocabulary Cards */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
         {vocabularyList.slice(-6).map((item) => {
           const isLatest = latestItem?.id === item.id;
@@ -110,7 +108,6 @@ export const VisualVocabularyDock: React.FC<VisualVocabularyDockProps> = ({
         })}
       </div>
 
-      {/* Vocabulary Bank Modal */}
       {isBankOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">

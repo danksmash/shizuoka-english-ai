@@ -8,6 +8,7 @@ import { FeedbackScreen } from './components/FeedbackScreen';
 import { ReflectionScreen } from './components/ReflectionScreen';
 import { LearningHistoryScreen, type StudentHistoryRow } from './components/LearningHistoryScreen';
 import { VisualVocabularyDock } from './components/VisualVocabularyDock';
+import { TodayGoals } from './components/TodayGoals';
 import {
   ChatMessage,
   CharacterMood,
@@ -17,7 +18,7 @@ import {
   VisualVocabularyItem,
 } from './types';
 import { getAIStudentById } from './data/curriculum';
-import { detectVocabularyInText } from './data/vocabulary';
+import { detectVocabularyInText } from './data/vocabulary56';
 import { generateFallbackFeedback } from './utils/feedbackFallback';
 import {
   speakStudentVoice,
@@ -217,7 +218,7 @@ export default function App() {
           if (typeof studentJapaneseTranslation === 'string' && studentJapaneseTranslation.trim()) return { ...message, japaneseText:studentJapaneseTranslation.trim() };
           return { ...message, japaneseText:'日本語に訳せませんでした。' };
         });
-        const updatedHistory = [...translatedHistory, aiMsg]; setMessages(updatedHistory); messagesRef.current = updatedHistory;
+        const updatedHistory = [...translatedHistory, aiMsg]; setMessages(updatedHistory); messagesRef.current=updatedHistory;
         setMood((aiMood as CharacterMood) || 'speaking'); playAiVoice(reply);
       } else throw new Error('API response unsuccessful');
     } catch (e) {
@@ -369,10 +370,7 @@ export default function App() {
             </div>
 
             <div className="col-span-12 lg:col-span-3 hidden lg:flex flex-col gap-4 overflow-y-auto min-h-0">
-              <div className="bg-emerald-50/80 p-5 rounded-3xl border border-emerald-200/80 shadow-sm flex-1 overflow-y-auto">
-                <h3 className="text-sm font-bold text-emerald-900 mb-3">🌟 Great Job! (今日のめあて)</h3>
-                <div className="space-y-2.5 text-xs font-semibold text-slate-800"><div className="bg-white p-3 rounded-2xl border border-emerald-200/70">Hello! / Nice to meet you! と挨拶しよう</div><div className="bg-white p-3 rounded-2xl border border-emerald-200/70">I like ~ / I can ~ で伝えよう</div><div className="bg-white p-3 rounded-2xl border border-emerald-200/70">How about you? と質問を返そう</div></div>
-              </div>
+              <TodayGoals topic={profile.selectedTopic} />
             </div>
           </main>
 
