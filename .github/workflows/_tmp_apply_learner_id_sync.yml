@@ -20,6 +20,8 @@ jobs:
         run: python3 scripts/_tmp_fix_identity_patch.py
       - name: Apply implementation patch
         run: python3 scripts/_tmp_apply_learner_id_sync.py
+      - name: Apply focused teacher identity UI fixes
+        run: python3 scripts/_tmp_post_apply_identity_fix.py
       - name: Update legacy QA expectations
         run: python3 scripts/_tmp_update_learner_id_qa.py
       - name: Full QA
