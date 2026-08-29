@@ -65,6 +65,9 @@ const vocabDock = fs.readFileSync('src/components/VisualVocabularyDock.tsx', 'ut
 for (const marker of ['setup-screen', 'setup-shell', 'setup-main', 'setup-student-grid', 'setup-controls']) {
   assert.ok(setup.includes(marker), `SetupScreen must expose ${marker}`);
 }
+for (const marker of ['setup-student-country', 'setup-student-info-grid', 'setup-student-avatar', 'setup-student-copy', 'setup-student-name', 'setup-student-japanese', 'setup-student-origin', 'setup-student-accent']) {
+  assert.ok(setup.includes(marker), `AI student cards must expose ${marker}`);
+}
 
 // Setup screen must preserve card/content proportions instead of stretching to fill height.
 assert.ok(css.includes('grid-template-rows: auto auto auto'), 'setup shell must use natural-height rows');
@@ -77,11 +80,11 @@ assert.ok(css.includes('--setup-student-avatar-size: clamp(60px, 4.45vw, 76px)')
 assert.ok(css.includes('grid-template-columns: var(--setup-student-avatar-size) minmax(0, 1fr)'), 'avatar grid column must use the canonical avatar size');
 assert.ok(css.includes('width: var(--setup-student-avatar-size) !important'), 'avatar wrapper width must equal its grid column');
 assert.ok(css.includes('min-width: var(--setup-student-avatar-size) !important'), 'avatar wrapper must never overflow a narrower grid column');
-assert.ok(css.includes('> div:first-child > img') && css.includes('width: 100% !important') && css.includes('height: 100% !important'), 'avatar image must stay inside the synchronized wrapper');
+assert.ok(css.includes('.setup-student-avatar > img') && css.includes('width: 100% !important') && css.includes('height: 100% !important'), 'avatar image must stay inside the synchronized wrapper');
 assert.ok(main.includes("import './setup-avatar-adjust.css';"), 'final avatar visual tuning must load after index.css');
 assert.ok(avatarTuning.includes('--setup-student-avatar-size: clamp(76px, 5.2vw, 92px)'), 'desktop portraits must stay readable');
 assert.ok(avatarTuning.includes('--setup-student-avatar-size: clamp(68px, 5.8vw, 78px)'), 'small landscape laptops need safe portrait sizing');
-assert.ok(avatarTuning.includes('gap: clamp(0.72rem, 0.78vw, 0.95rem)'), 'portrait needs a protected gap before text');
+assert.ok(avatarTuning.includes('column-gap: clamp(0.72rem, 0.78vw, 0.95rem)'), 'portrait needs a protected gap before text');
 assert.ok(css.includes('grid-template-columns: minmax(0, 1fr) clamp(126px, 10.4vw, 168px)'), 'selected-student portrait must scale proportionally');
 assert.ok(css.includes('@media (max-width: 1023px), (orientation: portrait)'), 'phone/tablet portrait fallback must exist');
 assert.equal(css.includes('grid-template-rows: auto minmax(0, 1fr) auto'), false, 'setup shell must not allocate all remaining viewport height');
@@ -90,6 +93,16 @@ assert.equal(css.includes('height: 100%;\n    display: grid !important'), false,
 assert.equal(css.includes('min(4.7vw, 7.2vh)'), false, 'setup card scaling must not shrink/grow from viewport height');
 assert.equal(css.includes('#root > .bg-gradient-to-b > main'), false, 'obsolete brittle setup selector must be removed');
 assert.equal(setup.includes('setup-start mt-auto'), false, 'start button must not create an artificial vertical spacer');
+
+// AI student text must adapt to the card itself, not be permanently truncated.
+assert.ok(css.includes('container-type: inline-size') && css.includes('container-name: student-card'), 'each AI student card must define an inline-size container');
+assert.ok(css.includes('@container student-card (max-width: 250px)'), 'narrow cards must switch layout by their own width');
+assert.ok(css.includes('"avatar copy"\n      "accent accent"'), 'narrow cards must move the language/accent row to full card width');
+assert.ok(css.includes('overflow-wrap: anywhere'), 'long country/name/city labels must wrap safely');
+assert.equal(setup.includes('mb-1.5 truncate pr-7'), false, 'country labels must not be forcibly truncated');
+assert.equal(setup.includes('<h3 className="truncate'), false, 'AI student names must not be forcibly truncated');
+assert.equal(setup.includes('<p className="truncate text-[11px]'), false, 'Japanese names must not be forcibly truncated');
+assert.equal(setup.includes('<p className="truncate text-[10px]'), false, 'origin text must not be forcibly truncated');
 
 assert.ok(app.includes("import { TodayGoals } from './components/TodayGoals'"), 'dialogue must render the theme-goal component');
 assert.ok(app.includes('<TodayGoals topic={profile.selectedTopic} />'), 'selected dialogue theme must drive today goals');
