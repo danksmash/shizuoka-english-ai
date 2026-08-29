@@ -195,6 +195,48 @@ export function generateFallbackFeedback(
   const overallComment = `${safeStudentName}さん、${persona.countryJapanese}の留学生 ${persona.name} と${topicSummary}について楽しく対話練習ができましたね！本番の静岡大学留学生交流会でも、笑顔でたくさん話しかけてみてくださいね！`;
   const studentMessage = `${topicSummary}について一緒に話せて楽しかったよ！また英語でお話ししようね！`;
 
+
+  const childLearningItems: FeedbackData['childLearningItems'] = childMsgs.slice(0, 3).map((message) => ({
+    english: maskHighRiskPII(message.englishText.trim()).maskedText.slice(0, 100),
+    japanese: message.japaneseText?.trim() || '自分が対話で実際に使った表現',
+    reason: '今回の対話で自分から実際に使えた英語です。',
+    evidenceText: maskHighRiskPII(message.englishText.trim()).maskedText.slice(0, 180),
+    speaker: 'child',
+    messageId: message.id,
+  }));
+
+  const aiLearningItems: FeedbackData['aiLearningItems'] = history
+    .filter((message) => message.sender === 'ai' && message.englishText?.trim())
+    .slice(0, 3)
+    .map((message) => ({
+      english: message.englishText.trim().slice(0, 100),
+      japanese: message.japaneseText?.trim() || 'AI留学生が対話で実際に使った表現',
+      reason: 'AI留学生が今回の対話で実際に使った、次の会話でも参考になる英語です。',
+      evidenceText: message.englishText.trim().slice(0, 180),
+      speaker: 'ai',
+      messageId: message.id,
+    }));
+
+  const fallbackKeyPhrases: FeedbackData['keyPhrases'] = extractedPhrases
+    .map((phrase) => {
+      const phraseLower = phrase.english.trim().toLowerCase();
+      const source = history.find((message) => message.englishText?.toLowerCase().includes(phraseLower));
+      if (!source) return null;
+      return {
+        english: phrase.english,
+        japanese: phrase.japanese,
+        reason: phrase.culturalNote || '別の英会話でも使いやすい表現です。',
+        evidenceText: source.sender === 'child'
+          ? maskHighRiskPII(source.englishText.trim()).maskedText.slice(0, 180)
+          : source.englishText.trim().slice(0, 180),
+        speaker: source.sender as 'child' | 'ai',
+        messageId: source.id,
+        culturalNote: phrase.culturalNote,
+      };
+    })
+    .filter((item) => item !== null)
+    .slice(0, 3) as FeedbackData['keyPhrases'];
+
   return {
     goodPoints: [goodPoint1, goodPoint2, goodPoint3],
     improvementAdvice: {
@@ -204,7 +246,9 @@ export function generateFallbackFeedback(
     },
     overallComment,
     studentMessage,
-    keyPhrases: extractedPhrases,
+    childLearningItems,
+    aiLearningItems,
+    keyPhrases: fallbackKeyPhrases,
     encounteredVocab: encounteredVocab || [],
     aiStudent: persona,
     stats: {
