@@ -76,7 +76,7 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
   });
 
   const { childVocabulary, aiVocabulary } = useMemo(() => {
-    const order = new Map(encounteredVocabList.map((item, index) => [item.id, index]));
+    const order = new Map<string, number>(encounteredVocabList.map((item, index) => [item.id, index] as const));
     const childMap = new Map<string, VocabularyEvidence>();
     const aiMap = new Map<string, VocabularyEvidence>();
 
