@@ -1,5 +1,5 @@
 import React from 'react';
-import { Award, BarChart3, BookOpen, CheckCircle2, MessageSquare, RotateCcw, Sparkles, TrendingUp, Volume2 } from 'lucide-react';
+import { Award, BarChart3, BookOpen, CheckCircle2, RotateCcw, Sparkles, TrendingUp, Volume2 } from 'lucide-react';
 import { ChatMessage, FeedbackData, FeedbackExpressionItem, StudentProfile, VisualVocabularyItem } from '../types';
 import { getAIStudentById } from '../data/curriculum';
 import { detectVocabularyInText } from '../data/vocabulary';
@@ -62,10 +62,6 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
   onOpenHistory,
 }) => {
   const aiStudent = getAIStudentById(profile.selectedAiStudentId);
-  const uniqueKeyPhrases = (feedback?.keyPhrases || []).filter((phrase, index, all) => {
-    const key = phrase.english.trim().toLowerCase();
-    return key.length > 0 && all.findIndex((candidate) => candidate.english.trim().toLowerCase() === key) === index;
-  });
 
 
   return (
@@ -117,8 +113,6 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
                   <div className="mb-3 flex items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-sm font-black text-slate-900"><Sparkles className="h-4 w-4 text-amber-600" />💡 AI留学生から出会ったことば・表現</h2><span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-black text-amber-700">{feedback?.aiLearningItems?.length || 0}件</span></div>
                   <LearningItemList items={feedback?.aiLearningItems || []} emptyText="今回は実発話から新しく学ぶ価値の高いことば・表現を選べませんでした。" onPlay={onPlayAudio} accent="amber" />
                 </section>
-
-                {uniqueKeyPhrases.length > 0 && <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><h2 className="mb-2 flex items-center gap-2 text-sm font-black text-slate-900"><MessageSquare className="h-4 w-4 text-blue-600" />⭐ 重要キーフレーズ (Key Expressions)</h2><p className="mb-3 text-[10px] font-semibold text-slate-500">別の相手・別のテーマでも使いやすい表現を、実際の対話から最大3つ選んでいます。</p><div className="space-y-2">{uniqueKeyPhrases.map((phrase, idx) => <div key={`${phrase.messageId || idx}-${phrase.english}`} className="rounded-xl border border-blue-200 bg-blue-50/60 p-2.5"><div className="flex items-start justify-between gap-2"><div><span className="text-xs font-black text-blue-950">{phrase.english}</span><p className="text-[11px] font-semibold text-slate-600">{phrase.japanese}</p></div><button type="button" onClick={() => onPlayAudio(phrase.english)} className="p-1 text-blue-700"><Volume2 className="h-4 w-4" /></button></div><p className="mt-1 text-[10px] font-semibold text-blue-800"><span className="font-black">なぜ重要？</span> {phrase.reason}</p><p className="mt-1 rounded-lg bg-white/80 px-2 py-1 text-[9px] font-semibold text-slate-600"><span className="font-black text-slate-700">{phrase.speaker === 'child' ? '🗣 あなた' : '💡 AI留学生'}の実際の発話：</span> “{phrase.evidenceText}”</p>{phrase.culturalNote && <p className="mt-1 text-[9px] text-blue-700">💡 {phrase.culturalNote}</p>}</div>)}</div></section>}
               </div>
             </div>
           </>

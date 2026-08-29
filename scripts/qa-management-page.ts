@@ -12,7 +12,7 @@ if (/onclick=/.test(html)) throw new Error('Inline onclick handlers are not allo
 for (const marker of ['teacherDashboard','studentList','studentSummary','sessionDetail','codeManagement','researchDashboard','researchList','researchSummary','researchSession','researchQuality']) {
   assert.ok(html.includes(`id="${marker}"`), `Management screen missing: ${marker}`);
 }
-for (const marker of ['teacherClass','teacherStart','teacherEnd','teacherMetric','teacherWeekly','teacherMonthly','teacherChart','listClass','listStart','listEnd','studentSearch','showUnused','summaryStart','summaryEnd','sumDurationChart','sumWordsChart','newCode','newClass','reissueModal','reissueConfirm','researchStart','researchEnd','researchDashboardClass','researchMetric','researchWeekly','researchMonthly','researchChart','researchClass','researchGrade','researchCompleteOnly','researchSearch','r4TurnChart','r4WordChart','r4ReflectionChart','r5Head','r5Reflection','r6Start','r6End','r6Class','r6Research','qNormal','qMissing','qDuplicate','qReview','turnsCsvBtn','expressionsCsvBtn','eventsCsvBtn']) {
+for (const marker of ['teacherClass','teacherStart','teacherEnd','teacherMetric','teacherDaily','teacherWeekly','teacherMonthly','teacherChart','listClass','listStart','listEnd','studentSearch','showUnused','summaryStart','summaryEnd','sumDurationChart','sumWordsChart','newCode','newClass','reissueModal','reissueConfirm','researchStart','researchEnd','researchDashboardClass','researchMetric','researchDaily','researchWeekly','researchMonthly','researchChart','researchClass','researchGrade','researchCompleteOnly','researchSearch','r4TurnChart','r4WordChart','r4ReflectionChart','r5Head','r5Reflection','r6Start','r6End','r6Class','r6Research','qNormal','qMissing','qDuplicate','qReview','turnsCsvBtn','expressionsCsvBtn','eventsCsvBtn']) {
   assert.ok(html.includes(`id="${marker}"`), `Functional UI control missing: ${marker}`);
 }
 
@@ -26,7 +26,7 @@ assert.ok(html.includes("used.size/recs.length"), 'Teacher implementation-rate c
 assert.ok(html.includes("dashToListBtn"), 'Teacher dashboard-to-list flow missing');
 
 // Research = anonymized longitudinal analysis / data quality.
-for (const marker of ['研究データ概要','匿名化ケース一覧','個人内縦断データ','匿名化セッションデータ','Export・データ品質','researchCompleteCases','researchMissingRate','researchMedianWords','researchSdWords','researchDescriptiveStats','researchStageSummary','r4DeltaWords','r4DeltaTurns','r4DeltaReflection','記述統計','通算実施回数別']) {
+for (const marker of ['研究データ概要','匿名化ケース一覧','個人内縦断データ','匿名化セッションデータ','Export・データ品質','researchCompleteCases','researchMissingRate','researchMedianWords','researchSdWords','researchMedianLabel','researchSdLabel','researchDescriptiveStats','researchStageSummary','r4DeltaWords','r4DeltaTurns','r4DeltaReflection','記述統計','通算実施回数別']) {
   assert.ok(html.includes(marker), `Research-analysis feature missing: ${marker}`);
 }
 for (const fn of ['median(','stdDev(','researchStatsHtml','stageSummaryHtml','deltaText']) {
@@ -68,9 +68,25 @@ for (const marker of ['自分の考えを伝える','相手の話を聞いて分
 assert.ok(!reflectionSource.includes('もう一度練習する'));
 assert.ok(!reflectionSource.includes('わたしの学習履歴'));
 const feedbackSource = await readFile('src/components/FeedbackScreen.tsx', 'utf8');
-for (const marker of ['からのメッセージ','よくできたところ (Good Points)','自分が使ったことば','AI留学生から出会ったことば','根拠となる実際の発話','次へのステップアップ (Next Step Advice)','重要キーフレーズ (Key Expressions)','対話の文字起こしと日本語訳','日本語訳','もう一度練習する']) assert.ok(feedbackSource.includes(marker), `Feedback UI marker missing: ${marker}`);
+for (const marker of ['からのメッセージ','よくできたところ (Good Points)','自分が使ったことば','AI留学生から出会ったことば','根拠となる実際の発話','次へのステップアップ (Next Step Advice)','対話の文字起こしと日本語訳','日本語訳','もう一度練習する']) assert.ok(feedbackSource.includes(marker), `Feedback UI marker missing: ${marker}`);
 assert.ok(!feedbackSource.includes('handleCopyReport'));
 assert.ok(!feedbackSource.includes('window.print()'));
+assert.ok(!feedbackSource.includes('重要キーフレーズ (Key Expressions)'), 'Redundant Key Expressions panel must be removed');
+assert.ok(html.includes('sessions.csv ― セッション単位の主要分析データ'), 'R6 must explain sessions.csv');
+assert.ok(html.includes('turns.csv ― 匿名化した発話単位データ'), 'R6 must explain turns.csv');
+assert.ok(html.includes('expressions.csv ― 5・6年教科書語彙・表現データ'), 'R6 must explain expressions.csv');
+assert.ok(html.includes('system_events.csv ― 学習支援機能・操作ログ'), 'R6 must explain system_events.csv');
+assert.ok(html.includes("var teacherAgg='day';var researchAgg='day';"), 'Teacher/research charts must default to daily aggregation');
+assert.ok(html.includes("mode==='day'"), 'Daily aggregation logic missing');
+assert.ok(html.includes("T00:00:00Z") && html.includes('getUTCDay') && html.includes('setUTCDate'), 'Weekly boundaries must be timezone-safe');
+assert.ok(html.includes("scope==='all'?(rows.length?['すべて']:[])"), 'Research all-scope chart must use an all-data series rather than unassigned class');
+assert.ok(html.includes('stageSummaryHtml(rows,metric)'), 'Longitudinal stage summary must follow selected metric');
+assert.ok(html.includes("shizuoka_culture:'静岡のじまん＆世界の文化'"), 'Current culture topic ID must map correctly');
+assert.ok(html.includes("talents:'できること・得意なこと'"), 'Current talents topic ID must map correctly');
+const aiCardSource = await readFile('src/components/AIStudentCard.tsx', 'utf8');
+assert.ok(aiCardSource.includes('flex shrink-0 flex-col'), 'Dialogue AI card must not shrink and clip the speech-rate slider');
+assert.ok(aiCardSource.includes('type="range"') && aiCardSource.includes('AIが話す速さ'), 'Speech-rate slider must remain visible and functional');
+
 const appSource = await readFile('src/App.tsx', 'utf8');
 assert.ok(!appSource.includes('setTimeout(executeTransition,4500)'));
 assert.ok(appSource.includes("setIsSavingReflection(false);\n    setPhase('feedback');"));

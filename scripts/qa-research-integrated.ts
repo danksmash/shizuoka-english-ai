@@ -80,6 +80,12 @@ const interruptedData = buildResearchDataSets([{...clustered[0], sessionId:'sess
 assert.equal(interruptedData.sessions[0].data_quality_flag, 'interrupted', 'checkpoint without session_finish must be distinguishable from reflection missing');
 assert.equal(interruptedData.sessions[0].session_status, 'in_progress_or_interrupted');
 assert.equal(interruptedData.sessions[0].session_completed, 0);
+
+const legacyComplete = buildResearchDataSets([{...clustered[0], schemaVersion:2, sessionId:'legacy_complete', reflection:{conveyedIdeas:3,understoodPartner:4,noticedLanguageCulture:3}, systemEvents:[]}]).sessions[0];
+assert.equal(legacyComplete.data_quality_flag,'complete','pre-event legacy session with reflection must remain a complete case');
+assert.equal(legacyComplete.session_status,'complete','legacy completed session status must be inferred');
+assert.equal(legacyComplete.session_completed,1,'legacy completed session must not be reclassified as interrupted');
+
 const weekendRow = data.sessions.find((row) => row.session_id === 'session_weekend')!;
 assert.equal(weekendRow.usage_context_inferred, 'non_school_day');
 
