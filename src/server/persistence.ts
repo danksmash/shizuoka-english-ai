@@ -174,11 +174,12 @@ export async function reissueStudentCode(studentId: string, newCode: string): Pr
   if (await getDocument(STUDENT_COLLECTION, learningCodeKey(newCode))) throw new Error('LEARNING_CODE_ALREADY_EXISTS');
   const latest = records.slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
   const tid = validTeacherStudentId(latest.teacherStudentId) || await generateUniqueTeacherStudentId(studentId, await listCollection(STUDENT_COLLECTION, 1000));
+  const created = await createStudentCode(newCode, studentId, String(latest.researchId || ''), normalizeClassId(latest.classId), tid);
   for (const record of records) {
     const id = documentId(record); if (!id) continue;
     await setDocument(STUDENT_COLLECTION, id, { ...withoutInternal(record), teacherStudentId: tid, active: false, updatedAt: new Date().toISOString() });
   }
-  return createStudentCode(newCode, studentId, String(latest.researchId || ''), normalizeClassId(latest.classId), tid);
+  return created;
 }
 
 function academicYearForLocalDate(localDate: string): number {

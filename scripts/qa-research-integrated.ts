@@ -138,6 +138,7 @@ assert.ok(persistenceHardening.includes("TEACHER_ID_COLLECTION = 'teacher_ids'")
 assert.ok(persistenceHardening.includes('createDocumentIfAbsent(STUDENT_COLLECTION, key'),'learning-code documents must not overwrite concurrent issuance');
 assert.ok(persistenceHardening.includes("queryCollection(SESSION_COLLECTION, 'studentId', studentId, 5000)"),'student longitudinal history must exceed the old 500-session ceiling');
 assert.ok(persistenceHardening.includes('updateStudentClass'),'grade/class progression must preserve student and research identity');
+assert.ok(persistenceHardening.indexOf('const created = await createStudentCode(newCode') < persistenceHardening.indexOf('teacherStudentId: tid, active: false'),'new learning code must be created successfully before old codes are deactivated');
 assert.ok(authHardening.includes('/api/management/research.bundle.zip'),'researcher must be allowed to download the protected one-snapshot bundle');
 assert.ok(serverHardening.includes('/api/management/research.bundle.zip'),'one-snapshot ZIP export endpoint must exist');
 assert.ok(managementHardening.includes("data_quality_flag||'')!=='complete"),'complete-case filters must include reflection/data-quality status');
