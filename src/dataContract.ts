@@ -18,6 +18,18 @@ export interface ReflectionAnswers {
   freeComment?: string;
 }
 
+export const RESEARCH_SYSTEM_EVENT_TYPES = [
+  'session_start','session_finish','reflection_submit','mic_start','mic_stop_send','mic_error',
+  'text_input_open','text_message_send','help_open','help_phrase_select','ai_replay','vocab_bank_open',
+  'vocab_audio_play','speech_rate_change','ai_request_failure',
+] as const;
+export type ResearchSystemEventType = typeof RESEARCH_SYSTEM_EVENT_TYPES[number];
+export interface ResearchSystemEvent {
+  type: ResearchSystemEventType;
+  timestamp: number;
+  value?: string;
+}
+
 export interface SessionSaveInput {
   sessionId: string;
   learningCode: string;
@@ -29,6 +41,7 @@ export interface SessionSaveInput {
   history: ChatMessage[];
   encounteredVocab?: VisualVocabularyItem[];
   reflection?: ReflectionAnswers;
+  systemEvents?: ResearchSystemEvent[];
 }
 
 export interface CanonicalSessionStats {
@@ -37,6 +50,13 @@ export interface CanonicalSessionStats {
   actualDurationSeconds: number;
   targetDurationMinutes: DialogueDurationMinutes;
   uniqueVocabularyCount: number;
+  childUniqueWordTypes: number;
+  meanChildWordsPerTurn: number;
+  maxChildWordsPerTurn: number;
+  childQuestionCount: number;
+  childReciprocalQuestionCount: number;
+  childRepairCount: number;
+  childReasonExpressionCount: number;
 }
 
 export const isAIStudentId = (value: unknown): value is AIStudentId => typeof value === 'string' && (AI_STUDENT_IDS as readonly string[]).includes(value);
@@ -52,7 +72,9 @@ export function isValidLearningCode(value: unknown): boolean {
   const cleaned = value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
   return /^[A-Z0-9]{4}$/.test(cleaned);
 }
+
 export function countEnglishWords(text: string): number { return (text.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g) || []).length; }
+function englishWordTypes(text: string): string[] { return (text.toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) || []); }
 
 export function canonicalizeHistory(history: unknown): ChatMessage[] {
   if (!Array.isArray(history)) return [];
@@ -70,14 +92,46 @@ export function canonicalizeHistory(history: unknown): ChatMessage[] {
   }).filter((item) => item !== null) as ChatMessage[];
 }
 
+export function analyzeChildCommunication(history: ChatMessage[]) {
+  const childMessages = history.filter((message) => message.sender === 'child' && message.englishText.trim());
+  const wordCounts = childMessages.map((message) => countEnglishWords(message.englishText));
+  const totalChildWords = wordCounts.reduce((sum, count) => sum + count, 0);
+  const wordTypes = new Set(childMessages.flatMap((message) => englishWordTypes(message.englishText)));
+  let childQuestionCount = 0;
+  let childReciprocalQuestionCount = 0;
+  let childRepairCount = 0;
+  let childReasonExpressionCount = 0;
+  const questionStart = /^(what|where|when|who|why|how|which|do|does|did|can|could|are|is|am|have|has|would|will)\b/i;
+  const reciprocal = /\b(how about you|what about you|and you)\b/i;
+  const repair = /\b(pardon|sorry|one more time|say that again|please repeat|repeat please|i don't understand|i do not understand)\b/i;
+  const reason = /\bbecause\b/i;
+  for (const message of childMessages) {
+    const text = message.englishText.trim();
+    if (/\?$/.test(text) || questionStart.test(text) || reciprocal.test(text)) childQuestionCount += 1;
+    if (reciprocal.test(text)) childReciprocalQuestionCount += 1;
+    if (repair.test(text) || /^(what\??|sorry\??)$/i.test(text)) childRepairCount += 1;
+    if (reason.test(text)) childReasonExpressionCount += 1;
+  }
+  return {
+    totalTurns: childMessages.length,
+    totalChildWords,
+    childUniqueWordTypes: wordTypes.size,
+    meanChildWordsPerTurn: childMessages.length ? Math.round((totalChildWords / childMessages.length) * 100) / 100 : 0,
+    maxChildWordsPerTurn: wordCounts.length ? Math.max(...wordCounts) : 0,
+    childQuestionCount,
+    childReciprocalQuestionCount,
+    childRepairCount,
+    childReasonExpressionCount,
+  };
+}
+
 export function calculateCanonicalStats(history: ChatMessage[], startedAt: number, endedAt: number, targetDurationMinutes: DialogueDurationMinutes, encounteredVocab: unknown): CanonicalSessionStats {
-  const childMessages = history.filter((message) => message.sender === 'child');
-  const totalChildWords = childMessages.reduce((sum, message) => sum + countEnglishWords(message.englishText), 0);
+  const communication = analyzeChildCommunication(history);
   const safeStart = Number.isFinite(startedAt) ? startedAt : endedAt;
   const safeEnd = Number.isFinite(endedAt) ? endedAt : safeStart;
   const actualDurationSeconds = Math.max(0, Math.min(3600, Math.round((safeEnd - safeStart) / 1000)));
   const vocabIds = new Set(Array.isArray(encounteredVocab) ? encounteredVocab.map((item) => (item && typeof item === 'object' && 'id' in item ? String(item.id) : '')).filter(Boolean) : []);
-  return { totalTurns: childMessages.length, totalChildWords, actualDurationSeconds, targetDurationMinutes, uniqueVocabularyCount: vocabIds.size };
+  return { ...communication, actualDurationSeconds, targetDurationMinutes, uniqueVocabularyCount: vocabIds.size };
 }
 
 export function maskHistoryForStorage(history: ChatMessage[]): ChatMessage[] { return maskMessagesForExternalUse(history); }
@@ -103,6 +157,20 @@ export function parseReflectionAnswers(value: unknown): ReflectionAnswers | unde
   };
 }
 
+export function parseResearchSystemEvents(value: unknown): ResearchSystemEvent[] {
+  if (!Array.isArray(value)) return [];
+  const allowed = new Set<string>(RESEARCH_SYSTEM_EVENT_TYPES);
+  return value.slice(-500).flatMap((raw) => {
+    if (!raw || typeof raw !== 'object') return [];
+    const source = raw as Record<string, unknown>;
+    const type = typeof source.type === 'string' && allowed.has(source.type) ? source.type as ResearchSystemEventType : null;
+    const timestamp = Number(source.timestamp);
+    if (!type || !Number.isFinite(timestamp) || timestamp <= 0) return [];
+    const valueText = typeof source.value === 'string' ? source.value.trim().slice(0, 80) : '';
+    return [{ type, timestamp, ...(valueText ? { value: valueText } : {}) }];
+  });
+}
+
 export function validateSessionSaveInput(body: unknown): { ok: true; value: SessionSaveInput } | { ok: false; error: string } {
   if (!body || typeof body !== 'object') return { ok: false, error: 'INVALID_BODY' };
   const source = body as Record<string, unknown>;
@@ -121,5 +189,6 @@ export function validateSessionSaveInput(body: unknown): { ok: true; value: Sess
     startedAt, endedAt, history,
     encounteredVocab: Array.isArray(source.encounteredVocab) ? (source.encounteredVocab as VisualVocabularyItem[]).slice(0, 200) : [],
     reflection: parseReflectionAnswers(source.reflection),
+    systemEvents: parseResearchSystemEvents(source.systemEvents),
   }};
 }
