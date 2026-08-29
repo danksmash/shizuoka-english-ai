@@ -1,33 +1,23 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
+const app = fs.readFileSync('src/App.tsx', 'utf8');
 const feedback = fs.readFileSync('src/components/FeedbackScreen.tsx', 'utf8');
+const server = fs.readFileSync('server.ts', 'utf8');
+const fallback = fs.readFileSync('src/utils/feedbackFallback.ts', 'utf8');
 
-assert.ok(
-  feedback.includes("const childLearningItems = (feedback?.childLearningItems || []).slice(0, 1);"),
-  'child learning expressions must be capped at one displayed item',
-);
-assert.ok(
-  feedback.includes("const aiLearningItems = (feedback?.aiLearningItems || []).slice(0, 2);"),
-  'AI exchange-student expressions must be capped at two displayed items',
-);
-assert.ok(
-  feedback.includes('{childLearningItems.length}件') && feedback.includes('items={childLearningItems}'),
-  'child learning badge and list must use the capped collection',
-);
-assert.ok(
-  feedback.includes('{aiLearningItems.length}件') && feedback.includes('items={aiLearningItems}'),
-  'AI learning badge and list must use the capped collection',
-);
-assert.equal(
-  feedback.includes('{feedback?.childLearningItems?.length || 0}件'),
-  false,
-  'child learning badge must not expose an uncapped count',
-);
-assert.equal(
-  feedback.includes('{feedback?.aiLearningItems?.length || 0}件'),
-  false,
-  'AI learning badge must not expose an uncapped count',
-);
+assert.ok(app.includes('topic:currentProf.selectedTopic'), 'feedback API must receive the selected dialogue topic');
+assert.ok(server.includes("getTopicLearningGoals"), 'feedback AI must receive the topic learning-goal context');
+assert.ok(server.includes('対話全体を一つのやり取りとして読み'), 'feedback selection must ask AI to interpret the whole interaction');
+assert.ok(server.includes('固定スコア、単純なキーワード一致、発話順だけで機械的に選ばず'), 'selection must not be reduced to rigid scoring or first-item order');
+assert.ok(server.includes('めあてや表現例は判断材料'), 'learning goals must inform rather than mechanically constrain AI selection');
+assert.ok(server.includes("groundFeedbackExpressions(parsed.childLearningItems, 'child', rawHistory, 1)"), 'child selection must be grounded and capped at one');
+assert.ok(server.includes("groundFeedbackExpressions(parsed.aiLearningItems, 'ai', rawHistory, 2)"), 'AI selection must be grounded and capped at two');
+assert.ok(server.includes('normalizeFeedbackEvidence(message.englishText).includes(normalized)'), 'every selected expression must be verified against an actual utterance');
+assert.equal(feedback.includes('.slice(0, 1)'), false, 'UI must not choose the first child item');
+assert.equal(feedback.includes('.slice(0, 2)'), false, 'UI must not choose the first two AI items');
+assert.ok(feedback.includes('items={childLearningItems}') && feedback.includes('items={aiLearningItems}'), 'UI must render server-selected items as-is');
+assert.ok(fallback.includes("childMsgs.slice(0, 1)"), 'emergency fallback must preserve one child item maximum');
+assert.ok(fallback.includes(".slice(0, 2)"), 'emergency fallback must preserve two AI items maximum');
 
-console.log('Feedback learning item count QA: PASS');
+console.log('Contextual AI feedback selection QA: PASS');

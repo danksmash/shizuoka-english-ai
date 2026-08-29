@@ -65,8 +65,8 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
 }) => {
   const aiStudent = getAIStudentById(profile.selectedAiStudentId);
   const reportOwner = profile.name && profile.name !== '5・6年生' ? profile.name : 'あなた';
-  const childLearningItems = (feedback?.childLearningItems || []).slice(0, 1);
-  const aiLearningItems = (feedback?.aiLearningItems || []).slice(0, 2);
+  const childLearningItems = feedback?.childLearningItems || [];
+  const aiLearningItems = feedback?.aiLearningItems || [];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-blue-50/20 to-slate-100 p-3 sm:p-6 lg:p-8">
