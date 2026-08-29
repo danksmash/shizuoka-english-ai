@@ -21,3 +21,36 @@
     --setup-student-avatar-size: clamp(68px, 5.8vw, 78px);
   }
 }
+
+/*
+ * Large desktop / Mac presentation scale.
+ *
+ * On a wide 16:10 desktop, the unscaled setup composition can look too small
+ * and leave excessive blank space above and below it. The target reference is
+ * the same layout viewed at roughly 120-125% browser zoom. Apply that visual
+ * density only on genuinely large landscape viewports, while shrinking the
+ * layout width before zooming so the composition still fits the viewport.
+ *
+ * Width-driven portraits are compensated separately so they do not become
+ * oversized; text, controls and vertical rhythm receive the intended increase.
+ */
+@media (min-width: 1440px) and (min-height: 900px) and (orientation: landscape) {
+  .setup-shell {
+    width: 81.97%;
+    max-width: 81.97% !important;
+    zoom: 1.22;
+  }
+
+  .setup-student-card {
+    --setup-student-avatar-size: clamp(70px, 4.8vw, 85px);
+    min-height: clamp(161px, 11.68vw, 189px) !important;
+  }
+
+  .setup-profile > div {
+    grid-template-columns: minmax(0, 1fr) clamp(103px, 8.53vw, 138px) !important;
+  }
+
+  .setup-profile img {
+    max-width: 138px !important;
+  }
+}
