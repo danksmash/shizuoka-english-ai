@@ -33,9 +33,32 @@ assert.ok(decorated.includes('>バージョン情報</button>'));
 assert.ok(decorated.includes('id="versionInfo"'));
 assert.ok(decorated.includes('id="versionBackBtn"'));
 assert.ok(decorated.includes(`AI留学生えいご対話 Version ${metadata.version}　Build ${metadata.build}`));
-assert.equal((decorated.match(/class="version-footer"/g) || []).length, 2);
-assert.ok(decorated.indexOf('class="version-footer"') > decorated.indexOf('id="teacherDashboard"'));
-assert.ok(decorated.lastIndexOf('class="version-footer"') > decorated.indexOf('id="researchDashboard"'));
 assert.ok(decorated.includes('<th>Version</th><th>Build</th><th>主な変更内容</th>'));
 
-console.log(`Version UI QA PASS: ${metadata.version} / ${metadata.build} / ${metadata.history.length} history rows; learner UI has no Version/Build display`);
+// Version/Build footer appears exactly once, immediately below the login card, never on teacher/research dashboards.
+assert.equal((decorated.match(/class="version-footer"/g) || []).length, 1);
+assert.equal((decorated.match(/id="managementVersionFooter"/g) || []).length, 1);
+const loginCard = decorated.indexOf('class="card login-card"');
+const versionFooter = decorated.indexOf('id="managementVersionFooter"');
+const panel = decorated.indexOf('<div id="panel"');
+assert.ok(loginCard >= 0 && versionFooter > loginCard && panel > versionFooter);
+const teacherStart = decorated.indexOf('<section id="teacherDashboard"');
+const researchStart = decorated.indexOf('<section id="researchDashboard"');
+const versionScreenStart = decorated.indexOf('<section id="versionInfo"');
+assert.ok(teacherStart >= 0 && researchStart > teacherStart && versionScreenStart > researchStart);
+assert.ok(!decorated.slice(teacherStart, researchStart).includes('version-footer'));
+assert.ok(!decorated.slice(researchStart, versionScreenStart).includes('version-footer'));
+
+// Header navigation separates page navigation from utility actions and highlights the current top-level page.
+assert.ok(decorated.includes('class="nav-shell"'));
+assert.ok(decorated.includes('class="nav-pages"'));
+assert.ok(decorated.includes('class="nav-actions"'));
+assert.ok(decorated.includes('class="secondary nav-page"'));
+assert.ok(decorated.includes('class="secondary nav-action refresh-action"'));
+assert.ok(decorated.includes('class="secondary nav-action logout-action"'));
+assert.ok(decorated.includes('.nav-page.active'));
+assert.ok(decorated.includes("versionInfo:'versionInfoBtn'"));
+assert.equal((decorated.match(/id="lastUpdated"/g) || []).length, 1);
+assert.equal((decorated.match(/id="versionInfoBtn"/g) || []).length, 1);
+
+console.log(`Version UI QA PASS: ${metadata.version} / ${metadata.build} / ${metadata.history.length} history rows; learner UI has no Version/Build display; management login has one footer and grouped navigation`);
