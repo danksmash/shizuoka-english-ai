@@ -32,4 +32,12 @@ s=p.read_text()
 s=s.replace("assert.equal(context.periodKey('2026-08-28', 'week'), '2026-08-24', 'Friday in JST week must start Monday without UTC day shift');", "assert.equal(context.periodKey('2026-08-28', 'week'), '2026-08-24~2026-08-30', 'Weekly key must display the full Monday-Sunday range');")
 p.write_text(s)
 
+# The previous architecture invented a second opaque teacher-only ID. The new architecture
+# deliberately uses the distributed learner ID for teacher views and reserves only research IDs.
+p=Path('scripts/qa-research-integrated.ts')
+s=p.read_text()
+s=s.replace("assert.ok(persistenceHardening.includes(\"TEACHER_ID_COLLECTION = 'teacher_ids'\"),'teacher-facing student IDs must also be atomically reserved');", "assert.ok(!persistenceHardening.includes(\"TEACHER_ID_COLLECTION = 'teacher_ids'\"),'opaque teacher-only IDs must not be generated in the learner-ID architecture');\nassert.ok(persistenceHardening.includes('learningId: normalized'),'teacher views must use the distributed learner ID');")
+s=s.replace("assert.ok(persistenceHardening.indexOf('const created = await createStudentCode(newCode') < persistenceHardening.indexOf('teacherStudentId: tid, active: false'),'new learning code must be created successfully before old codes are deactivated');", "assert.ok(persistenceHardening.indexOf('const created = await createStudentCode(newCode') < persistenceHardening.indexOf('active: false'),'new learner ID must be created successfully before old learner IDs are deactivated');")
+p.write_text(s)
+
 print('Legacy QA expectations updated for learner-ID architecture')
