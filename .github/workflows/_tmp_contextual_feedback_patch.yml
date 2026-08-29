@@ -1,0 +1,34 @@
+name: Temporary contextual feedback patch
+
+on:
+  push:
+    branches:
+      - codex/feedback-learning-item-counts
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'fix: let AI select contextual learning expressions'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/feedback-learning-item-counts
+          fetch-depth: 0
+      - name: Apply contextual feedback patch
+        run: python3 scripts/_tmp_apply_contextual_feedback.py
+      - name: Remove temporary patch files
+        run: |
+          rm scripts/_tmp_apply_contextual_feedback.py
+          rm .github/workflows/_tmp_contextual_feedback_patch.yml
+      - name: Commit final implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: let AI select contextual learning expressions"
+          git push origin HEAD:codex/feedback-learning-item-counts
