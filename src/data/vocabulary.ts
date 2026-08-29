@@ -323,7 +323,7 @@ export const ELEMENTARY_GRADE_5_VOCABULARY: VisualVocabularyItem[] = [
     emoji: '🏃‍♂️',
     exampleSentence: 'P.E. is very energetic and fun!',
     mitsumuraUnit: '光村 5年 Unit 2',
-    keywords: ['p.e.', 'pe', 'physical education', 'gym'],
+    keywords: ['p.e.', 'pe', 'physical education', 'gym class'],
   },
 
   // --- Animals & Nature (Mitsumura Unit 2, 5) ---
@@ -564,21 +564,34 @@ export const ELEMENTARY_GRADE_5_VOCABULARY: VisualVocabularyItem[] = [
   },
 ];
 
+const normalizeVocabularyText = (value: string) => value
+  .normalize('NFKC')
+  .toLowerCase()
+  .replace(/[’‘]/g, "'")
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const exactKeywordPattern = (keyword: string) => {
+  const normalizedKeyword = normalizeVocabularyText(keyword);
+  const escaped = normalizedKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9])${escaped}(?=$|[^a-z0-9])`, 'i');
+};
+
 /**
- * Scan text for Grade 5 Visual Vocabulary keywords and return matching items
+ * Scan text for Grade 5 Visual Vocabulary keywords.
+ * A vocabulary item is returned only when one of its registered words/phrases
+ * appears as an actual token or phrase in the utterance. Partial substrings are
+ * intentionally rejected (e.g. people -> PE, start -> art, breakfast -> fast).
  */
 export function detectVocabularyInText(text: string): VisualVocabularyItem[] {
   if (!text || typeof text !== 'string') return [];
 
-  const lower = text.toLowerCase();
+  const normalizedText = normalizeVocabularyText(text);
   const matchedMap = new Map<string, VisualVocabularyItem>();
 
   for (const item of ELEMENTARY_GRADE_5_VOCABULARY) {
-    for (const kw of item.keywords) {
-      // Check if keyword matches as whole word or phrase
-      const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(`\\b${escaped}\\b`, 'i');
-      if (regex.test(lower) || lower.includes(kw.toLowerCase())) {
+    for (const keyword of item.keywords) {
+      if (exactKeywordPattern(keyword).test(normalizedText)) {
         matchedMap.set(item.id, item);
         break;
       }
