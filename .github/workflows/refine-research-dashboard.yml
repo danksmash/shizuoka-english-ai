@@ -1,0 +1,49 @@
+name: Refine research dashboard
+
+on:
+  push:
+    branches:
+      - codex/research-dashboard-csv-verification
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: research-dashboard-refine
+  cancel-in-progress: false
+
+jobs:
+  refine-test-commit:
+    if: ${{ !contains(github.event.head_commit.message || '', '[refine-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: codex/research-dashboard-csv-verification
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Apply final precision refinements
+        run: python3 scripts/refine-research-dashboard.py
+      - name: Remove one-shot patch script
+        run: rm -f scripts/refine-research-dashboard.py
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Full QA
+        run: npm run qa
+      - name: Production build
+        run: npm run build
+      - name: Verify protected student assets unchanged
+        run: |
+          test -z "$(git status --short | grep -E 'public/images|src/assets/images|src/utils/speech.ts|src/components/SetupScreen.tsx|src/App.tsx' || true)"
+      - name: Commit validated refinements
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898297+github-actions[bot]@users.noreply.github.com"
+          git checkout HEAD -- .github/workflows
+          git add -A
+          git commit -m "fix: refine research dashboard labels and codebook [refine-applied]"
+          git push origin HEAD:codex/research-dashboard-csv-verification
