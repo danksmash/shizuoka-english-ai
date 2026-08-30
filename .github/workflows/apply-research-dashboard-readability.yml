@@ -1,0 +1,308 @@
+name: Apply researcher dashboard readability fixes
+
+on:
+  push:
+    branches:
+      - codex/research-dashboard-readability-filters
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Apply targeted researcher dashboard fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              if old in text:
+                  return text.replace(old, new, 1)
+              if new in text:
+                  return text
+              raise SystemExit(f'patch target not found: {label}')
+
+          # --- researchDashboard.ts ---
+          p = Path('src/server/researchDashboard.ts')
+          s = p.read_text()
+          old = """function textQuery(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
+          function filterSessions(rows: Row[], query: ResearchFilterQuery): Row[] {
+            const start=textQuery(query.start), end=textQuery(query.end), classId=textQuery(query.classId), grade=textQuery(query.grade);
+            const personaId=textQuery(query.personaId), circle=textQuery(query.circle), label=textQuery(query.labelCondition), topic=textQuery(query.topic);
+            const completeOnly=String(query.completeOnly || '') === '1';
+            return rows.filter((row) => {
+              const date=String(row.local_date || '');
+              return (!start || date >= start) && (!end || date <= end)
+                && (!classId || classId === 'all' || String(row.class_id || '') === classId)
+                && (!grade || grade === 'all' || String(row.grade_level || '') === grade)
+                && (!personaId || personaId === 'all' || String(row.persona_id || '') === personaId)
+                && (!circle || circle === 'all' || String(row.accent_circle || '') === circle)
+                && (!label || label === 'all' || String(row.persona_label_condition || '') === label)
+                && (!topic || topic === 'all' || String(row.topic || '') === topic)
+                && (!completeOnly || String(row.data_quality_flag || '') === 'complete');
+            });
+          }
+          """
+          new = """function textQuery(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
+          function gradeMatches(row: Row, grade: string): boolean {
+            if (!grade || grade === 'all') return true;
+            const storedClass = String(row.class_id || '');
+            if (grade === 'test') return storedClass === 'テスト';
+            if (grade === 'reserve') return storedClass === '予備';
+            return String(row.grade_level || '') === grade;
+          }
+          function classMatches(row: Row, classId: string): boolean {
+            if (!classId || classId === 'all') return true;
+            const storedClass = String(row.class_id || '');
+            if (classId === 'test') return storedClass === 'テスト';
+            if (classId === 'reserve') return storedClass === '予備';
+            if (['1','2','3'].includes(classId)) return storedClass.endsWith(`-${classId}`);
+            return storedClass === classId;
+          }
+          function filterSessions(rows: Row[], query: ResearchFilterQuery): Row[] {
+            const start=textQuery(query.start), end=textQuery(query.end), classId=textQuery(query.classId), grade=textQuery(query.grade);
+            const personaId=textQuery(query.personaId), circle=textQuery(query.circle), label=textQuery(query.labelCondition), topic=textQuery(query.topic);
+            const completeOnly=String(query.completeOnly || '') === '1';
+            return rows.filter((row) => {
+              const date=String(row.local_date || '');
+              return (!start || date >= start) && (!end || date <= end)
+                && classMatches(row, classId)
+                && gradeMatches(row, grade)
+                && (!personaId || personaId === 'all' || String(row.persona_id || '') === personaId)
+                && (!circle || circle === 'all' || String(row.accent_circle || '') === circle)
+                && (!label || label === 'all' || String(row.persona_label_condition || '') === label)
+                && (!topic || topic === 'all' || String(row.topic || '') === topic)
+                && (!completeOnly || String(row.data_quality_flag || '') === 'complete');
+            });
+          }
+          """
+          s = replace_once(s, old, new, 'research filter semantics')
+          s = replace_once(s,
+            "  const latestAt = data.sessions.map((row) => String(row.local_ended_at || row.local_started_at || '')).sort().at(-1) || '';\n  type SeriesBucket={sessions:number;words:number[];reflections:[number[],number[],number[]]};",
+            "  const latestAt = data.sessions.map((row) => String(row.local_ended_at || row.local_started_at || '')).sort().at(-1) || '';\n  let rateWords=0, rateSeconds=0;\n  for (const row of data.sessions) { const words=Number(row.child_total_words), seconds=Number(row.actual_duration_seconds); if (Number.isFinite(words) && Number.isFinite(seconds) && seconds > 0) { rateWords += words; rateSeconds += seconds; } }\n  const meanChildWordsPerMinute = rateSeconds > 0 ? round(rateWords * 60 / rateSeconds, 1) : 0;\n  type SeriesBucket={sessions:number;words:number[];childWords:number;durationSeconds:number;reflections:[number[],number[],number[]]};",
+            'dashboard words/min metric')
+          old_add = """  const addSeries=(target:Map<string,SeriesBucket>,key:string,row:Row)=>{const d=target.get(key)||{sessions:0,words:[],reflections:[[],[],[]]};d.sessions+=1;const words=Number(row.child_total_words);if(Number.isFinite(words))d.words.push(words);const refs=[row.reflection_conveyed_ideas,row.reflection_understood_partner,row.reflection_noticed_language_culture];refs.forEach((value,index)=>{const n=Number(value);if([1,3,5].includes(n))d.reflections[index].push(n)});target.set(key,d);};"""
+          new_add = """  const addSeries=(target:Map<string,SeriesBucket>,key:string,row:Row)=>{const d=target.get(key)||{sessions:0,words:[],childWords:0,durationSeconds:0,reflections:[[],[],[]]};d.sessions+=1;const words=Number(row.child_total_words),seconds=Number(row.actual_duration_seconds);if(Number.isFinite(words))d.words.push(words);if(Number.isFinite(words)&&Number.isFinite(seconds)&&seconds>0){d.childWords+=words;d.durationSeconds+=seconds;}const refs=[row.reflection_conveyed_ideas,row.reflection_understood_partner,row.reflection_noticed_language_culture];refs.forEach((value,index)=>{const n=Number(value);if([1,3,5].includes(n))d.reflections[index].push(n)});target.set(key,d);};"""
+          s = replace_once(s, old_add, new_add, 'series words/min accumulator')
+          s = replace_once(s,
+            "  const personaUsage = counts('persona_id').map((item)=>({ ...item, label: `${personaNames.get(item.label) || item.label} (${item.label})` }));",
+            "  const personaUsage = counts('persona_id').map((item)=>({ ...item, label: personaNames.get(item.label) || item.label }));",
+            'short persona chart labels')
+          s = replace_once(s,
+            "    date, sessions:value.sessions, mean_child_words:round(average(value.words),1),\n    reflection_conveyed:value.reflections[0].length?round(average(value.reflections[0]),2):null,",
+            "    date, sessions:value.sessions, mean_child_words:round(average(value.words),1),\n    mean_child_words_per_minute:value.durationSeconds>0?round(value.childWords*60/value.durationSeconds,1):null,\n    reflection_conveyed:value.reflections[0].length?round(average(value.reflections[0]),2):null,",
+            'series words/min output')
+          s = replace_once(s,
+            "      participantCount:participants.size, totalSessions:data.sessions.length,\n      childUtteranceCount:data.utterances.filter((row)=>row.speaker==='child').length,\n      completeRate:data.sessions.length?round((complete/data.sessions.length)*100,1):0, latestAt,",
+            "      participantCount:participants.size, totalSessions:data.sessions.length,\n      childUtteranceCount:data.utterances.filter((row)=>row.speaker==='child').length, meanChildWordsPerMinute,\n      completeRate:data.sessions.length?round((complete/data.sessions.length)*100,1):0, latestAt,",
+            'dashboard metric payload')
+          old_filters = """    filters:{
+              classes:uniqueSorted(all.sessions,'class_id'), grades:uniqueSorted(all.sessions,'grade_level'), personas:uniqueSorted(all.sessions,'persona_id'),
+              circles:uniqueSorted(all.sessions,'accent_circle'), labelConditions:uniqueSorted(all.sessions,'persona_label_condition'), topics:uniqueSorted(all.sessions,'topic'),
+            },"""
+          new_filters = """    filters:{
+              classes:['1','2','3','test','reserve'], grades:['5','6','test','reserve'], personas:AI_STUDENTS_LIST.map((persona)=>persona.id),
+              circles:['Inner','Outer','Expanding'], labelConditions:['shown','hidden'], topics:['intro','favorites','shizuoka_culture','talents','free'],
+            },"""
+          s = replace_once(s, old_filters, new_filters, 'fixed researcher filter choices')
+          p.write_text(s)
+
+          # --- managementPage.ts ---
+          p = Path('src/server/managementPage.ts')
+          s = p.read_text()
+          replacements = [
+            ('input,select{width:100%;padding:9px;border:1px solid #b8c7df;border-radius:8px;background:#fff}', 'input,select{width:100%;font-size:15px;line-height:1.35;padding:10px 11px;border:1px solid #b8c7df;border-radius:8px;background:#fff}'),
+            ('button{border-radius:8px;padding:9px 12px;font-weight:800;cursor:pointer}', 'button{font-size:14px;border-radius:8px;padding:10px 13px;font-weight:800;cursor:pointer}'),
+            ('.muted{font-size:11px;color:#64748b}', '.muted{font-size:13px;color:#64748b}'),
+            ('.metric span{font-size:11px;font-weight:800;color:#526581}', '.metric span{font-size:13px;font-weight:800;color:#526581}'),
+            ('.filters label{font-size:10px;font-weight:800}', '.filters label{font-size:13px;font-weight:800}'),
+            ('.charts{display:grid;grid-template-columns:1.1fr 1fr 1fr 1.15fr 1.3fr;gap:10px;margin-top:10px}', '.charts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}'),
+            ('.chart-card{min-height:250px}', '.chart-card{min-height:330px}'),
+            ('.chart-card h3,.section-title{font-size:13px;margin:0 0 8px}', '.chart-card h3,.section-title{font-size:16px;margin:0 0 10px}'),
+            ('.chart{height:205px;overflow:hidden}', '.chart{height:280px;overflow:hidden}'),
+            ('.quality-row,.expression-row{display:grid;grid-template-columns:1fr auto;gap:8px;padding:6px 0;border-bottom:1px solid #edf2f8;font-size:11px}', '.quality-row,.expression-row{display:grid;grid-template-columns:1fr auto;gap:10px;padding:8px 0;border-bottom:1px solid #edf2f8;font-size:13px}'),
+            ('.quality-group-title{font-size:10px;font-weight:900;', '.quality-group-title{font-size:12px;font-weight:900;'),
+            ('.recent{width:100%;border-collapse:collapse;font-size:10px}', '.recent{width:100%;border-collapse:collapse;font-size:12px}'),
+            ('.export-card h3{margin:0 0 5px;font-size:14px}', '.export-card h3{margin:0 0 6px;font-size:16px}'),
+            ('.export-card p{font-size:10px;line-height:1.5;', '.export-card p{font-size:12px;line-height:1.55;'),
+            ('.note{background:#eef4ff;border:1px solid #bfd0f5;border-radius:10px;padding:10px;font-size:11px;', '.note{background:#eef4ff;border:1px solid #bfd0f5;border-radius:10px;padding:11px;font-size:13px;'),
+            ('.status{margin-top:7px;font-size:11px;', '.status{margin-top:8px;font-size:13px;'),
+            ('.version{text-align:center;color:#94a3b8;font-size:10px;', '.version{text-align:center;color:#94a3b8;font-size:11px;'),
+            ('.svg-label{font-size:9px;fill:#526581}.svg-value{font-size:9px;fill:#173461;font-weight:700}', '.svg-label{font-size:12px;fill:#526581}.svg-value{font-size:12px;fill:#173461;font-weight:800}'),
+          ]
+          for old,new in replacements:
+              s = replace_once(s, old, new, old[:45])
+          nav = '<div class="nav"><button class="secondary" data-nav="overview">研究データ概要</button><button class="secondary" data-nav="quality">データ品質</button><button class="secondary" data-nav="exports">CSVダウンロード</button><button class="secondary" data-nav="dictionary">データ辞書</button></div>'
+          s = replace_once(s, nav, '', 'remove top section navigation')
+          s = replace_once(s,
+            '<div class="metrics"><div class="card metric"><span>参加児童数</span><b id="mParticipants">-</b></div><div class="card metric"><span>総セッション数</span><b id="mSessions">-</b></div><div class="card metric"><span>総児童発話数</span><b id="mUtterances">-</b></div><div class="card metric"><span>完全ケース率</span><b id="mCompleteRate">-</b></div><div class="card metric"><span>最終セッション日時</span><b id="mLatest" style="font-size:17px">-</b></div></div>',
+            '<div class="metrics"><div class="card metric"><span>参加児童数</span><b id="mParticipants">-</b></div><div class="card metric"><span>総セッション数</span><b id="mSessions">-</b></div><div class="card metric"><span>1分あたり平均発話語数</span><b id="mWordsPerMinute">-</b></div><div class="card metric"><span>完全ケース率</span><b id="mCompleteRate">-</b></div><div class="card metric"><span>最終セッション日時</span><b id="mLatest" style="font-size:17px">-</b></div></div>',
+            'top metric words per minute')
+          old_filters_html = '<div class="filters"><label>開始日<input id="start" type="date"></label><label>終了日<input id="end" type="date"></label><label>学年<select id="grade"><option value="all">すべて</option></select></label><label>学級<select id="classId"><option value="all">すべて</option></select></label><label>Persona<select id="personaId"><option value="all">すべて</option></select></label><label>Inner / Outer / Expanding<select id="circle"><option value="all">すべて</option></select></label><label>ラベル条件<select id="labelCondition"><option value="all">すべて</option></select></label><label>テーマ<select id="topic"><option value="all">すべて</option></select></label></div>'
+          new_filters_html = '<div class="filters"><label>開始日<input id="start" type="date"></label><label>終了日<input id="end" type="date"></label><label>学年<select id="grade"><option value="all">すべて</option><option value="5">５年</option><option value="6">６年</option><option value="test">テスト</option><option value="reserve">予備</option></select></label><label>学級<select id="classId"><option value="all">すべて</option><option value="1">１組</option><option value="2">２組</option><option value="3">３組</option><option value="test">テスト</option><option value="reserve">予備</option></select></label><label>Persona<select id="personaId"><option value="all">すべて</option></select></label><label>Inner / Outer / Expanding<select id="circle"><option value="all">すべて</option></select></label><label>ペルソナ情報ラベル<select id="labelCondition"><option value="all">すべて</option><option value="shown">表示あり</option><option value="hidden">表示なし</option></select></label><label>テーマ<select id="topic"><option value="all">すべて</option><option value="intro">自己紹介・あいさつ</option><option value="favorites">好きなもの・すきなこと</option><option value="shizuoka_culture">静岡のじまん＆世界の文化</option><option value="talents">できること・得意なこと</option><option value="free">自由トーク・おしゃべり</option></select></label></div>'
+          s = replace_once(s, old_filters_html, new_filters_html, 'fixed filter option labels')
+          s = s.replace('style="font-size:11px;display:flex;align-items:center;gap:5px"', 'style="font-size:13px;display:flex;align-items:center;gap:6px"')
+          old_charts = '<div class="charts"><div class="card chart-card"><h3 id="chartDailyTitle">日別セッション数</h3><div id="chartDaily" class="chart"></div></div><div class="card chart-card"><h3>Persona別利用回数</h3><div id="chartPersona" class="chart"></div></div><div class="card chart-card"><h3>Inner / Outer / Expanding</h3><div id="chartCircle" class="chart"></div></div><div class="card chart-card"><h3 id="chartWordsTitle">1セッションあたり児童総語数（平均）</h3><div id="chartWords" class="chart"></div></div><div class="card chart-card"><h3 id="chartReflectionTitle">振り返り平均値（1/3/5）</h3><div id="chartReflection" class="chart"></div></div></div>'
+          new_charts = '<div class="charts"><div class="card chart-card"><h3 id="chartDailyTitle">日別セッション数</h3><div id="chartDaily" class="chart"></div></div><div class="card chart-card"><h3>Persona別利用回数</h3><div id="chartPersona" class="chart"></div></div><div class="card chart-card"><h3 id="chartWordsTitle">1分あたり平均発話語数（日別）</h3><div id="chartWords" class="chart"></div></div><div class="card chart-card"><h3 id="chartReflectionTitle">振り返り平均値（1/3/5）</h3><div id="chartReflection" class="chart"></div></div></div>'
+          s = replace_once(s, old_charts, new_charts, 'remove circle graph and replace words graph')
+          s = s.replace('📚 よく使われている表現（児童）', '📚 児童が使った表現')
+          s = replace_once(s,
+            "const topicLabels={intro:'自己紹介・あいさつ',favorites:'好きなもの・すきなこと',shizuoka_culture:'静岡のじまん＆世界の文化',talents:'できること・得意なこと',free:'自由トーク・おしゃべり'};",
+            "const topicLabels={intro:'自己紹介・あいさつ',favorites:'好きなもの・すきなこと',shizuoka_culture:'静岡のじまん＆世界の文化',talents:'できること・得意なこと',free:'自由トーク・おしゃべり'};const gradeLabels={'5':'５年','6':'６年',test:'テスト',reserve:'予備'};const classLabels={'1':'１組','2':'２組','3':'３組',test:'テスト',reserve:'予備'};const labelConditionLabels={shown:'表示あり',hidden:'表示なし'};const expressionSourceLabels={curriculum:'教科書辞書',persona:'プロフィール辞書'};",
+            'UI label dictionaries')
+          old_bar = "function barSvg(items,valueKey,maxItems){const rows=(items||[]).slice(0,maxItems||12),w=360,h=Math.max(190,rows.length*24+20),max=Math.max(1,...rows.map(function(r){return Number(r[valueKey]||r.value||0)}));let out='<svg viewBox=\"0 0 '+w+' '+h+'\" width=\"100%\" height=\"100%\" role=\"img\">';rows.forEach(function(r,i){const value=Number(r[valueKey]||r.value||0),y=8+i*24,bw=Math.max(1,210*value/max);out+='<text x=\"2\" y=\"'+(y+11)+'\" class=\"svg-label\">'+esc(r.label||r.date||'')+'</text><rect x=\"130\" y=\"'+y+'\" width=\"'+bw+'\" height=\"14\" rx=\"4\" fill=\"#4d8df7\"></rect><text x=\"'+(136+bw)+'\" y=\"'+(y+11)+'\" class=\"svg-value\">'+esc(value)+'</text>'});return out+'</svg>'}"
+          new_bar = "function formatChartValue(v){const n=Number(v);if(!Number.isFinite(n))return '';return Number.isInteger(n)?String(n):String(Math.round(n*10)/10)}\nfunction barSvg(items,valueKey,maxItems){const rows=(items||[]).slice(0,maxItems||12),w=440,h=Math.max(220,rows.length*28+24);if(!rows.length)return '<div class=\"muted\" style=\"padding:90px 8px;text-align:center\">データなし</div>';const max=Math.max(1,...rows.map(function(r){return Number(r[valueKey]||r.value||0)}));let out='<svg viewBox=\"0 0 '+w+' '+h+'\" width=\"100%\" height=\"100%\" role=\"img\">';rows.forEach(function(r,i){const value=Number(r[valueKey]||r.value||0),y=8+i*28,bw=Math.max(2,205*value/max);out+='<text x=\"2\" y=\"'+(y+14)+'\" class=\"svg-label\">'+esc(r.label||r.date||'')+'</text><rect x=\"170\" y=\"'+y+'\" width=\"'+bw+'\" height=\"17\" rx=\"4\" fill=\"#4d8df7\"></rect><text x=\"'+Math.min(424,178+bw)+'\" y=\"'+(y+14)+'\" class=\"svg-value\">'+esc(formatChartValue(value))+'</text>'});return out+'</svg>'}"
+          s = replace_once(s, old_bar, new_bar, 'larger bar graph labels')
+          old_line = """function lineSvg(items,keys){
+            const rows=items||[],w=420,h=190,left=35,top=10,right=8,bottom=28,plotW=w-left-right,plotH=h-top-bottom;
+            const valid=function(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))};
+            const vals=[];rows.forEach(function(r){keys.forEach(function(k){if(valid(r[k.key]))vals.push(Number(r[k.key]))})});
+            if(!rows.length||!vals.length)return '<div class=\"muted\" style=\"padding:70px 8px;text-align:center\">データなし</div>';
+            let max=Math.max(...vals),min=Math.min(...vals);if(max===min){max+=1;min=Math.max(0,min-1)}
+            const x=function(i){return left+(rows.length<=1?plotW/2:i*plotW/(rows.length-1))},y=function(v){return top+plotH-(Number(v)-min)*plotH/(max-min||1)};
+            let out='<svg viewBox=\"0 0 '+w+' '+h+'\" width=\"100%\" height=\"100%\" role=\"img\"><line x1=\"'+left+'\" y1=\"'+(top+plotH)+'\" x2=\"'+(left+plotW)+'\" y2=\"'+(top+plotH)+'\" stroke=\"#cbd8ea\"/>';
+            const every=Math.max(1,Math.ceil(rows.length/10));rows.forEach(function(r,i){if(i%every===0||i===rows.length-1)out+='<text x=\"'+x(i)+'\" y=\"'+(h-8)+'\" text-anchor=\"middle\" class=\"svg-label\">'+esc(String(r.date||'').slice(5))+'</text>'});
+            keys.forEach(function(k,ki){const color=['#2774ee','#20a567','#f59e0b'][ki%3];let segment=[];const segments=[];rows.forEach(function(r,i){if(valid(r[k.key]))segment.push(x(i)+','+y(Number(r[k.key])));else if(segment.length){segments.push(segment);segment=[]}});if(segment.length)segments.push(segment);segments.forEach(function(points){if(points.length>1)out+='<polyline points=\"'+points.join(' ')+'\" fill=\"none\" stroke=\"'+color+'\" stroke-width=\"2.5\"/>'});rows.forEach(function(r,i){if(valid(r[k.key]))out+='<circle cx=\"'+x(i)+'\" cy=\"'+y(Number(r[k.key]))+'\" r=\"3\" fill=\"'+color+'\"/>'});out+='<text x=\"'+(left+ki*120)+'\" y=\"9\" class=\"svg-label\" fill=\"'+color+'\">'+esc(k.label)+'</text>'});
+            return out+'</svg>'
+          }"""
+          new_line = """function lineSvg(items,keys){
+            const rows=items||[],w=460,h=240,left=44,top=34,right=18,bottom=36,plotW=w-left-right,plotH=h-top-bottom;
+            const valid=function(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))};
+            const vals=[];rows.forEach(function(r){keys.forEach(function(k){if(valid(r[k.key]))vals.push(Number(r[k.key]))})});
+            if(!rows.length||!vals.length)return '<div class=\"muted\" style=\"padding:100px 8px;text-align:center\">データなし</div>';
+            let max=Math.max(...vals),min=Math.min(...vals);if(max===min){max+=1;min=Math.max(0,min-1)}else{const pad=(max-min)*.12;max+=pad;min=Math.max(0,min-pad)}
+            const x=function(i){return left+(rows.length<=1?plotW/2:i*plotW/(rows.length-1))},y=function(v){return top+plotH-(Number(v)-min)*plotH/(max-min||1)};
+            let out='<svg viewBox=\"0 0 '+w+' '+h+'\" width=\"100%\" height=\"100%\" role=\"img\"><line x1=\"'+left+'\" y1=\"'+(top+plotH)+'\" x2=\"'+(left+plotW)+'\" y2=\"'+(top+plotH)+'\" stroke=\"#cbd8ea\"/>';
+            const every=Math.max(1,Math.ceil(rows.length/8));rows.forEach(function(r,i){if(i%every===0||i===rows.length-1)out+='<text x=\"'+x(i)+'\" y=\"'+(h-10)+'\" text-anchor=\"middle\" class=\"svg-label\">'+esc(String(r.date||'').slice(5))+'</text>'});
+            keys.forEach(function(k,ki){const color=['#2774ee','#20a567','#f59e0b'][ki%3];let segment=[];const segments=[];rows.forEach(function(r,i){if(valid(r[k.key]))segment.push(x(i)+','+y(Number(r[k.key])));else if(segment.length){segments.push(segment);segment=[]}});if(segment.length)segments.push(segment);segments.forEach(function(points){if(points.length>1)out+='<polyline points=\"'+points.join(' ')+'\" fill=\"none\" stroke=\"'+color+'\" stroke-width=\"3\"/>'});rows.forEach(function(r,i){if(valid(r[k.key])){const cx=x(i),cy=y(Number(r[k.key])),offset=keys.length===1?-10:(ki===0?-12:ki===1?5:20),ly=Math.max(18,Math.min(h-bottom-2,cy+offset));out+='<circle cx=\"'+cx+'\" cy=\"'+cy+'\" r=\"4\" fill=\"'+color+'\"/><text x=\"'+cx+'\" y=\"'+ly+'\" text-anchor=\"middle\" class=\"svg-value\" style=\"fill:'+color+'\">'+esc(formatChartValue(r[k.key]))+'</text>'}});out+='<text x=\"'+(left+ki*125)+'\" y=\"16\" class=\"svg-label\" style=\"fill:'+color+'\">'+esc(k.label)+'</text>'});
+            return out+'</svg>'
+          }"""
+          s = replace_once(s, old_line, new_line, 'line graph numeric labels')
+          s = replace_once(s,
+            "function renderDashboard(d,appliedQuery){if(typeof appliedQuery==='string')appliedFilterQuery=appliedQuery;lastDashboard=d;const m=d.metrics||{};$('mParticipants').textContent=m.participantCount??0;$('mSessions').textContent=m.totalSessions??0;$('mUtterances').textContent=m.childUtteranceCount??0;$('mCompleteRate').textContent=String(m.completeRate??0)+'%';$('mLatest').textContent=m.latestAt||'-';$('lastRefresh').textContent=new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});",
+            "function renderDashboard(d,appliedQuery){if(typeof appliedQuery==='string')appliedFilterQuery=appliedQuery;lastDashboard=d;const m=d.metrics||{};$('mParticipants').textContent=m.participantCount??0;$('mSessions').textContent=m.totalSessions??0;$('mWordsPerMinute').textContent=formatChartValue(m.meanChildWordsPerMinute??0);$('mCompleteRate').textContent=String(m.completeRate??0)+'%';$('mLatest').textContent=m.latestAt||'-';$('lastRefresh').textContent=new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});",
+            'render words/min metric')
+          s = replace_once(s,
+            "const f=d.filters||{};setOptions('classId',f.classes);setOptions('grade',f.grades);setOptions('personaId',f.personas);setOptions('circle',f.circles);setOptions('labelCondition',f.labelConditions);setOptions('topic',f.topics,function(v){return topicLabels[v]||v});",
+            "const f=d.filters||{};setOptions('classId',['1','2','3','test','reserve'],function(v){return classLabels[v]||v});setOptions('grade',['5','6','test','reserve'],function(v){return gradeLabels[v]||v});setOptions('personaId',f.personas||[]);setOptions('circle',['Inner','Outer','Expanding']);setOptions('labelCondition',['shown','hidden'],function(v){return labelConditionLabels[v]||v});setOptions('topic',['intro','favorites','shizuoka_culture','talents','free'],function(v){return topicLabels[v]||v});",
+            'fixed render filter options')
+          s = replace_once(s,
+            "const aggregation=((d.charts||{}).aggregation||'daily');$('chartDailyTitle').textContent=aggregation==='weekly'?'週別セッション数':'日別セッション数';$('chartWordsTitle').textContent=aggregation==='weekly'?'1セッションあたり児童総語数（週別平均）':'1セッションあたり児童総語数（平均）';$('chartReflectionTitle').textContent=aggregation==='weekly'?'振り返り平均値（週別・1/3/5）':'振り返り平均値（1/3/5）';",
+            "const aggregation=((d.charts||{}).aggregation||'daily');$('chartDailyTitle').textContent=aggregation==='weekly'?'週別セッション数':'日別セッション数';$('chartWordsTitle').textContent=aggregation==='weekly'?'1分あたり平均発話語数（週別）':'1分あたり平均発話語数（日別）';$('chartReflectionTitle').textContent=aggregation==='weekly'?'振り返り平均値（週別・1/3/5）':'振り返り平均値（1/3/5）';",
+            'chart words/min title')
+          s = replace_once(s,
+            "$('chartDaily').innerHTML=barSvg((d.charts||{}).daily||[],'sessions',14);$('chartPersona').innerHTML=barSvg((d.charts||{}).personas||[],'value',9);$('chartCircle').innerHTML=barSvg((d.charts||{}).circles||[],'value',6);$('chartWords').innerHTML=lineSvg((d.charts||{}).daily||[],[{key:'mean_child_words',label:'平均語数'}]);$('chartReflection').innerHTML=lineSvg((d.charts||{}).daily||[],[{key:'reflection_conveyed',label:'伝える'},{key:'reflection_understood',label:'分かる'},{key:'reflection_culture',label:'気づき'}]);",
+            "$('chartDaily').innerHTML=barSvg((d.charts||{}).daily||[],'sessions',14);$('chartPersona').innerHTML=barSvg((d.charts||{}).personas||[],'value',9);$('chartWords').innerHTML=lineSvg((d.charts||{}).daily||[],[{key:'mean_child_words_per_minute',label:'語/分'}]);$('chartReflection').innerHTML=lineSvg((d.charts||{}).daily||[],[{key:'reflection_conveyed',label:'伝える'},{key:'reflection_understood',label:'分かる'},{key:'reflection_culture',label:'気づき'}]);",
+            'render four graphs')
+          s = replace_once(s,
+            "$('topExpressions').innerHTML=(d.topExpressions||[]).map(function(r,i){return '<div class=\"expression-row\"><span>'+(i+1)+'. '+esc(r.expression)+' <span class=\"muted\">('+esc(r.source)+')</span></span><b>'+esc(r.count)+'</b></div>'}).join('')||'<span class=\"muted\">データなし</span>';",
+            "$('topExpressions').innerHTML=(d.topExpressions||[]).map(function(r,i){return '<div class=\"expression-row\"><span>'+(i+1)+'. '+esc(r.expression)+' <span class=\"muted\">（'+esc(expressionSourceLabels[r.source]||r.source)+'）</span></span><b>'+esc(r.count)+'</b></div>'}).join('')||'<span class=\"muted\">データなし</span>';",
+            'clarify expression dictionary source')
+          nav_js = "document.querySelectorAll('[data-nav]').forEach(function(b){b.onclick=function(){const e=$(b.dataset.nav);if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'})}});health();"
+          s = replace_once(s, nav_js, "health();", 'remove top navigation handlers')
+          p.write_text(s)
+
+          # --- dashboard QA ---
+          p = Path('scripts/qa-dashboard-data-sync.ts')
+          s = p.read_text()
+          s = s.replace("metrics:{participantCount:128,totalSessions:384,childUtteranceCount:9842,completeRate:98.7,latestAt:'2026-09-03 14:32:00'}", "metrics:{participantCount:128,totalSessions:384,childUtteranceCount:9842,meanChildWordsPerMinute:18.4,completeRate:98.7,latestAt:'2026-09-03 14:32:00'}")
+          s = s.replace('sessions:45,mean_child_words:12.5,', 'sessions:45,mean_child_words:12.5,mean_child_words_per_minute:17.2,').replace('sessions:52,mean_child_words:14.2,', 'sessions:52,mean_child_words:14.2,mean_child_words_per_minute:19.1,')
+          s = s.replace("assert.equal(element('mUtterances').textContent,9842);", "assert.equal(element('mWordsPerMinute').textContent,'18.4');")
+          s = s.replace("for(const id of ['chartDaily','chartPersona','chartCircle','chartWords','chartReflection'])", "for(const id of ['chartDaily','chartPersona','chartWords','chartReflection'])")
+          s = s.replace("assert.ok(element('topExpressions').innerHTML.includes('surfing'));", "assert.ok(element('topExpressions').innerHTML.includes('surfing'));assert.ok(element('topExpressions').innerHTML.includes('プロフィール辞書'));assert.equal(element('topExpressions').innerHTML.includes('(persona)'),false);")
+          s = s.replace("element('classId').value='5-1';", "element('classId').value='1';")
+          s = s.replace("assert.equal(params.get('classId'),'5-1');", "assert.equal(params.get('classId'),'1');")
+          s = s.replace("location.href.includes('dataset=sessions')&&location.href.includes('classId=5-1')", "location.href.includes('dataset=sessions')&&location.href.includes('classId=1')")
+          old_nav_assert = "for(const label of ['研究データ概要','データ品質','CSVダウンロード','データ辞書'])assert.ok(pageSource.includes(label),'navigation missing '+label);"
+          s = s.replace(old_nav_assert, "assert.equal(pageSource.includes('data-nav='),false,'top section navigation buttons must be removed');")
+          s = s.replace("assert.ok(pageSource.includes('flex-wrap:wrap'),'research header/actions must wrap instead of overflowing');", "assert.ok(pageSource.includes('flex-wrap:wrap'),'research header/actions must wrap instead of overflowing');assert.ok(pageSource.includes('.svg-label{font-size:12px'),'graph labels must be readable');assert.ok(pageSource.includes('1分あたり平均発話語数'),'words/min metric and graph label missing');assert.equal(pageSource.includes('id=\"chartCircle\"'),false,'Inner/Outer/Expanding graph must be removed');assert.ok(pageSource.includes('５年')&&pageSource.includes('６年')&&pageSource.includes('１組')&&pageSource.includes('２組')&&pageSource.includes('３組'),'fixed grade/class labels missing');assert.ok(pageSource.includes('表示あり')&&pageSource.includes('表示なし'),'label condition wording must be clear');for(const label of Object.values(topicLabels))assert.ok(pageSource.includes(label),'theme option missing '+label);")
+          p.write_text(s)
+
+          # --- research export/linkage QA ---
+          p = Path('scripts/qa-research-export-complete.ts')
+          s = p.read_text()
+          s = s.replace("assert.equal(dashboard.metrics.childUtteranceCount,3);", "assert.equal(dashboard.metrics.childUtteranceCount,3);const expectedWordsPerMinute=Math.round(((Number(alpha.child_total_words)+Number(beta.child_total_words))*60/(Number(alpha.actual_duration_seconds)+Number(beta.actual_duration_seconds)))*10)/10;assert.equal(dashboard.metrics.meanChildWordsPerMinute,expectedWordsPerMinute);")
+          s = s.replace("assert.ok(dashboard.charts.circles.some((r)=>r.label==='Inner'));", "assert.ok(dashboard.charts.circles.some((r)=>r.label==='Inner'));assert.ok(dashboard.charts.daily.every((r)=>r.mean_child_words_per_minute===null||Number.isFinite(Number(r.mean_child_words_per_minute))),'words/min series must be numeric or null');")
+          s = s.replace("assert.ok(dashboard.topExpressions.some((r)=>r.source==='persona'));", "assert.ok(dashboard.topExpressions.some((r)=>r.source==='persona'));for(const item of dashboard.topExpressions)assert.ok(data.expressions.some((r)=>r.speaker==='child'&&String(r.dictionary_source)===String(item.source)&&String(r.expression).toLowerCase()===String(item.expression).toLowerCase()),'dashboard top expression must come from a child utterance');")
+          s = s.replace("assert.equal(dashboard.exportFiles.length,5);", "assert.equal(dashboard.exportFiles.length,5);assert.deepEqual(dashboard.filters.grades,['5','6','test','reserve']);assert.deepEqual(dashboard.filters.classes,['1','2','3','test','reserve']);assert.deepEqual(dashboard.filters.labelConditions,['shown','hidden']);assert.deepEqual(dashboard.filters.topics,['intro','favorites','shizuoka_culture','talents','free']);assert.ok(dashboard.charts.personas.every((r)=>!String(r.label).includes('(')),'persona graph should use readable names without IDs');")
+          insert_after = "assert.equal(filtered.codebook.length,data.codebook.length,'codebook must remain complete regardless of session filters');"
+          special = """\nconst displayClassFiltered=filterResearchExportDataSets(data,{grade:'5',classId:'1'});assert.equal(displayClassFiltered.sessions.length,1);assert.equal(displayClassFiltered.sessions[0].session_id,'session_alpha');
+          const specialRaw=[...sessions,{...sessions[0],sessionId:'session_test',researchId:'RTEST',classId:'テスト',startedAt:new Date(base+172800000).toISOString(),endedAt:new Date(base+172920000).toISOString()},{...sessions[0],sessionId:'session_reserve',researchId:'RRESERVE',classId:'予備',startedAt:new Date(base+259200000).toISOString(),endedAt:new Date(base+259320000).toISOString()}];
+          const specialData=buildResearchExportDataSets(specialRaw as any);assert.equal(filterResearchExportDataSets(specialData,{grade:'test'}).sessions.length,1);assert.equal(filterResearchExportDataSets(specialData,{grade:'reserve'}).sessions.length,1);assert.equal(filterResearchExportDataSets(specialData,{classId:'test'}).sessions.length,1);assert.equal(filterResearchExportDataSets(specialData,{classId:'reserve'}).sessions.length,1);"""
+          if special.strip() not in s:
+              s = s.replace(insert_after, insert_after + special)
+          s = s.replace("assert.ok(page.includes('chartDaily')&&page.includes('chartPersona')&&page.includes('chartCircle')&&page.includes('chartWords')&&page.includes('chartReflection'),'all five graph containers must exist');", "assert.ok(page.includes('chartDaily')&&page.includes('chartPersona')&&page.includes('chartWords')&&page.includes('chartReflection'),'four required graph containers must exist');assert.equal(page.includes('id=\"chartCircle\"'),false,'circle graph container must not exist');")
+          p.write_text(s)
+          PY
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Full QA
+        run: npm run qa
+      - name: Production build
+        run: npm run build
+      - name: Real Chrome researcher dashboard QA
+        shell: bash
+        run: |
+          npm install --no-save --package-lock=false playwright-core@1.55.0 >/dev/null 2>&1
+          npx tsx -e "import fs from 'node:fs'; import { managementPageHtml } from './src/server/managementPage.ts'; fs.writeFileSync('/tmp/research-dashboard.html', managementPageHtml());"
+          cat > /tmp/research-browser-qa.mjs <<'JS'
+          import fs from 'node:fs';
+          import { chromium } from 'playwright-core';
+          const candidates=['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium','/usr/bin/chromium-browser'];
+          const executablePath=candidates.find(fs.existsSync); if(!executablePath) throw new Error('Chrome executable not found');
+          const sample={success:true,metrics:{participantCount:128,totalSessions:384,childUtteranceCount:9842,meanChildWordsPerMinute:18.4,completeRate:98.7,latestAt:'2026-09-03 14:32:00'},filters:{personas:['emma_usa','oliver_uk','liam_australia','chloe_canada','bence_hungary','zofia_poland','rahul_bangladesh','linh_vietnam','aung_myanmar']},charts:{aggregation:'daily',daily:[{date:'2026-09-01',sessions:45,mean_child_words_per_minute:17.2,reflection_conveyed:3.1,reflection_understood:3.2,reflection_culture:3.0},{date:'2026-09-02',sessions:52,mean_child_words_per_minute:19.1,reflection_conveyed:3.4,reflection_understood:3.5,reflection_culture:3.3}],personas:[{label:'Emma Johnson',value:45},{label:'Rahul Hasan',value:30}]},dataQuality:[{label:'complete',value:379}],systemQuality:[{label:'AI応答失敗',value:0},{label:'マイクエラー',value:1},{label:'TTSフォールバック',value:0}],topExpressions:[{expression:'surfing',count:5,source:'persona'}],recentSessions:[],exportFiles:[{dataset:'sessions',fileName:'sessions.csv',contains:'session data',analysisUse:'analysis',rowCount:384},{dataset:'utterances',fileName:'utterances.csv',contains:'utterances',analysisUse:'analysis',rowCount:1000},{dataset:'expressions',fileName:'expressions.csv',contains:'expressions',analysisUse:'analysis',rowCount:300},{dataset:'personas',fileName:'personas.csv',contains:'personas',analysisUse:'analysis',rowCount:9},{dataset:'codebook',fileName:'codebook.csv',contains:'variables',analysisUse:'analysis',rowCount:180}]};
+          const filtered=structuredClone(sample);filtered.metrics={...sample.metrics,totalSessions:120,meanChildWordsPerMinute:12.3};
+          const browser=await chromium.launch({headless:true,executablePath,args:['--no-sandbox']});
+          for(const viewport of [{width:1920,height:1080},{width:1536,height:900},{width:1366,height:900},{width:1024,height:900},{width:768,height:900},{width:390,height:844}]){
+            const page=await browser.newPage({viewport});
+            await page.addInitScript(({sample,filtered})=>{window.fetch=async(url)=>{const s=String(url);const data=s.includes('/api/health')?{appVersion:'1.0.7',build:'test'}:s.includes('/api/management/login')?{role:'researcher'}:s.includes('/api/management/research.dashboard')&&s.includes('grade=5')?filtered:sample;return {ok:true,status:200,json:async()=>data};};},{sample,filtered});
+            await page.goto('file:///tmp/research-dashboard.html');
+            await page.fill('#u','researcher');await page.fill('#p','test');await page.click('#loginBtn');await page.waitForTimeout(250);
+            const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);if(overflow>1)throw new Error(`horizontal overflow ${overflow}px at ${viewport.width}`);
+            if(await page.locator('[data-nav]').count())throw new Error('removed top navigation buttons are still present');
+            if(await page.locator('#chartCircle').count())throw new Error('circle graph still present');
+            if((await page.locator('#mWordsPerMinute').textContent())!=='18.4')throw new Error('words/min top metric mismatch');
+            if(await page.locator('#chartWords .svg-value').count()<2)throw new Error('words/min graph numeric labels missing');
+            if(await page.locator('#chartReflection .svg-value').count()<3)throw new Error('reflection graph numeric labels missing');
+            const grade=await page.locator('#grade option').allTextContents();if(JSON.stringify(grade)!==JSON.stringify(['すべて','５年','６年','テスト','予備']))throw new Error('grade options mismatch '+JSON.stringify(grade));
+            const classes=await page.locator('#classId option').allTextContents();if(JSON.stringify(classes)!==JSON.stringify(['すべて','１組','２組','３組','テスト','予備']))throw new Error('class options mismatch '+JSON.stringify(classes));
+            const label=await page.locator('#labelCondition option').allTextContents();if(JSON.stringify(label)!==JSON.stringify(['すべて','表示あり','表示なし']))throw new Error('label condition options mismatch '+JSON.stringify(label));
+            const topics=await page.locator('#topic option').allTextContents();if(topics.length!==6)throw new Error('all five themes plus all must be present');
+            const font=Number.parseFloat(await page.locator('#chartDaily .svg-label').first().evaluate(el=>getComputedStyle(el).fontSize));if(font<12)throw new Error('graph label font too small '+font);
+            const filterFont=Number.parseFloat(await page.locator('.filters label').first().evaluate(el=>getComputedStyle(el).fontSize));if(filterFont<13)throw new Error('filter label font too small '+filterFont);
+            const expression=await page.locator('#topExpressions').textContent();if(!expression?.includes('surfing')||!expression.includes('プロフィール辞書')||expression.includes('(persona)'))throw new Error('child expression source wording mismatch');
+            await page.selectOption('#grade','5');await page.waitForTimeout(350);if((await page.locator('#mWordsPerMinute').textContent())!=='12.3')throw new Error('filter change did not refresh dashboard immediately');
+            const badButtons=await page.locator('button:visible').evaluateAll((els)=>els.filter(el=>{const r=el.getBoundingClientRect();return r.left<-1||r.right>window.innerWidth+1}).map(el=>el.textContent));if(badButtons.length)throw new Error('button overflow '+JSON.stringify(badButtons));
+            await page.close();
+          }
+          await browser.close();console.log('Real Chrome researcher dashboard readability/filter QA: PASS');
+          JS
+          node /tmp/research-browser-qa.mjs
+      - name: Verify student app protected files unchanged
+        shell: bash
+        run: |
+          git diff origin/main -- src/App.tsx src/components src/utils/speech.ts src/data/curriculum.ts src/assets/images | cat
+          test -z "$(git diff --name-only origin/main -- src/App.tsx src/components src/utils/speech.ts src/data/curriculum.ts src/assets/images)"
+      - name: Commit validated changes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No code changes to commit"
+            exit 0
+          fi
+          git config user.name "danksmash"
+          git config user.email "danksmash@gmail.com"
+          git add src/server/researchDashboard.ts src/server/managementPage.ts scripts/qa-dashboard-data-sync.ts scripts/qa-research-export-complete.ts
+          git commit -m "fix: improve researcher dashboard readability and filters"
+          git push origin HEAD:codex/research-dashboard-readability-filters
