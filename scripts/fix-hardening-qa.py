@@ -42,4 +42,10 @@ server=(p/'server.ts').read_text(encoding='utf-8').replace("'time-cluster-v1'", 
 auth=(p/'src/server/auth.ts').read_text(encoding='utf-8')
 auth=auth.replace("  if (path === '/api/management/research.csv') return true;", "  if (path === '/api/management/research.csv') return true;\n  if (path === '/api/management/research.summary') return true;")
 (p/'src/server/auth.ts').write_text(auth,encoding='utf-8')
-print('Aligned research QA, classifier and researcher-only authorization.')
+
+speech=(p/'src/utils/speech.ts').read_text(encoding='utf-8')
+local_extra="  onError?: (e: unknown) => void,\n  onProvider?: (provider: 'google-chirp3-hd' | 'device-fallback', effectiveRate: number) => void\n): SpeechSynthesisUtterance | null {"
+local_plain="  onError?: (e: unknown) => void\n): SpeechSynthesisUtterance | null {"
+speech=speech.replace(local_extra,local_plain,1)
+(p/'src/utils/speech.ts').write_text(speech,encoding='utf-8')
+print('Aligned research QA/auth and removed unused local TTS callback.')
