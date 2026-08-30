@@ -2,78 +2,97 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { managementPageHtml } from '../src/server/managementPage';
 
-const html = managementPageHtml();
-const match = html.match(/<script>([\s\S]*?)<\/script>/);
-if (!match) throw new Error('management script missing');
+const html=managementPageHtml();
+const match=html.match(/<script>([\s\S]*?)<\/script>/);
+if(!match)throw new Error('management script missing');
 
-const elements = new Map<string, any>();
-function element(id: string) {
-  if (!elements.has(id)) {
-    const classes = new Set<string>();
-    elements.set(id, {
-      id, value: '', checked: false, innerHTML: '', textContent: '', style: {}, options: [], dataset: {},
-      classList: { add: (...xs: string[]) => xs.forEach((x) => classes.add(x)), remove: (...xs: string[]) => xs.forEach((x) => classes.delete(x)), contains: (x: string) => classes.has(x) },
-      addEventListener: () => {}, appendChild: () => {}, remove: () => {}, click: () => {},
-    });
-  }
-  return elements.get(id);
+const elements=new Map<string,any>();
+const datasetButtons:any[]=[];
+function makeElement(id:string):any{
+  const classes=new Set<string>();
+  return {id,value:'',checked:false,disabled:false,innerHTML:'',textContent:'',style:{},options:[{value:'all'}],dataset:{},onclick:null,onchange:null,
+    className:'',classList:{add:(...xs:string[])=>xs.forEach(x=>classes.add(x)),remove:(...xs:string[])=>xs.forEach(x=>classes.delete(x)),contains:(x:string)=>classes.has(x)},
+    scrollIntoView:()=>{},addEventListener:()=>{},appendChild:()=>{},remove:()=>{},click(){if(typeof this.onclick==='function')return this.onclick();},change(){if(typeof this.onchange==='function')return this.onchange();}};
 }
-const documentStub = {
-  getElementById: (id: string) => element(id),
-  querySelectorAll: () => [] as any[],
-  createElement: (tag: string) => element('created-' + tag + '-' + Math.random()),
-  body: { appendChild: () => {} },
+function element(id:string){if(!elements.has(id))elements.set(id,makeElement(id));return elements.get(id)}
+for(const id of ['grade','classId','personaId','circle','labelCondition','topic'])element(id).value='all';
+for(const dataset of ['sessions','utterances','expressions','personas','codebook']){
+  const b=makeElement('dynamic-'+dataset);b.dataset.exportDataset=dataset;datasetButtons.push(b);
+}
+const documentStub:any={
+  getElementById:(id:string)=>element(id),
+  querySelectorAll:(selector:string)=>selector==='[data-export-dataset]'?datasetButtons:[],
+  createElement:(tag:string)=>makeElement('created-'+tag),
+  body:{appendChild:()=>{}},
 };
-const context: any = {
-  console, document: documentStub, window: {}, location: { reload: () => {} }, alert: () => {},
-  fetch: async () => ({ ok: false, json: async () => ({}) }),
-  URL, URLSearchParams, Blob, Set, Map, Math, Number, String, Array, Object, Date,
-  setTimeout: () => 0, clearTimeout: () => {},
+const location:any={href:'',reload:()=>{}};
+const sample={
+  success:true,
+  metrics:{participantCount:128,totalSessions:384,childUtteranceCount:9842,completeRate:98.7,latestAt:'2026-09-03 14:32:00'},
+  filters:{classes:['5-1','6-2'],grades:['5','6'],personas:['emma_usa','rahul_bangladesh'],circles:['Inner','Outer'],labelConditions:['shown','hidden'],topics:['favorites','shizuoka_culture']},
+  charts:{
+    daily:[{date:'2026-09-01',sessions:45,mean_child_words:12.5,reflection_conveyed:3.1,reflection_understood:3.2,reflection_culture:3.0},{date:'2026-09-02',sessions:52,mean_child_words:14.2,reflection_conveyed:3.4,reflection_understood:3.5,reflection_culture:3.3}],
+    personas:[{label:'Emma (emma_usa)',value:45},{label:'Rahul (rahul_bangladesh)',value:30}],circles:[{label:'Inner',value:45},{label:'Outer',value:30}],aggregation:'daily'
+  },
+  dataQuality:[{label:'complete',value:379},{label:'missing_reflection',value:5}],
+  systemQuality:[{label:'AI応答失敗',value:2},{label:'マイクエラー',value:1},{label:'TTSフォールバック',value:3}],
+  topExpressions:[{expression:'I like',count:342,source:'curriculum'},{expression:'surfing',count:187,source:'persona'}],
+  recentSessions:[{local_started_at:'2026-09-03 14:31:00',research_id:'R0123',persona_name:'Emma',persona_id:'emma_usa',topic:'好きなもの',target_duration_minutes:3,data_quality_flag:'complete'}],
+  exportFiles:[
+    {dataset:'sessions',fileName:'sessions.csv',contains:'session data',analysisUse:'longitudinal',rowCount:384},
+    {dataset:'utterances',fileName:'utterances.csv',contains:'utterances',analysisUse:'interaction',rowCount:12000},
+    {dataset:'expressions',fileName:'expressions.csv',contains:'expressions',analysisUse:'vocabulary',rowCount:3000},
+    {dataset:'personas',fileName:'personas.csv',contains:'personas',analysisUse:'conditions',rowCount:9},
+    {dataset:'codebook',fileName:'codebook.csv',contains:'variables',analysisUse:'reproducibility',rowCount:180},
+  ],
 };
+const context:any={console,document:documentStub,window:{},location,alert:()=>{},URL,URLSearchParams,Set,Map,Math,Number,String,Array,Object,Date,
+  fetch:async(url:string)=>({ok:true,json:async()=>url.includes('/api/health')?{appVersion:'1.0.7',build:'test'}:sample}),
+  setTimeout:()=>0,clearTimeout:()=>{}};
 vm.createContext(context);
-vm.runInContext(match[1], context, { filename: 'management-data-sync.js' });
+vm.runInContext(match[1],context,{filename:'research-dashboard.js'});
 
-assert.equal(context.periodKey('2026-08-28', 'day'), '2026-08-28');
-assert.equal(context.periodKey('2026-08-28', 'week'), '2026-08-24~2026-08-30', 'Weekly key must display the full Monday-Sunday range');
-assert.equal(context.periodKey('2026-08-29', 'month'), '2026-08');
+context.renderDashboard(sample);
+assert.equal(element('mParticipants').textContent,128);
+assert.equal(element('mSessions').textContent,384);
+assert.equal(element('mUtterances').textContent,9842);
+assert.equal(element('mCompleteRate').textContent,'98.7%');
+for(const id of ['chartDaily','chartPersona','chartCircle','chartWords','chartReflection'])assert.ok(element(id).innerHTML.includes('<svg'),id+' must render an inline SVG graph');
+assert.ok(element('qualityRows').innerHTML.includes('完全ケース'));assert.ok(element('qualityRows').innerHTML.includes('システムイベント'));assert.ok(element('qualityRows').innerHTML.includes('TTSフォールバック'));
+assert.ok(element('topExpressions').innerHTML.includes('surfing'));
+assert.ok(element('recentRows').innerHTML.includes('R0123'));
+assert.ok(element('exportCards').innerHTML.includes('sessions.csv')&&element('exportCards').innerHTML.includes('codebook.csv'));
 
-context.researchData = [
-  { research_id:'R-A', class_id:'', session_id:'s1', local_date:'2026-08-28', total_turns:'2', total_child_words:'10', actual_duration_seconds:'60', lifetime_session_number:'1', data_quality_flag:'complete', reflection_conveyed_ideas:'3', reflection_understood_partner:'4', reflection_noticed_language_culture:'3', topic:'shizuoka_culture' },
-  { research_id:'R-A', class_id:'', session_id:'s2', local_date:'2026-08-29', total_turns:'4', total_child_words:'30', actual_duration_seconds:'120', lifetime_session_number:'2', data_quality_flag:'complete', reflection_conveyed_ideas:'4', reflection_understood_partner:'4', reflection_noticed_language_culture:'5', topic:'talents' },
-  { research_id:'R-B', class_id:'5-1', session_id:'s3', local_date:'2026-08-29', total_turns:'6', total_child_words:'50', actual_duration_seconds:'180', lifetime_session_number:'1', data_quality_flag:'complete', reflection_conveyed_ideas:'5', reflection_understood_partner:'5', reflection_noticed_language_culture:'5', topic:'favorites' },
-];
-element('researchStart').value = '2026-08-28';
-element('researchEnd').value = '2026-08-29';
-element('researchDashboardClass').value = 'all';
-element('researchMetric').value = 'words';
-context.researchAgg = 'day';
-context.updateResearchDashboard();
-assert.equal(element('researchSessions').textContent, 3);
-assert.ok(element('researchLegend').innerHTML.includes('すべて'));
-assert.ok(!element('researchLegend').innerHTML.includes('学級未設定'), 'all scope must not be mislabeled as unassigned class');
-assert.ok(element('researchChart').innerHTML.includes('08/28') && element('researchChart').innerHTML.includes('08/29'), 'daily chart must show each selected date');
-assert.ok(element('researchConditionSummary').textContent.includes('日別'));
-assert.ok(element('researchUsageSummary').innerHTML.includes('静岡のじまん＆世界の文化'));
-assert.ok(element('researchUsageSummary').innerHTML.includes('できること・得意なこと'));
-assert.ok(element('researchMedianLabel').textContent.includes('発話語数'));
-assert.ok(element('researchStageSummary').innerHTML.includes('語'));
+element('start').value='2026-09-01';element('end').value='2026-09-03';element('grade').value='5';element('classId').value='5-1';element('personaId').value='emma_usa';element('circle').value='Inner';element('labelCondition').value='shown';element('topic').value='favorites';element('completeOnly').checked=true;
+const params=context.filterParams();
+assert.equal(params.get('start'),'2026-09-01');assert.equal(params.get('end'),'2026-09-03');assert.equal(params.get('grade'),'5');assert.equal(params.get('classId'),'5-1');
+assert.equal(params.get('personaId'),'emma_usa');assert.equal(params.get('circle'),'Inner');assert.equal(params.get('labelCondition'),'shown');assert.equal(params.get('topic'),'favorites');assert.equal(params.get('completeOnly'),'1');
+const dashboardUrl=context.queryUrl('/api/management/research.dashboard');
+assert.ok(dashboardUrl.includes('personaId=emma_usa')&&dashboardUrl.includes('completeOnly=1'),'dashboard API must receive every active filter');
+context.renderDashboard(sample,params.toString());
+assert.ok(context.appliedQueryUrl('/api/management/research.csv','sessions').includes('personaId=emma_usa'),'applied dashboard filters must be snapshotted for exports');
 
-// Changing analysis metric must update both descriptive/stat cards and lifetime-stage summary.
-element('researchMetric').value = 'turns';
-context.updateResearchDashboard();
-assert.ok(element('researchMedianLabel').textContent.includes('ターン数'));
-assert.ok(element('researchStageSummary').innerHTML.includes('回'));
-assert.ok(!element('researchStageSummary').innerHTML.includes('語</b>'), 'stage summary must not remain hard-wired to word count');
+context.downloadDataset('sessions');
+assert.ok(location.href.startsWith('/api/management/research.csv?'));
+assert.ok(location.href.includes('dataset=sessions')&&location.href.includes('classId=5-1'),'CSV download must use the same dashboard filters');
 
-// Date and class dropdowns must filter every dependent R2 summary consistently.
-element('researchDashboardClass').value = '5-1';
-context.updateResearchDashboard();
-assert.equal(element('researchSessions').textContent, 1);
-assert.ok(element('researchConditionSummary').textContent.includes('対象: 5-1'));
-element('researchDashboardClass').value = 'all';
-element('researchStart').value = '2026-08-29';
-context.updateResearchDashboard();
-assert.equal(element('researchSessions').textContent, 2);
-assert.ok(!element('researchChart').innerHTML.includes('08/28'));
+element('bundleBtn').onclick();
+assert.ok(location.href.startsWith('/api/management/research.bundle.zip'));
+assert.ok(location.href.includes('personaId=emma_usa'),'ZIP download must use the same dashboard filters');
 
-console.log('Dashboard data/filter synchronization QA: PASS');
+context.resetFilters();
+assert.equal(element('start').value,'');assert.equal(element('end').value,'');assert.equal(element('classId').value,'all');assert.equal(element('completeOnly').checked,false);
+
+const pageSource=html;
+for(const label of ['研究データ概要','データ品質','CSVダウンロード','データ辞書'])assert.ok(pageSource.includes(label),'navigation missing '+label);
+for(const id of ['filterBtn','resetBtn','refreshBtn','bundleBtn','logoutBtn'])assert.ok(pageSource.includes('id="'+id+'"'),'button missing '+id);
+assert.ok(pageSource.includes("$('filterBtn').onclick=loadDashboard"),'filter button must be linked to dashboard refresh');
+assert.ok(pageSource.includes("$('refreshBtn').onclick=loadDashboard"),'refresh button must be linked to dashboard refresh');
+assert.ok(pageSource.includes("$('bundleBtn').onclick"),'bundle button must be linked to download endpoint');
+assert.ok(pageSource.includes('onchange=scheduleDashboardReload'),'all filter controls must auto-refresh the dashboard');
+assert.ok(pageSource.includes('appliedQueryUrl'),'CSV and ZIP downloads must use the last successfully rendered filter snapshot');
+assert.ok(pageSource.includes('flex-wrap:wrap'),'research header/actions must wrap instead of overflowing');
+assert.equal(pageSource.includes('博士'),false,'researcher UI must not display 博士');
+for(const id of ['start','end','grade','classId','personaId','circle','labelCondition','topic','completeOnly'])assert.equal(typeof element(id).onchange,'function',id+' must have immediate-change binding');
+
+console.log('Research dashboard graph/button/filter linkage QA: PASS');

@@ -161,7 +161,7 @@ assert.ok(reissueSource.indexOf('const created = await createStudentCode(newCode
 assert.ok(authHardening.includes('/api/management/research.bundle.zip'),'researcher must be allowed to download the protected one-snapshot bundle');
 assert.ok(serverHardening.includes('/api/management/research.bundle.zip'),'one-snapshot ZIP export endpoint must exist');
 assert.ok(managementHardening.includes('/api/management/research.bundle.zip'),'research management UI must expose the same-snapshot ZIP export');
-assert.ok(managementHardening.includes('/api/management/research.summary'),'research management UI must expose anonymous summary data');
+assert.ok(managementHardening.includes('/api/management/research.dashboard'),'research management UI must expose anonymous dashboard data');
 assert.ok(!managementHardening.includes('教師用管理'),'teacher management UI must be removed');
 assert.ok(appSource.includes('sessionSaveQueueRef'),'checkpoint writes must be serialized to avoid stale overwrite races');
 assert.ok(appSource.includes('Research session checkpoint unavailable'),'in-progress session checkpoints must be attempted');
