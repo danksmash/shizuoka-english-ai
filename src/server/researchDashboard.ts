@@ -279,16 +279,15 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
   const participants = new Set(data.sessions.map((row) => String(row.research_id || '')).filter(Boolean));
   const complete = data.sessions.filter((row) => String(row.data_quality_flag || '') === 'complete').length;
   const latestAt = data.sessions.map((row) => String(row.local_ended_at || row.local_started_at || '')).sort().at(-1) || '';
-  const daily = new Map<string, { sessions:number; words:number[]; reflections:[number[],number[],number[]] }>();
+  type SeriesBucket={sessions:number;words:number[];reflections:[number[],number[],number[]]};
+  const daily = new Map<string, SeriesBucket>();
+  const weekly = new Map<string, SeriesBucket>();
+  const weekStart=(date:string):string=>{const d=new Date(`${date}T00:00:00Z`);if(Number.isNaN(d.getTime()))return date;const offset=(d.getUTCDay()+6)%7;d.setUTCDate(d.getUTCDate()-offset);return d.toISOString().slice(0,10);};
+  const addSeries=(target:Map<string,SeriesBucket>,key:string,row:Row)=>{const d=target.get(key)||{sessions:0,words:[],reflections:[[],[],[]]};d.sessions+=1;const words=Number(row.child_total_words);if(Number.isFinite(words))d.words.push(words);const refs=[row.reflection_conveyed_ideas,row.reflection_understood_partner,row.reflection_noticed_language_culture];refs.forEach((value,index)=>{const n=Number(value);if([1,3,5].includes(n))d.reflections[index].push(n)});target.set(key,d);};
   for (const row of data.sessions) {
     const date = String(row.local_date || '');
     if (!date) continue;
-    const d = daily.get(date) || { sessions:0, words:[], reflections:[[],[],[]] };
-    d.sessions += 1;
-    d.words.push(Number(row.child_total_words || 0));
-    const refs = [row.reflection_conveyed_ideas,row.reflection_understood_partner,row.reflection_noticed_language_culture];
-    refs.forEach((value,index)=>{ const n=Number(value); if ([1,3,5].includes(n)) d.reflections[index].push(n); });
-    daily.set(date,d);
+    addSeries(daily,date,row);addSeries(weekly,weekStart(date),row);
   }
   const counts = (key: string) => {
     const map = new Map<string,number>();
@@ -306,20 +305,23 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
   const topExpressions=[...topMap.entries()].map(([key,v])=>({expression:key.split(':').slice(1).join(':'),count:v.count,source:v.source})).sort((a,b)=>b.count-a.count).slice(0,10);
   const quality = counts('data_quality_flag');
   const sumField = (key: string) => data.sessions.reduce((sum,row)=>sum+Number(row[key]||0),0);
-  quality.push(
-    { label:'AI request failure', value:sumField('ai_request_failure_count') },
-    { label:'Mic error', value:sumField('mic_error_count') },
-    { label:'TTS fallback', value:sumField('tts_fallback_count') },
-  );
+  const systemQuality=[
+    { label:'AI応答失敗', value:sumField('ai_request_failure_count') },
+    { label:'マイクエラー', value:sumField('mic_error_count') },
+    { label:'TTSフォールバック', value:sumField('tts_fallback_count') },
+  ];
   const recentSessions = [...data.sessions].sort((a,b)=>String(b.local_started_at||'').localeCompare(String(a.local_started_at||''))).slice(0,10).map((row)=>({
     local_started_at:row.local_started_at||'', research_id:row.research_id||'', persona_id:row.persona_id||'', persona_name:personaNames.get(String(row.persona_id||''))||'',
     topic:topicLabel(String(row.topic||'')), target_duration_minutes:row.target_duration_minutes||'', data_quality_flag:row.data_quality_flag||''
   }));
-  const dailyRows=[...daily.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([date,value])=>({
+  const seriesRows=(source:Map<string,SeriesBucket>)=>[...source.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([date,value])=>({
     date, sessions:value.sessions, mean_child_words:round(average(value.words),1),
-    reflection_conveyed:round(average(value.reflections[0]),2), reflection_understood:round(average(value.reflections[1]),2),
-    reflection_culture:round(average(value.reflections[2]),2),
+    reflection_conveyed:value.reflections[0].length?round(average(value.reflections[0]),2):null,
+    reflection_understood:value.reflections[1].length?round(average(value.reflections[1]),2):null,
+    reflection_culture:value.reflections[2].length?round(average(value.reflections[2]),2):null,
   }));
+  const dailyRows=seriesRows(daily),weeklyRows=seriesRows(weekly),aggregation=dailyRows.length>21?'weekly':'daily';
+  const chartRows=aggregation==='weekly'?weeklyRows:dailyRows;
   return {
     success:true,
     metrics:{
@@ -331,8 +333,9 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
       classes:uniqueSorted(all.sessions,'class_id'), grades:uniqueSorted(all.sessions,'grade_level'), personas:uniqueSorted(all.sessions,'persona_id'),
       circles:uniqueSorted(all.sessions,'accent_circle'), labelConditions:uniqueSorted(all.sessions,'persona_label_condition'), topics:uniqueSorted(all.sessions,'topic'),
     },
-    charts:{ daily:dailyRows, personas:personaUsage, circles:counts('accent_circle') },
+    charts:{ daily:chartRows, aggregation, personas:personaUsage, circles:counts('accent_circle') },
     dataQuality:quality,
+    systemQuality,
     topExpressions,
     recentSessions,
     exportFiles:([

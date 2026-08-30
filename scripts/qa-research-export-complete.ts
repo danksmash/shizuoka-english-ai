@@ -136,13 +136,25 @@ assert.ok(dashboard.charts.personas.length===2);
 assert.ok(dashboard.charts.circles.some((r)=>r.label==='Inner'));
 assert.ok(dashboard.topExpressions.some((r)=>r.source==='persona'));
 assert.equal(dashboard.exportFiles.length,5);
-assert.ok(dashboard.dataQuality.some((r)=>r.label==='AI request failure'&&r.value===1),'dashboard must expose AI failure quality events');
-assert.ok(dashboard.dataQuality.some((r)=>r.label==='Mic error'&&r.value===1),'dashboard must expose microphone error quality events');
-assert.ok(dashboard.dataQuality.some((r)=>r.label==='TTS fallback'&&r.value===1),'dashboard must expose TTS fallback quality events');
+assert.ok(dashboard.systemQuality.some((r)=>r.label==='AI応答失敗'&&r.value===1),'dashboard must expose AI failure events separately');
+assert.ok(dashboard.systemQuality.some((r)=>r.label==='マイクエラー'&&r.value===1),'dashboard must expose microphone errors separately');
+assert.ok(dashboard.systemQuality.some((r)=>r.label==='TTSフォールバック'&&r.value===1),'dashboard must expose TTS fallback separately');
 const schemaCodebook=data.codebook.find((r)=>r.file_name==='sessions.csv'&&r.variable==='schema_version')!;
 assert.equal(schemaCodebook.data_type,'number','schema_version must be typed as numeric in codebook');
 const rateCodebook=data.codebook.find((r)=>r.file_name==='sessions.csv'&&r.variable==='student_selected_speech_rate')!;
 assert.equal(rateCodebook.allowed_values,'0.75–1.25','speech rate range must be documented in codebook');
+const betaDate=String(beta.local_date||'');
+const betaSeries=dashboard.charts.daily.find((r)=>r.date===betaDate)!;
+assert.equal(betaSeries.reflection_conveyed,null,'missing reflection must stay null, never become a false zero score');
+for(const utterance of data.utterances){const session=data.sessions.find((r)=>r.session_id===utterance.session_id)!;assert.ok(session,'orphan utterance');assert.equal(utterance.research_id,session.research_id);assert.equal(utterance.class_id,session.class_id);assert.equal(utterance.persona_id,session.persona_id);assert.equal(utterance.topic,session.topic);}
+for(const expression of data.expressions){const utterance=data.utterances.find((r)=>r.utterance_id===expression.utterance_id)!;assert.ok(utterance,'orphan expression');assert.equal(expression.session_id,utterance.session_id);assert.equal(expression.research_id,utterance.research_id);assert.equal(expression.class_id,utterance.class_id);assert.equal(expression.speaker,utterance.speaker);}
+for(const session of data.sessions)assert.ok(personaIds.has(String(session.persona_id)),'every session persona_id must resolve in personas.csv');
+const expectedCodebookRows=['sessions','utterances','expressions','personas','codebook'].reduce((sum,name)=>sum+RESEARCH_EXPORT_HEADERS[name as keyof typeof RESEARCH_EXPORT_HEADERS].length,0);
+assert.equal(data.codebook.length,expectedCodebookRows,'codebook must contain exactly one row for every exported column');
+const longSessions=Array.from({length:22},(_,i)=>({...sessions[0],sessionId:'long_'+i,researchId:'RLONG',startedAt:new Date(base+i*86400000).toISOString(),endedAt:new Date(base+i*86400000+120000).toISOString()}));
+const longDashboard=buildResearchDashboardData(longSessions as any,{});
+assert.equal(longDashboard.charts.aggregation,'weekly','more than 21 daily points must aggregate to weekly display');
+assert.ok(longDashboard.charts.daily.length<22,'weekly aggregation must reduce chart density');
 
 const forbidden=['studentId','student_id','learningCode','learning_code','teacherStudentId','teacher_student_id','name_raw'];
 for(const dataset of ['sessions','utterances','expressions'] as const){

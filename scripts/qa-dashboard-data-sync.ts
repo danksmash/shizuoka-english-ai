@@ -10,9 +10,9 @@ const elements=new Map<string,any>();
 const datasetButtons:any[]=[];
 function makeElement(id:string):any{
   const classes=new Set<string>();
-  return {id,value:'',checked:false,innerHTML:'',textContent:'',style:{},options:[{value:'all'}],dataset:{},onclick:null,
+  return {id,value:'',checked:false,disabled:false,innerHTML:'',textContent:'',style:{},options:[{value:'all'}],dataset:{},onclick:null,onchange:null,
     className:'',classList:{add:(...xs:string[])=>xs.forEach(x=>classes.add(x)),remove:(...xs:string[])=>xs.forEach(x=>classes.delete(x)),contains:(x:string)=>classes.has(x)},
-    scrollIntoView:()=>{},addEventListener:()=>{},appendChild:()=>{},remove:()=>{},click(){if(typeof this.onclick==='function')return this.onclick();}};
+    scrollIntoView:()=>{},addEventListener:()=>{},appendChild:()=>{},remove:()=>{},click(){if(typeof this.onclick==='function')return this.onclick();},change(){if(typeof this.onchange==='function')return this.onchange();}};
 }
 function element(id:string){if(!elements.has(id))elements.set(id,makeElement(id));return elements.get(id)}
 for(const id of ['grade','classId','personaId','circle','labelCondition','topic'])element(id).value='all';
@@ -32,9 +32,10 @@ const sample={
   filters:{classes:['5-1','6-2'],grades:['5','6'],personas:['emma_usa','rahul_bangladesh'],circles:['Inner','Outer'],labelConditions:['shown','hidden'],topics:['favorites','shizuoka_culture']},
   charts:{
     daily:[{date:'2026-09-01',sessions:45,mean_child_words:12.5,reflection_conveyed:3.1,reflection_understood:3.2,reflection_culture:3.0},{date:'2026-09-02',sessions:52,mean_child_words:14.2,reflection_conveyed:3.4,reflection_understood:3.5,reflection_culture:3.3}],
-    personas:[{label:'Emma (emma_usa)',value:45},{label:'Rahul (rahul_bangladesh)',value:30}],circles:[{label:'Inner',value:45},{label:'Outer',value:30}]
+    personas:[{label:'Emma (emma_usa)',value:45},{label:'Rahul (rahul_bangladesh)',value:30}],circles:[{label:'Inner',value:45},{label:'Outer',value:30}],aggregation:'daily'
   },
   dataQuality:[{label:'complete',value:379},{label:'missing_reflection',value:5}],
+  systemQuality:[{label:'AI応答失敗',value:2},{label:'マイクエラー',value:1},{label:'TTSフォールバック',value:3}],
   topExpressions:[{expression:'I like',count:342,source:'curriculum'},{expression:'surfing',count:187,source:'persona'}],
   recentSessions:[{local_started_at:'2026-09-03 14:31:00',research_id:'R0123',persona_name:'Emma',persona_id:'emma_usa',topic:'好きなもの',target_duration_minutes:3,data_quality_flag:'complete'}],
   exportFiles:[
@@ -57,7 +58,7 @@ assert.equal(element('mSessions').textContent,384);
 assert.equal(element('mUtterances').textContent,9842);
 assert.equal(element('mCompleteRate').textContent,'98.7%');
 for(const id of ['chartDaily','chartPersona','chartCircle','chartWords','chartReflection'])assert.ok(element(id).innerHTML.includes('<svg'),id+' must render an inline SVG graph');
-assert.ok(element('qualityRows').innerHTML.includes('complete'));
+assert.ok(element('qualityRows').innerHTML.includes('完全ケース'));assert.ok(element('qualityRows').innerHTML.includes('システムイベント'));assert.ok(element('qualityRows').innerHTML.includes('TTSフォールバック'));
 assert.ok(element('topExpressions').innerHTML.includes('surfing'));
 assert.ok(element('recentRows').innerHTML.includes('R0123'));
 assert.ok(element('exportCards').innerHTML.includes('sessions.csv')&&element('exportCards').innerHTML.includes('codebook.csv'));
@@ -68,6 +69,8 @@ assert.equal(params.get('start'),'2026-09-01');assert.equal(params.get('end'),'2
 assert.equal(params.get('personaId'),'emma_usa');assert.equal(params.get('circle'),'Inner');assert.equal(params.get('labelCondition'),'shown');assert.equal(params.get('topic'),'favorites');assert.equal(params.get('completeOnly'),'1');
 const dashboardUrl=context.queryUrl('/api/management/research.dashboard');
 assert.ok(dashboardUrl.includes('personaId=emma_usa')&&dashboardUrl.includes('completeOnly=1'),'dashboard API must receive every active filter');
+context.renderDashboard(sample,params.toString());
+assert.ok(context.appliedQueryUrl('/api/management/research.csv','sessions').includes('personaId=emma_usa'),'applied dashboard filters must be snapshotted for exports');
 
 context.downloadDataset('sessions');
 assert.ok(location.href.startsWith('/api/management/research.csv?'));
@@ -86,5 +89,10 @@ for(const id of ['filterBtn','resetBtn','refreshBtn','bundleBtn','logoutBtn'])as
 assert.ok(pageSource.includes("$('filterBtn').onclick=loadDashboard"),'filter button must be linked to dashboard refresh');
 assert.ok(pageSource.includes("$('refreshBtn').onclick=loadDashboard"),'refresh button must be linked to dashboard refresh');
 assert.ok(pageSource.includes("$('bundleBtn').onclick"),'bundle button must be linked to download endpoint');
+assert.ok(pageSource.includes('onchange=scheduleDashboardReload'),'all filter controls must auto-refresh the dashboard');
+assert.ok(pageSource.includes('appliedQueryUrl'),'CSV and ZIP downloads must use the last successfully rendered filter snapshot');
+assert.ok(pageSource.includes('flex-wrap:wrap'),'research header/actions must wrap instead of overflowing');
+assert.equal(pageSource.includes('博士'),false,'researcher UI must not display 博士');
+for(const id of ['start','end','grade','classId','personaId','circle','labelCondition','topic','completeOnly'])assert.equal(typeof element(id).onchange,'function',id+' must have immediate-change binding');
 
 console.log('Research dashboard graph/button/filter linkage QA: PASS');
