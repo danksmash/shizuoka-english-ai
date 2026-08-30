@@ -20,4 +20,9 @@ const management=await readFile('src/server/managementPage.ts','utf8');assert.ok
 console.log('DATA CONTRACT QA PASS');
 '''
 (p/'scripts/qa-data-contract.ts').write_text(qa,encoding='utf-8')
-print('Aligned data-contract QA with final researcher-only architecture.')
+
+rq=(p/'scripts/qa-research-integrated.ts').read_text(encoding='utf-8')
+rq=rq.replace("assert.ok(managementHardening.includes(\"data_quality_flag||'')!=='complete'\"),'complete-case filters must include reflection/data-quality status');\nassert.ok(managementHardening.includes('bundleCsvBtn'),'research management UI must expose the same-snapshot ZIP export');", "assert.ok(managementHardening.includes('/api/management/research.bundle.zip'),'research management UI must expose the same-snapshot ZIP export');\nassert.ok(managementHardening.includes('/api/management/research.summary'),'research management UI must expose anonymous summary data');\nassert.ok(!managementHardening.includes('教師用管理'),'teacher management UI must be removed');")
+rq=rq.replace("'teacher views must use the distributed learner ID'", "'learner identity records must retain the distributed learner ID'")
+(p/'scripts/qa-research-integrated.ts').write_text(rq,encoding='utf-8')
+print('Aligned data-contract and integrated QA with final researcher-only architecture.')
