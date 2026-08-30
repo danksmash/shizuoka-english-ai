@@ -28,6 +28,10 @@ jobs:
           cache: npm
       - name: Apply audited transformations
         run: python3 scripts/apply-final-hardening.py
+      - name: Align QA with finalized architecture
+        run: |
+          python3 scripts/fix-hardening-qa.py
+          rm -f scripts/fix-hardening-qa.py
       - name: Install
         run: npm ci --no-audit --no-fund
       - name: Full QA
