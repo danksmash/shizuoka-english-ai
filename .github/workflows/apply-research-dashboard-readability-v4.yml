@@ -1,0 +1,64 @@
+name: Finalize researcher dashboard readability fixes
+
+on:
+  push:
+    branches:
+      - codex/research-dashboard-readability-filters
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Apply final implementation patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          wf=Path('.github/workflows/apply-research-dashboard-readability-v3.yml').read_text()
+          marker="          python3 - <<'PY'\n"
+          start=wf.index(marker)+len(marker)
+          end=wf.index("\n          PY",start)
+          lines=wf[start:end].splitlines()
+          code='\n'.join(line[10:] if line.startswith('          ') else line for line in lines)
+          exec(compile(code,'research-dashboard-patch.py','exec'),{})
+          p=Path('src/server/researchDashboard.ts')
+          s=p.read_text()
+          unused="""function uniqueSorted(rows: Row[], key: string): string[] {
+            return [...new Set(rows.map((row) => String(row[key] || '')).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
+          }
+          """
+          if unused in s:
+              s=s.replace(unused,'',1)
+          elif 'function uniqueSorted' in s:
+              raise SystemExit('uniqueSorted exists in unexpected form')
+          p.write_text(s)
+          PY
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Full QA including type-check and load QA
+        run: npm run qa
+      - name: Production build
+        run: npm run build
+      - name: Verify protected student UI unchanged
+        shell: bash
+        run: |
+          test -z "$(git diff --name-only origin/main -- src/App.tsx src/components src/utils/speech.ts src/data/curriculum.ts src/assets/images)"
+      - name: Commit validated implementation
+        shell: bash
+        run: |
+          git config user.name "danksmash"
+          git config user.email "danksmash@gmail.com"
+          git add src/server/researchDashboard.ts src/server/managementPage.ts scripts/qa-dashboard-data-sync.ts scripts/qa-research-export-complete.ts
+          if git diff --cached --quiet; then echo 'already applied'; exit 0; fi
+          git commit -m "fix: improve researcher dashboard readability and filters"
+          git push origin HEAD:codex/research-dashboard-readability-filters
