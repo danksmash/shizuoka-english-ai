@@ -75,8 +75,8 @@ p.write_text(s,encoding='utf-8')
 
 p=root/'scripts/qa-research-export-complete.ts'
 s=p.read_text(encoding='utf-8')
-anchor="assert.ok(dashboard.exportFiles.length===5);"
-insert="""assert.ok(dashboard.exportFiles.length===5);
+anchor="assert.equal(dashboard.exportFiles.length,5);"
+insert="""assert.equal(dashboard.exportFiles.length,5);
 assert.ok(dashboard.dataQuality.some((r)=>r.label==='AI request failure'&&r.value===1),'dashboard must expose AI failure quality events');
 assert.ok(dashboard.dataQuality.some((r)=>r.label==='Mic error'&&r.value===1),'dashboard must expose microphone error quality events');
 assert.ok(dashboard.dataQuality.some((r)=>r.label==='TTS fallback'&&r.value===1),'dashboard must expose TTS fallback quality events');
