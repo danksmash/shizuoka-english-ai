@@ -14,6 +14,7 @@ interface ReflectionScreenProps {
   onSubmit: (answers: ReflectionAnswers) => Promise<void> | void;
   isSaving: boolean;
   saveMessage?: string;
+  labelCondition?: 'shown' | 'hidden';
 }
 
 const ITEMS = [
@@ -41,7 +42,9 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
   onSubmit,
   isSaving,
   saveMessage,
+  labelCondition = 'shown',
 }) => {
+  const showLabels = labelCondition === 'shown';
   const [ratings, setRatings] = useState<Partial<Record<RatingKey, number>>>({});
   const [submitted, setSubmitted] = useState(false);
   const reportOwner = profile.name && profile.name !== '5・6年生' ? profile.name : 'あなた';
@@ -95,7 +98,7 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
             <div>
               <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">Great Job! 対話ふりかえり</span>
               <h2 className="mt-2 text-2xl font-black text-slate-900">{reportOwner}の英会話レポート</h2>
-              <p className="mt-1 text-sm font-semibold text-slate-600">{aiStudent.flag} {aiStudent.name} ({aiStudent.countryJapanese}) 留学生との対話練習記録</p>
+              <p className="mt-1 text-sm font-semibold text-slate-600">{showLabels ? `${aiStudent.flag} ${aiStudent.name} (${aiStudent.countryJapanese})` : aiStudent.name} 留学生との対話練習記録</p>
             </div>
           </div>
 

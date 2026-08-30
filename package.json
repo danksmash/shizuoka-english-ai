@@ -25,12 +25,13 @@
     "qa:setup-columns": "tsx scripts/qa-setup-column-sync.ts",
     "qa:feedback-counts": "tsx scripts/qa-feedback-learning-counts.ts",
     "qa:version": "tsx scripts/qa-version-ui.ts",
-    "qa": "npm run qa:dialogue && npm run qa:speech && npm run qa:security && npm run qa:alignment && npm run qa:starter-translations && npm run qa:data && npm run qa:management && npm run qa:responsive-vocab && npm run qa:setup-columns && npm run qa:feedback-counts && npm run qa:research && npm run qa:dashboard && npm run qa:identity && npm run qa:version && npm run lint",
+    "qa": "npm run qa:dialogue && npm run qa:speech && npm run qa:security && npm run qa:alignment && npm run qa:starter-translations && npm run qa:data && npm run qa:management && npm run qa:responsive-vocab && npm run qa:setup-columns && npm run qa:feedback-counts && npm run qa:research && npm run qa:version && npm run lint && npm run qa:load",
     "qa:starter-translations": "tsx scripts/qa-starter-translations.ts",
     "qa:alignment": "tsx scripts/qa-dialogue-alignment.ts",
     "qa:research": "tsx scripts/qa-research-integrated.ts",
     "qa:dashboard": "tsx scripts/qa-dashboard-data-sync.ts",
-    "qa:identity": "tsx scripts/qa-learner-identity-sync.ts"
+    "qa:identity": "tsx scripts/qa-learner-identity-sync.ts",
+    "qa:load": "tsx scripts/qa-research-run-load.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

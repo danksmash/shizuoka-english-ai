@@ -19,6 +19,7 @@ interface FeedbackScreenProps {
   onPlayAudio: (text: string) => void;
   onRestart: () => void;
   onOpenHistory?: () => void;
+  labelCondition?: 'shown' | 'hidden';
 }
 
 interface LearningItemListProps {
@@ -62,7 +63,9 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
   onPlayAudio,
   onRestart,
   onOpenHistory,
+  labelCondition = 'shown',
 }) => {
+  const showLabels = labelCondition === 'shown';
   const aiStudent = getAIStudentById(profile.selectedAiStudentId);
   const reportOwner = profile.name && profile.name !== '5・6年生' ? profile.name : 'あなた';
   const childLearningItems = feedback?.childLearningItems || [];
@@ -77,7 +80,7 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
             <div>
               <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-800">Great Job! 対話ふりかえり</span></div>
               <h1 className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">{reportOwner}の英会話レポート</h1>
-              <p className="text-xs font-semibold text-slate-600 sm:text-sm">{aiStudent.flag} {aiStudent.name} ({aiStudent.countryJapanese}) 留学生との対話練習記録</p>
+              <p className="text-xs font-semibold text-slate-600 sm:text-sm">{showLabels ? `${aiStudent.flag} ${aiStudent.name} (${aiStudent.countryJapanese})` : aiStudent.name} 留学生との対話練習記録</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -127,7 +130,7 @@ export const FeedbackScreen: React.FC<FeedbackScreenProps> = ({
             {messages.map((msg, i) => {
               const isAi = msg.sender === 'ai';
               const translation = getJapaneseTranslationForMessage(msg, profile.selectedAiStudentId, profile.selectedTopic);
-              return <div key={msg.id || i} className="flex items-start justify-between gap-3 py-4 first:pt-0"><div className="flex min-w-0 flex-1 items-start gap-3"><span className={`mt-0.5 shrink-0 whitespace-nowrap rounded-lg border px-2.5 py-1 text-[10px] font-black ${isAi ? 'border-blue-200 bg-blue-100 text-blue-800' : 'border-emerald-200 bg-emerald-100 text-emerald-800'}`}>{isAi ? `${aiStudent.flag} ${aiStudent.name}` : `🧒 ${profile.name || 'じどう'}`}</span><div className="min-w-0 flex-1"><p className="break-words text-sm font-black leading-relaxed text-slate-900">{msg.englishText}</p>{translation && <div className="mt-1.5 flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50/90 p-2 text-xs leading-relaxed text-slate-700"><span className="mt-0.5 shrink-0 rounded-md border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-black text-indigo-700">日本語訳</span><span className="font-semibold">{translation}</span></div>}{msg.culturalNote && <p className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-blue-700">💡 {msg.culturalNote}</p>}</div></div><button type="button" onClick={() => onPlayAudio(msg.englishText)} className="shrink-0 rounded-xl p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600" title="音声を再生"><Volume2 className="h-4 w-4" /></button></div>;
+              return <div key={msg.id || i} className="flex items-start justify-between gap-3 py-4 first:pt-0"><div className="flex min-w-0 flex-1 items-start gap-3"><span className={`mt-0.5 shrink-0 whitespace-nowrap rounded-lg border px-2.5 py-1 text-[10px] font-black ${isAi ? 'border-blue-200 bg-blue-100 text-blue-800' : 'border-emerald-200 bg-emerald-100 text-emerald-800'}`}>{isAi ? `${showLabels ? aiStudent.flag : ''} ${aiStudent.name}` : `🧒 ${profile.name || 'じどう'}`}</span><div className="min-w-0 flex-1"><p className="break-words text-sm font-black leading-relaxed text-slate-900">{msg.englishText}</p>{translation && <div className="mt-1.5 flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50/90 p-2 text-xs leading-relaxed text-slate-700"><span className="mt-0.5 shrink-0 rounded-md border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-black text-indigo-700">日本語訳</span><span className="font-semibold">{translation}</span></div>}{msg.culturalNote && <p className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-blue-700">💡 {msg.culturalNote}</p>}</div></div><button type="button" onClick={() => onPlayAudio(msg.englishText)} className="shrink-0 rounded-xl p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600" title="音声を再生"><Volume2 className="h-4 w-4" /></button></div>;
             })}
           </div>
         </section>

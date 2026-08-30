@@ -88,6 +88,7 @@ function researcherRouteAllowed(req: Request): boolean {
   const path = req.path || '';
   if (path === '/api/management/me') return true;
   if (path === '/api/management/research.csv') return true;
+  if (path === '/api/management/research.summary') return true;
   if (path === '/api/management/research.bundle.zip') return true;
   return false;
 }

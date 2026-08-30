@@ -4,13 +4,14 @@ import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAIStudentById } from './src/data/curriculum';
+import { GOOGLE_TTS_VOICES } from './src/data/personaResearch';
 import { detectVocabularyInText } from './src/data/vocabulary56';
 import { getTopicLearningGoals } from './src/data/topicLearningGoals';
 import { calculateCanonicalStats, canonicalizeHistory, isAIStudentId, isDialogueDuration, isDialogueTopic, isValidLearningCode, normalizeLearningCode, validateSessionSaveInput } from './src/dataContract';
 import { generateFallbackFeedback } from './src/utils/feedbackFallback';
 import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } from './src/utils/security';
 import { validateAiResponse, inspectAiResponse, buildAlignedReply } from './src/utils/responseValidation';
-import { createStudentCode, getAllSessionsForManagement, getTeacherSessionsForManagement, getStudentHistory, getStudentRecordsForManagement, reissueStudentCode, setStudentActive, updateStudentClass, persistenceConfigured, resolveStudentByCode, saveCanonicalSession } from './src/server/persistence';
+import { getAllSessionsForManagement, getStudentHistory, persistenceConfigured, resolveStudentByCode, saveCanonicalSession } from './src/server/persistence';
 import { buildResearchDataSets, type ResearchDatasetName } from './src/server/researchExport';
 import { authenticateManagement, clearManagementCookie, managementAuthConfigured, requireManagementRole, setManagementCookie, type AuthenticatedRequest } from './src/server/auth';
 import { managementPageHtml } from './src/server/managementPage';
@@ -67,19 +68,21 @@ setInterval(() => {
   }
 }, 5 * 60_000);
 
-const GOOGLE_TTS_VOICES: Record<string, { languageCode: string; name: string }> = {
-  emma_usa: { languageCode: 'en-US', name: 'en-US-Chirp3-HD-Aoede' },
-  oliver_uk: { languageCode: 'en-GB', name: 'en-GB-Chirp3-HD-Orus' },
-  liam_australia: { languageCode: 'en-AU', name: 'en-AU-Chirp3-HD-Puck' },
-  chloe_canada: { languageCode: 'en-US', name: 'en-US-Chirp3-HD-Kore' },
-  bence_hungary: { languageCode: 'en-GB', name: 'en-GB-Chirp3-HD-Iapetus' },
-  zofia_poland: { languageCode: 'en-GB', name: 'en-GB-Chirp3-HD-Leda' },
-  rahul_bangladesh: { languageCode: 'en-IN', name: 'en-IN-Chirp3-HD-Orus' },
-  linh_vietnam: { languageCode: 'en-US', name: 'en-US-Chirp3-HD-Leda' },
-  aung_myanmar: { languageCode: 'en-IN', name: 'en-IN-Chirp3-HD-Puck' },
-};
 
 let googleAccessToken: { token: string; expiresAt: number } | null = null;
+
+const TTS_CACHE_TTL_MS = 20 * 60_000;
+const ttsAudioCache = new Map<string, { audio: Buffer; expiresAt: number }>();
+const ttsPending = new Map<string, Promise<Buffer>>();
+function ttsCacheKey(text: string, aiStudentId: string, speakingRate: number): string { return `${aiStudentId}|${speakingRate.toFixed(2)}|${text}`; }
+async function cachedGoogleTts(text: string, aiStudentId: string, speakingRate: number): Promise<{ audio: Buffer; cache: 'HIT' | 'MISS' }> {
+  const key = ttsCacheKey(text, aiStudentId, speakingRate); const now = Date.now(); const hit = ttsAudioCache.get(key);
+  if (hit && hit.expiresAt > now) return { audio: hit.audio, cache: 'HIT' };
+  if (hit) ttsAudioCache.delete(key);
+  const pending = ttsPending.get(key); if (pending) return { audio: await pending, cache: 'HIT' };
+  const task = synthesizeGoogleTts(text, aiStudentId, speakingRate).then((audio) => { ttsAudioCache.set(key, { audio, expiresAt: Date.now() + TTS_CACHE_TTL_MS }); return audio; }).finally(() => ttsPending.delete(key));
+  ttsPending.set(key, task); return { audio: await task, cache: 'MISS' };
+}
 
 async function getGoogleAccessToken(): Promise<string> {
   if (googleAccessToken && Date.now() < googleAccessToken.expiresAt - 60_000) {
@@ -159,7 +162,7 @@ function getAnthropicClient(): Anthropic | null {
   if (!anthropicClient) {
     anthropicClient = new Anthropic({
       apiKey,
-      maxRetries: 3,
+      maxRetries: 0,
       timeout: 30_000,
     });
   }
@@ -197,41 +200,35 @@ function isRetryable(error: any): boolean {
 async function callClaudeJson(system: string, prompt: string, maxTokens: number) {
   const client = getAnthropicClient();
   if (!client) throw new Error('API_KEY_NOT_CONFIGURED');
-
-  const configured = process.env.ANTHROPIC_MODEL?.trim();
-  const models = Array.from(new Set([
-    configured || 'claude-sonnet-4-6',
-    'claude-haiku-4-5',
-  ]));
-
+  const configured = process.env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-5';
+  const models = Array.from(new Set([configured, 'claude-sonnet-4-6']));
   let lastError: any = null;
-
-  for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const response = await client.messages.create({
-          model,
-          max_tokens: maxTokens,
-          temperature: 0.5,
-          system,
-          messages: [{ role: 'user', content: prompt }],
-        });
-
-        const rawText = response.content
-          .filter((block: any) => block.type === 'text')
-          .map((block: any) => ('text' in block ? block.text : ''))
-          .join('')
-          .trim();
-
-        return { parsed: extractJson(rawText), model };
-      } catch (error: any) {
-        lastError = error;
-        if (!isRetryable(error)) break;
-        await sleep(500 * Math.pow(2, attempt));
-      }
+  for (let index = 0; index < models.length; index += 1) {
+    const model = models[index];
+    try {
+      if (index > 0) await sleep(250 + Math.floor(Math.random() * 350));
+      const response = await client.messages.create({
+        model,
+        max_tokens: maxTokens,
+        output_config: { effort: 'medium' },
+        cache_control: { type: 'ephemeral' },
+        system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+        messages: [{ role: 'user', content: prompt }],
+      } as any);
+      const rawText = response.content.filter((block: any) => block.type === 'text').map((block: any) => ('text' in block ? block.text : '')).join('').trim();
+      const u: any = response.usage || {};
+      return {
+        parsed: extractJson(rawText), model,
+        usage: {
+          inputTokens: Number(u.input_tokens || 0), outputTokens: Number(u.output_tokens || 0),
+          cacheReadTokens: Number(u.cache_read_input_tokens || 0), cacheCreationTokens: Number(u.cache_creation_input_tokens || 0),
+        },
+      };
+    } catch (error: any) {
+      lastError = error;
+      if (index === 0 && !isRetryable(error) && Number(error?.status || 0) !== 400) break;
     }
   }
-
   throw lastError || new Error('AI_UNAVAILABLE');
 }
 
@@ -317,8 +314,10 @@ app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
     aiConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
-    resilience: 'multi-retry-model-fallback',
+    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
+    appVersion: process.env.APP_VERSION || 'unknown',
+    build: process.env.APP_BUILD || 'unknown',
+    resilience: 'single-attempt-model-fallback',
     ttsProvider: 'google-chirp3-hd',
     learningDataConfigured: persistenceConfigured(),
     managementConfigured: managementAuthConfigured(),
@@ -336,8 +335,8 @@ app.post('/api/tts', async (req, res) => {
   const aiStudentId = typeof req.body?.aiStudentId === 'string' ? req.body.aiStudentId : '';
   const requestedRate = Number(req.body?.speakingRate || 1.0);
   const speakingRate = Math.max(
-    0.8,
-    Math.min(1.15, Number.isFinite(requestedRate) ? requestedRate : 1.0)
+    0.75,
+    Math.min(1.25, Number.isFinite(requestedRate) ? requestedRate : 1.0)
   );
 
   if (!text || text.length > 300) {
@@ -348,10 +347,12 @@ app.post('/api/tts', async (req, res) => {
   }
 
   try {
-    const audio = await synthesizeGoogleTts(text, aiStudentId, speakingRate);
+    const { audio, cache } = await cachedGoogleTts(text, aiStudentId, speakingRate);
     res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Cache-Control', 'private, max-age=900');
     res.setHeader('X-TTS-Provider', 'google-chirp3-hd');
+    res.setHeader('X-TTS-Cache', cache);
+    res.setHeader('X-TTS-Effective-Rate', speakingRate.toFixed(2));
     res.setHeader('X-TTS-Latency-Ms', String(Date.now() - requestStart));
     return res.send(audio);
   } catch (error: any) {
@@ -427,7 +428,7 @@ A natural short reaction or filler is allowed when it truly fits the immediate c
 Translate the student's latest English into Japanese too.`;
 
   try {
-    const { parsed, model } = await callClaudeJson(getSystemInstructionForPersona(aiStudentId), prompt, 300);
+    const { parsed, model, usage } = await callClaudeJson(getSystemInstructionForPersona(aiStudentId), prompt, 300);
     const alignedReply = buildAlignedReply(parsed, persona.name);
     const reply = alignedReply.english;
     const japaneseTranslation = alignedReply.japanese;
@@ -455,6 +456,7 @@ Translate the student's latest English into Japanese too.`;
       _diagnostics: {
         requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         model,
+        usage,
         latencyMs: Date.now() - requestStart,
         route: 'anthropic-resilient',
       },
@@ -701,51 +703,20 @@ ${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${perso
 });
 
 const sensitiveAttemptMap = new Map<string, { count: number; resetTime: number }>();
-function checkSensitiveLimit(key: string, maxRequests: number, windowMs: number): boolean {
-  const now = Date.now(); const record = sensitiveAttemptMap.get(key);
-  if (!record || now > record.resetTime) { sensitiveAttemptMap.set(key, { count: 1, resetTime: now + windowMs }); return true; }
-  if (record.count >= maxRequests) return false; record.count += 1; return true;
-}
-app.get('/management', (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.type('html').send(managementPageHtml()); });
-app.post('/api/student/resolve', async (req, res) => {
-  const ip=req.ip||req.socket.remoteAddress||'unknown'; if(!checkSensitiveLimit(`student:${ip}`,15,10*60_000))return res.status(429).json({success:false,error:'TOO_MANY_CODE_ATTEMPTS'});
-  if(!persistenceConfigured())return res.status(503).json({success:false,error:'PERSISTENCE_NOT_CONFIGURED'});
-  if(!isValidLearningCode(req.body?.learningCode))return res.status(400).json({success:false,error:'INVALID_LEARNING_CODE'});
-  const learningCode=normalizeLearningCode(req.body.learningCode);
-  try{const student=await resolveStudentByCode(learningCode);if(!student)return res.status(401).json({success:false,error:'LEARNING_CODE_NOT_FOUND'});res.setHeader('Cache-Control','no-store');return res.json({success:true});}
-  catch(error:any){console.error('Student code resolve failed',{message:error?.message});return res.status(503).json({success:false,error:'STUDENT_LOOKUP_UNAVAILABLE'});}
-});
-app.post('/api/student/history', async (req,res)=>{
-  const ip=req.ip||req.socket.remoteAddress||'unknown';if(!checkSensitiveLimit(`history:${ip}`,30,10*60_000))return res.status(429).json({success:false,error:'RATE_LIMITED'});
-  if(!isValidLearningCode(req.body?.learningCode))return res.status(400).json({success:false,error:'INVALID_LEARNING_CODE'});
-  const learningCode=normalizeLearningCode(req.body.learningCode);
-  try{const student=await resolveStudentByCode(learningCode);if(!student)return res.status(401).json({success:false,error:'LEARNING_CODE_NOT_FOUND'});const history=await getStudentHistory(student.studentId);res.setHeader('Cache-Control','no-store');return res.json({success:true,history});}
-  catch(error:any){console.error('Student history failed',{message:error?.message});return res.status(503).json({success:false,error:'HISTORY_UNAVAILABLE'});}
-});
-app.post('/api/sessions', async (req,res)=>{
-  const validated=validateSessionSaveInput(req.body);if('error' in validated)return res.status(400).json({success:false,error:validated.error});
-  try{const student=await resolveStudentByCode(validated.value.learningCode);if(!student)return res.status(401).json({success:false,error:'LEARNING_CODE_NOT_FOUND'});const saved=await saveCanonicalSession({sessionId:validated.value.sessionId,studentId:student.studentId,researchId:student.researchId,classId:student.classId,aiStudentId:validated.value.aiStudentId,topic:validated.value.topic,targetDurationMinutes:validated.value.targetDurationMinutes,startedAt:validated.value.startedAt,endedAt:validated.value.endedAt,history:validated.value.history,encounteredVocab:validated.value.encounteredVocab||[],reflection:validated.value.reflection,systemEvents:validated.value.systemEvents||[]});res.setHeader('Cache-Control','no-store');return res.json({success:true,session:{sessionId:saved.sessionId,lifetimeSessionNumber:saved.lifetimeSessionNumber}});}
-  catch(error:any){console.error('Session save failed',{message:error?.message});const conflict=error?.message==='SESSION_ID_CONFLICT';return res.status(conflict?409:503).json({success:false,error:conflict?'SESSION_ID_CONFLICT':'SESSION_SAVE_UNAVAILABLE'});}
-});
-app.post('/api/management/login',(req,res)=>{const ip=req.ip||req.socket.remoteAddress||'unknown';if(!checkSensitiveLimit(`mgmt:${ip}`,10,15*60_000))return res.status(429).json({success:false,error:'TOO_MANY_LOGIN_ATTEMPTS'});const username=typeof req.body?.username==='string'?req.body.username.slice(0,100):'';const password=typeof req.body?.password==='string'?req.body.password.slice(0,300):'';const result=authenticateManagement(username,password);if(!result)return res.status(managementAuthConfigured()?401:503).json({success:false,error:managementAuthConfigured()?'INVALID_CREDENTIALS':'MANAGEMENT_AUTH_NOT_CONFIGURED'});setManagementCookie(res,result.token);return res.json({success:true,role:result.role});});
+function checkSensitiveLimit(key: string, maxRequests: number, windowMs: number): boolean { const now=Date.now();const record=sensitiveAttemptMap.get(key);if(!record||now>record.resetTime){sensitiveAttemptMap.set(key,{count:1,resetTime:now+windowMs});return true;}if(record.count>=maxRequests)return false;record.count+=1;return true; }
+function registerFailedCodeAttempt(ip:string):boolean{return checkSensitiveLimit(`student-fail:${ip}`,30,10*60_000);}
+app.get('/management', (_req,res)=>{res.setHeader('Cache-Control','no-store');res.type('html').send(managementPageHtml());});
+app.post('/api/student/resolve',async(req,res)=>{const ip=req.ip||req.socket.remoteAddress||'unknown';if(!persistenceConfigured())return res.status(503).json({success:false,error:'PERSISTENCE_NOT_CONFIGURED'});if(!isValidLearningCode(req.body?.learningCode)){registerFailedCodeAttempt(ip);return res.status(400).json({success:false,error:'INVALID_LEARNING_CODE'});}const learningCode=normalizeLearningCode(req.body.learningCode);try{const student=await resolveStudentByCode(learningCode);if(!student){const allowed=registerFailedCodeAttempt(ip);return res.status(allowed?401:429).json({success:false,error:allowed?'LEARNING_CODE_NOT_FOUND':'TOO_MANY_FAILED_CODE_ATTEMPTS'});}res.setHeader('Cache-Control','no-store');return res.json({success:true});}catch(error:any){console.error('Student code resolve failed',{message:error?.message});return res.status(503).json({success:false,error:'STUDENT_LOOKUP_UNAVAILABLE'});}});
+app.post('/api/student/history',async(req,res)=>{const ip=req.ip||req.socket.remoteAddress||'unknown';if(!checkSensitiveLimit(`history:${ip}`,300,10*60_000))return res.status(429).json({success:false,error:'RATE_LIMITED'});if(!isValidLearningCode(req.body?.learningCode))return res.status(400).json({success:false,error:'INVALID_LEARNING_CODE'});const learningCode=normalizeLearningCode(req.body.learningCode);try{const student=await resolveStudentByCode(learningCode);if(!student)return res.status(401).json({success:false,error:'LEARNING_CODE_NOT_FOUND'});const history=await getStudentHistory(student.studentId);res.setHeader('Cache-Control','no-store');return res.json({success:true,history});}catch(error:any){console.error('Student history failed',{message:error?.message});return res.status(503).json({success:false,error:'HISTORY_UNAVAILABLE'});}});
+app.post('/api/sessions',async(req,res)=>{const validated=validateSessionSaveInput(req.body);if('error'in validated)return res.status(400).json({success:false,error:validated.error});try{const student=await resolveStudentByCode(validated.value.learningCode);if(!student)return res.status(401).json({success:false,error:'LEARNING_CODE_NOT_FOUND'});const saved=await saveCanonicalSession({sessionId:validated.value.sessionId,studentId:student.studentId,researchId:student.researchId,classId:student.classId,aiStudentId:validated.value.aiStudentId,topic:validated.value.topic,targetDurationMinutes:validated.value.targetDurationMinutes,startedAt:validated.value.startedAt,endedAt:validated.value.endedAt,history:validated.value.history,encounteredVocab:validated.value.encounteredVocab||[],reflection:validated.value.reflection,systemEvents:validated.value.systemEvents||[],personaLabelCondition:validated.value.personaLabelCondition,countryLabelVisible:validated.value.countryLabelVisible,accentLabelVisible:validated.value.accentLabelVisible,flagVisible:validated.value.flagVisible,studentSelectedSpeechRate:validated.value.studentSelectedSpeechRate,effectiveTtsSpeechRate:validated.value.effectiveTtsSpeechRate});res.setHeader('Cache-Control','no-store');return res.json({success:true,session:{sessionId:saved.sessionId,lifetimeSessionNumber:saved.lifetimeSessionNumber}});}catch(error:any){console.error('Session save failed',{message:error?.message});const conflict=error?.message==='SESSION_ID_CONFLICT';return res.status(conflict?409:503).json({success:false,error:conflict?'SESSION_ID_CONFLICT':'SESSION_SAVE_UNAVAILABLE'});}});
+app.post('/api/management/login',(req,res)=>{const ip=req.ip||req.socket.remoteAddress||'unknown';if(!checkSensitiveLimit(`mgmt:${ip}`,10,15*60_000))return res.status(429).json({success:false,error:'TOO_MANY_LOGIN_ATTEMPTS'});const username=typeof req.body?.username==='string'?req.body.username.slice(0,100):'';const password=typeof req.body?.password==='string'?req.body.password.slice(0,300):'';const result=authenticateManagement(username,password);if(!result)return res.status(managementAuthConfigured()?401:503).json({success:false,error:managementAuthConfigured()?'INVALID_CREDENTIALS':'MANAGEMENT_AUTH_NOT_CONFIGURED'});if(result.role!=='researcher')return res.status(403).json({success:false,error:'RESEARCHER_ONLY'});setManagementCookie(res,result.token);return res.json({success:true,role:result.role});});
 app.post('/api/management/logout',(_req,res)=>{clearManagementCookie(res);return res.json({success:true});});
-app.get('/api/management/me',requireManagementRole(['teacher','researcher']),(req:AuthenticatedRequest,res)=>{res.setHeader('Cache-Control','no-store');return res.json({success:true,user:req.managementUser});});
-app.get('/api/management/student-codes', requireManagementRole(['teacher']), async (_req,res) => {
-  try { const students=await getStudentRecordsForManagement(); res.setHeader('Cache-Control','no-store'); return res.json({success:true,students}); }
-  catch(error:any){console.error('Student code list failed',{message:error?.message});return res.status(503).json({success:false,error:'CODE_LIST_UNAVAILABLE'});}
-});
-app.post('/api/management/student-codes', requireManagementRole(['teacher']), async (req,res) => {
-  const action=typeof req.body?.action==='string'?req.body.action:'create';
-  try {
-    if(action==='create'){const code=normalizeLearningCode(req.body?.learningCode);const classId=typeof req.body?.classId==='string'?req.body.classId.trim():'';const attendanceNumber=Number(req.body?.attendanceNumber);if(!isValidLearningCode(req.body?.learningCode))return res.status(400).json({success:false,error:'INVALID_LEARNING_CODE'});if(!/^(?:5-[123]|6-[123]|テスト|予備)$/.test(classId))return res.status(400).json({success:false,error:'CLASS_ID_REQUIRED'});if(!Number.isInteger(attendanceNumber)||attendanceNumber<1||attendanceNumber>99)return res.status(400).json({success:false,error:'ATTENDANCE_NUMBER_REQUIRED'});const created=await createStudentCode(code,undefined,undefined,classId,undefined,attendanceNumber);return res.json({success:true,studentId:created.studentId,learningId:created.learningId,classId:created.classId,attendanceNumber:created.attendanceNumber});}
-    if(action==='reissue'){const studentId=typeof req.body?.studentId==='string'?req.body.studentId:'';if(!studentId||!isValidLearningCode(req.body?.learningCode))return res.status(400).json({success:false,error:'INVALID_REISSUE_REQUEST'});const created=await reissueStudentCode(studentId,normalizeLearningCode(req.body.learningCode));return res.json({success:true,studentId:created.studentId,learningId:created.learningId,classId:created.classId,attendanceNumber:created.attendanceNumber});}
-    if(action==='update-class'){const studentId=typeof req.body?.studentId==='string'?req.body.studentId:'';const classId=typeof req.body?.classId==='string'?req.body.classId.trim():'';const attendanceNumber=req.body?.attendanceNumber; if(!studentId||!/^(?:5-[123]|6-[123]|テスト|予備)$/.test(classId))return res.status(400).json({success:false,error:'INVALID_CLASS_UPDATE'});await updateStudentClass(studentId,classId,attendanceNumber);return res.json({success:true,classId,attendanceNumber});}
-    if(action==='set-active'){const studentId=typeof req.body?.studentId==='string'?req.body.studentId:'';if(!studentId||typeof req.body?.active!=='boolean')return res.status(400).json({success:false,error:'INVALID_ACTIVE_REQUEST'});await setStudentActive(studentId,req.body.active);return res.json({success:true});}
-    return res.status(400).json({success:false,error:'INVALID_CODE_ACTION'});
-  } catch(error:any){console.error('Student code mutation failed',{message:error?.message});const conflict=error?.message==='LEARNING_CODE_ALREADY_EXISTS';return res.status(conflict?409:503).json({success:false,error:conflict?'LEARNING_CODE_ALREADY_EXISTS':'CODE_MUTATION_UNAVAILABLE'});}
-});
-app.get('/api/management/sessions',requireManagementRole(['teacher']),async(_req,res)=>{try{const sessions=await getTeacherSessionsForManagement();res.setHeader('Cache-Control','no-store');return res.json({success:true,sessions});}catch(error:any){console.error('Management sessions failed',{message:error?.message});return res.status(503).json({success:false,error:'MANAGEMENT_DATA_UNAVAILABLE'});}});
+app.get('/api/management/me',requireManagementRole(['researcher']),(req:AuthenticatedRequest,res)=>{res.setHeader('Cache-Control','no-store');return res.json({success:true,user:req.managementUser});});
+app.get('/api/management/research.summary',requireManagementRole(['researcher']),async(_req,res)=>{try{const rows=buildResearchDataSets(await getAllSessionsForManagement()).sessions;const classCounts:Record<string,number>={};const researchIds=new Set<string>();let latestDate='';let completeSessions=0;for(const row of rows){const c=String(row.class_id||'');if(c)classCounts[c]=(classCounts[c]||0)+1;const rid=String(row.research_id||'');if(rid)researchIds.add(rid);const d=String(row.local_date||'');if(d>latestDate)latestDate=d;if(String(row.data_quality_flag||'')==='complete')completeSessions+=1;}res.setHeader('Cache-Control','no-store');return res.json({success:true,totalSessions:rows.length,completeSessions,researchIdCount:researchIds.size,latestDate,classCounts});}catch(error:any){console.error('Research summary failed',{message:error?.message});return res.status(503).json({success:false,error:'RESEARCH_SUMMARY_UNAVAILABLE'});}});
 function csvCell(value:unknown):string{const text=String(value??'');return `"${text.replace(/"/g,'""')}"`;}
+
+
+function filterRawResearchSessions(rows:Record<string,any>[],query:any):Record<string,any>[] { const start=typeof query?.start==='string'?query.start:'';const end=typeof query?.end==='string'?query.end:'';const classId=typeof query?.classId==='string'?query.classId:'';return rows.filter(row=>{const date=String(row.localDate||'');return(!start||date>=start)&&(!end||date<=end)&&(!classId||classId==='all'||String(row.classId||'')===classId);}); }
 
 const RESEARCH_DEFAULT_HEADERS:Record<ResearchDatasetName,string[]>={
   sessions:['research_id','class_id','session_id','local_date','local_start_time','usage_context_inferred'],
@@ -776,11 +747,11 @@ function buildStoredZip(files:Array<{name:string;content:string}>):Buffer{
 }
 app.get('/api/management/research.bundle.zip',requireManagementRole(['researcher']),async(req,res)=>{
   try{
-    const raw=buildResearchDataSets(await getAllSessionsForManagement());
+    const raw=buildResearchDataSets(filterRawResearchSessions(await getAllSessionsForManagement(),req.query));
     const start=typeof req.query?.start==='string'?req.query.start:'';const end=typeof req.query?.end==='string'?req.query.end:'';const classId=typeof req.query?.classId==='string'?req.query.classId:'';const researchId=typeof req.query?.researchId==='string'?req.query.researchId:'';const completeOnly=req.query?.completeOnly==='1';
     const sessions=raw.sessions.filter(row=>{const date=String(row.local_date||'');return(!start||date>=start)&&(!end||date<=end)&&(!classId||classId==='all'||String(row.class_id||'')===classId)&&(!researchId||researchId==='all'||String(row.research_id||'')===researchId)&&(!completeOnly||String(row.data_quality_flag||'')==='complete');});
     const allowed=new Set(sessions.map(row=>String(row.session_id||'')));const datasets={sessions,turns:raw.turns.filter(row=>allowed.has(String(row.session_id||''))),expressions:raw.expressions.filter(row=>allowed.has(String(row.session_id||''))),system_events:raw.system_events.filter(row=>allowed.has(String(row.session_id||'')))};
-    const exportedAt=new Date().toISOString();const manifest={export_id:`export_${Date.now()}`,exported_at:exportedAt,schema_version:3,classification_rule_version:String(sessions[0]?.classification_rule_version||'time-cluster-v1'),filters:{start,end,class_id:classId||'all',research_id:researchId||'all',complete_only:completeOnly},row_counts:{sessions:datasets.sessions.length,turns:datasets.turns.length,expressions:datasets.expressions.length,system_events:datasets.system_events.length}};
+    const exportedAt=new Date().toISOString();const manifest={export_id:`export_${Date.now()}`,exported_at:exportedAt,schema_version:3,classification_rule_version:String(sessions[0]?.classification_rule_version||'time-cluster-v2'),filters:{start,end,class_id:classId||'all',research_id:researchId||'all',complete_only:completeOnly},row_counts:{sessions:datasets.sessions.length,turns:datasets.turns.length,expressions:datasets.expressions.length,system_events:datasets.system_events.length}};
     const zip=buildStoredZip([{name:'sessions.csv',content:researchCsvString(datasets.sessions,'sessions')},{name:'turns.csv',content:researchCsvString(datasets.turns,'turns')},{name:'expressions.csv',content:researchCsvString(datasets.expressions,'expressions')},{name:'system_events.csv',content:researchCsvString(datasets.system_events,'system_events')},{name:'manifest.json',content:JSON.stringify(manifest,null,2)}]);
     res.setHeader('Content-Type','application/zip');res.setHeader('Content-Disposition',`attachment; filename="research-bundle-${exportedAt.slice(0,10).replace(/-/g,'')}.zip"`);res.setHeader('Cache-Control','no-store');return res.send(zip);
   }catch(error:any){console.error('Research bundle export failed',{message:error?.message});return res.status(503).json({success:false,error:'RESEARCH_BUNDLE_UNAVAILABLE'});}
@@ -788,7 +759,7 @@ app.get('/api/management/research.bundle.zip',requireManagementRole(['researcher
 
 app.get('/api/management/research.csv',requireManagementRole(['researcher']),async(req,res)=>{
   try {
-    const sessions=await getAllSessionsForManagement();
+    const sessions=filterRawResearchSessions(await getAllSessionsForManagement(),req.query);
     const requested=typeof req.query?.dataset==='string'?req.query.dataset:'sessions';
     const dataset:ResearchDatasetName=(['sessions','turns','expressions','system_events'] as string[]).includes(requested)?requested as ResearchDatasetName:'sessions';
     const rows=buildResearchDataSets(sessions)[dataset];

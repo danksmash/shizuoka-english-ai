@@ -34,6 +34,8 @@ export type AIStudentId =
   | 'aung_myanmar';
 
 export type DialogueDurationMinutes = 1 | 2 | 3 | 5;
+export type WorldEnglishesCircle = 'Inner' | 'Outer' | 'Expanding';
+export type PersonaLabelCondition = 'shown' | 'hidden';
 
 export interface AIStudentProfile {
   id: AIStudentId;
@@ -52,6 +54,7 @@ export interface AIStudentProfile {
   avatarImage: string;
   heritageLandmark?: string;
   accentName: string;
+  worldEnglishesCircle: WorldEnglishesCircle;
   voiceLang: string;
   voiceGender: 'male' | 'female';
   voicePitch: number;

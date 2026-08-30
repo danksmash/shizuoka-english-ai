@@ -13,6 +13,7 @@ interface HeaderProps {
   soundEnabled: boolean;
   onToggleSound: () => void;
   onFinishEarly: () => void;
+  labelCondition?: 'shown' | 'hidden';
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -25,7 +26,9 @@ export const Header: React.FC<HeaderProps> = ({
   soundEnabled,
   onToggleSound,
   onFinishEarly,
+  labelCondition = 'shown',
 }) => {
+  const showLabels = labelCondition === 'shown';
   const minutes = Math.floor(remainingSeconds / 60);
   const seconds = remainingSeconds % 60;
   const timeDisplay = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
@@ -45,8 +48,8 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="bg-blue-100 text-blue-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full hidden md:inline">小学校５・６年生向け</span>
             </div>
             <p className="text-sm sm:text-xs text-slate-700 sm:text-slate-500 font-bold sm:font-medium truncate">
-              <span className="sm:hidden">{aiStudentFlag} {aiStudentName}</span>
-              <span className="hidden sm:inline">- Shizuoka University Exchange - <span className="text-slate-700 font-semibold">{studentName || '5・6年生'}</span> × {aiStudentName} {aiStudentFlag}</span>
+              <span className="sm:hidden">{showLabels ? aiStudentFlag : ''} {aiStudentName}</span>
+              <span className="hidden sm:inline">- Shizuoka University Exchange - <span className="text-slate-700 font-semibold">{studentName || '5・6年生'}</span> × {aiStudentName} {showLabels ? aiStudentFlag : ''}</span>
             </p>
           </div>
         </div>

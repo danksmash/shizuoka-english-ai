@@ -10,6 +10,7 @@ interface SetupScreenProps {
   onStartDialogue: (profile: StudentProfile, learningCode: string) => void;
   learningDataEnabled: boolean;
   onValidateLearningCode: (learningCode: string) => Promise<boolean>;
+  labelCondition?: 'shown' | 'hidden';
 }
 
 const LEARNING_ID_SESSION_KEY = 'ai-exchange-learning-id';
@@ -33,7 +34,8 @@ const retainLearningId = (learningId: string) => {
 const countryLabel = (student: AIStudentProfile) =>
   student.countryNative ? `${student.country} (${student.countryNative})` : student.country;
 
-export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learningDataEnabled, onValidateLearningCode }) => {
+export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learningDataEnabled, onValidateLearningCode, labelCondition = 'shown' }) => {
+  const showLabels = labelCondition === 'shown';
   const [selectedStudentId, setSelectedStudentId] = useState('emma_usa');
   const [selectedTopic, setSelectedTopic] = useState<DialogueTopic>('intro');
   const [durationMinutes, setDurationMinutes] = useState<1 | 2 | 3 | 5>(1);
@@ -113,22 +115,22 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
           <section className="setup-student-section flex min-w-0 flex-col">
             <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-sm font-black"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs text-white">1</span>会話するAI留学生をえらぼう（全9名）</h2>
-              <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{selectedStudent.flag} {selectedStudent.countryJapanese} 選択中</span>
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{showLabels ? `${selectedStudent.flag} ${selectedStudent.countryJapanese} 選択中` : `${selectedStudent.name} 選択中`}</span>
             </div>
             <div className="setup-student-grid grid flex-1 auto-rows-fr grid-cols-1 gap-2 min-[520px]:grid-cols-2 lg:grid-cols-3">
               {AI_STUDENTS_LIST.map((student) => {
                 const selected = student.id === selectedStudentId;
                 return <article key={student.id} onClick={() => setSelectedStudentId(student.id)} className={`setup-student-card relative flex min-h-[174px] cursor-pointer flex-col rounded-2xl border-2 bg-white p-2.5 shadow-sm transition sm:min-h-[184px] ${selected ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-200 hover:border-blue-300'}`}>
                   {selected && <CheckCircle2 className="absolute right-2 top-2 h-5 w-5 fill-blue-600 text-white" />}
-                  <div className="setup-student-country pr-7 text-[12px] font-black" title={countryLabel(student)}>{student.flag} {countryLabel(student)}</div>
+                  <div className="setup-student-country pr-7 text-[12px] font-black" title={showLabels ? countryLabel(student) : 'AI留学生'}>{showLabels ? `${student.flag} ${countryLabel(student)}` : 'AI留学生'}</div>
                   <div className="setup-student-info-grid grid flex-1 items-start">
                     <StudentAvatar student={student} size="custom" className="setup-student-avatar h-[72px] w-[72px] rounded-xl border border-slate-200 object-cover sm:h-[76px] sm:w-[76px]" />
                     <div className="setup-student-copy min-w-0">
                       <h3 className="setup-student-name text-[13px] font-black">{student.name}</h3>
                       <p className="setup-student-japanese text-[11px] font-black text-blue-700">{student.japaneseName}</p>
-                      <p className="setup-student-origin text-[10px] font-semibold text-slate-600">{student.age}歳 · {student.city}</p>
+                      <p className="setup-student-origin text-[10px] font-semibold text-slate-600">{student.age}歳{showLabels ? ` · ${student.city}` : ''}</p>
                     </div>
-                    <p className="setup-student-accent rounded-md bg-slate-100 px-2 py-1 text-[9px] font-bold leading-tight text-slate-600">🗣 {student.accentName}</p>
+                    {showLabels && <p className="setup-student-accent rounded-md bg-slate-100 px-2 py-1 text-[9px] font-bold leading-tight text-slate-600">🗣 {student.accentName}</p>}
                   </div>
                   <button type="button" onClick={(e) => playPreview(student, e)} className={`mt-2 flex min-h-8 items-center justify-center gap-1 rounded-lg border text-[11px] font-black ${previewPlayingId === student.id ? 'border-blue-600 bg-blue-600 text-white' : 'border-blue-200 bg-white text-blue-700 hover:bg-blue-50'}`}><Volume2 className="h-3.5 w-3.5" />{previewPlayingId === student.id ? '再生中...' : '声を聞く'}</button>
                 </article>;
@@ -141,16 +143,15 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_clamp(132px,16vw,170px)] sm:items-center">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-xl">{selectedStudent.flag}</span>
-                    <p className="text-sm font-black">{selectedStudent.countryJapanese} ({countryLabel(selectedStudent)})</p>
+                    {showLabels && <><span className="text-xl">{selectedStudent.flag}</span><p className="text-sm font-black">{selectedStudent.countryJapanese} ({countryLabel(selectedStudent)})</p></>}
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-baseline gap-2"><h3 className="text-lg font-black">{selectedStudent.name}</h3><span className="text-sm font-black text-blue-700">{selectedStudent.japaneseName}</span></div>
-                  <p className="text-sm font-bold text-blue-700">{selectedStudent.age}歳 · {selectedStudent.city}</p>
-                  <p className="mt-2 rounded-xl border border-blue-100 bg-blue-50/70 p-2 text-[11px] font-semibold leading-relaxed text-slate-700">{selectedStudent.japaneseBio}</p>
+                  <p className="text-sm font-bold text-blue-700">{selectedStudent.age}歳{showLabels ? ` · ${selectedStudent.city}` : ''}</p>
+                  <p className="mt-2 rounded-xl border border-blue-100 bg-blue-50/70 p-2 text-[11px] font-semibold leading-relaxed text-slate-700">{showLabels ? selectedStudent.japaneseBio : '好きなものや専攻について英語で話せるAI留学生です。'}</p>
                   <div className="mt-2 grid gap-1 text-[10px] font-semibold text-slate-700">
                     <p><b>❤️ 好き:</b> {selectedStudent.likes.join('、')}</p>
                     <p><b>🎓 専攻:</b> {selectedStudent.major}</p>
-                    <p><b>🏛 名所:</b> {selectedStudent.heritageLandmark}</p>
+                    {showLabels && <p><b>🏛 名所:</b> {selectedStudent.heritageLandmark}</p>}
                   </div>
                 </div>
                 <StudentAvatar student={selectedStudent} size="custom" className="mx-auto aspect-[4/5] w-full max-w-[170px] rounded-xl border border-blue-200 object-cover shadow-sm" />

@@ -331,7 +331,8 @@ export function speakStudentVoice(
   customRate?: number,
   onStart?: () => void,
   onEnd?: () => void,
-  onError?: (e: unknown) => void
+  onError?: (e: unknown) => void,
+  onProvider?: (provider: 'google-chirp3-hd' | 'device-fallback', effectiveRate: number) => void
 ): SpeechSynthesisUtterance | null {
   if (typeof window === 'undefined') return null;
 
@@ -341,7 +342,7 @@ export function speakStudentVoice(
 
   const baseUrl = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
   const ttsUrl = `${baseUrl}/api/tts`;
-  const rate = Math.max(0.8, Math.min(1.15, customRate || student.voiceRate || 1.0));
+  const rate = Math.max(0.75, Math.min(1.25, customRate || student.voiceRate || 1.0));
 
   void (async () => {
     let cloudPlaybackCompleted = false;
@@ -358,6 +359,7 @@ export function speakStudentVoice(
       localFallbackStarted = true;
       console.warn('Google Cloud TTS unavailable; using device TTS fallback:', error);
       cleanupCloudAudio();
+      onProvider?.('device-fallback', Math.max(0.75, Math.min(1.25, customRate || student.voiceRate || 1.0)));
       speakStudentVoiceLocal(text, student, customRate, onStart, onEnd, onError);
     };
 
@@ -377,6 +379,7 @@ export function speakStudentVoice(
       }
 
       if (!response.ok) throw new Error(`Cloud TTS HTTP ${response.status}`);
+      onProvider?.('google-chirp3-hd', Number(response.headers.get('X-TTS-Effective-Rate') || rate));
       const blob = await response.blob();
       if (!blob.size) throw new Error('Cloud TTS returned empty audio');
       if (requestId !== activeCloudRequestId) return;
