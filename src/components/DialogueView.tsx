@@ -9,6 +9,7 @@ interface DialogueViewProps {
   aiStudent: AIStudentProfile;
   isAiResponding: boolean;
   onPlayAudio: (text: string) => void;
+  labelCondition?: 'shown' | 'hidden';
 }
 
 export const DialogueView: React.FC<DialogueViewProps> = ({
@@ -17,7 +18,9 @@ export const DialogueView: React.FC<DialogueViewProps> = ({
   aiStudent,
   isAiResponding,
   onPlayAudio,
+  labelCondition = 'shown',
 }) => {
+  const showLabels = labelCondition === 'shown';
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // Auto-scroll to bottom on new message
@@ -35,7 +38,7 @@ export const DialogueView: React.FC<DialogueViewProps> = ({
       {/* Welcome Banner */}
       <div className="text-center py-2 flex flex-wrap items-center justify-center gap-2">
         <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 border border-slate-200 rounded-full text-xs font-semibold text-slate-600">
-          <span>{aiStudent.flag}</span>
+          {showLabels && <span>{aiStudent.flag}</span>}
           <span>{aiStudent.name} との英語対話セッション (小学校５・６年生向け)</span>
         </span>
       </div>
@@ -67,7 +70,7 @@ export const DialogueView: React.FC<DialogueViewProps> = ({
               {/* Speaker Label */}
               <div className="flex items-center gap-1.5 mb-1 px-1">
                 <span className="text-[11px] font-bold text-slate-500">
-                  {isAi ? `${aiStudent.name} (${aiStudent.countryJapanese})` : studentName || 'あなた (5・6年生)'}
+                  {isAi ? (showLabels ? `${aiStudent.name} (${aiStudent.countryJapanese})` : aiStudent.name) : studentName || 'あなた (5・6年生)'}
                 </span>
                 {!isAi && msg.wordCount && (
                   <span className="text-[10px] bg-slate-100 text-slate-500 font-mono px-1 rounded">

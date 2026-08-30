@@ -34,6 +34,8 @@ import type { ReflectionAnswers, ResearchSystemEvent, ResearchSystemEventType } 
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const apiUrl = (path: string) => `${API_BASE_URL}${path}`;
+const PERSONA_LABEL_CONDITION: 'shown' | 'hidden' = import.meta.env.VITE_PERSONA_LABEL_CONDITION === 'hidden' ? 'hidden' : 'shown';
+const LABELS_VISIBLE = PERSONA_LABEL_CONDITION === 'shown';
 
 export default function App() {
   const [phase, setPhase] = useState<'setup' | 'dialogue' | 'reflection' | 'feedback' | 'history'>('setup');
@@ -90,6 +92,7 @@ export default function App() {
   const currentAiStudentRef = useRef<AIStudentProfile>(currentAiStudent); currentAiStudentRef.current = currentAiStudent;
   const soundEnabledRef = useRef(soundEnabled); soundEnabledRef.current = soundEnabled;
   const speechRateRef = useRef(speechRate); speechRateRef.current = speechRate;
+  const effectiveTtsRateRef = useRef(speechRate);
   const dialogueActiveRef = useRef(false);
   const chatAbortControllerRef = useRef<AbortController | null>(null);
   const systemEventsRef = useRef<ResearchSystemEvent[]>([]);
@@ -125,7 +128,8 @@ export default function App() {
     speakStudentVoice(text, currentAiStudentRef.current, speechRateRef.current,
       () => { setIsSpeaking(true); setMood('speaking'); },
       () => { setIsSpeaking(false); setMood('greeting'); },
-      () => { setIsSpeaking(false); setMood('greeting'); });
+      () => { setIsSpeaking(false); setMood('greeting'); },
+      (provider, effectiveRate) => { effectiveTtsRateRef.current = effectiveRate; recordResearchEvent('tts_provider', provider); recordResearchEvent('tts_effective_rate', effectiveRate.toFixed(2)); });
   }, []);
 
   const extractAndAddVocab = useCallback((text: string) => {
@@ -174,7 +178,7 @@ export default function App() {
     const initialHistory = [starterMessage];
     setMessages(initialHistory); messagesRef.current = initialHistory; setPhase('dialogue');
     if (learningDataEnabled && code && nextSessionId) {
-      void enqueueSessionSnapshot({ sessionId: nextSessionId, learningCode: code, aiStudentId: newProfile.selectedAiStudentId, topic: newProfile.selectedTopic, targetDurationMinutes: newProfile.selectedDurationMinutes, startedAt, endedAt: startedAt, history: initialHistory, encounteredVocab: [], systemEvents: systemEventsRef.current }).catch(() => undefined);
+      void enqueueSessionSnapshot({ sessionId: nextSessionId, learningCode: code, aiStudentId: newProfile.selectedAiStudentId, topic: newProfile.selectedTopic, targetDurationMinutes: newProfile.selectedDurationMinutes, startedAt, endedAt: startedAt, history: initialHistory, encounteredVocab: [], systemEvents: systemEventsRef.current, personaLabelCondition: PERSONA_LABEL_CONDITION, countryLabelVisible: LABELS_VISIBLE, accentLabelVisible: LABELS_VISIBLE, flagVisible: LABELS_VISIBLE, studentSelectedSpeechRate: speechRateRef.current, effectiveTtsSpeechRate: effectiveTtsRateRef.current }).catch(() => undefined);
     }
     setTimeout(() => {
       if (dialogueActiveRef.current && soundEnabledRef.current) {
@@ -182,7 +186,8 @@ export default function App() {
         speakStudentVoice(starterPrompt, studentObj, speechRateRef.current,
           () => setIsSpeaking(true),
           () => { setIsSpeaking(false); setMood('greeting'); },
-          () => { setIsSpeaking(false); setMood('greeting'); });
+          () => { setIsSpeaking(false); setMood('greeting'); },
+          (provider, effectiveRate) => { effectiveTtsRateRef.current = effectiveRate; recordResearchEvent('tts_provider', provider); recordResearchEvent('tts_effective_rate', effectiveRate.toFixed(2)); });
       }
     }, 600);
   };
@@ -232,6 +237,12 @@ export default function App() {
       const response = await fetch(apiUrl('/api/chat'), { method:'POST', headers:{'Content-Type':'application/json'}, signal:controller.signal, body:JSON.stringify({ message:trimmed, history:newHistory, topic:currentProf.selectedTopic, studentName:currentProf.name, aiStudentId:currentProf.selectedAiStudentId }) });
       const resData = await response.json();
       recordResearchEvent('ai_response_latency_ms', String(Math.max(0, Date.now() - aiRequestStartedAt)));
+      if (resData?._diagnostics?.model) recordResearchEvent('ai_model', String(resData._diagnostics.model));
+      const usage = resData?._diagnostics?.usage || {};
+      if (Number(usage.inputTokens) > 0) recordResearchEvent('ai_input_tokens', String(usage.inputTokens));
+      if (Number(usage.outputTokens) > 0) recordResearchEvent('ai_output_tokens', String(usage.outputTokens));
+      if (Number(usage.cacheReadTokens) > 0) recordResearchEvent('ai_cache_read_tokens', String(usage.cacheReadTokens));
+      if (Number(usage.cacheCreationTokens) > 0) recordResearchEvent('ai_cache_creation_tokens', String(usage.cacheCreationTokens));
       if (!dialogueActiveRef.current || controller.signal.aborted || chatAbortControllerRef.current !== controller) return;
       if (resData.success && resData.data) {
         const { reply, japaneseTranslation, studentJapaneseTranslation, studentTranslationStatus, mood: aiMood, culturalNote } = resData.data;
@@ -245,7 +256,7 @@ export default function App() {
         });
         const updatedHistory = [...translatedHistory, aiMsg]; setMessages(updatedHistory); messagesRef.current=updatedHistory;
         if (learningDataEnabled && learningCode && sessionId) {
-          void enqueueSessionSnapshot({ sessionId, learningCode, aiStudentId: currentProf.selectedAiStudentId, topic: currentProf.selectedTopic, targetDurationMinutes: currentProf.selectedDurationMinutes, startedAt: sessionStartedAtRef.current, endedAt: Date.now(), history: updatedHistory, encounteredVocab: encounteredVocabRef.current, systemEvents: systemEventsRef.current }).catch(() => undefined);
+          void enqueueSessionSnapshot({ sessionId, learningCode, aiStudentId: currentProf.selectedAiStudentId, topic: currentProf.selectedTopic, targetDurationMinutes: currentProf.selectedDurationMinutes, startedAt: sessionStartedAtRef.current, endedAt: Date.now(), history: updatedHistory, encounteredVocab: encounteredVocabRef.current, systemEvents: systemEventsRef.current, personaLabelCondition: PERSONA_LABEL_CONDITION, countryLabelVisible: LABELS_VISIBLE, accentLabelVisible: LABELS_VISIBLE, flagVisible: LABELS_VISIBLE, studentSelectedSpeechRate: speechRateRef.current, effectiveTtsSpeechRate: effectiveTtsRateRef.current }).catch(() => undefined);
         }
         setMood((aiMood as CharacterMood) || 'speaking'); playAiVoice(reply);
       } else throw new Error('API response unsuccessful');
@@ -336,7 +347,7 @@ export default function App() {
       const snapshotPayload = {
         sessionId, learningCode, aiStudentId: currentProf.selectedAiStudentId, topic: currentProf.selectedTopic,
         targetDurationMinutes: currentProf.selectedDurationMinutes, startedAt: sessionStartedAtRef.current,
-        endedAt: sessionEndedAtRef.current || Date.now(), history: finalMessages, encounteredVocab: encounteredVocabRef.current, systemEvents: systemEventsRef.current,
+        endedAt: sessionEndedAtRef.current || Date.now(), history: finalMessages, encounteredVocab: encounteredVocabRef.current, systemEvents: systemEventsRef.current, personaLabelCondition: PERSONA_LABEL_CONDITION, countryLabelVisible: LABELS_VISIBLE, accentLabelVisible: LABELS_VISIBLE, flagVisible: LABELS_VISIBLE, studentSelectedSpeechRate: speechRateRef.current, effectiveTtsSpeechRate: effectiveTtsRateRef.current,
       };
       initialSessionSaveRef.current = enqueueSessionSnapshot(snapshotPayload)
         .catch((error) => { console.warn('Initial research session snapshot unavailable:', error); });
@@ -347,7 +358,7 @@ export default function App() {
     let hasTransitioned=false; const executeTransition=()=>{if(hasTransitioned)return;hasTransitioned=true;stopSpeaking();if(farewellSafetyTimerRef.current){clearTimeout(farewellSafetyTimerRef.current);farewellSafetyTimerRef.current=null;}farewellTransitionRef.current=null;setFarewellBanner(null);setPhase('reflection');};
     farewellTransitionRef.current=executeTransition;
     // Do not advance on a fixed timer: long farewell audio must finish before the reflection screen opens.
-    speakStudentVoice(farewell.english,studentObj,speechRateRef.current,()=>{setIsSpeaking(true);setMood('happy');},()=>{setIsSpeaking(false);executeTransition();},()=>{setIsSpeaking(false);executeTransition();});
+    speakStudentVoice(farewell.english,studentObj,speechRateRef.current,()=>{setIsSpeaking(true);setMood('happy');},()=>{setIsSpeaking(false);executeTransition();},()=>{setIsSpeaking(false);executeTransition();},(provider, effectiveRate) => { effectiveTtsRateRef.current = effectiveRate; recordResearchEvent('tts_provider', provider); recordResearchEvent('tts_effective_rate', effectiveRate.toFixed(2)); });
   };
 
   const handleSubmitReflection = async (answers: ReflectionAnswers) => {
@@ -359,7 +370,7 @@ export default function App() {
         await enqueueSessionSnapshot({
           sessionId, learningCode, aiStudentId: profileRef.current.selectedAiStudentId, topic: profileRef.current.selectedTopic,
           targetDurationMinutes: profileRef.current.selectedDurationMinutes, startedAt: sessionStartedAtRef.current,
-          endedAt: sessionEndedAtRef.current || Date.now(), history: messagesRef.current, encounteredVocab: encounteredVocabRef.current, reflection: answers, systemEvents: systemEventsRef.current,
+          endedAt: sessionEndedAtRef.current || Date.now(), history: messagesRef.current, encounteredVocab: encounteredVocabRef.current, reflection: answers, systemEvents: systemEventsRef.current, personaLabelCondition: PERSONA_LABEL_CONDITION, countryLabelVisible: LABELS_VISIBLE, accentLabelVisible: LABELS_VISIBLE, flagVisible: LABELS_VISIBLE, studentSelectedSpeechRate: speechRateRef.current, effectiveTtsSpeechRate: effectiveTtsRateRef.current,
         });
         setReflectionSaveMessage('学習履歴に保存しました。');
       } catch (error) {
@@ -388,13 +399,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-800 flex flex-col">
-      {phase==='setup' && <SetupScreen onStartDialogue={handleStartDialogue} learningDataEnabled={learningDataEnabled} onValidateLearningCode={validateLearningCode}/>} 
+      {phase==='setup' && <SetupScreen onStartDialogue={handleStartDialogue} learningDataEnabled={learningDataEnabled} onValidateLearningCode={validateLearningCode} labelCondition={PERSONA_LABEL_CONDITION}/>} 
       {phase==='dialogue' && (
         <div className="flex-1 flex flex-col min-h-[100dvh] lg:h-screen lg:overflow-hidden">
-          <Header studentName={profile.name} learningId={learningCode} aiStudentName={currentAiStudent.name} aiStudentFlag={currentAiStudent.flag} remainingSeconds={remainingSeconds} totalDurationSeconds={profile.selectedDurationMinutes*60} turnCount={turnCount} wordCount={totalChildWords} soundEnabled={soundEnabled} onToggleSound={()=>{if(soundEnabled)stopSpeaking();setSoundEnabled(!soundEnabled);}} onFinishEarly={handleFinishDialogue}/>
+          <Header labelCondition={PERSONA_LABEL_CONDITION} studentName={profile.name} learningId={learningCode} aiStudentName={currentAiStudent.name} aiStudentFlag={currentAiStudent.flag} remainingSeconds={remainingSeconds} totalDurationSeconds={profile.selectedDurationMinutes*60} turnCount={turnCount} wordCount={totalChildWords} soundEnabled={soundEnabled} onToggleSound={()=>{if(soundEnabled)stopSpeaking();setSoundEnabled(!soundEnabled);}} onFinishEarly={handleFinishDialogue}/>
           <main className="flex-1 max-w-7xl w-full mx-auto p-2.5 sm:p-4 lg:p-5 grid grid-cols-1 md:grid-cols-12 gap-3 lg:gap-5 min-h-0 lg:overflow-hidden pb-[calc(7.5rem+env(safe-area-inset-bottom))] lg:pb-5">
             <div className="hidden md:flex col-span-12 md:col-span-4 lg:col-span-3 flex-col gap-4 overflow-y-auto min-h-0">
-              <AIStudentCard student={currentAiStudent} mood={mood} isSpeaking={isSpeaking} isListening={isListening} speechRate={speechRate} onReplayAudio={()=>{recordResearchEvent('ai_replay','profile');const lastAi=messages.filter((m)=>m.sender==='ai').slice(-1)[0];if(lastAi)playAiVoice(lastAi.englishText);}} onChangeSpeechRate={(rate)=>{recordResearchEvent('speech_rate_change',rate.toFixed(2));setSpeechRate(rate);}}/>
+              <AIStudentCard labelCondition={PERSONA_LABEL_CONDITION} student={currentAiStudent} mood={mood} isSpeaking={isSpeaking} isListening={isListening} speechRate={speechRate} onReplayAudio={()=>{recordResearchEvent('ai_replay','profile');const lastAi=messages.filter((m)=>m.sender==='ai').slice(-1)[0];if(lastAi)playAiVoice(lastAi.englishText);}} onChangeSpeechRate={(rate)=>{recordResearchEvent('speech_rate_change',rate.toFixed(2));setSpeechRate(rate);}}/>
               <div className="shrink-0 bg-slate-800 p-5 rounded-3xl text-white shadow-sm">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Session Stats (対話記録)</p>
                 <div className="flex items-center justify-between mb-2"><span className="text-xs text-slate-300">Turns</span><span className="font-mono font-bold text-lg">{turnCount}</span></div>
@@ -406,8 +417,8 @@ export default function App() {
 
             <div className="col-span-12 md:col-span-8 lg:col-span-6 flex flex-col bg-white rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[65dvh] md:min-h-0 md:h-full relative">
               <div className="hidden sm:block p-2.5 sm:p-3 border-b border-slate-100 bg-slate-50/50"><VisualVocabularyDock vocabularyList={encounteredVocabList} latestItem={latestVocabItem} onPlayWord={(word)=>speakVocabularyWord(word,currentAiStudent.voiceLang)} onResearchEvent={recordResearchEvent}/></div>
-              <div className="sm:hidden flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50 text-xs font-bold text-slate-700"><span className="text-xl">{currentAiStudent.flag}</span><span>{currentAiStudent.name}</span><span className="ml-auto text-slate-500">Turns {turnCount} · Words {totalChildWords}</span></div>
-              <DialogueView messages={messages} studentName={profile.name} aiStudent={currentAiStudent} isAiResponding={isAiResponding} onPlayAudio={(text)=>{recordResearchEvent('ai_replay','transcript');playAiVoice(text);}}/>
+              <div className="sm:hidden flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50 text-xs font-bold text-slate-700">{LABELS_VISIBLE && <span className="text-xl">{currentAiStudent.flag}</span>}<span>{currentAiStudent.name}</span><span className="ml-auto text-slate-500">Turns {turnCount} · Words {totalChildWords}</span></div>
+              <DialogueView labelCondition={PERSONA_LABEL_CONDITION} messages={messages} studentName={profile.name} aiStudent={currentAiStudent} isAiResponding={isAiResponding} onPlayAudio={(text)=>{recordResearchEvent('ai_replay','transcript');playAiVoice(text);}}/>
               <AnimatePresence>{micHintMessage&&<motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:10}} className="mx-3 sm:mx-4 mb-2 bg-amber-50 border border-amber-300 rounded-xl p-2.5 text-xs font-bold text-amber-900 text-center shadow-xs">{micHintMessage}</motion.div>}</AnimatePresence>
               <div className="hidden lg:block"><SpeechInputBar isRecording={isRecording} transcript={speechTranscript} isAiResponding={isAiResponding} onToggleRecording={handleToggleRecording} onSendMessage={handleSendMessage} onClearTranscript={()=>{setSpeechTranscript('');liveTranscriptRef.current='';}} onResearchEvent={recordResearchEvent}/></div>
             </div>

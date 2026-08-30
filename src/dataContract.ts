@@ -1,5 +1,5 @@
-import { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, VisualVocabularyItem } from './types';
-import { maskMessagesForExternalUse } from './utils/privacy';
+import { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, PersonaLabelCondition, VisualVocabularyItem } from './types';
+import { maskTextForResearchExport } from './utils/privacy';
 
 export const AI_STUDENT_IDS = [
   'emma_usa','oliver_uk','liam_australia','chloe_canada','bence_hungary','zofia_poland','rahul_bangladesh','linh_vietnam','aung_myanmar',
@@ -11,17 +11,16 @@ export const DIALOGUE_DURATIONS_MINUTES = [1, 2, 3, 5] as const satisfies readon
 export interface StudentIdentity { learningCode: string; }
 
 export interface ReflectionAnswers {
-  conveyedIdeas: number;
-  understoodPartner: number;
-  noticedLanguageCulture: number;
-  continuedConversation?: number;
-  freeComment?: string;
+  conveyedIdeas: 1 | 3 | 5;
+  understoodPartner: 1 | 3 | 5;
+  noticedLanguageCulture: 1 | 3 | 5;
 }
 
 export const RESEARCH_SYSTEM_EVENT_TYPES = [
   'session_start','session_finish','reflection_submit','mic_start','mic_stop_send','mic_error',
   'text_input_open','text_message_send','help_open','help_phrase_select','ai_replay','vocab_bank_open',
   'vocab_audio_play','speech_rate_change','ai_response_latency_ms','ai_request_failure',
+  'ai_model','ai_input_tokens','ai_output_tokens','ai_cache_read_tokens','ai_cache_creation_tokens','tts_provider','tts_effective_rate',
 ] as const;
 export type ResearchSystemEventType = typeof RESEARCH_SYSTEM_EVENT_TYPES[number];
 export interface ResearchSystemEvent {
@@ -42,6 +41,12 @@ export interface SessionSaveInput {
   encounteredVocab?: VisualVocabularyItem[];
   reflection?: ReflectionAnswers;
   systemEvents?: ResearchSystemEvent[];
+  personaLabelCondition?: PersonaLabelCondition;
+  countryLabelVisible?: boolean;
+  accentLabelVisible?: boolean;
+  flagVisible?: boolean;
+  studentSelectedSpeechRate?: number;
+  effectiveTtsSpeechRate?: number;
 }
 
 export interface CanonicalSessionStats {
@@ -134,27 +139,27 @@ export function calculateCanonicalStats(history: ChatMessage[], startedAt: numbe
   return { ...communication, actualDurationSeconds, targetDurationMinutes, uniqueVocabularyCount: vocabIds.size };
 }
 
-export function maskHistoryForStorage(history: ChatMessage[]): ChatMessage[] { return maskMessagesForExternalUse(history); }
+export function maskHistoryForStorage(history: ChatMessage[]): ChatMessage[] {
+  return history.map((message) => ({
+    ...message,
+    englishText: maskTextForResearchExport(message.englishText),
+    japaneseText: message.japaneseText ? maskTextForResearchExport(message.japaneseText) : message.japaneseText,
+    culturalNote: message.culturalNote ? maskTextForResearchExport(message.culturalNote) : message.culturalNote,
+  }));
+}
 
 export function parseReflectionAnswers(value: unknown): ReflectionAnswers | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const source = value as Record<string, unknown>;
-  const rating = (key: string) => {
+  const rating = (key: string): 1 | 3 | 5 | null => {
     const number = Number(source[key]);
-    return Number.isInteger(number) && number >= 1 && number <= 5 ? number : null;
+    return number === 1 || number === 3 || number === 5 ? number : null;
   };
   const conveyedIdeas = rating('conveyedIdeas');
   const understoodPartner = rating('understoodPartner');
   const noticedLanguageCulture = rating('noticedLanguageCulture');
-  if ([conveyedIdeas, understoodPartner, noticedLanguageCulture].some((v) => v === null)) return undefined;
-  const continuedConversation = rating('continuedConversation');
-  return {
-    conveyedIdeas: conveyedIdeas!,
-    understoodPartner: understoodPartner!,
-    noticedLanguageCulture: noticedLanguageCulture!,
-    ...(continuedConversation === null ? {} : { continuedConversation }),
-    freeComment: typeof source.freeComment === 'string' ? source.freeComment.trim().slice(0, 500) : undefined,
-  };
+  if (conveyedIdeas === null || understoodPartner === null || noticedLanguageCulture === null) return undefined;
+  return { conveyedIdeas, understoodPartner, noticedLanguageCulture };
 }
 
 export function parseResearchSystemEvents(value: unknown): ResearchSystemEvent[] {
@@ -190,5 +195,11 @@ export function validateSessionSaveInput(body: unknown): { ok: true; value: Sess
     encounteredVocab: Array.isArray(source.encounteredVocab) ? (source.encounteredVocab as VisualVocabularyItem[]).slice(0, 200) : [],
     reflection: parseReflectionAnswers(source.reflection),
     systemEvents: parseResearchSystemEvents(source.systemEvents),
+    personaLabelCondition: source.personaLabelCondition === 'hidden' ? 'hidden' : 'shown',
+    countryLabelVisible: source.countryLabelVisible !== false,
+    accentLabelVisible: source.accentLabelVisible !== false,
+    flagVisible: source.flagVisible !== false,
+    studentSelectedSpeechRate: Math.max(0.75, Math.min(1.25, Number(source.studentSelectedSpeechRate || 1))),
+    effectiveTtsSpeechRate: Math.max(0.75, Math.min(1.25, Number(source.effectiveTtsSpeechRate || source.studentSelectedSpeechRate || 1))),
   }};
 }

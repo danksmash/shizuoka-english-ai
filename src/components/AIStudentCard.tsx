@@ -11,6 +11,7 @@ interface AIStudentCardProps {
   speechRate: number;
   onReplayAudio: () => void;
   onChangeSpeechRate: (rate: number) => void;
+  labelCondition?: 'shown' | 'hidden';
 }
 
 export const AIStudentCard: React.FC<AIStudentCardProps> = ({
@@ -21,7 +22,9 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
   speechRate,
   onReplayAudio,
   onChangeSpeechRate,
+  labelCondition = 'shown',
 }) => {
+  const showLabels = labelCondition === 'shown';
   const updateSpeechRate = (rawValue: string) => {
     const parsed = Number(rawValue);
     if (!Number.isFinite(parsed)) return;
@@ -66,8 +69,7 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
     <div className="bg-white rounded-3xl p-3.5 sm:p-4 border border-slate-200 shadow-sm flex shrink-0 flex-col items-center text-center relative overflow-hidden">
       <div className="w-full min-h-9 flex items-center justify-between gap-2 mb-2">
         <div className="min-w-0 flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full text-xs font-bold text-slate-700 shadow-2xs">
-          <span className="text-lg leading-none flex-shrink-0">{student.flag}</span>
-          <span className="truncate">{student.country} ({student.countryNative})</span>
+          {showLabels ? <><span className="text-lg leading-none flex-shrink-0">{student.flag}</span><span className="truncate">{student.country} ({student.countryNative})</span></> : <span className="truncate">AI留学生</span>}
         </div>
 
         <button
@@ -108,7 +110,7 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
 
       <h2 className="text-xl font-black text-slate-900 leading-tight">{student.name}</h2>
       <p className="text-xs font-bold text-blue-700 mt-0.5 mb-1">
-        {student.japaneseName} ({student.age}歳・{student.city})
+        {student.japaneseName} ({student.age}歳{showLabels ? `・${student.city}` : ''})
       </p>
       <p className="text-xs text-slate-600 font-medium leading-relaxed max-w-xs mb-2">
         {student.role}
@@ -144,9 +146,7 @@ export const AIStudentCard: React.FC<AIStudentCardProps> = ({
         </p>
       </div>
 
-      <p className="text-[10px] text-slate-500 font-semibold leading-tight">
-        {student.accentName}
-      </p>
+      {showLabels && <p className="text-[10px] text-slate-500 font-semibold leading-tight">{student.accentName}</p>}
     </div>
   );
 };

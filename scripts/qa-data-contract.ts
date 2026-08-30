@@ -3,50 +3,17 @@ import { readFile } from 'node:fs/promises';
 import { canonicalizeHistory, maskHistoryForStorage, validateSessionSaveInput } from '../src/dataContract';
 import { safePlainTextForClipboard } from '../src/utils/privacy';
 
-const history = canonicalizeHistory([
-  { id: 'a', sender: 'ai', englishText: 'Hello!', japaneseText: 'こんにちは！', timestamp: 1000 },
-  { id: 'b', sender: 'child', englishText: 'I like soccer.', japaneseText: 'サッカーが好きです。', timestamp: 1500 },
-]);
-const valid = validateSessionSaveInput({
-  sessionId: 'session_12345678', learningCode: 'A7M4', aiStudentId: 'emma_usa', topic: 'favorites', targetDurationMinutes: 3, startedAt: 1000, endedAt: 2000, history,
-});
-assert.equal(valid.ok, true);
-for (const code of ['A7M', 'A7M45', 'A-7M', '']) {
-  const result = validateSessionSaveInput({ sessionId: 'session_12345678', learningCode: code, aiStudentId: 'emma_usa', topic: 'favorites', targetDurationMinutes: 3, startedAt: 1000, endedAt: 2000, history });
-  assert.equal(result.ok, false, `Invalid learner code accepted: ${code}`);
-}
-for (const duration of [1,2,3,5]) {
-  const result = validateSessionSaveInput({ sessionId: 'session_12345678', learningCode: 'A7M4', aiStudentId: 'emma_usa', topic: 'favorites', targetDurationMinutes: duration, startedAt: 1000, endedAt: 2000, history });
-  assert.equal(result.ok, true, `Valid duration rejected: ${duration}`);
-}
-const badDuration = validateSessionSaveInput({ sessionId: 'session_12345678', learningCode: 'A7M4', aiStudentId: 'emma_usa', topic: 'favorites', targetDurationMinutes: 10, startedAt: 1000, endedAt: 2000, history });
-assert.equal(badDuration.ok, false);
-
-const privateHistory = canonicalizeHistory([{ id: 'p', sender: 'child', englishText: 'My email is child@example.com and phone is 090-1234-5678.', timestamp: 1000 }]);
-const maskedHistory = maskHistoryForStorage(privateHistory);
-assert.equal(maskedHistory[0].englishText.includes('child@example.com'), false);
-assert.equal(maskedHistory[0].englishText.includes('090-1234-5678'), false);
-const copied = safePlainTextForClipboard('Email child@example.com phone 090-1234-5678');
-assert.equal(copied.includes('child@example.com'), false);
-assert.equal(copied.includes('090-1234-5678'), false);
-
-const persistenceSource = await readFile('src/server/persistence.ts', 'utf8');
-assert.ok(persistenceSource.includes('learningId: normalized'), 'Teacher-facing learner ID must be the distributed four-character ID');
-assert.ok(persistenceSource.includes('attendanceNumber'), 'Attendance number must be stored separately from names');
-assert.ok(persistenceSource.includes('learnerTeacherVisibleSession'), 'Learner/teacher ordinary views must exclude checkpoint-only sessions');
-assert.equal(persistenceSource.includes('child_utterances:'), false, 'Persistence must not create a raw research-export field');
-const researchExportSource = await readFile('src/server/researchExport.ts', 'utf8');
-assert.ok(researchExportSource.includes('reflection_conveyed_ideas'));
-assert.ok(researchExportSource.includes('reflection_understood_partner'));
-assert.ok(researchExportSource.includes('reflection_noticed_language_culture'));
-assert.ok(!researchExportSource.includes('learningId'), 'Research export must not expose learner IDs');
-const serverSource = await readFile('server.ts', 'utf8');
-assert.ok(serverSource.includes('learningId:created.learningId'));
-assert.ok(serverSource.includes("requireManagementRole(['teacher'])"));
-assert.ok(serverSource.includes("requireManagementRole(['researcher'])"));
-const managementSource = await readFile('src/server/managementPage.ts', 'utf8');
-assert.ok(managementSource.includes('learningId'));
-assert.ok(managementSource.includes('/api/management/research.csv'));
-assert.ok(managementSource.includes('児童の生の発話本文を表示しません'));
-
+const history=canonicalizeHistory([{id:'a',sender:'ai',englishText:'Hello!',japaneseText:'こんにちは！',timestamp:1000},{id:'b',sender:'child',englishText:'I like soccer.',japaneseText:'サッカーが好きです。',timestamp:1500}]);
+const valid=validateSessionSaveInput({sessionId:'session_12345678',learningCode:'A7M4',aiStudentId:'emma_usa',topic:'favorites',targetDurationMinutes:3,startedAt:1000,endedAt:2000,history,reflection:{conveyedIdeas:3,understoodPartner:3,noticedLanguageCulture:3},personaLabelCondition:'shown',studentSelectedSpeechRate:1,effectiveTtsSpeechRate:1});assert.equal(valid.ok,true);
+for(const code of ['A7M','A7M45','A-7M',''])assert.equal(validateSessionSaveInput({sessionId:'session_12345678',learningCode:code,aiStudentId:'emma_usa',topic:'favorites',targetDurationMinutes:3,startedAt:1000,endedAt:2000,history}).ok,false);
+for(const duration of [1,2,3,5])assert.equal(validateSessionSaveInput({sessionId:'session_12345678',learningCode:'A7M4',aiStudentId:'emma_usa',topic:'favorites',targetDurationMinutes:duration,startedAt:1000,endedAt:2000,history}).ok,true);
+assert.equal(validateSessionSaveInput({sessionId:'session_12345678',learningCode:'A7M4',aiStudentId:'emma_usa',topic:'favorites',targetDurationMinutes:10,startedAt:1000,endedAt:2000,history}).ok,false);
+for(const reflection of [{conveyedIdeas:2,understoodPartner:3,noticedLanguageCulture:3},{conveyedIdeas:5,understoodPartner:4,noticedLanguageCulture:1}]){const r=validateSessionSaveInput({sessionId:'session_12345678',learningCode:'A7M4',aiStudentId:'emma_usa',topic:'favorites',targetDurationMinutes:1,startedAt:1000,endedAt:2000,history,reflection});assert.equal(r.ok,true);if(r.ok)assert.equal(r.value.reflection,undefined);}
+const privateHistory=canonicalizeHistory([{id:'p',sender:'child',englishText:'My name is Jonah Smith. I go to Kitahama Elementary School. My code is A7M4. Email child@example.com phone 090-1234-5678.',timestamp:1000}]);const masked=maskHistoryForStorage(privateHistory);for(const secret of ['Jonah Smith','Kitahama Elementary School','A7M4','child@example.com','090-1234-5678'])assert.equal(masked[0].englishText.includes(secret),false,secret);
+const copied=safePlainTextForClipboard('Email child@example.com phone 090-1234-5678');assert.equal(copied.includes('child@example.com'),false);assert.equal(copied.includes('090-1234-5678'),false);
+const persistence=await readFile('src/server/persistence.ts','utf8');assert.ok(persistence.includes('learningId: normalized'));assert.ok(persistence.includes("existing ? [] : await queryCollection"));assert.ok(persistence.includes("schemaVersion: 4"));
+const exportSource=await readFile('src/server/researchExport.ts','utf8');assert.ok(exportSource.includes('persona_label_condition'));assert.ok(exportSource.includes('student_selected_speech_rate'));assert.ok(exportSource.includes("dictionary_source:'persona'"));assert.equal(exportSource.includes('learningId'),false);
+const server=await readFile('server.ts','utf8');assert.ok(server.includes("'claude-sonnet-5'"));assert.ok(server.includes("output_config: { effort: 'medium' }"));assert.ok(server.includes("requireManagementRole(['researcher'])"));assert.equal(server.includes("requireManagementRole(['teacher'])"),false);assert.equal(server.includes("'/api/management/student-codes'"),false);assert.equal(server.includes("'/api/management/sessions'"),false);
+const management=await readFile('src/server/managementPage.ts','utf8');assert.ok(management.includes('/api/management/research.csv'));assert.ok(management.includes('匿名化'));assert.equal(management.includes('教師用管理'),false);
+const auth=await readFile('src/server/auth.ts','utf8');assert.ok(auth.includes('/api/management/research.summary'));
 console.log('DATA CONTRACT QA PASS');

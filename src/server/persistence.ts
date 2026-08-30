@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { ReflectionAnswers, ResearchSystemEvent, calculateCanonicalStats, maskHistoryForStorage } from '../dataContract';
-import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, VisualVocabularyItem } from '../types';
+import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, PersonaLabelCondition, VisualVocabularyItem } from '../types';
+import { getPersonaResearchMetadata } from '../data/personaResearch';
 import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, setDocument } from './firestore';
 
 const STUDENT_COLLECTION = 'students';
@@ -181,6 +182,8 @@ export interface SaveCanonicalSessionArgs {
   sessionId: string; studentId: string; researchId: string; classId?: string; aiStudentId: AIStudentId; topic: DialogueTopic;
   targetDurationMinutes: DialogueDurationMinutes; startedAt: number; endedAt: number; history: ChatMessage[];
   encounteredVocab: VisualVocabularyItem[]; reflection?: ReflectionAnswers; systemEvents?: ResearchSystemEvent[];
+  personaLabelCondition?: PersonaLabelCondition; countryLabelVisible?: boolean; accentLabelVisible?: boolean; flagVisible?: boolean;
+  studentSelectedSpeechRate?: number; effectiveTtsSpeechRate?: number;
 }
 
 export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
@@ -188,21 +191,32 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
   const stats = calculateCanonicalStats(safeHistory, args.startedAt, args.endedAt, args.targetDurationMinutes, args.encounteredVocab);
   const existing = await getDocument(SESSION_COLLECTION, args.sessionId);
   if (existing && existing.studentId && existing.studentId !== args.studentId) throw new Error('SESSION_ID_CONFLICT');
-  const studentSessions = await queryCollection(SESSION_COLLECTION, 'studentId', args.studentId, 5000);
+  const studentSessions = existing ? [] : await queryCollection(SESSION_COLLECTION, 'studentId', args.studentId, 5000);
   const lifetimeSessionNumber = existing?.lifetimeSessionNumber || studentSessions.length + 1;
   const localDate = new Date(args.startedAt).toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
   const dailySessionNumber = existing?.dailySessionNumber || studentSessions.filter((session) => session.localDate === localDate).length + 1;
   const currentClassId = normalizeClassId(args.classId);
+  const personaMeta = getPersonaResearchMetadata(args.aiStudentId);
+  const events = (args.systemEvents || []).slice(0, 500);
+  const eventValues = (type: string) => events.filter((event) => event.type === type).map((event) => Number(event.value || 0)).filter(Number.isFinite);
+  const sumEvent = (type: string) => eventValues(type).reduce((sum, value) => sum + value, 0);
+  const latestEvent = (type: string) => [...events].reverse().find((event) => event.type === type)?.value || '';
   const document = {
-    schemaVersion: 3, sessionId: args.sessionId, studentId: args.studentId, researchId: args.researchId,
+    schemaVersion: 4, researchSchemaVersion: 'research-2026-v1', sessionId: args.sessionId, studentId: args.studentId, researchId: args.researchId,
     classId: currentClassId, academicYear: academicYearForLocalDate(localDate), gradeLevel: gradeLevelForClassId(currentClassId), aiStudentId: args.aiStudentId, topic: args.topic,
+    appVersion: process.env.APP_VERSION || 'unknown', build: process.env.APP_BUILD || 'unknown', aiModel: latestEvent('ai_model') || process.env.ANTHROPIC_MODEL || 'unknown',
+    aiInputTokens: sumEvent('ai_input_tokens'), aiOutputTokens: sumEvent('ai_output_tokens'), aiCacheReadTokens: sumEvent('ai_cache_read_tokens'), aiCacheCreationTokens: sumEvent('ai_cache_creation_tokens'),
+    personaId: personaMeta.personaId, personaCountry: personaMeta.country, personaGender: personaMeta.gender, personaAccentName: personaMeta.accentName, worldEnglishesCircle: personaMeta.worldEnglishesCircle,
+    personaLabelCondition: args.personaLabelCondition === 'hidden' ? 'hidden' : 'shown', countryLabelVisible: args.countryLabelVisible !== false, accentLabelVisible: args.accentLabelVisible !== false, flagVisible: args.flagVisible !== false,
+    ttsProvider: latestEvent('tts_provider') || 'not_observed', ttsVoiceName: personaMeta.voiceName, ttsLanguageCode: personaMeta.voiceLanguageCode, personaVoiceGender: personaMeta.voiceGender, personaVoicePitch: personaMeta.voicePitch, personaDefaultVoiceRate: personaMeta.defaultVoiceRate,
+    studentSelectedSpeechRate: Number(args.studentSelectedSpeechRate || 1), effectiveTtsSpeechRate: Number(latestEvent('tts_effective_rate') || args.effectiveTtsSpeechRate || args.studentSelectedSpeechRate || 1), personaDictionaryVersion: personaMeta.personaDictionaryVersion,
     targetDurationMinutes: args.targetDurationMinutes, actualDurationSeconds: stats.actualDurationSeconds,
     startedAt: new Date(args.startedAt).toISOString(), endedAt: new Date(args.endedAt).toISOString(), localDate,
     lifetimeSessionNumber, dailySessionNumber, totalTurns: stats.totalTurns, totalChildWords: stats.totalChildWords,
     uniqueVocabularyCount: stats.uniqueVocabularyCount,
     childUniqueWordTypes: stats.childUniqueWordTypes, meanChildWordsPerTurn: stats.meanChildWordsPerTurn, maxChildWordsPerTurn: stats.maxChildWordsPerTurn,
     childQuestionCount: stats.childQuestionCount, childReciprocalQuestionCount: stats.childReciprocalQuestionCount, childRepairCount: stats.childRepairCount, childReasonExpressionCount: stats.childReasonExpressionCount,
-    history: safeHistory, systemEvents: (args.systemEvents || []).slice(0, 500),
+    history: safeHistory, systemEvents: events,
     encounteredVocab: args.encounteredVocab.slice(0, 200).map((item) => ({ id: item.id, word: item.word, japanese: item.japanese, category: item.category })),
     reflection: args.reflection || null, updatedAt: new Date().toISOString(), createdAt: existing?.createdAt || new Date().toISOString(),
     retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000).toISOString(),

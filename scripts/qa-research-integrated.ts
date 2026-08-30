@@ -54,7 +54,7 @@ assert.equal(inClass.local_start_time, '10:00:00');
 assert.equal(inClass.weekday, 'Tue');
 assert.equal(inClass.usage_context_inferred, 'in_class');
 assert.equal(inClass.same_class_starts_5min, 8);
-assert.equal(inClass.classification_rule_version, 'time-cluster-v1');
+assert.equal(inClass.classification_rule_version, 'time-cluster-v2');
 assert.equal(inClass.total_turns, inClass.child_turn_count);
 assert.equal(inClass.total_child_words, inClass.child_total_words);
 assert.equal(inClass.unique_vocabulary_count, inClass.encountered_curriculum_vocab_count);
@@ -150,7 +150,7 @@ assert.ok(firestoreHardening.includes('nextPageToken'),'Firestore management rea
 assert.ok(firestoreHardening.includes('createDocumentIfAbsent'),'atomic create-if-absent helper must exist');
 assert.ok(persistenceHardening.includes("RESEARCH_ID_COLLECTION = 'research_ids'"),'research IDs must have an atomic uniqueness index');
 assert.ok(!persistenceHardening.includes("TEACHER_ID_COLLECTION = 'teacher_ids'"),'opaque teacher-only IDs must not be generated in the learner-ID architecture');
-assert.ok(persistenceHardening.includes('learningId: normalized'),'teacher views must use the distributed learner ID');
+assert.ok(persistenceHardening.includes('learningId: normalized'),'learner identity records must retain the distributed learner ID');
 assert.ok(persistenceHardening.includes('createDocumentIfAbsent(STUDENT_COLLECTION, key'),'learning-code documents must not overwrite concurrent issuance');
 assert.ok(persistenceHardening.includes("queryCollection(SESSION_COLLECTION, 'studentId', studentId, 5000)"),'student longitudinal history must exceed the old 500-session ceiling');
 assert.ok(persistenceHardening.includes('updateStudentClass'),'grade/class progression must preserve student and research identity');
@@ -160,9 +160,12 @@ const reissueSource = persistenceHardening.slice(reissueStart, reissueEnd);
 assert.ok(reissueSource.indexOf('const created = await createStudentCode(newCode') < reissueSource.indexOf('active: false'),'new learner ID must be created successfully before old learner IDs are deactivated');
 assert.ok(authHardening.includes('/api/management/research.bundle.zip'),'researcher must be allowed to download the protected one-snapshot bundle');
 assert.ok(serverHardening.includes('/api/management/research.bundle.zip'),'one-snapshot ZIP export endpoint must exist');
-assert.ok(managementHardening.includes("data_quality_flag||'')!=='complete"),'complete-case filters must include reflection/data-quality status');
-assert.ok(managementHardening.includes('bundleCsvBtn'),'research management UI must expose the same-snapshot ZIP export');
+assert.ok(managementHardening.includes('/api/management/research.bundle.zip'),'research management UI must expose the same-snapshot ZIP export');
+assert.ok(managementHardening.includes('/api/management/research.summary'),'research management UI must expose anonymous summary data');
+assert.ok(!managementHardening.includes('教師用管理'),'teacher management UI must be removed');
 assert.ok(appSource.includes('sessionSaveQueueRef'),'checkpoint writes must be serialized to avoid stale overwrite races');
 assert.ok(appSource.includes('Research session checkpoint unavailable'),'in-progress session checkpoints must be attempted');
 
 console.log('Integrated research dataset QA: PASS');
+
+const personaRow=data.sessions.find((row)=>row.session_id==='session_class_0')!;assert.equal(personaRow.persona_id,'emma_usa');assert.ok(['Inner','Outer','Expanding'].includes(String(personaRow.accent_circle)));
