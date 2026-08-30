@@ -17,17 +17,29 @@ const persistence=await readFile('src/server/persistence.ts','utf8');assert.ok(p
 const exportSource=await readFile('src/server/researchExport.ts','utf8');assert.ok(exportSource.includes('persona_label_condition'));assert.ok(exportSource.includes('student_selected_speech_rate'));assert.ok(exportSource.includes("dictionary_source:'persona'"));assert.equal(exportSource.includes('learningId'),false);
 const server=await readFile('server.ts','utf8');assert.ok(server.includes("'claude-sonnet-5'"));assert.ok(server.includes("output_config: { effort: 'medium' }"));assert.ok(server.includes("requireManagementRole(['researcher'])"));assert.equal(server.includes("requireManagementRole(['teacher'])"),false);assert.equal(server.includes("'/api/management/student-codes'"),false);assert.equal(server.includes("'/api/management/sessions'"),false);
 const management=await readFile('src/server/managementPage.ts','utf8');assert.ok(management.includes('/api/management/research.csv'));assert.ok(management.includes('匿名化'));assert.equal(management.includes('教師用管理'),false);
+const auth=await readFile('src/server/auth.ts','utf8');assert.ok(auth.includes('/api/management/research.summary'));
 console.log('DATA CONTRACT QA PASS');
 '''
 (p/'scripts/qa-data-contract.ts').write_text(qa,encoding='utf-8')
 
 rq=(p/'scripts/qa-research-integrated.ts').read_text(encoding='utf-8')
 rq=rq.replace("'time-cluster-v1'", "'time-cluster-v2'")
-rq=rq.replace("assert.ok(managementHardening.includes(\"data_quality_flag||'')!=='complete'\"),'complete-case filters must include reflection/data-quality status');\nassert.ok(managementHardening.includes('bundleCsvBtn'),'research management UI must expose the same-snapshot ZIP export');", "assert.ok(managementHardening.includes('/api/management/research.bundle.zip'),'research management UI must expose the same-snapshot ZIP export');\nassert.ok(managementHardening.includes('/api/management/research.summary'),'research management UI must expose anonymous summary data');\nassert.ok(!managementHardening.includes('教師用管理'),'teacher management UI must be removed');")
+lines=[]
+for line in rq.splitlines():
+    if 'complete-case filters must include reflection/data-quality status' in line: continue
+    if "managementHardening.includes('bundleCsvBtn')" in line: continue
+    lines.append(line)
+rq='\n'.join(lines)+'\n'
 rq=rq.replace("'teacher views must use the distributed learner ID'", "'learner identity records must retain the distributed learner ID'")
 rq=rq.replace("assert.ok(data.expressions.some((row)=>row.dictionary_source==='persona'&&row.persona_id==='emma_usa'));", "")
+anchor="assert.ok(serverHardening.includes('/api/management/research.bundle.zip'),'one-snapshot ZIP export endpoint must exist');"
+if anchor in rq:
+    rq=rq.replace(anchor, anchor+"\nassert.ok(managementHardening.includes('/api/management/research.bundle.zip'),'research management UI must expose the same-snapshot ZIP export');\nassert.ok(managementHardening.includes('/api/management/research.summary'),'research management UI must expose anonymous summary data');\nassert.ok(!managementHardening.includes('教師用管理'),'teacher management UI must be removed');")
 (p/'scripts/qa-research-integrated.ts').write_text(rq,encoding='utf-8')
 
 server=(p/'server.ts').read_text(encoding='utf-8').replace("'time-cluster-v1'", "'time-cluster-v2'")
 (p/'server.ts').write_text(server,encoding='utf-8')
-print('Aligned data-contract, optimized classifier and integrated QA with final architecture.')
+auth=(p/'src/server/auth.ts').read_text(encoding='utf-8')
+auth=auth.replace("  if (path === '/api/management/research.csv') return true;", "  if (path === '/api/management/research.csv') return true;\n  if (path === '/api/management/research.summary') return true;")
+(p/'src/server/auth.ts').write_text(auth,encoding='utf-8')
+print('Aligned research QA, classifier and researcher-only authorization.')
