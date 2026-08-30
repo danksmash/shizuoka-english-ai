@@ -226,6 +226,21 @@ export function buildResearchExportDataSets(rawSessions: Record<string, any>[]):
 }
 
 function textQuery(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
+function gradeMatches(row: Row, grade: string): boolean {
+  if (!grade || grade === 'all') return true;
+  const storedClass=String(row.class_id || '');
+  if (grade === 'test') return storedClass === 'テスト';
+  if (grade === 'reserve') return storedClass === '予備';
+  return String(row.grade_level || '') === grade;
+}
+function classMatches(row: Row, classId: string): boolean {
+  if (!classId || classId === 'all') return true;
+  const storedClass=String(row.class_id || '');
+  if (classId === 'test') return storedClass === 'テスト';
+  if (classId === 'reserve') return storedClass === '予備';
+  if (['1','2','3'].includes(classId)) return storedClass.endsWith(`-${classId}`);
+  return storedClass === classId;
+}
 function filterSessions(rows: Row[], query: ResearchFilterQuery): Row[] {
   const start=textQuery(query.start), end=textQuery(query.end), classId=textQuery(query.classId), grade=textQuery(query.grade);
   const personaId=textQuery(query.personaId), circle=textQuery(query.circle), label=textQuery(query.labelCondition), topic=textQuery(query.topic);
@@ -233,8 +248,7 @@ function filterSessions(rows: Row[], query: ResearchFilterQuery): Row[] {
   return rows.filter((row) => {
     const date=String(row.local_date || '');
     return (!start || date >= start) && (!end || date <= end)
-      && (!classId || classId === 'all' || String(row.class_id || '') === classId)
-      && (!grade || grade === 'all' || String(row.grade_level || '') === grade)
+      && classMatches(row,classId) && gradeMatches(row,grade)
       && (!personaId || personaId === 'all' || String(row.persona_id || '') === personaId)
       && (!circle || circle === 'all' || String(row.accent_circle || '') === circle)
       && (!label || label === 'all' || String(row.persona_label_condition || '') === label)
@@ -260,9 +274,6 @@ export function serializeResearchCsv(rows: Row[], dataset: ResearchExportDataset
   return '\uFEFF' + [headers.map(csvCell).join(','), ...rows.map((row) => headers.map((key) => csvCell(row[key])).join(','))].join('\n');
 }
 
-function uniqueSorted(rows: Row[], key: string): string[] {
-  return [...new Set(rows.map((row) => String(row[key] || '')).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
-}
 function round(value: number, digits = 2): number {
   const f = 10 ** digits; return Math.round(value * f) / f;
 }
@@ -279,11 +290,13 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
   const participants = new Set(data.sessions.map((row) => String(row.research_id || '')).filter(Boolean));
   const complete = data.sessions.filter((row) => String(row.data_quality_flag || '') === 'complete').length;
   const latestAt = data.sessions.map((row) => String(row.local_ended_at || row.local_started_at || '')).sort().at(-1) || '';
-  type SeriesBucket={sessions:number;words:number[];reflections:[number[],number[],number[]]};
+  let rateWords=0,rateSeconds=0; for(const row of data.sessions){const words=Number(row.child_total_words),seconds=Number(row.actual_duration_seconds);if(Number.isFinite(words)&&Number.isFinite(seconds)&&seconds>0){rateWords+=words;rateSeconds+=seconds;}}
+  const meanChildWordsPerMinute=rateSeconds>0?round(rateWords*60/rateSeconds,1):0;
+  type SeriesBucket={sessions:number;words:number[];childWords:number;durationSeconds:number;reflections:[number[],number[],number[]]};
   const daily = new Map<string, SeriesBucket>();
   const weekly = new Map<string, SeriesBucket>();
   const weekStart=(date:string):string=>{const d=new Date(`${date}T00:00:00Z`);if(Number.isNaN(d.getTime()))return date;const offset=(d.getUTCDay()+6)%7;d.setUTCDate(d.getUTCDate()-offset);return d.toISOString().slice(0,10);};
-  const addSeries=(target:Map<string,SeriesBucket>,key:string,row:Row)=>{const d=target.get(key)||{sessions:0,words:[],reflections:[[],[],[]]};d.sessions+=1;const words=Number(row.child_total_words);if(Number.isFinite(words))d.words.push(words);const refs=[row.reflection_conveyed_ideas,row.reflection_understood_partner,row.reflection_noticed_language_culture];refs.forEach((value,index)=>{const n=Number(value);if([1,3,5].includes(n))d.reflections[index].push(n)});target.set(key,d);};
+  const addSeries=(target:Map<string,SeriesBucket>,key:string,row:Row)=>{const d=target.get(key)||{sessions:0,words:[],childWords:0,durationSeconds:0,reflections:[[],[],[]]};d.sessions+=1;const words=Number(row.child_total_words),seconds=Number(row.actual_duration_seconds);if(Number.isFinite(words))d.words.push(words);if(Number.isFinite(words)&&Number.isFinite(seconds)&&seconds>0){d.childWords+=words;d.durationSeconds+=seconds;}const refs=[row.reflection_conveyed_ideas,row.reflection_understood_partner,row.reflection_noticed_language_culture];refs.forEach((value,index)=>{const n=Number(value);if([1,3,5].includes(n))d.reflections[index].push(n)});target.set(key,d);};
   for (const row of data.sessions) {
     const date = String(row.local_date || '');
     if (!date) continue;
@@ -295,7 +308,7 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
     return [...map.entries()].map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value || a.label.localeCompare(b.label,'ja'));
   };
   const personaNames = new Map(data.personas.map((row)=>[String(row.persona_id),String(row.name)]));
-  const personaUsage = counts('persona_id').map((item)=>({ ...item, label: `${personaNames.get(item.label) || item.label} (${item.label})` }));
+  const personaUsage = counts('persona_id').map((item)=>({ ...item, label: personaNames.get(item.label) || item.label }));
   const topMap = new Map<string,{count:number,source:string}>();
   for (const row of data.expressions.filter((r)=>r.speaker==='child')) {
     const expression=String(row.expression||'').trim(); if(!expression) continue;
@@ -316,6 +329,7 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
   }));
   const seriesRows=(source:Map<string,SeriesBucket>)=>[...source.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([date,value])=>({
     date, sessions:value.sessions, mean_child_words:round(average(value.words),1),
+    mean_child_words_per_minute:value.durationSeconds>0?round(value.childWords*60/value.durationSeconds,1):null,
     reflection_conveyed:value.reflections[0].length?round(average(value.reflections[0]),2):null,
     reflection_understood:value.reflections[1].length?round(average(value.reflections[1]),2):null,
     reflection_culture:value.reflections[2].length?round(average(value.reflections[2]),2):null,
@@ -326,12 +340,12 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
     success:true,
     metrics:{
       participantCount:participants.size, totalSessions:data.sessions.length,
-      childUtteranceCount:data.utterances.filter((row)=>row.speaker==='child').length,
+      childUtteranceCount:data.utterances.filter((row)=>row.speaker==='child').length, meanChildWordsPerMinute,
       completeRate:data.sessions.length?round((complete/data.sessions.length)*100,1):0, latestAt,
     },
     filters:{
-      classes:uniqueSorted(all.sessions,'class_id'), grades:uniqueSorted(all.sessions,'grade_level'), personas:uniqueSorted(all.sessions,'persona_id'),
-      circles:uniqueSorted(all.sessions,'accent_circle'), labelConditions:uniqueSorted(all.sessions,'persona_label_condition'), topics:uniqueSorted(all.sessions,'topic'),
+      classes:['1','2','3','test','reserve'], grades:['5','6','test','reserve'], personas:AI_STUDENTS_LIST.map((persona)=>persona.id),
+      circles:['Inner','Outer','Expanding'], labelConditions:['shown','hidden'], topics:['intro','favorites','shizuoka_culture','talents','free'],
     },
     charts:{ daily:chartRows, aggregation, personas:personaUsage, circles:counts('accent_circle') },
     dataQuality:quality,
