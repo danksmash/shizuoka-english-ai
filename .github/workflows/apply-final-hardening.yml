@@ -1,0 +1,47 @@
+name: Apply final research hardening
+
+on:
+  push:
+    branches:
+      - codex/research-run-final-hardening
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: final-research-hardening
+  cancel-in-progress: false
+
+jobs:
+  apply-test-commit:
+    if: ${{ !contains(github.event.head_commit.message || '', '[hardening-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: codex/research-run-final-hardening
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Apply audited transformations
+        run: python3 scripts/apply-final-hardening.py
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Full QA
+        run: npm run qa
+      - name: Production build
+        run: npm run build
+      - name: Verify intended scope
+        run: |
+          git status --short
+          test -z "$(git status --short | grep -E 'public/images|src/assets/images' || true)"
+      - name: Commit tested changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: harden 2026 research run [hardening-applied]"
+          git push origin HEAD:codex/research-run-final-hardening
