@@ -330,8 +330,8 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
       completeRate:data.sessions.length?round((complete/data.sessions.length)*100,1):0, latestAt,
     },
     filters:{
-      classes:uniqueSorted(all.sessions,'class_id'), grades:uniqueSorted(all.sessions,'grade_level'), personas:uniqueSorted(all.sessions,'persona_id'),
-      circles:uniqueSorted(all.sessions,'accent_circle'), labelConditions:uniqueSorted(all.sessions,'persona_label_condition'), topics:uniqueSorted(all.sessions,'topic'),
+      classes:['1','2','3','test','reserve'], grades:['5','6','test','reserve'], personas:AI_STUDENTS_LIST.map((persona)=>persona.id),
+      circles:['Inner','Outer','Expanding'], labelConditions:['shown','hidden'], topics:['intro','favorites','shizuoka_culture','talents','free'],
     },
     charts:{ daily:chartRows, aggregation, personas:personaUsage, circles:counts('accent_circle') },
     dataQuality:quality,
