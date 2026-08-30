@@ -763,7 +763,8 @@ app.get('/api/management/research.csv',requireManagementRole(['researcher']),asy
     const requested=typeof req.query?.dataset==='string'?req.query.dataset:'sessions';
     const allowed=['sessions','utterances','expressions','personas','codebook'] as const;
     const dataset:ResearchExportDatasetName=(allowed as readonly string[]).includes(requested)?requested as ResearchExportDatasetName:'sessions';
-    const datasets=filterResearchExportDataSets(buildResearchExportDataSets(await getAllSessionsForManagement()),req.query);
+    const sourceSessions=(dataset==='personas'||dataset==='codebook')?[]:await getAllSessionsForManagement();
+    const datasets=filterResearchExportDataSets(buildResearchExportDataSets(sourceSessions),req.query);
     const csv=serializeResearchCsv(datasets[dataset],dataset);
     res.setHeader('Content-Type','text/csv; charset=utf-8');res.setHeader('Content-Disposition',`attachment; filename="${dataset}.csv"`);res.setHeader('Cache-Control','no-store');return res.send(csv);
   }catch(error:any){console.error('Research export failed',{message:error?.message});return res.status(503).json({success:false,error:'RESEARCH_EXPORT_UNAVAILABLE'});}

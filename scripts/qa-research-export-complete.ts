@@ -136,6 +136,13 @@ assert.ok(dashboard.charts.personas.length===2);
 assert.ok(dashboard.charts.circles.some((r)=>r.label==='Inner'));
 assert.ok(dashboard.topExpressions.some((r)=>r.source==='persona'));
 assert.equal(dashboard.exportFiles.length,5);
+assert.ok(dashboard.dataQuality.some((r)=>r.label==='AI request failure'&&r.value===1),'dashboard must expose AI failure quality events');
+assert.ok(dashboard.dataQuality.some((r)=>r.label==='Mic error'&&r.value===1),'dashboard must expose microphone error quality events');
+assert.ok(dashboard.dataQuality.some((r)=>r.label==='TTS fallback'&&r.value===1),'dashboard must expose TTS fallback quality events');
+const schemaCodebook=data.codebook.find((r)=>r.file_name==='sessions.csv'&&r.variable==='schema_version')!;
+assert.equal(schemaCodebook.data_type,'number','schema_version must be typed as numeric in codebook');
+const rateCodebook=data.codebook.find((r)=>r.file_name==='sessions.csv'&&r.variable==='student_selected_speech_rate')!;
+assert.equal(rateCodebook.allowed_values,'0.75–1.25','speech rate range must be documented in codebook');
 
 const forbidden=['studentId','student_id','learningCode','learning_code','teacherStudentId','teacher_student_id','name_raw'];
 for(const dataset of ['sessions','utterances','expressions'] as const){
@@ -147,6 +154,7 @@ const auth=fs.readFileSync('src/server/auth.ts','utf8');
 const page=fs.readFileSync('src/server/managementPage.ts','utf8');
 for(const dataset of ['sessions','utterances','expressions','personas','codebook']) assert.ok(server.includes("'"+dataset+"'"),'server dataset allowlist missing '+dataset);
 assert.ok(server.includes('/api/management/research.dashboard'),'dashboard endpoint missing');
+assert.ok(server.includes("(dataset==='personas'||dataset==='codebook')?[]:await getAllSessionsForManagement()"),'static persona/codebook downloads must not scan all Firestore sessions');
 assert.ok(auth.includes('/api/management/research.dashboard'),'researcher auth allowlist missing dashboard endpoint');
 for(const dataset of ['sessions','utterances','expressions','personas','codebook']) assert.ok(page.includes(dataset+'.csv'),'research page missing '+dataset+'.csv');
 assert.ok(page.includes('data-export-dataset'),'research page CSV buttons are not dynamically bound');

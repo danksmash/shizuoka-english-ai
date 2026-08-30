@@ -106,12 +106,17 @@ const FIELD_DEFINITION: Record<string, string> = {
 const ALLOWED_VALUES: Record<string, string> = {
   accent_circle:'Inner | Outer | Expanding', world_englishes_circle:'Inner | Outer | Expanding',
   persona_label_condition:'shown | hidden', speaker:'child | ai', dictionary_source:'curriculum | persona',
+  persona_gender:'male | female', gender:'male | female', persona_voice_gender:'male | female', voice_gender:'male | female',
+  grade_level:'5 | 6', curriculum_grade:'5 | 6', target_duration_minutes:'1 | 2 | 3 | 5',
+  topic:'intro | favorites | shizuoka_culture | talents | free', profile_field:'likes | major', persona_category:'interest | major',
+  student_selected_speech_rate:'0.75–1.25', effective_tts_speech_rate:'0.75–1.25',
   reflection_conveyed_ideas:'1 | 3 | 5', reflection_understood_partner:'1 | 3 | 5',
   reflection_noticed_language_culture:'1 | 3 | 5', data_quality_flag:'complete | missing_reflection | interrupted | missing_core',
   session_status:'complete | dialogue_complete | in_progress_or_interrupted',
   usage_context_inferred:'in_class | out_of_class_school_hours | out_of_school_hours | non_school_day | unknown',
   usage_context_confidence:'high | medium | low', country_label_visible:'0 | 1', accent_label_visible:'0 | 1', flag_visible:'0 | 1',
-  session_completed:'0 | 1', is_question:'0 | 1', is_reciprocal_question:'0 | 1', is_repair:'0 | 1', is_reason_expression:'0 | 1'
+  weekday_flag:'0 | 1', school_hours_flag:'0 | 1', session_completed:'0 | 1', is_question:'0 | 1',
+  is_reciprocal_question:'0 | 1', is_repair:'0 | 1', is_reason_expression:'0 | 1'
 };
 
 function csvCell(value: unknown): string {
@@ -119,7 +124,7 @@ function csvCell(value: unknown): string {
   return `"${text.replace(/"/g, '""')}"`;
 }
 function isNumericField(variable: string): boolean {
-  return /(_count|_tokens|_number|_seconds|_minutes|_rate|_pitch|_year|_level|_flag|_visible|_words|_types|_turns|_completed|starts_|word_count|turn_sequence|speaker_turn_number|days_since|age$|^reflection_)/.test(variable);
+  return variable === 'schema_version' || /(_count|_tokens|_number|_seconds|_minutes|_rate|_pitch|_year|_level|_flag|_visible|_words|_types|_turns|_completed|starts_|word_count|turn_sequence|speaker_turn_number|days_since|age$|^reflection_)/.test(variable);
 }
 function metaFor(file: ResearchExportDatasetName, variable: string) {
   return {
@@ -273,7 +278,7 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
   const data = filterResearchExportDataSets(all, query);
   const participants = new Set(data.sessions.map((row) => String(row.research_id || '')).filter(Boolean));
   const complete = data.sessions.filter((row) => String(row.data_quality_flag || '') === 'complete').length;
-  const latestAt = data.sessions.map((row) => String(row.local_started_at || '')).sort().at(-1) || '';
+  const latestAt = data.sessions.map((row) => String(row.local_ended_at || row.local_started_at || '')).sort().at(-1) || '';
   const daily = new Map<string, { sessions:number; words:number[]; reflections:[number[],number[],number[]] }>();
   for (const row of data.sessions) {
     const date = String(row.local_date || '');
@@ -300,6 +305,12 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
   }
   const topExpressions=[...topMap.entries()].map(([key,v])=>({expression:key.split(':').slice(1).join(':'),count:v.count,source:v.source})).sort((a,b)=>b.count-a.count).slice(0,10);
   const quality = counts('data_quality_flag');
+  const sumField = (key: string) => data.sessions.reduce((sum,row)=>sum+Number(row[key]||0),0);
+  quality.push(
+    { label:'AI request failure', value:sumField('ai_request_failure_count') },
+    { label:'Mic error', value:sumField('mic_error_count') },
+    { label:'TTS fallback', value:sumField('tts_fallback_count') },
+  );
   const recentSessions = [...data.sessions].sort((a,b)=>String(b.local_started_at||'').localeCompare(String(a.local_started_at||''))).slice(0,10).map((row)=>({
     local_started_at:row.local_started_at||'', research_id:row.research_id||'', persona_id:row.persona_id||'', persona_name:personaNames.get(String(row.persona_id||''))||'',
     topic:topicLabel(String(row.topic||'')), target_duration_minutes:row.target_duration_minutes||'', data_quality_flag:row.data_quality_flag||''
