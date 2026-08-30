@@ -53,6 +53,7 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
+          BUILD_SHA="${GITHUB_SHA:0:12}"
           gcloud run deploy shizuoka-english-ai \
             --project shizuoka-english-ai \
             --source . \
@@ -63,7 +64,7 @@ jobs:
             --concurrency 80 \
             --timeout 60 \
             --memory 512Mi \
-            --update-env-vars ANTHROPIC_MODEL=claude-sonnet-4-6,SESSION_RETENTION_DAYS=1095 \
+            --update-env-vars ANTHROPIC_MODEL=claude-sonnet-5,SESSION_RETENTION_DAYS=1095,APP_VERSION=1.0.7,APP_BUILD="$BUILD_SHA" \
             --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest
 
       - name: Production health and AI smoke test
@@ -79,6 +80,8 @@ jobs:
           done
           echo "$health" | grep -q '"status":"ok"'
           echo "$health" | grep -q '"aiConfigured":true'
+          echo "$health" | grep -q '"model":"claude-sonnet-5"'
+          echo "$health" | grep -q '"appVersion":"1.0.7"'
           echo "$health" | grep -q '"ttsProvider":"google-chirp3-hd"'
           echo "$health" | grep -q '"learningDataConfigured":true'
           echo "$health" | grep -q '"managementConfigured":true'
@@ -97,6 +100,7 @@ jobs:
           done
           echo "$chat" | grep -q '"success":true'
           echo "$chat" | grep -q '"route":"anthropic-resilient"'
+          echo "$chat" | grep -q '"model":"claude-sonnet-5"'
 
           # A realistic five-minute research payload must pass Express JSON parsing.
           # The deliberately unknown learning code guarantees that this smoke test cannot write a session.
@@ -163,6 +167,7 @@ jobs:
             fi
             grep -qi 'content-type: audio/mpeg' "$tts_headers"
             grep -qi 'x-tts-provider: google-chirp3-hd' "$tts_headers"
+            grep -qi 'x-tts-effective-rate: 0.95' "$tts_headers"
             test "$(wc -c < "$tts_audio")" -gt 500
             rm -f "$tts_headers" "$tts_audio"
           done
