@@ -42,10 +42,14 @@ jobs:
         run: |
           git status --short
           test -z "$(git status --short | grep -E 'public/images|src/assets/images' || true)"
-      - name: Commit tested changes
+      - name: Commit tested code
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Workflow files require a separate GitHub permission. Keep the tested
+          # runtime/code changes in this commit and apply deployment YAML through
+          # the authorized repository connection after this job succeeds.
+          git checkout HEAD -- .github/workflows
           git add -A
           git commit -m "feat: harden 2026 research run [hardening-applied]"
           git push origin HEAD:codex/research-run-final-hardening
