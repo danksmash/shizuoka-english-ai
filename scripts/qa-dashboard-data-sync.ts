@@ -8,7 +8,7 @@ if(!match)throw new Error('management script missing');
 
 const elements=new Map<string,any>();
 const datasetButtons:any[]=[];
-function makeElement(id:string){
+function makeElement(id:string):any{
   const classes=new Set<string>();
   return {id,value:'',checked:false,innerHTML:'',textContent:'',style:{},options:[{value:'all'}],dataset:{},onclick:null,
     className:'',classList:{add:(...xs:string[])=>xs.forEach(x=>classes.add(x)),remove:(...xs:string[])=>xs.forEach(x=>classes.delete(x)),contains:(x:string)=>classes.has(x)},
