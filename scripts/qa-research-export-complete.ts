@@ -125,17 +125,19 @@ assert.ok(filtered.utterances.every((r)=>r.session_id==='session_alpha'));
 assert.ok(filtered.expressions.every((r)=>r.session_id==='session_alpha'));
 assert.equal(filtered.personas.length,9,'persona master must remain complete regardless of session filters');
 assert.equal(filtered.codebook.length,data.codebook.length,'codebook must remain complete regardless of session filters');
+const uiClass=filterResearchExportDataSets(data,{grade:'5',classId:'1'});assert.equal(uiClass.sessions.length,1);assert.equal(uiClass.sessions[0].session_id,'session_alpha');
+const specialRaw=[...sessions,{...sessions[0],sessionId:'session_test',researchId:'RTEST',classId:'テスト'},{...sessions[0],sessionId:'session_reserve',researchId:'RRESERVE',classId:'予備'}];const specialData=buildResearchExportDataSets(specialRaw as any);assert.equal(filterResearchExportDataSets(specialData,{grade:'test'}).sessions.length,1);assert.equal(filterResearchExportDataSets(specialData,{grade:'reserve'}).sessions.length,1);assert.equal(filterResearchExportDataSets(specialData,{classId:'test'}).sessions.length,1);assert.equal(filterResearchExportDataSets(specialData,{classId:'reserve'}).sessions.length,1);
 
 const dashboard=buildResearchDashboardData(sessions as any,{});
 assert.equal(dashboard.metrics.participantCount,2);
 assert.equal(dashboard.metrics.totalSessions,2);
-assert.equal(dashboard.metrics.childUtteranceCount,3);
+assert.equal(dashboard.metrics.childUtteranceCount,3);const expectedWpm=Math.round(((Number(alpha.child_total_words)+Number(beta.child_total_words))*60/(Number(alpha.actual_duration_seconds)+Number(beta.actual_duration_seconds)))*10)/10;assert.equal(dashboard.metrics.meanChildWordsPerMinute,expectedWpm);
 assert.equal(dashboard.metrics.completeRate,50);
 assert.ok(dashboard.charts.daily.length===2);
 assert.ok(dashboard.charts.personas.length===2);
 assert.ok(dashboard.charts.circles.some((r)=>r.label==='Inner'));
-assert.ok(dashboard.topExpressions.some((r)=>r.source==='persona'));
-assert.equal(dashboard.exportFiles.length,5);
+assert.ok(dashboard.topExpressions.some((r)=>r.source==='persona'));for(const item of dashboard.topExpressions)assert.ok(data.expressions.some((r)=>r.speaker==='child'&&String(r.dictionary_source)===String(item.source)&&String(r.expression).toLowerCase()===String(item.expression).toLowerCase()),'top expression must originate from child utterance');
+assert.equal(dashboard.exportFiles.length,5);assert.deepEqual(dashboard.filters.grades,['5','6','test','reserve']);assert.deepEqual(dashboard.filters.classes,['1','2','3','test','reserve']);assert.deepEqual(dashboard.filters.labelConditions,['shown','hidden']);assert.deepEqual(dashboard.filters.topics,['intro','favorites','shizuoka_culture','talents','free']);assert.ok(dashboard.charts.personas.every((r)=>!String(r.label).includes('(')));
 assert.ok(dashboard.systemQuality.some((r)=>r.label==='AI応答失敗'&&r.value===1),'dashboard must expose AI failure events separately');
 assert.ok(dashboard.systemQuality.some((r)=>r.label==='マイクエラー'&&r.value===1),'dashboard must expose microphone errors separately');
 assert.ok(dashboard.systemQuality.some((r)=>r.label==='TTSフォールバック'&&r.value===1),'dashboard must expose TTS fallback separately');
@@ -170,6 +172,6 @@ assert.ok(server.includes("(dataset==='personas'||dataset==='codebook')?[]:await
 assert.ok(auth.includes('/api/management/research.dashboard'),'researcher auth allowlist missing dashboard endpoint');
 for(const dataset of ['sessions','utterances','expressions','personas','codebook']) assert.ok(page.includes(dataset+'.csv'),'research page missing '+dataset+'.csv');
 assert.ok(page.includes('data-export-dataset'),'research page CSV buttons are not dynamically bound');
-assert.ok(page.includes('chartDaily')&&page.includes('chartPersona')&&page.includes('chartCircle')&&page.includes('chartWords')&&page.includes('chartReflection'),'all five graph containers must exist');
+assert.ok(page.includes('chartDaily')&&page.includes('chartPersona')&&page.includes('chartWords')&&page.includes('chartReflection'),'four required graph containers must exist');assert.equal(page.includes('id="chartCircle"'),false);
 
 console.log('Research CSV completeness/linkage QA: PASS');
