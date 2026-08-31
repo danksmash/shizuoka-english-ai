@@ -103,14 +103,16 @@ const ys=Array.from(collisionSvg.matchAll(/<text x="[^"]+" y="([^"]+)" text-anch
 assert.equal(ys.length,3,'reflection collision test must render three value labels');
 assert.ok(Math.min(...ys.map((y:number,i:number)=>Math.min(...ys.filter((_:number,j:number)=>j!==i).map((z:number)=>Math.abs(y-z)))))>=22,'overlapping reflection values must be separated vertically');
 const styledSvg=context.lineSvg([{date:'2026-08-30',a:4.5,b:4.5,c:3.5}],[{key:'a',label:'伝える'},{key:'b',label:'分かる'},{key:'c',label:'気づき'}]);
-assert.ok(styledSvg.includes('stroke-dasharray=\"8 6\"'),'second reflection series must use a dashed line');
-assert.ok(styledSvg.includes('stroke-dasharray=\"2 6\"'),'third reflection series must use a dotted line');
-assert.ok(styledSvg.includes('<rect '),'value labels must have a white background box');
-assert.ok(styledSvg.includes('fill=\"#fff\" stroke=\"#2774ee\"'),'data points must be white-filled with a colored outline');
+assert.equal(styledSvg.includes('stroke-dasharray='),false,'reflection series should use simple solid colored lines');
+assert.equal(styledSvg.includes('<rect '),false,'value labels must not have background boxes');
+assert.ok(styledSvg.includes('style=\"fill:#111827\"'),'value labels must use black text');
+for(const color of ['#2774ee','#20a567','#f59e0b'])assert.ok(styledSvg.includes('stroke=\"'+color+'\"'),'each reflection series must keep its own line color');
+assert.ok(styledSvg.includes('fill=\"#fff\" stroke=\"#2774ee\"'),'data points must remain white-filled with a colored outline');
 const coincidentSvg=context.lineSvg([{date:'2026-08-28',a:3,b:3},{date:'2026-08-29',a:3.7,b:3.7},{date:'2026-08-30',a:4.5,b:4.5}],[{key:'a',label:'伝える'},{key:'b',label:'分かる'}]);
-assert.ok(coincidentSvg.includes('stroke=\"#2774ee\" stroke-width=\"7\"'),'fully coincident first series must render wider so it remains visible beneath the later series');
-assert.ok(coincidentSvg.includes('stroke=\"#20a567\" stroke-width=\"3\"'),'top coincident series must retain the normal line width');
-assert.ok(coincidentSvg.includes('r=\"7\" fill=\"#fff\" stroke=\"#2774ee\"'),'coincident first-series markers must remain visible as an outer ring');
+const bluePoints=(coincidentSvg.match(/<polyline points=\"([^\"]+)\"[^>]*stroke=\"#2774ee\"/)||[])[1];
+const greenPoints=(coincidentSvg.match(/<polyline points=\"([^\"]+)\"[^>]*stroke=\"#20a567\"/)||[])[1];
+assert.ok(bluePoints&&greenPoints&&bluePoints!==greenPoints,'fully coincident series must receive a small visual offset so both lines remain visible');
+assert.ok(coincidentSvg.includes('style=\"fill:#111827\"'),'coincident value labels must remain black');
 for(const id of ['start','end','grade','classId','personaId','circle','labelCondition','topic','completeOnly'])assert.equal(typeof element(id).onchange,'function',id+' must have immediate-change binding');
 
 console.log('Research dashboard graph/button/filter linkage QA: PASS');
