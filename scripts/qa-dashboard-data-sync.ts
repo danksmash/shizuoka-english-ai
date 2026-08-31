@@ -102,6 +102,11 @@ const collisionSvg=context.lineSvg([{date:'2026-08-30',a:4.5,b:4.5,c:4.5}],[{key
 const ys=Array.from(collisionSvg.matchAll(/<text x="[^"]+" y="([^"]+)" text-anchor="middle" class="svg-value"/g)).map((m:any)=>Number(m[1]));
 assert.equal(ys.length,3,'reflection collision test must render three value labels');
 assert.ok(Math.min(...ys.map((y:number,i:number)=>Math.min(...ys.filter((_:number,j:number)=>j!==i).map((z:number)=>Math.abs(y-z)))))>=22,'overlapping reflection values must be separated vertically');
+const styledSvg=context.lineSvg([{date:'2026-08-30',a:4.5,b:4.5,c:3.5}],[{key:'a',label:'伝える'},{key:'b',label:'分かる'},{key:'c',label:'気づき'}]);
+assert.ok(styledSvg.includes('stroke-dasharray=\"8 6\"'),'second reflection series must use a dashed line');
+assert.ok(styledSvg.includes('stroke-dasharray=\"2 6\"'),'third reflection series must use a dotted line');
+assert.ok(styledSvg.includes('<rect '),'value labels must have a white background box');
+assert.ok(styledSvg.includes('fill=\"#fff\" stroke=\"#2774ee\"'),'data points must be white-filled with a colored outline');
 for(const id of ['start','end','grade','classId','personaId','circle','labelCondition','topic','completeOnly'])assert.equal(typeof element(id).onchange,'function',id+' must have immediate-change binding');
 
 console.log('Research dashboard graph/button/filter linkage QA: PASS');
