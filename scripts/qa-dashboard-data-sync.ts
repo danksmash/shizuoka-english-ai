@@ -93,6 +93,15 @@ assert.ok(pageSource.includes('onchange=scheduleDashboardReload'),'all filter co
 assert.ok(pageSource.includes('appliedQueryUrl'),'CSV and ZIP downloads must use the last successfully rendered filter snapshot');
 assert.ok(pageSource.includes('flex-wrap:wrap'),'research header/actions must wrap instead of overflowing');assert.ok(pageSource.includes('.charts{display:grid;grid-template-columns:repeat(2'),'desktop charts must use two readable columns');assert.ok(pageSource.includes('.svg-label{font-size:15px'),'line graph labels must be readable');assert.ok(pageSource.includes('.bar-label-html{font-size:16px'),'bar graph labels must remain readable HTML text');assert.ok(pageSource.includes('.chart svg{min-width:460px'),'line charts must not shrink labels below their readable base size');assert.ok(pageSource.includes('1分あたり平均発話語数'));assert.equal(pageSource.includes('id="chartCircle"'),false);assert.ok(pageSource.includes('５年')&&pageSource.includes('６年')&&pageSource.includes('１組')&&pageSource.includes('２組')&&pageSource.includes('３組'));assert.ok(pageSource.includes('表示あり')&&pageSource.includes('表示なし'));for(const label of ['自己紹介・あいさつ','好きなもの・すきなこと','静岡のじまん＆世界の文化','できること・得意なこと','自由トーク・おしゃべり'])assert.ok(pageSource.includes(label),'theme missing '+label);
 assert.equal(pageSource.includes('博士'),false,'researcher UI must not display 博士');
+assert.ok(pageSource.includes('#chartPersona{height:390px;overflow-y:visible}'),'persona chart must reserve enough vertical space for all 9 rows');
+assert.ok(pageSource.includes('const labelYs=rows.map(function(){return []})'),'line graph must track per-date label positions');
+const ninePersonas=Array.from({length:9},(_,i)=>({label:'Persona '+(i+1),value:9-i}));
+const ninePersonaHtml=context.barSvg(ninePersonas,'value',9);
+assert.equal((ninePersonaHtml.match(/bar-row-html/g)||[]).length,9,'persona chart must render all nine rows');
+const collisionSvg=context.lineSvg([{date:'2026-08-30',a:4.5,b:4.5,c:4.5}],[{key:'a',label:'A'},{key:'b',label:'B'},{key:'c',label:'C'}]);
+const ys=Array.from(collisionSvg.matchAll(/<text x="[^"]+" y="([^"]+)" text-anchor="middle" class="svg-value"/g)).map((m:any)=>Number(m[1]));
+assert.equal(ys.length,3,'reflection collision test must render three value labels');
+assert.ok(Math.min(...ys.map((y:number,i:number)=>Math.min(...ys.filter((_:number,j:number)=>j!==i).map((z:number)=>Math.abs(y-z)))))>=22,'overlapping reflection values must be separated vertically');
 for(const id of ['start','end','grade','classId','personaId','circle','labelCondition','topic','completeOnly'])assert.equal(typeof element(id).onchange,'function',id+' must have immediate-change binding');
 
 console.log('Research dashboard graph/button/filter linkage QA: PASS');
