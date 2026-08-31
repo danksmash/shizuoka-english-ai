@@ -1,0 +1,121 @@
+name: Apply researcher chart label readability
+
+on:
+  push:
+    branches:
+      - codex/research-chart-label-readability
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Patch chart layout and labels
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('src/server/managementPage.ts')
+          s = p.read_text()
+
+          replacements = [
+            ('.charts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}',
+             '.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}'),
+            ('.chart-card{min-height:330px}', '.chart-card{min-height:390px}'),
+            ('.chart-card h3,.section-title{font-size:16px;margin:0 0 10px}', '.chart-card h3,.section-title{font-size:18px;margin:0 0 12px}'),
+            ('.chart{height:280px;overflow:hidden}', '.chart{height:330px;overflow-x:auto;overflow-y:hidden}'),
+            ('.svg-label{font-size:12px;fill:#526581}.svg-value{font-size:12px;fill:#173461;font-weight:800}',
+             '.svg-label{font-size:15px;fill:#425878;font-weight:700}.svg-value{font-size:15px;fill:#173461;font-weight:900}.chart svg{min-width:460px}.bar-chart-html{height:100%;display:flex;flex-direction:column;justify-content:center;gap:10px;padding:10px 2px}.bar-row-html{display:grid;grid-template-columns:minmax(135px,40%) minmax(90px,1fr) auto;align-items:center;gap:10px;min-height:30px}.bar-label-html{font-size:16px;font-weight:750;line-height:1.25;color:#425878;overflow-wrap:anywhere}.bar-track-html{height:20px;background:#edf3ff;border-radius:999px;overflow:hidden}.bar-fill-html{height:100%;min-width:2px;background:#4d8df7;border-radius:999px}.bar-value-html{font-size:16px;font-weight:900;color:#173461;min-width:28px;text-align:left}'),
+            ('@media(max-width:760px){.top{align-items:flex-start;flex-direction:column}',
+             '@media(max-width:760px){.bar-row-html{grid-template-columns:minmax(112px,42%) minmax(72px,1fr) auto;gap:8px}.bar-label-html,.bar-value-html{font-size:15px}.top{align-items:flex-start;flex-direction:column}'),
+          ]
+          for old, new in replacements:
+              if old not in s:
+                  raise SystemExit(f'patch target not found: {old[:70]}')
+              s = s.replace(old, new, 1)
+
+          start = s.index('function barSvg(items,valueKey,maxItems)')
+          end = s.index('\nfunction lineSvg', start)
+          new_bar = '''function barSvg(items,valueKey,maxItems){
+  const rows=(items||[]).slice(0,maxItems||12);
+  if(!rows.length)return '<div class="muted" style="padding:90px 8px;text-align:center">データなし</div>';
+  const max=Math.max(1,...rows.map(function(r){return Number(r[valueKey]||r.value||0)}));
+  return '<div class="bar-chart-html">'+rows.map(function(r){const value=Number(r[valueKey]||r.value||0),percent=Math.max(1,Math.round(100*value/max));return '<div class="bar-row-html"><div class="bar-label-html">'+esc(r.label||r.date||'')+'</div><div class="bar-track-html"><div class="bar-fill-html" style="width:'+percent+'%"></div></div><div class="bar-value-html">'+esc(formatChartValue(value))+'</div></div>'}).join('')+'</div>'
+}'''
+          s = s[:start] + new_bar + s[end:]
+          p.write_text(s)
+
+          q = Path('scripts/qa-dashboard-data-sync.ts')
+          t = q.read_text()
+          old = "for(const id of ['chartDaily','chartPersona','chartWords','chartReflection'])assert.ok(element(id).innerHTML.includes('<svg'),id+' must render an inline SVG graph');"
+          new = "for(const id of ['chartDaily','chartPersona'])assert.ok(element(id).innerHTML.includes('bar-chart-html'),id+' must render readable HTML bar labels');for(const id of ['chartWords','chartReflection'])assert.ok(element(id).innerHTML.includes('<svg'),id+' must render an inline SVG graph');"
+          if old not in t: raise SystemExit('chart QA target not found')
+          t = t.replace(old, new, 1)
+          old = "assert.ok(pageSource.includes('flex-wrap:wrap'),'research header/actions must wrap instead of overflowing');assert.ok(pageSource.includes('.svg-label{font-size:12px'),'graph labels must be readable');"
+          new = "assert.ok(pageSource.includes('flex-wrap:wrap'),'research header/actions must wrap instead of overflowing');assert.ok(pageSource.includes('.charts{display:grid;grid-template-columns:repeat(2'),'desktop charts must use two readable columns');assert.ok(pageSource.includes('.svg-label{font-size:15px'),'line graph labels must be readable');assert.ok(pageSource.includes('.bar-label-html{font-size:16px'),'bar graph labels must remain readable HTML text');assert.ok(pageSource.includes('.chart svg{min-width:460px'),'line charts must not shrink labels below their readable base size');"
+          if old not in t: raise SystemExit('readability QA target not found')
+          t = t.replace(old, new, 1)
+          q.write_text(t)
+          PY
+      - name: Full QA and production build
+        run: |
+          npm run qa
+          npm run build
+      - name: Real Chrome multi-width readability check
+        shell: bash
+        run: |
+          cat > .tmp-research-visual.ts <<'TS'
+          import { writeFileSync } from 'node:fs';
+          import { managementPageHtml } from './src/server/managementPage';
+          const sample:any={success:true,metrics:{participantCount:1,totalSessions:28,meanChildWordsPerMinute:24.5,completeRate:82.1,latestAt:'2026-08-30 22:41:28'},filters:{personas:['emma_usa','aung_myanmar','bence_hungary','liam_australia','linh_vietnam','oliver_uk','rahul_bangladesh','zofia_poland','chloe_canada']},charts:{aggregation:'daily',daily:[{date:'2026-08-28',sessions:8,mean_child_words_per_minute:27.7,reflection_conveyed:3,reflection_understood:3,reflection_culture:3},{date:'2026-08-29',sessions:15,mean_child_words_per_minute:22.4,reflection_conveyed:3.7,reflection_understood:3.7,reflection_culture:2.6},{date:'2026-08-30',sessions:5,mean_child_words_per_minute:21.8,reflection_conveyed:4.5,reflection_understood:4.5,reflection_culture:3.5}],personas:[{label:'Emma Johnson',value:13},{label:'Aung Min',value:2},{label:'Bence Kovács',value:2},{label:'Liam Walker',value:2},{label:'Linh Nguyen',value:2},{label:'Oliver Wright',value:2},{label:'Rahul Hasan',value:2},{label:'Zofia Nowak',value:2},{label:'Chloe Tremblay',value:1}]},dataQuality:[],systemQuality:[],topExpressions:[],recentSessions:[],exportFiles:[]};
+          let html=managementPageHtml();
+          const extra=`<script>document.getElementById('login').style.display='none';document.getElementById('panel').style.display='block';renderDashboard(${JSON.stringify(sample)});requestAnimationFrame(function(){const rects=function(sel){return Array.from(document.querySelectorAll(sel)).map(function(e){return e.getBoundingClientRect().height})};const firstCards=Array.from(document.querySelectorAll('.chart-card')).map(function(e){const r=e.getBoundingClientRect();return {x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width)}});const result={viewport:window.innerWidth,overflow:document.documentElement.scrollWidth-window.innerWidth,minBarLabel:Math.min.apply(null,rects('.bar-label-html')),minBarValue:Math.min.apply(null,rects('.bar-value-html')),minSvgLabel:Math.min.apply(null,rects('.svg-label')),minSvgValue:Math.min.apply(null,rects('.svg-value')),personaVisible:document.body.textContent.includes('Emma Johnson'),dateVisible:document.body.textContent.includes('2026-08-28'),cards:firstCards};document.body.insertAdjacentHTML('beforeend','<pre id="qa-result">'+JSON.stringify(result)+'</pre>')});</script>`;
+          html=html.replace('</body>',extra+'</body>');
+          writeFileSync('/tmp/research-chart-readability.html',html);
+          TS
+          npx tsx .tmp-research-visual.ts
+          rm .tmp-research-visual.ts
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          test -n "$CHROME"
+          for W in 1920 1440 1366 1024 768 390; do
+            "$CHROME" --headless --no-sandbox --disable-gpu --allow-file-access-from-files --virtual-time-budget=1200 --window-size=${W},1200 --dump-dom file:///tmp/research-chart-readability.html > /tmp/dom-${W}.html 2>/dev/null
+          done
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          for w in [1920,1440,1366,1024,768,390]:
+              text=Path(f'/tmp/dom-{w}.html').read_text()
+              m=re.search(r'<pre id="qa-result">(\{.*?\})</pre>',text)
+              if not m: raise SystemExit(f'no visual QA result at {w}px')
+              d=json.loads(m.group(1).replace('&quot;','"').replace('&amp;','&'))
+              if d['overflow'] > 2: raise SystemExit(f'page overflow at {w}px: {d["overflow"]}')
+              if not d['personaVisible'] or not d['dateVisible']: raise SystemExit(f'labels missing at {w}px')
+              if d['minBarLabel'] < 14 or d['minBarValue'] < 14: raise SystemExit(f'bar label too small at {w}px: {d}')
+              if d['minSvgLabel'] < 14 or d['minSvgValue'] < 14: raise SystemExit(f'line label too small at {w}px: {d}')
+              cards=d['cards']
+              if w >= 768 and len(cards)>=3 and cards[0]['y'] != cards[1]['y']: raise SystemExit(f'desktop/tablet charts not two-column at {w}px')
+              if w <= 390 and len(cards)>=2 and cards[0]['y'] == cards[1]['y']: raise SystemExit('mobile charts must be one column')
+              print('visual QA',w,d['minBarLabel'],d['minSvgLabel'],'PASS')
+          PY
+      - name: Commit verified changes
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/server/managementPage.ts scripts/qa-dashboard-data-sync.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: make researcher chart labels readable"
+          git push
