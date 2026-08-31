@@ -1,0 +1,35 @@
+name: Apply researcher chart label readability
+
+on:
+  push:
+    branches:
+      - codex/research-chart-label-readability
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: python3 scripts/patch-research-chart-readability.py
+      - run: npm run qa
+      - run: npm run build
+      - run: npx tsx scripts/qa-research-chart-readability-temp.ts
+      - name: Commit verified app changes
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/server/managementPage.ts scripts/qa-dashboard-data-sync.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: make researcher chart labels readable"
+          git push
