@@ -107,6 +107,10 @@ assert.ok(styledSvg.includes('stroke-dasharray=\"8 6\"'),'second reflection seri
 assert.ok(styledSvg.includes('stroke-dasharray=\"2 6\"'),'third reflection series must use a dotted line');
 assert.ok(styledSvg.includes('<rect '),'value labels must have a white background box');
 assert.ok(styledSvg.includes('fill=\"#fff\" stroke=\"#2774ee\"'),'data points must be white-filled with a colored outline');
+const coincidentSvg=context.lineSvg([{date:'2026-08-28',a:3,b:3},{date:'2026-08-29',a:3.7,b:3.7},{date:'2026-08-30',a:4.5,b:4.5}],[{key:'a',label:'伝える'},{key:'b',label:'分かる'}]);
+assert.ok(coincidentSvg.includes('stroke=\"#2774ee\" stroke-width=\"7\"'),'fully coincident first series must render wider so it remains visible beneath the later series');
+assert.ok(coincidentSvg.includes('stroke=\"#20a567\" stroke-width=\"3\"'),'top coincident series must retain the normal line width');
+assert.ok(coincidentSvg.includes('r=\"7\" fill=\"#fff\" stroke=\"#2774ee\"'),'coincident first-series markers must remain visible as an outer ring');
 for(const id of ['start','end','grade','classId','personaId','circle','labelCondition','topic','completeOnly'])assert.equal(typeof element(id).onchange,'function',id+' must have immediate-change binding');
 
 console.log('Research dashboard graph/button/filter linkage QA: PASS');
