@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import sharp from 'sharp';
 import { AI_STUDENTS_MASTER_LIST, TARGET_20_AI_STUDENT_IDS } from '../src/data/curriculum';
@@ -15,7 +16,8 @@ for (const id of TARGET_20_AI_STUDENT_IDS) assert.ok(AI_STUDENTS_MASTER_LIST.som
 
 const avatarSource = fs.readFileSync('src/data/studentImages.ts', 'utf8');
 const avatarComponent = fs.readFileSync('src/components/StudentAvatar.tsx', 'utf8');
-assert.ok(avatarSource.includes("import personas20Sprite from '../assets/images/personas20.webp'"), 'intact 20-person WebP asset must be imported directly');
+assert.ok(avatarSource.includes('personas20_final_01.b64.txt') && avatarSource.includes('personas20_final_06.b64.txt'), 'verified six-part 20-person WebP source must be used');
+assert.ok(avatarSource.includes('decodeBase64Part') && avatarSource.includes('new Blob'), 'sprite chunks must be decoded before binary reconstruction');
 assert.ok(avatarSource.includes('STUDENT_AVATAR_SPRITE_MAP'), '20-person portrait sprite map is required');
 assert.ok(avatarSource.includes('tileWidth: 80') && avatarSource.includes('tileHeight: 100'), '400x400 sprite must use 80x100 portrait cells');
 assert.ok(avatarComponent.includes('STUDENT_AVATAR_SPRITE_MAP'), 'StudentAvatar must render the portrait sprite');
@@ -29,15 +31,21 @@ for (const id of TARGET_20_AI_STUDENT_IDS) {
 }
 assert.equal(targetPlacements.size, 20, 'all 20 target personas must have unique portrait cells');
 
-const spritePath = 'src/assets/images/personas20.webp';
-assert.ok(fs.existsSync(spritePath), 'approved 20-person WebP sprite is missing');
-const spriteBytes = fs.readFileSync(spritePath);
-assert.ok(spriteBytes.length > 20_000, 'portrait sprite unexpectedly small');
+const spriteBytes = Buffer.concat([1, 2, 3, 4, 5, 6].map((part) => {
+  const encoded = fs.readFileSync(`src/assets/images/personas20_final_0${part}.b64.txt`, 'utf8').trim();
+  return Buffer.from(encoded, 'base64');
+}));
+assert.equal(spriteBytes.length, 34_280, 'approved portrait sprite byte length must remain stable');
 assert.equal(spriteBytes.subarray(0, 4).toString('ascii'), 'RIFF', 'portrait sprite must be a WebP RIFF file');
 assert.equal(spriteBytes.subarray(8, 12).toString('ascii'), 'WEBP', 'portrait sprite must be WebP');
+assert.equal(
+  createHash('sha256').update(spriteBytes).digest('hex'),
+  '4908b156eac50a2285042b6f52fff21f8486535db1bc50d090a264deefcc7a57',
+  'portrait sprite checksum must match the approved 20-person sheet',
+);
 const spriteMetadata = await sharp(spriteBytes).metadata();
 assert.equal(spriteMetadata.width, 400, 'portrait sprite width must be 400px');
 assert.equal(spriteMetadata.height, 400, 'portrait sprite height must be 400px');
 assert.equal(spriteMetadata.format, 'webp', 'portrait sprite metadata must report WebP');
 
-console.log('20-person setup selector + portrait QA: PASS (20/20 unique portraits, 400x400 WebP)');
+console.log('20-person setup selector + portrait QA: PASS (20/20 unique portraits, verified 400x400 WebP)');
