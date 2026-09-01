@@ -65,8 +65,15 @@ const vocabDock = fs.readFileSync('src/components/VisualVocabularyDock.tsx', 'ut
 for (const marker of ['setup-screen', 'setup-shell', 'setup-main', 'setup-student-grid', 'setup-controls']) {
   assert.ok(setup.includes(marker), `SetupScreen must expose ${marker}`);
 }
-for (const marker of ['setup-student-country', 'setup-student-info-grid', 'setup-student-avatar', 'setup-student-copy', 'setup-student-name', 'setup-student-japanese', 'setup-student-origin', 'setup-student-accent']) {
-  assert.ok(setup.includes(marker), `AI student cards must expose ${marker}`);
+if (setup.includes('setup-student-card-compact')) {
+  for (const marker of ['setup-student-country', 'setup-student-name', 'setup-student-origin']) {
+    assert.ok(setup.includes(marker), `Compact AI student cards must expose ${marker}`);
+  }
+  assert.equal(setup.includes('setup-student-info-grid'), false, 'compact selector must not use the old portrait information grid');
+} else {
+  for (const marker of ['setup-student-country', 'setup-student-info-grid', 'setup-student-avatar', 'setup-student-copy', 'setup-student-name', 'setup-student-japanese', 'setup-student-origin', 'setup-student-accent']) {
+    assert.ok(setup.includes(marker), `AI student cards must expose ${marker}`);
+  }
 }
 
 // Setup screen must preserve card/content proportions instead of stretching to fill height.

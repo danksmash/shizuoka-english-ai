@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { CheckCircle2, KeyRound, MessageCircle, Play, Volume2 } from 'lucide-react';
+import { CheckCircle2, KeyRound, MessageCircle, Play } from 'lucide-react';
 import { DialogueTopic, StudentProfile, AIStudentProfile } from '../types';
-import { AI_STUDENTS_LIST, DIALOGUE_TOPICS } from '../data/curriculum';
-import { speakStudentVoice, stopSpeaking } from '../utils/speech';
+import { AI_STUDENTS_MASTER_LIST, DIALOGUE_TOPICS, TARGET_20_AI_STUDENT_IDS } from '../data/curriculum';
+import { stopSpeaking } from '../utils/speech';
 import { StudentAvatar } from './StudentAvatar';
 import { normalizeLearningCode, isValidLearningCode } from '../dataContract';
 
@@ -34,6 +34,10 @@ const retainLearningId = (learningId: string) => {
 const countryLabel = (student: AIStudentProfile) =>
   student.countryNative ? `${student.country} (${student.countryNative})` : student.country;
 
+const TARGET_STUDENTS = TARGET_20_AI_STUDENT_IDS
+  .map((id) => AI_STUDENTS_MASTER_LIST.find((student) => student.id === id))
+  .filter((student): student is AIStudentProfile => Boolean(student));
+
 export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learningDataEnabled, onValidateLearningCode, labelCondition = 'shown' }) => {
   const showLabels = labelCondition === 'shown';
   const [selectedStudentId, setSelectedStudentId] = useState('emma_usa');
@@ -42,15 +46,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
   const [learningCode, setLearningCode] = useState(readRetainedLearningId);
   const [codeError, setCodeError] = useState('');
   const [checkingCode, setCheckingCode] = useState(false);
-  const [previewPlayingId, setPreviewPlayingId] = useState<string | null>(null);
-  const selectedStudent = AI_STUDENTS_LIST.find((s) => s.id === selectedStudentId) || AI_STUDENTS_LIST[0];
-
-  const playPreview = (student: AIStudentProfile, event: React.MouseEvent) => {
-    event.stopPropagation();
-    stopSpeaking();
-    setPreviewPlayingId(student.id);
-    speakStudentVoice(student.characterMessage, student, 0.9, undefined, () => setPreviewPlayingId(null), () => setPreviewPlayingId(null));
-  };
+  const selectedStudent = TARGET_STUDENTS.find((student) => student.id === selectedStudentId) || TARGET_STUDENTS[0];
 
   const handleStart = async () => {
     stopSpeaking();
@@ -114,25 +110,22 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
         <main className="setup-main grid min-h-0 items-stretch gap-2 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
           <section className="setup-student-section flex min-w-0 flex-col">
             <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="flex items-center gap-2 text-sm font-black"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs text-white">1</span>会話するAI留学生をえらぼう（全9名）</h2>
+              <h2 className="flex items-center gap-2 text-sm font-black"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs text-white">1</span>会話するAI留学生をえらぼう（全20名）</h2>
               <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{showLabels ? `${selectedStudent.flag} ${selectedStudent.countryJapanese} 選択中` : `${selectedStudent.name} 選択中`}</span>
             </div>
-            <div className="setup-student-grid grid flex-1 auto-rows-fr grid-cols-1 gap-2 min-[520px]:grid-cols-2 lg:grid-cols-3">
-              {AI_STUDENTS_LIST.map((student) => {
+            <div className="setup-student-grid grid flex-1 auto-rows-fr grid-cols-1 gap-2 min-[520px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {TARGET_STUDENTS.map((student) => {
                 const selected = student.id === selectedStudentId;
-                return <article key={student.id} onClick={() => setSelectedStudentId(student.id)} className={`setup-student-card relative flex min-h-[174px] cursor-pointer flex-col rounded-2xl border-2 bg-white p-2.5 shadow-sm transition sm:min-h-[184px] ${selected ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-200 hover:border-blue-300'}`}>
-                  {selected && <CheckCircle2 className="absolute right-2 top-2 h-5 w-5 fill-blue-600 text-white" />}
-                  <div className="setup-student-country pr-7 text-[12px] font-black" title={showLabels ? countryLabel(student) : 'AI留学生'}>{showLabels ? `${student.flag} ${countryLabel(student)}` : 'AI留学生'}</div>
-                  <div className="setup-student-info-grid grid flex-1 items-start">
-                    <StudentAvatar student={student} size="custom" className="setup-student-avatar h-[72px] w-[72px] rounded-xl border border-slate-200 object-cover sm:h-[76px] sm:w-[76px]" />
-                    <div className="setup-student-copy min-w-0">
-                      <h3 className="setup-student-name text-[13px] font-black">{student.name}</h3>
-                      <p className="setup-student-japanese text-[11px] font-black text-blue-700">{student.japaneseName}</p>
-                      <p className="setup-student-origin text-[10px] font-semibold text-slate-600">{student.age}歳{showLabels ? ` · ${student.city}` : ''}</p>
-                    </div>
-                    {showLabels && <p className="setup-student-accent rounded-md bg-slate-100 px-2 py-1 text-[9px] font-bold leading-tight text-slate-600">🗣 {student.accentName}</p>}
-                  </div>
-                  <button type="button" onClick={(e) => playPreview(student, e)} className={`mt-2 flex min-h-8 items-center justify-center gap-1 rounded-lg border text-[11px] font-black ${previewPlayingId === student.id ? 'border-blue-600 bg-blue-600 text-white' : 'border-blue-200 bg-white text-blue-700 hover:bg-blue-50'}`}><Volume2 className="h-3.5 w-3.5" />{previewPlayingId === student.id ? '再生中...' : '声を聞く'}</button>
+                return <article
+                  key={student.id}
+                  onClick={() => setSelectedStudentId(student.id)}
+                  className={`setup-student-card-compact relative flex min-h-[88px] cursor-pointer flex-col justify-center rounded-xl border-2 bg-white px-3 py-2 shadow-sm transition ${selected ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50/30'}`}
+                  aria-label={`${student.countryJapanese} ${student.name} ${student.age}歳 ${student.city}`}
+                >
+                  {selected && <CheckCircle2 className="absolute right-2 top-2 h-4 w-4 fill-blue-600 text-white" />}
+                  <p className="setup-student-country pr-6 text-[11px] font-black leading-tight text-slate-800">{showLabels ? `${student.flag} ${student.country}` : 'AI留学生'}</p>
+                  <h3 className="setup-student-name mt-1 text-[13px] font-black leading-tight text-slate-950">{student.name}</h3>
+                  <p className="setup-student-origin mt-1 text-[10px] font-semibold leading-tight text-slate-600">{student.age}歳{showLabels ? ` · ${student.city}` : ''}</p>
                 </article>;
               })}
             </div>
