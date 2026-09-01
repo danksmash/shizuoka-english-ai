@@ -1,0 +1,44 @@
+name: Verify new 13 production voices
+
+on:
+  push:
+    branches:
+      - verify/new-13-tts-production
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify production Google TTS for new personas
+        run: |
+          set -euo pipefail
+          API_URL="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app"
+          for student in \
+            minji_korea \
+            pavel_belarus \
+            lukas_germany \
+            aina_malaysia \
+            dimas_indonesia \
+            yuting_taiwan \
+            matas_lithuania \
+            ananya_india \
+            xinyi_china \
+            nadeesha_srilanka \
+            suman_nepal \
+            amara_nigeria \
+            andrei_romania; do
+            headers=$(mktemp)
+            audio=$(mktemp)
+            status=$(curl --silent --show-error --max-time 20 \
+              -D "$headers" -o "$audio" -w '%{http_code}' \
+              -X POST "$API_URL/api/tts" \
+              -H 'Content-Type: application/json' \
+              --data "{\"text\":\"Hello. Nice to meet you.\",\"aiStudentId\":\"$student\",\"speakingRate\":0.95}")
+            test "$status" = "200"
+            grep -qi 'content-type: audio/mpeg' "$headers"
+            grep -qi 'x-tts-provider: google-chirp3-hd' "$headers"
+            bytes=$(wc -c < "$audio")
+            test "$bytes" -gt 500
+            echo "$student: PASS ($bytes bytes)"
+            rm -f "$headers" "$audio"
+          done
