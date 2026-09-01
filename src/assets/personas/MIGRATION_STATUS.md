@@ -1,0 +1,1 @@
+Normal WebP migration in progress. Legacy Base64 sprite files will be removed after all individual persona images are attached.
