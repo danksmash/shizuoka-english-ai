@@ -7,7 +7,12 @@ import zofiaImg from '../assets/images/zofia_pol.jpg';
 import rahulImg from '../assets/images/rahul_ban.jpg';
 import linhImg from '../assets/images/linh_vie.jpg';
 import aungImg from '../assets/images/aung_mya.jpg';
-import personas20Sprite from '../assets/images/personas20.webp';
+import spritePart1 from '../assets/images/personas20_final_01.b64.txt?raw';
+import spritePart2 from '../assets/images/personas20_final_02.b64.txt?raw';
+import spritePart3 from '../assets/images/personas20_final_03.b64.txt?raw';
+import spritePart4 from '../assets/images/personas20_final_04.b64.txt?raw';
+import spritePart5 from '../assets/images/personas20_final_05.b64.txt?raw';
+import spritePart6 from '../assets/images/personas20_final_06.b64.txt?raw';
 
 export const STUDENT_AVATAR_MAP: Record<string, string> = {
   oliver_uk: oliverImg,
@@ -38,7 +43,17 @@ export interface StudentAvatarSprite {
   tileHeight: number;
 }
 
-const PERSONAS20_SPRITE_SRC = personas20Sprite;
+const decodeBase64Part = (part: string): ArrayBuffer => {
+  const binary = atob(part.trim());
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+};
+
+const PERSONAS20_SPRITE_SRC = URL.createObjectURL(new Blob(
+  [spritePart1, spritePart2, spritePart3, spritePart4, spritePart5, spritePart6].map(decodeBase64Part),
+  { type: 'image/webp' },
+));
 
 const sprite = (column: number, row: number): StudentAvatarSprite => ({
   src: PERSONAS20_SPRITE_SRC,
