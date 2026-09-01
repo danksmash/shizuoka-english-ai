@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AIStudentProfile } from '../types';
-import { STUDENT_AVATAR_MAP } from '../data/studentImages';
+import { STUDENT_AVATAR_MAP, STUDENT_AVATAR_SPRITE_MAP } from '../data/studentImages';
 
 interface StudentAvatarProps {
   student: AIStudentProfile;
@@ -19,7 +19,6 @@ export const StudentAvatar: React.FC<StudentAvatarProps> = ({
 }) => {
   const [imageError, setImageError] = useState(false);
 
-  // Size mapping
   const sizeClasses = {
     sm: 'w-10 h-10 rounded-2xl text-xs',
     md: 'w-14 h-14 rounded-2xl text-sm',
@@ -29,8 +28,9 @@ export const StudentAvatar: React.FC<StudentAvatarProps> = ({
   };
 
   const containerSizeClass = size === 'custom' ? '' : sizeClasses[size] || sizeClasses.md;
-
+  const spriteAvatar = STUDENT_AVATAR_SPRITE_MAP[student.id];
   const avatarSrc = STUDENT_AVATAR_MAP[student.id] || student.avatarImage;
+  const label = `${student.name} (${student.country})`;
 
   return (
     <div
@@ -40,10 +40,28 @@ export const StudentAvatar: React.FC<StudentAvatarProps> = ({
         isListening ? 'ring-4 ring-emerald-400 ring-offset-2 animate-pulse' : ''
       }`}
     >
-      {!imageError && avatarSrc ? (
+      {spriteAvatar ? (
+        <svg
+          role="img"
+          aria-label={label}
+          viewBox={`${spriteAvatar.column * spriteAvatar.tileWidth} ${spriteAvatar.row * spriteAvatar.tileHeight} ${spriteAvatar.tileWidth} ${spriteAvatar.tileHeight}`}
+          preserveAspectRatio="xMidYMid slice"
+          className="h-full w-full transition-transform hover:scale-105"
+        >
+          <title>{label}</title>
+          <image
+            href={spriteAvatar.src}
+            x="0"
+            y="0"
+            width={spriteAvatar.columns * spriteAvatar.tileWidth}
+            height={spriteAvatar.rows * spriteAvatar.tileHeight}
+            preserveAspectRatio="none"
+          />
+        </svg>
+      ) : !imageError && avatarSrc ? (
         <img
           src={avatarSrc}
-          alt={`${student.name} (${student.country})`}
+          alt={label}
           className="w-full h-full object-cover object-center transition-transform hover:scale-105"
           loading="eager"
           decoding="async"
