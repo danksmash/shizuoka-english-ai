@@ -1,0 +1,1 @@
+Binary persona portraits will be committed through Git object APIs; this marker is temporary.
