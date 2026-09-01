@@ -41,12 +41,19 @@ export interface StudentAvatarSprite {
   tileHeight: number;
 }
 
-const PERSONAS20_SPRITE_SRC = `data:image/webp;base64,${[
-  spritePart1,
-  spritePart2,
-  spritePart3,
-  spritePart4,
-].map((part) => part.trim()).join('')}`;
+const decodeBase64Part = (part: string): ArrayBuffer => {
+  const binary = atob(part.trim());
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+};
+
+// Each text file contains an independently Base64-encoded byte chunk of the same WebP.
+// Decode the chunks first, then concatenate them as a Blob so Base64 padding never corrupts the image.
+const PERSONAS20_SPRITE_SRC = URL.createObjectURL(new Blob(
+  [spritePart1, spritePart2, spritePart3, spritePart4].map(decodeBase64Part),
+  { type: 'image/webp' },
+));
 
 const sprite = (column: number, row: number): StudentAvatarSprite => ({
   src: PERSONAS20_SPRITE_SRC,
