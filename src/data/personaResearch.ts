@@ -1,7 +1,7 @@
-import { AI_STUDENTS_LIST } from './curriculum';
+import { AI_STUDENTS_MASTER_LIST } from './curriculum';
 import type { AIStudentId, WorldEnglishesCircle } from '../types';
 
-export const PERSONA_DICTIONARY_VERSION = 'persona-profile-v1';
+export const PERSONA_DICTIONARY_VERSION = 'persona-profile-v2';
 
 export const GOOGLE_TTS_VOICES: Record<AIStudentId, { languageCode: string; name: string }> = {
   emma_usa: { languageCode: 'en-US', name: 'en-US-Chirp3-HD-Aoede' },
@@ -13,6 +13,19 @@ export const GOOGLE_TTS_VOICES: Record<AIStudentId, { languageCode: string; name
   rahul_bangladesh: { languageCode: 'en-IN', name: 'en-IN-Chirp3-HD-Orus' },
   linh_vietnam: { languageCode: 'en-US', name: 'en-US-Chirp3-HD-Leda' },
   aung_myanmar: { languageCode: 'en-IN', name: 'en-IN-Chirp3-HD-Puck' },
+  minji_korea: { languageCode: 'en-US', name: 'en-US-Chirp3-HD-Kore' },
+  pavel_belarus: { languageCode: 'en-GB', name: 'en-GB-Chirp3-HD-Orus' },
+  lukas_germany: { languageCode: 'en-GB', name: 'en-GB-Chirp3-HD-Iapetus' },
+  aina_malaysia: { languageCode: 'en-US', name: 'en-US-Chirp3-HD-Aoede' },
+  dimas_indonesia: { languageCode: 'en-US', name: 'en-US-Chirp3-HD-Puck' },
+  yuting_taiwan: { languageCode: 'en-US', name: 'en-US-Chirp3-HD-Leda' },
+  matas_lithuania: { languageCode: 'en-GB', name: 'en-GB-Chirp3-HD-Puck' },
+  ananya_india: { languageCode: 'en-IN', name: 'en-IN-Chirp3-HD-Aoede' },
+  xinyi_china: { languageCode: 'en-US', name: 'en-US-Chirp3-HD-Gacrux' },
+  nadeesha_srilanka: { languageCode: 'en-IN', name: 'en-IN-Chirp3-HD-Gacrux' },
+  suman_nepal: { languageCode: 'en-IN', name: 'en-IN-Chirp3-HD-Puck' },
+  amara_nigeria: { languageCode: 'en-GB', name: 'en-GB-Chirp3-HD-Pulcherrima' },
+  andrei_romania: { languageCode: 'en-GB', name: 'en-GB-Chirp3-HD-Schedar' },
 };
 
 const MAJOR_ENGLISH: Record<AIStudentId, { expression: string; keywords: string[] }> = {
@@ -25,14 +38,27 @@ const MAJOR_ENGLISH: Record<AIStudentId, { expression: string; keywords: string[
   rahul_bangladesh: { expression: 'agriculture and tea science', keywords: ['agriculture', 'tea science', 'tea research'] },
   linh_vietnam: { expression: 'language culture and tourism', keywords: ['language culture', 'tourism', 'international culture'] },
   aung_myanmar: { expression: 'history and Asian exchange studies', keywords: ['history', 'asian exchange', 'asian studies'] },
+  minji_korea: { expression: 'education and child development', keywords: ['education', 'child development'] },
+  pavel_belarus: { expression: 'mathematics and data science', keywords: ['mathematics', 'math', 'data science'] },
+  lukas_germany: { expression: 'mechanical engineering', keywords: ['mechanical engineering', 'engineering'] },
+  aina_malaysia: { expression: 'environmental design', keywords: ['environmental design', 'design'] },
+  dimas_indonesia: { expression: 'tourism and cultural heritage', keywords: ['tourism', 'cultural heritage'] },
+  yuting_taiwan: { expression: 'visual communication design', keywords: ['visual communication design', 'communication design', 'design'] },
+  matas_lithuania: { expression: 'sports science and health', keywords: ['sports science', 'health'] },
+  ananya_india: { expression: 'computer science', keywords: ['computer science', 'computing'] },
+  xinyi_china: { expression: 'economics and international business', keywords: ['economics', 'international business', 'business'] },
+  nadeesha_srilanka: { expression: 'environmental science and biodiversity', keywords: ['environmental science', 'biodiversity'] },
+  suman_nepal: { expression: 'geography and disaster prevention', keywords: ['geography', 'disaster prevention'] },
+  amara_nigeria: { expression: 'international relations', keywords: ['international relations'] },
+  andrei_romania: { expression: 'architecture and urban design', keywords: ['architecture', 'urban design'] },
 };
 
-export type PersonaProfileField = 'likes' | 'major';
+export type PersonaProfileField = 'likes' | 'major' | 'city' | 'landmark';
 export type PersonaDictionaryEntry = {
   id: string;
   personaId: AIStudentId;
   profileField: PersonaProfileField;
-  category: 'interest' | 'major';
+  category: 'interest' | 'major' | 'place';
   expression: string;
   japanese: string;
   keywords: string[];
@@ -54,7 +80,7 @@ function keywordVariants(value: string): string[] {
   return [...variants].filter(Boolean);
 }
 
-export const PERSONA_PROFILE_DICTIONARY: PersonaDictionaryEntry[] = AI_STUDENTS_LIST.flatMap((persona) => {
+export const PERSONA_PROFILE_DICTIONARY: PersonaDictionaryEntry[] = AI_STUDENTS_MASTER_LIST.flatMap((persona) => {
   const likes: PersonaDictionaryEntry[] = persona.likes.map((like, index) => {
     const expression = asciiLabel(like);
     return {
@@ -68,7 +94,7 @@ export const PERSONA_PROFILE_DICTIONARY: PersonaDictionaryEntry[] = AI_STUDENTS_
     };
   });
   const major = MAJOR_ENGLISH[persona.id];
-  return likes.concat({
+  const entries: PersonaDictionaryEntry[] = likes.concat({
     id: `persona-${persona.id}-major`,
     personaId: persona.id,
     profileField: 'major',
@@ -77,6 +103,17 @@ export const PERSONA_PROFILE_DICTIONARY: PersonaDictionaryEntry[] = AI_STUDENTS_
     japanese: persona.major,
     keywords: major.keywords,
   });
+  const cityExpression = asciiLabel(persona.city);
+  if (cityExpression) entries.push({
+    id: `persona-${persona.id}-city`, personaId: persona.id, profileField: 'city', category: 'place',
+    expression: cityExpression, japanese: japaneseLabel(persona.city), keywords: keywordVariants(cityExpression),
+  });
+  const landmarkExpression = asciiLabel(persona.heritageLandmark || '');
+  if (landmarkExpression) entries.push({
+    id: `persona-${persona.id}-landmark`, personaId: persona.id, profileField: 'landmark', category: 'place',
+    expression: landmarkExpression, japanese: japaneseLabel(persona.heritageLandmark || ''), keywords: keywordVariants(landmarkExpression),
+  });
+  return entries;
 });
 
 function normalize(value: string): string {
@@ -94,7 +131,7 @@ export function detectPersonaProfileExpressions(text: string, personaId: string)
 }
 
 export function getPersonaResearchMetadata(personaId: string) {
-  const persona = AI_STUDENTS_LIST.find((item) => item.id === personaId) || AI_STUDENTS_LIST[0];
+  const persona = AI_STUDENTS_MASTER_LIST.find((item) => item.id === personaId) || AI_STUDENTS_MASTER_LIST[0];
   const cloudVoice = GOOGLE_TTS_VOICES[persona.id];
   return {
     personaId: persona.id,

@@ -3,6 +3,8 @@ import { maskTextForResearchExport } from './utils/privacy';
 
 export const AI_STUDENT_IDS = [
   'emma_usa','oliver_uk','liam_australia','chloe_canada','bence_hungary','zofia_poland','rahul_bangladesh','linh_vietnam','aung_myanmar',
+  'minji_korea','pavel_belarus','lukas_germany','aina_malaysia','dimas_indonesia','yuting_taiwan','matas_lithuania',
+  'ananya_india','xinyi_china','nadeesha_srilanka','suman_nepal','amara_nigeria','andrei_romania',
 ] as const satisfies readonly AIStudentId[];
 
 export const DIALOGUE_TOPIC_IDS = ['intro','favorites','shizuoka_culture','talents','free'] as const satisfies readonly DialogueTopic[];
