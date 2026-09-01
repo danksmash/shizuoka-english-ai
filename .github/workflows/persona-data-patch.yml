@@ -1,0 +1,41 @@
+name: Apply persona data patch
+
+on:
+  push:
+    branches:
+      - codex/add-20-persona-data
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[persona-data-patched]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/add-20-persona-data
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Apply patch
+        run: python3 scripts/patch-persona-master.py
+      - name: Remove temporary patch files
+        run: |
+          rm -f scripts/patch-persona-master.py
+          rm -f .github/workflows/persona-data-patch.yml
+      - name: Full QA
+        run: npm run qa
+      - name: Production build
+        run: npm run build
+      - name: Commit patched source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add 20-country persona data [persona-data-patched]"
+          git push origin HEAD:codex/add-20-persona-data
