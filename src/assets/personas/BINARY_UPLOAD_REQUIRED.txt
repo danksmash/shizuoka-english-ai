@@ -1,0 +1,1 @@
+Individual WebP binary assets are required here; Base64 text assets are deprecated.
