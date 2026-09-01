@@ -1,0 +1,39 @@
+name: Apply 20-persona UI patch
+
+on:
+  push:
+    branches:
+      - codex/20-persona-main-ui
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[20-persona-ui-patched]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/20-persona-main-ui
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Apply UI patch
+        run: python3 scripts/patch-20-persona-ui.py
+      - name: Remove patch helper
+        run: rm -f scripts/patch-20-persona-ui.py
+      - name: Full QA
+        run: npm run qa
+      - name: Production build
+        run: npm run build
+      - name: Commit patched UI
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add compact 20-persona setup selector [20-persona-ui-patched]"
+          git push origin HEAD:codex/20-persona-main-ui
