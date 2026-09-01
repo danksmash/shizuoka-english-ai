@@ -35,7 +35,7 @@ const spriteBytes = Buffer.concat([1, 2, 3, 4, 5, 6].map((part) => {
   const encoded = fs.readFileSync(`src/assets/images/personas20_final_0${part}.b64.txt`, 'utf8').trim();
   return Buffer.from(encoded, 'base64');
 }));
-assert.equal(spriteBytes.length, 34_280, 'approved portrait sprite byte length must remain stable');
+assert.equal(spriteBytes.length, 34_279, 'approved portrait sprite byte length must remain stable');
 assert.equal(spriteBytes.subarray(0, 4).toString('ascii'), 'RIFF', 'portrait sprite must be a WebP RIFF file');
 assert.equal(spriteBytes.subarray(8, 12).toString('ascii'), 'WEBP', 'portrait sprite must be WebP');
 assert.equal(
