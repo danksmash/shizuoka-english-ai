@@ -7,10 +7,7 @@ import zofiaImg from '../assets/images/zofia_pol.jpg';
 import rahulImg from '../assets/images/rahul_ban.jpg';
 import linhImg from '../assets/images/linh_vie.jpg';
 import aungImg from '../assets/images/aung_mya.jpg';
-import spritePart1 from '../assets/images/personas20_01.b64.txt?raw';
-import spritePart2 from '../assets/images/personas20_02.b64.txt?raw';
-import spritePart3 from '../assets/images/personas20_03.b64.txt?raw';
-import spritePart4 from '../assets/images/personas20_04.b64.txt?raw';
+import personas20Sprite from '../assets/images/personas20.webp';
 
 export const STUDENT_AVATAR_MAP: Record<string, string> = {
   oliver_uk: oliverImg,
@@ -41,19 +38,7 @@ export interface StudentAvatarSprite {
   tileHeight: number;
 }
 
-const decodeBase64Part = (part: string): ArrayBuffer => {
-  const binary = atob(part.trim());
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-};
-
-// Each text file contains an independently Base64-encoded byte chunk of the same WebP.
-// Decode the chunks first, then concatenate them as a Blob so Base64 padding never corrupts the image.
-const PERSONAS20_SPRITE_SRC = URL.createObjectURL(new Blob(
-  [spritePart1, spritePart2, spritePart3, spritePart4].map(decodeBase64Part),
-  { type: 'image/webp' },
-));
+const PERSONAS20_SPRITE_SRC = personas20Sprite;
 
 const sprite = (column: number, row: number): StudentAvatarSprite => ({
   src: PERSONAS20_SPRITE_SRC,
