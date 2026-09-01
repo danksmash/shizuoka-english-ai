@@ -54,8 +54,8 @@ const sprite = (column: number, row: number): StudentAvatarSprite => ({
   row,
   columns: 5,
   rows: 4,
-  tileWidth: 96,
-  tileHeight: 120,
+  tileWidth: 80,
+  tileHeight: 100,
 });
 
 // Approved 20-person portrait sheet. The order exactly follows TARGET_20_AI_STUDENT_IDS.
