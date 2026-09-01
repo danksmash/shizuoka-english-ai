@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import sharp from 'sharp';
 import { AI_STUDENTS_MASTER_LIST, TARGET_20_AI_STUDENT_IDS } from '../src/data/curriculum';
 
 const setup = fs.readFileSync('src/components/SetupScreen.tsx', 'utf8');
@@ -15,6 +16,7 @@ for (const id of TARGET_20_AI_STUDENT_IDS) assert.ok(AI_STUDENTS_MASTER_LIST.som
 const avatarSource = fs.readFileSync('src/data/studentImages.ts', 'utf8');
 const avatarComponent = fs.readFileSync('src/components/StudentAvatar.tsx', 'utf8');
 assert.ok(avatarSource.includes('STUDENT_AVATAR_SPRITE_MAP'), '20-person portrait sprite map is required');
+assert.ok(avatarSource.includes('tileWidth: 80') && avatarSource.includes('tileHeight: 100'), '400x400 sprite must use 80x100 portrait cells');
 assert.ok(avatarComponent.includes('STUDENT_AVATAR_SPRITE_MAP'), 'StudentAvatar must render the portrait sprite');
 assert.ok(avatarComponent.includes('<svg') && avatarComponent.includes('viewBox='), 'sprite portraits must be cropped with an SVG viewBox');
 
@@ -30,8 +32,12 @@ const spriteBase64 = [1, 2, 3, 4]
   .map((part) => fs.readFileSync(`src/assets/images/personas20_0${part}.b64.txt`, 'utf8').trim())
   .join('');
 const spriteBytes = Buffer.from(spriteBase64, 'base64');
-assert.ok(spriteBytes.length > 40_000, 'portrait sprite unexpectedly small');
+assert.ok(spriteBytes.length > 20_000, 'portrait sprite unexpectedly small');
 assert.equal(spriteBytes.subarray(0, 4).toString('ascii'), 'RIFF', 'portrait sprite must be a WebP RIFF file');
 assert.equal(spriteBytes.subarray(8, 12).toString('ascii'), 'WEBP', 'portrait sprite must be WebP');
+const spriteMetadata = await sharp(spriteBytes).metadata();
+assert.equal(spriteMetadata.width, 400, 'portrait sprite width must be 400px');
+assert.equal(spriteMetadata.height, 400, 'portrait sprite height must be 400px');
+assert.equal(spriteMetadata.format, 'webp', 'portrait sprite metadata must report WebP');
 
-console.log('20-person setup selector + portrait QA: PASS (20/20 unique portraits)');
+console.log('20-person setup selector + portrait QA: PASS (20/20 unique portraits, 400x400 WebP)');
