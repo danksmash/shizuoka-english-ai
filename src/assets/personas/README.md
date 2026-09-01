@@ -1,0 +1,1 @@
+Persona portrait assets are stored as normal individual WebP files. Base64 sprite reconstruction is not used.
