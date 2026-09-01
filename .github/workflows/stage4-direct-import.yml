@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - codex/stage4-unified-persona-images
-    paths:
-      - stage4_personas_q85.tar.gz
 
 permissions:
   contents: write
@@ -33,16 +31,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f stage4_personas_q85.tar.gz
-          if tar -tzf stage4_personas_q85.tar.gz | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+          test -f stage4_personas_q85.tar
+          if tar -tf stage4_personas_q85.tar | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
             echo 'Unsafe archive path detected.' >&2
             exit 1
           fi
           rm -rf /tmp/stage4-personas
           mkdir -p /tmp/stage4-personas
-          tar -xzf stage4_personas_q85.tar.gz -C /tmp/stage4-personas
+          tar -xf stage4_personas_q85.tar -C /tmp/stage4-personas
 
-      - name: Verify and copy the 20 real WebP files
+      - name: Verify and copy the 20 approved WebP files
         shell: bash
         run: |
           set -euo pipefail
@@ -53,26 +51,11 @@ jobs:
           import sharp from 'sharp';
 
           const expected = [
-            'emma_usa.webp',
-            'oliver_uk.webp',
-            'liam_australia.webp',
-            'minji_korea.webp',
-            'pavel_belarus.webp',
-            'lukas_germany.webp',
-            'aina_malaysia.webp',
-            'dimas_indonesia.webp',
-            'bence_hungary.webp',
-            'yuting_taiwan.webp',
-            'zofia_poland.webp',
-            'matas_lithuania.webp',
-            'ananya_india.webp',
-            'xinyi_china.webp',
-            'linh_vietnam.webp',
-            'rahul_bangladesh.webp',
-            'nadeesha_srilanka.webp',
-            'suman_nepal.webp',
-            'amara_nigeria.webp',
-            'andrei_romania.webp',
+            'emma_usa.webp', 'oliver_uk.webp', 'liam_australia.webp', 'minji_korea.webp',
+            'pavel_belarus.webp', 'lukas_germany.webp', 'aina_malaysia.webp', 'dimas_indonesia.webp',
+            'bence_hungary.webp', 'yuting_taiwan.webp', 'zofia_poland.webp', 'matas_lithuania.webp',
+            'ananya_india.webp', 'xinyi_china.webp', 'linh_vietnam.webp', 'rahul_bangladesh.webp',
+            'nadeesha_srilanka.webp', 'suman_nepal.webp', 'amara_nigeria.webp', 'andrei_romania.webp',
           ];
 
           function walk(dir) {
@@ -85,8 +68,7 @@ jobs:
             return out;
           }
 
-          const root = '/tmp/stage4-personas';
-          const files = walk(root);
+          const files = walk('/tmp/stage4-personas');
           const byBase = new Map();
           for (const p of files) {
             const base = path.basename(p);
@@ -94,6 +76,7 @@ jobs:
             byBase.get(base).push(p);
           }
 
+          if (files.length !== 20) throw new Error(`expected exactly 20 archive files, found ${files.length}`);
           fs.mkdirSync('src/assets/personas', { recursive: true });
           const hashes = new Set();
           let totalBytes = 0;
@@ -116,9 +99,7 @@ jobs:
           }
 
           if (hashes.size !== 20) throw new Error(`expected 20 unique images, got ${hashes.size}`);
-          if (totalBytes < 1_000_000 || totalBytes > 5_000_000) {
-            throw new Error(`unexpected total image size: ${totalBytes} bytes`);
-          }
+          if (totalBytes < 1_000_000 || totalBytes > 5_000_000) throw new Error(`unexpected total image size: ${totalBytes}`);
           console.log(`Verified and copied 20 WebP files (${totalBytes} bytes total).`);
           EOF
           node /tmp/stage4-import.mjs
@@ -197,9 +178,7 @@ jobs:
           assert.ok(setup.includes('会話するAI留学生をえらぼう（全20名）'), 'setup heading must show 20 personas');
           assert.ok(setup.includes('TARGET_20_AI_STUDENT_IDS'), 'setup must derive visible personas from research target IDs');
           assert.equal(TARGET_20_AI_STUDENT_IDS.length, 20);
-          for (const id of TARGET_20_AI_STUDENT_IDS) {
-            assert.ok(AI_STUDENTS_MASTER_LIST.some((p) => p.id === id), `missing target persona ${id}`);
-          }
+          for (const id of TARGET_20_AI_STUDENT_IDS) assert.ok(AI_STUDENTS_MASTER_LIST.some((p) => p.id === id), `missing target persona ${id}`);
 
           const avatarSource = fs.readFileSync('src/data/studentImages.ts', 'utf8');
           assert.equal(avatarSource.includes('.b64'), false, 'Base64 avatar assets must not be used');
@@ -213,15 +192,11 @@ jobs:
             'ananya_india.webp', 'xinyi_china.webp', 'linh_vietnam.webp', 'rahul_bangladesh.webp',
             'nadeesha_srilanka.webp', 'suman_nepal.webp', 'amara_nigeria.webp', 'andrei_romania.webp',
           ];
-
-          const forbiddenOldTargetImports = [
+          const oldTargetImports = [
             '../assets/images/emma_usa.jpg', '../assets/images/oliver_uk.jpg', '../assets/images/liam_aus.jpg',
-            '../assets/images/bence_hun.jpg', '../assets/images/zofia_pol.jpg', '../assets/images/rahul_ban.jpg',
-            '../assets/images/linh_vie.jpg',
+            '../assets/images/bence_hun.jpg', '../assets/images/zofia_pol.jpg', '../assets/images/rahul_ban.jpg', '../assets/images/linh_vie.jpg',
           ];
-          for (const oldPath of forbiddenOldTargetImports) {
-            assert.equal(avatarSource.includes(oldPath), false, `target persona must not use old JPG: ${oldPath}`);
-          }
+          for (const oldPath of oldTargetImports) assert.equal(avatarSource.includes(oldPath), false, `target persona must not use old JPG: ${oldPath}`);
 
           const hashes = new Set<string>();
           let totalBytes = 0;
@@ -242,11 +217,7 @@ jobs:
           }
           assert.equal(hashes.size, 20, 'all 20 target persona images must be unique');
           assert.ok(totalBytes >= 1_000_000 && totalBytes <= 5_000_000, `unexpected total persona size: ${totalBytes}`);
-
-          for (const id of TARGET_20_AI_STUDENT_IDS) {
-            assert.ok(avatarSource.includes(`${id}:`), `missing avatar mapping for target persona ${id}`);
-          }
-
+          for (const id of TARGET_20_AI_STUDENT_IDS) assert.ok(avatarSource.includes(`${id}:`), `missing avatar mapping for target persona ${id}`);
           console.log(`20-person unified WebP QA: PASS (${totalBytes} bytes, no Base64/sprite reconstruction)`);
           EOF
 
@@ -258,18 +229,21 @@ jobs:
       - name: Remove one-shot inputs and workflow
         shell: bash
         run: |
-          rm -f stage4_personas_q85.tar.gz
+          rm -f stage4_personas_q85.tar
           rm -f .github/workflows/stage4-direct-import.yml
 
-      - name: Commit verified final Stage 4 changes
+      - name: Verify final diff scope and commit
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          echo 'Files to commit:'
           git diff --cached --name-status
           test -n "$(git diff --cached --name-only)"
-          git commit -m 'feat: unify 20 persona images as WebP'
+          if git diff --cached --name-only | grep -Ev '^(src/assets/personas/[^/]+\.webp|src/data/studentImages\.ts|scripts/qa-20-persona-setup\.ts|stage4_personas_q85\.tar|\.github/workflows/stage4-direct-import\.yml)$'; then
+            echo 'Unexpected Stage 4 file change detected.' >&2
+            exit 1
+          fi
+          git commit -m 'feat: unify 20 approved persona images as WebP'
           git push origin HEAD:codex/stage4-unified-persona-images
