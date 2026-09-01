@@ -14,7 +14,20 @@ export type CountryCode =
   | 'Poland'
   | 'Bangladesh'
   | 'Vietnam'
-  | 'Myanmar';
+  | 'Myanmar'
+  | 'South Korea'
+  | 'Belarus'
+  | 'Germany'
+  | 'Malaysia'
+  | 'Indonesia'
+  | 'Taiwan'
+  | 'Lithuania'
+  | 'India'
+  | 'China'
+  | 'Sri Lanka'
+  | 'Nepal'
+  | 'Nigeria'
+  | 'Romania';
 
 export interface CulturalExpression {
   phrase: string;
@@ -31,7 +44,20 @@ export type AIStudentId =
   | 'zofia_poland'
   | 'rahul_bangladesh'
   | 'linh_vietnam'
-  | 'aung_myanmar';
+  | 'aung_myanmar'
+  | 'minji_korea'
+  | 'pavel_belarus'
+  | 'lukas_germany'
+  | 'aina_malaysia'
+  | 'dimas_indonesia'
+  | 'yuting_taiwan'
+  | 'matas_lithuania'
+  | 'ananya_india'
+  | 'xinyi_china'
+  | 'nadeesha_srilanka'
+  | 'suman_nepal'
+  | 'amara_nigeria'
+  | 'andrei_romania';
 
 export type DialogueDurationMinutes = 1 | 2 | 3 | 5;
 export type WorldEnglishesCircle = 'Inner' | 'Outer' | 'Expanding';
