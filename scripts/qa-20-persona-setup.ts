@@ -17,6 +17,7 @@ const avatarSource = fs.readFileSync('src/data/studentImages.ts', 'utf8');
 const avatarComponent = fs.readFileSync('src/components/StudentAvatar.tsx', 'utf8');
 assert.ok(avatarSource.includes('STUDENT_AVATAR_SPRITE_MAP'), '20-person portrait sprite map is required');
 assert.ok(avatarSource.includes('tileWidth: 80') && avatarSource.includes('tileHeight: 100'), '400x400 sprite must use 80x100 portrait cells');
+assert.ok(avatarSource.includes('decodeBase64Part') && avatarSource.includes('new Blob'), 'sprite chunks must be decoded before Blob reconstruction');
 assert.ok(avatarComponent.includes('STUDENT_AVATAR_SPRITE_MAP'), 'StudentAvatar must render the portrait sprite');
 assert.ok(avatarComponent.includes('<svg') && avatarComponent.includes('viewBox='), 'sprite portraits must be cropped with an SVG viewBox');
 
@@ -28,10 +29,10 @@ for (const id of TARGET_20_AI_STUDENT_IDS) {
 }
 assert.equal(targetPlacements.size, 20, 'all 20 target personas must have unique portrait cells');
 
-const spriteBase64 = [1, 2, 3, 4]
-  .map((part) => fs.readFileSync(`src/assets/images/personas20_0${part}.b64.txt`, 'utf8').trim())
-  .join('');
-const spriteBytes = Buffer.from(spriteBase64, 'base64');
+const spriteBytes = Buffer.concat([1, 2, 3, 4].map((part) => {
+  const encoded = fs.readFileSync(`src/assets/images/personas20_0${part}.b64.txt`, 'utf8').trim();
+  return Buffer.from(encoded, 'base64');
+}));
 assert.ok(spriteBytes.length > 20_000, 'portrait sprite unexpectedly small');
 assert.equal(spriteBytes.subarray(0, 4).toString('ascii'), 'RIFF', 'portrait sprite must be a WebP RIFF file');
 assert.equal(spriteBytes.subarray(8, 12).toString('ascii'), 'WEBP', 'portrait sprite must be WebP');
