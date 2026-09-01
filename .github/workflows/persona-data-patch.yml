@@ -24,10 +24,10 @@ jobs:
       - run: npm ci
       - name: Apply patch
         run: python3 scripts/patch-persona-master.py
-      - name: Remove temporary patch files
+      - name: Keep workflow files unchanged and remove patch helper
         run: |
+          git checkout -- .github/workflows/cloud-run-deploy.yml
           rm -f scripts/patch-persona-master.py
-          rm -f .github/workflows/persona-data-patch.yml
       - name: Full QA
         run: npm run qa
       - name: Production build
