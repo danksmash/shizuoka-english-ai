@@ -1,0 +1,1 @@
+Binary WebP files are added through Git blobs in the same branch.
