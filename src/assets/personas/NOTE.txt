@@ -1,0 +1,1 @@
+Next commit replaces legacy Base64 sprite references with normal WebP imports.
