@@ -42,16 +42,39 @@ new_block = '''            <div className="mb-1.5 flex flex-wrap items-center ju
                   aria-label={`${student.countryJapanese} ${student.name} ${student.age}歳 ${student.city}`}
                 >
                   {selected && <CheckCircle2 className="absolute right-2 top-2 h-4 w-4 fill-blue-600 text-white" />}
-                  <p className="pr-6 text-[11px] font-black leading-tight text-slate-800">{showLabels ? `${student.flag} ${student.country}` : 'AI留学生'}</p>
-                  <h3 className="mt-1 text-[13px] font-black leading-tight text-slate-950">{student.name}</h3>
-                  <p className="mt-1 text-[10px] font-semibold leading-tight text-slate-600">{student.age}歳{showLabels ? ` · ${student.city}` : ''}</p>
+                  <p className="setup-student-country pr-6 text-[11px] font-black leading-tight text-slate-800">{showLabels ? `${student.flag} ${student.country}` : 'AI留学生'}</p>
+                  <h3 className="setup-student-name mt-1 text-[13px] font-black leading-tight text-slate-950">{student.name}</h3>
+                  <p className="setup-student-origin mt-1 text-[10px] font-semibold leading-tight text-slate-600">{student.age}歳{showLabels ? ` · ${student.city}` : ''}</p>
                 </article>;
               })}
 '''
 text = text[:start] + new_block + text[end:]
 p.write_text(text)
 
-# Add focused QA for the compact 20-person selector without disturbing the legacy nine-card contract elsewhere.
+# Update the responsive QA contract: the old portrait-card markers are still
+# tested when that layout is used, while the new compact selector deliberately
+# exposes only country/name/age/hometown on the left.
+rp = Path('scripts/qa-responsive-vocabulary.ts')
+rtext = rp.read_text()
+old = """for (const marker of ['setup-student-country', 'setup-student-info-grid', 'setup-student-avatar', 'setup-student-copy', 'setup-student-name', 'setup-student-japanese', 'setup-student-origin', 'setup-student-accent']) {
+  assert.ok(setup.includes(marker), `AI student cards must expose ${marker}`);
+}
+"""
+new = """if (setup.includes('setup-student-card-compact')) {
+  for (const marker of ['setup-student-country', 'setup-student-name', 'setup-student-origin']) {
+    assert.ok(setup.includes(marker), `Compact AI student cards must expose ${marker}`);
+  }
+  assert.equal(setup.includes('setup-student-info-grid'), false, 'compact selector must not use the old portrait information grid');
+} else {
+  for (const marker of ['setup-student-country', 'setup-student-info-grid', 'setup-student-avatar', 'setup-student-copy', 'setup-student-name', 'setup-student-japanese', 'setup-student-origin', 'setup-student-accent']) {
+    assert.ok(setup.includes(marker), `AI student cards must expose ${marker}`);
+  }
+}
+"""
+if old not in rtext: raise SystemExit('responsive QA marker block missing')
+rp.write_text(rtext.replace(old, new, 1))
+
+# Add focused QA for the compact 20-person selector.
 q = Path('scripts/qa-20-persona-setup.ts')
 q.write_text(r'''import assert from 'node:assert/strict';
 import fs from 'node:fs';
