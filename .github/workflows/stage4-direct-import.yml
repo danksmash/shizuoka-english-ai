@@ -44,11 +44,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat > /tmp/stage4-import.mjs <<'EOF'
-          import fs from 'node:fs';
-          import path from 'node:path';
-          import crypto from 'node:crypto';
-          import sharp from 'sharp';
+          node <<'EOF'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const sharp = require('sharp');
 
           const expected = [
             'emma_usa.webp', 'oliver_uk.webp', 'liam_australia.webp', 'minji_korea.webp',
@@ -68,41 +68,45 @@ jobs:
             return out;
           }
 
-          const files = walk('/tmp/stage4-personas');
-          const byBase = new Map();
-          for (const p of files) {
-            const base = path.basename(p);
-            if (!byBase.has(base)) byBase.set(base, []);
-            byBase.get(base).push(p);
-          }
+          (async () => {
+            const files = walk('/tmp/stage4-personas');
+            const byBase = new Map();
+            for (const p of files) {
+              const base = path.basename(p);
+              if (!byBase.has(base)) byBase.set(base, []);
+              byBase.get(base).push(p);
+            }
 
-          if (files.length !== 20) throw new Error(`expected exactly 20 archive files, found ${files.length}`);
-          fs.mkdirSync('src/assets/personas', { recursive: true });
-          const hashes = new Set();
-          let totalBytes = 0;
+            if (files.length !== 20) throw new Error(`expected exactly 20 archive files, found ${files.length}`);
+            fs.mkdirSync('src/assets/personas', { recursive: true });
+            const hashes = new Set();
+            let totalBytes = 0;
 
-          for (const name of expected) {
-            const matches = byBase.get(name) ?? [];
-            if (matches.length !== 1) throw new Error(`${name}: expected exactly one file, found ${matches.length}`);
-            const src = matches[0];
-            const stat = fs.statSync(src);
-            if (stat.size < 20_000) throw new Error(`${name}: suspiciously small (${stat.size} bytes)`);
-            const meta = await sharp(src).metadata();
-            if (meta.format !== 'webp') throw new Error(`${name}: expected WebP, got ${meta.format}`);
-            if (meta.width !== 1120 || meta.height !== 1400) throw new Error(`${name}: expected 1120x1400, got ${meta.width}x${meta.height}`);
-            const data = fs.readFileSync(src);
-            const hash = crypto.createHash('sha256').update(data).digest('hex');
-            if (hashes.has(hash)) throw new Error(`${name}: duplicate binary image detected`);
-            hashes.add(hash);
-            totalBytes += stat.size;
-            fs.copyFileSync(src, path.join('src/assets/personas', name));
-          }
+            for (const name of expected) {
+              const matches = byBase.get(name) ?? [];
+              if (matches.length !== 1) throw new Error(`${name}: expected exactly one file, found ${matches.length}`);
+              const src = matches[0];
+              const stat = fs.statSync(src);
+              if (stat.size < 20_000) throw new Error(`${name}: suspiciously small (${stat.size} bytes)`);
+              const meta = await sharp(src).metadata();
+              if (meta.format !== 'webp') throw new Error(`${name}: expected WebP, got ${meta.format}`);
+              if (meta.width !== 1120 || meta.height !== 1400) throw new Error(`${name}: expected 1120x1400, got ${meta.width}x${meta.height}`);
+              const data = fs.readFileSync(src);
+              const hash = crypto.createHash('sha256').update(data).digest('hex');
+              if (hashes.has(hash)) throw new Error(`${name}: duplicate binary image detected`);
+              hashes.add(hash);
+              totalBytes += stat.size;
+              fs.copyFileSync(src, path.join('src/assets/personas', name));
+            }
 
-          if (hashes.size !== 20) throw new Error(`expected 20 unique images, got ${hashes.size}`);
-          if (totalBytes < 1_000_000 || totalBytes > 5_000_000) throw new Error(`unexpected total image size: ${totalBytes}`);
-          console.log(`Verified and copied 20 WebP files (${totalBytes} bytes total).`);
+            if (hashes.size !== 20) throw new Error(`expected 20 unique images, got ${hashes.size}`);
+            if (totalBytes < 1_000_000 || totalBytes > 5_000_000) throw new Error(`unexpected total image size: ${totalBytes}`);
+            console.log(`Verified and copied 20 WebP files (${totalBytes} bytes total).`);
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
           EOF
-          node /tmp/stage4-import.mjs
 
       - name: Write final image mapping
         shell: bash
