@@ -386,7 +386,7 @@
 }
 
 .setup-v2-card-japanese-name {
-  margin-top: 2px !important;
+  margin-top: 2px;
   color: #214f9b;
   font-size: clamp(7.2px, 0.55vw, 9.2px);
   line-height: 1.03;
