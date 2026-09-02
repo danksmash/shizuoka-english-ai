@@ -9,6 +9,12 @@ const SESSION_COLLECTION = 'sessions';
 const RESEARCH_ID_COLLECTION = 'research_ids';
 const RESEARCH_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
+export type ResearchAssignmentMetadata = {
+  assignedPartnerId: string;
+  assignedPartnerCountry: string;
+  assignmentAnnouncedAt: string;
+};
+
 function retentionDays(): number {
   const value = Number(process.env.SESSION_RETENTION_DAYS || 1095);
   return Number.isFinite(value) ? Math.max(30, Math.min(3650, Math.round(value))) : 1095;
@@ -35,6 +41,21 @@ function validTeacherStudentId(value: unknown): string {
   const id = typeof value === 'string' ? value.trim().toUpperCase() : '';
   return /^[A-HJ-NP-Z2-9]{4}$/.test(id) ? id : '';
 }
+function normalizeAssignmentText(value: unknown): string {
+  return typeof value === 'string' ? value.trim().slice(0, 120) : '';
+}
+function normalizeAssignmentAnnouncedAt(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : '';
+}
+function researchAssignmentFromRecord(record: Record<string, any> | undefined): ResearchAssignmentMetadata {
+  return {
+    assignedPartnerId: normalizeAssignmentText(record?.assignedPartnerId),
+    assignedPartnerCountry: normalizeAssignmentText(record?.assignedPartnerCountry),
+    assignmentAnnouncedAt: normalizeAssignmentAnnouncedAt(record?.assignmentAnnouncedAt),
+  };
+}
 function randomResearchId(): string {
   let out = 'R-';
   for (let i = 0; i < 12; i += 1) out += RESEARCH_ID_ALPHABET[crypto.randomInt(0, RESEARCH_ID_ALPHABET.length)];
@@ -47,7 +68,6 @@ async function generateUniqueResearchId(studentId: string): Promise<string> {
   }
   throw new Error('RESEARCH_ID_EXHAUSTED');
 }
-
 
 export async function resolveStudentByCode(code: string): Promise<{ studentId: string; researchId: string; classId: string; active: boolean; learningId: string; attendanceNumber: number | '' } | null> {
   const learningId = code.trim().toUpperCase();
@@ -69,7 +89,8 @@ export async function createStudentCode(
   researchId?: string,
   classId?: string,
   teacherId?: string,
-  attendanceNumber?: unknown
+  attendanceNumber?: unknown,
+  researchAssignment?: Partial<ResearchAssignmentMetadata>,
 ): Promise<{ studentId: string; researchId: string; classId: string; teacherStudentId: string; learningId: string; attendanceNumber: number | '' }> {
   const normalized = code.trim().toUpperCase();
   const key = learningCodeKey(normalized);
@@ -80,6 +101,7 @@ export async function createStudentCode(
   const cid = normalizeClassId(classId);
   const tid = validTeacherStudentId(teacherId);
   const attendance = normalizeAttendanceNumber(attendanceNumber);
+  const assignment = researchAssignmentFromRecord(researchAssignment || {});
   const now = new Date().toISOString();
   const created = await createDocumentIfAbsent(STUDENT_COLLECTION, key, {
     studentId: sid,
@@ -89,6 +111,9 @@ export async function createStudentCode(
     attendanceNumber: attendance,
     classId: cid,
     active: true,
+    ...(assignment.assignedPartnerId ? { assignedPartnerId: assignment.assignedPartnerId } : {}),
+    ...(assignment.assignedPartnerCountry ? { assignedPartnerCountry: assignment.assignedPartnerCountry } : {}),
+    ...(assignment.assignmentAnnouncedAt ? { assignmentAnnouncedAt: assignment.assignmentAnnouncedAt } : {}),
     createdAt: now,
     updatedAt: now,
   });
@@ -96,7 +121,19 @@ export async function createStudentCode(
   return { studentId: sid, researchId: rid, classId: cid, teacherStudentId: tid, learningId: normalized, attendanceNumber: attendance };
 }
 
-export async function getStudentRecordsForManagement(): Promise<Array<{ studentId: string; learningId: string; classId: string; attendanceNumber: number | ''; active: boolean; createdAt: string; updatedAt: string }>> {
+export async function getStudentRecordsForManagement(): Promise<Array<{
+  studentId: string;
+  researchId: string;
+  learningId: string;
+  classId: string;
+  attendanceNumber: number | '';
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  assignedPartnerId: string;
+  assignedPartnerCountry: string;
+  assignmentAnnouncedAt: string;
+}>> {
   const records = await listCollection(STUDENT_COLLECTION, 1000);
   const grouped = new Map<string, Record<string, any>[]>();
   for (const record of records) {
@@ -104,18 +141,25 @@ export async function getStudentRecordsForManagement(): Promise<Array<{ studentI
     if (!sid) continue;
     const list = grouped.get(sid) || []; list.push(record); grouped.set(sid, list);
   }
-  const result: Array<{ studentId: string; learningId: string; classId: string; attendanceNumber: number | ''; active: boolean; createdAt: string; updatedAt: string }> = [];
+  const result: Array<{
+    studentId: string; researchId: string; learningId: string; classId: string; attendanceNumber: number | ''; active: boolean;
+    createdAt: string; updatedAt: string; assignedPartnerId: string; assignedPartnerCountry: string; assignmentAnnouncedAt: string;
+  }> = [];
   for (const [studentId, list] of grouped.entries()) {
     const sorted = list.slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
     const activeRecord = sorted.find((row) => row.active !== false) || sorted[0] || {};
+    const assignmentRecord = sorted.find((row) => row.assignedPartnerId || row.assignedPartnerCountry || row.assignmentAnnouncedAt) || activeRecord;
+    const assignment = researchAssignmentFromRecord(assignmentRecord);
     result.push({
       studentId,
+      researchId: String(activeRecord.researchId || assignmentRecord.researchId || ''),
       learningId: String(activeRecord.learningId || '').trim().toUpperCase(),
       classId: normalizeClassId(activeRecord.classId),
       attendanceNumber: normalizeAttendanceNumber(activeRecord.attendanceNumber),
       active: sorted.some((row) => row.active !== false),
       createdAt: String(activeRecord.createdAt || ''),
       updatedAt: String(activeRecord.updatedAt || ''),
+      ...assignment,
     });
   }
   return result.sort((a, b) => a.classId.localeCompare(b.classId, 'ja') || (Number(a.attendanceNumber || 999) - Number(b.attendanceNumber || 999)) || a.learningId.localeCompare(b.learningId));
@@ -140,7 +184,6 @@ export async function setStudentActive(studentId: string, active: boolean): Prom
   }
 }
 
-
 export async function updateStudentClass(studentId: string, classId: string, attendanceNumber?: unknown): Promise<void> {
   const cid = normalizeClassId(classId);
   if (!/^(?:5-[123]|6-[123]|テスト|予備)$/.test(cid)) throw new Error('INVALID_CLASS_ID');
@@ -161,7 +204,15 @@ export async function reissueStudentCode(studentId: string, newCode: string): Pr
   if (await getDocument(STUDENT_COLLECTION, learningCodeKey(newCode))) throw new Error('LEARNING_CODE_ALREADY_EXISTS');
   const latest = records.slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
   const tid = validTeacherStudentId(latest.teacherStudentId);
-  const created = await createStudentCode(newCode, studentId, String(latest.researchId || ''), normalizeClassId(latest.classId), tid, latest.attendanceNumber);
+  const created = await createStudentCode(
+    newCode,
+    studentId,
+    String(latest.researchId || ''),
+    normalizeClassId(latest.classId),
+    tid,
+    latest.attendanceNumber,
+    researchAssignmentFromRecord(latest),
+  );
   for (const record of records) {
     const id = documentId(record); if (!id) continue;
     await setDocument(STUDENT_COLLECTION, id, { ...withoutInternal(record), teacherStudentId: tid, active: false, updatedAt: new Date().toISOString() });
@@ -244,7 +295,23 @@ export async function getStudentHistory(studentId: string): Promise<Record<strin
   }));
 }
 
-export async function getAllSessionsForManagement(): Promise<Record<string, any>[]> { return listCollection(SESSION_COLLECTION, 1000); }
+export async function getAllSessionsForManagement(): Promise<Record<string, any>[]> {
+  const [sessions, students] = await Promise.all([
+    listCollection(SESSION_COLLECTION, 1000),
+    getStudentRecordsForManagement(),
+  ]);
+  const studentById = new Map(students.map((student) => [student.studentId, student]));
+  return sessions.map((session) => {
+    const student = studentById.get(String(session.studentId || ''));
+    return {
+      ...session,
+      assignedPartnerId: normalizeAssignmentText(session.assignedPartnerId || student?.assignedPartnerId),
+      assignedPartnerCountry: normalizeAssignmentText(session.assignedPartnerCountry || student?.assignedPartnerCountry),
+      assignmentAnnouncedAt: normalizeAssignmentAnnouncedAt(session.assignmentAnnouncedAt || student?.assignmentAnnouncedAt),
+    };
+  });
+}
+
 export async function getTeacherSessionsForManagement(): Promise<Record<string, any>[]> {
   const [rows, students] = await Promise.all([getAllSessionsForManagement(), getStudentRecordsForManagement()]);
   const records = new Map(students.map((student) => [student.studentId, student]));
