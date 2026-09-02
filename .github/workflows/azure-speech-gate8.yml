@@ -1,0 +1,107 @@
+name: Gate 8 - 100-user headroom and fault injection
+
+on:
+  push:
+    branches:
+      - codex/gate8-100-headroom-faults
+    paths:
+      - 'scripts/gate8-headroom-faults.ts'
+      - '.github/workflows/azure-speech-gate8.yml'
+      - 'src/server/azureTts.ts'
+      - 'src/data/azureVoiceProfiles.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  gate8:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GATE8_OUTPUT_DIR: gate8-artifacts
+      AZURE_SPEECH_REGION: japaneast
+      CANARY_SERVICE: shizuoka-english-ai-gate8-canary
+      GCP_PROJECT: shizuoka-english-ai
+      GCP_REGION: asia-northeast1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Verify protected production and Azure key
+        env:
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+        run: |
+          test -n "$AZURE_SPEECH_KEY"
+          grep -q "ttsProvider: 'google-chirp3-hd'" server.ts
+          grep -q "X-TTS-Provider', 'google-chirp3-hd'" server.ts
+      - name: Full QA and build
+        run: |
+          npm run qa
+          npm run build
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
+      - name: Deploy isolated Gate 8 canary
+        run: |
+          BUILD_SHA="${GITHUB_SHA:0:12}"
+          gcloud run deploy "$CANARY_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --source . \
+            --region "$GCP_REGION" \
+            --allow-unauthenticated \
+            --min-instances 0 \
+            --max-instances 10 \
+            --concurrency 80 \
+            --timeout 60 \
+            --memory 512Mi \
+            --update-env-vars ANTHROPIC_MODEL=claude-sonnet-5,SESSION_RETENTION_DAYS=1095,APP_VERSION=gate8-canary,APP_BUILD="$BUILD_SHA" \
+            --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest
+          CANARY_URL=$(gcloud run services describe "$CANARY_SERVICE" --project "$GCP_PROJECT" --region "$GCP_REGION" --format='value(status.url)')
+          test -n "$CANARY_URL"
+          case "$CANARY_URL" in
+            *shizuoka-english-ai-1075707511474.asia-northeast1.run.app*) echo 'Refusing production endpoint'; exit 1;;
+          esac
+          echo "GATE8_CANARY_URL=$CANARY_URL" >> "$GITHUB_ENV"
+      - name: Canary health verification
+        run: |
+          health=''
+          for attempt in 1 2 3 4 5 6; do
+            if health=$(curl --fail --silent --show-error --max-time 20 "$GATE8_CANARY_URL/api/health"); then break; fi
+            sleep 4
+          done
+          echo "$health" | grep -q '"status":"ok"'
+          echo "$health" | grep -q '"model":"claude-sonnet-5"'
+          echo "$health" | grep -q '"appVersion":"gate8-canary"'
+          echo "$health" | grep -q '"ttsProvider":"google-chirp3-hd"'
+      - name: Run 100-user headroom and fault injection
+        env:
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+        run: npx tsx scripts/gate8-headroom-faults.ts
+      - name: Upload Gate 8 report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: azure-speech-gate8-report
+          path: gate8-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Remove Gate 8 canary
+        if: always()
+        continue-on-error: true
+        run: gcloud run services delete "$CANARY_SERVICE" --project "$GCP_PROJECT" --region "$GCP_REGION" --quiet || true
