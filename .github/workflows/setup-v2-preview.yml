@@ -1,0 +1,58 @@
+name: Setup v2 branch preview
+
+on:
+  push:
+    branches:
+      - codex/setup-main-reference-5x4
+
+permissions:
+  contents: read
+
+jobs:
+  verify-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Full QA
+        run: npm run qa
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Chromium for visual QA
+        run: npx --yes playwright@1.55.0 install --with-deps chromium
+
+      - name: Start production preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/setup-v2-preview.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/setup-v2-preview.log
+          exit 1
+
+      - name: Capture reference viewport screenshots
+        run: |
+          mkdir -p setup-v2-screenshots
+          npx --yes playwright@1.55.0 screenshot --browser=chromium --viewport-size="1672,941" --wait-for-timeout=1500 http://127.0.0.1:4173/ setup-v2-screenshots/setup-1672x941.png
+          npx --yes playwright@1.55.0 screenshot --browser=chromium --viewport-size="1366,768" --wait-for-timeout=1500 http://127.0.0.1:4173/ setup-v2-screenshots/setup-1366x768.png
+          npx --yes playwright@1.55.0 screenshot --browser=chromium --viewport-size="1280,720" --wait-for-timeout=1500 http://127.0.0.1:4173/ setup-v2-screenshots/setup-1280x720.png
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: setup-v2-screenshots
+          path: setup-v2-screenshots/*.png
+          if-no-files-found: error
