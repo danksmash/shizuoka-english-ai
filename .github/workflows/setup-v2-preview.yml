@@ -28,6 +28,9 @@ jobs:
         run: npm run qa
 
       - name: Production build
+        env:
+          VITE_API_BASE_URL: https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app
+          VITE_PERSONA_LABEL_CONDITION: shown
         run: npm run build
 
       - name: Install Chromium for visual QA
@@ -46,9 +49,9 @@ jobs:
       - name: Capture reference viewport screenshots
         run: |
           mkdir -p setup-v2-screenshots
-          npx --yes playwright@1.55.0 screenshot --browser=chromium --viewport-size="1672,941" --wait-for-timeout=1500 http://127.0.0.1:4173/ setup-v2-screenshots/setup-1672x941.png
-          npx --yes playwright@1.55.0 screenshot --browser=chromium --viewport-size="1366,768" --wait-for-timeout=1500 http://127.0.0.1:4173/ setup-v2-screenshots/setup-1366x768.png
-          npx --yes playwright@1.55.0 screenshot --browser=chromium --viewport-size="1280,720" --wait-for-timeout=1500 http://127.0.0.1:4173/ setup-v2-screenshots/setup-1280x720.png
+          npx --yes playwright@1.55.0 screenshot --browser=chromium --viewport-size="1672,941" --wait-for-timeout=5000 http://127.0.0.1:4173/ setup-v2-screenshots/setup-1672x941.png
+          npx --yes playwright@1.55.0 screenshot --browser=chromium --viewport-size="1366,768" --wait-for-timeout=5000 http://127.0.0.1:4173/ setup-v2-screenshots/setup-1366x768.png
+          npx --yes playwright@1.55.0 screenshot --browser=chromium --viewport-size="1280,720" --wait-for-timeout=5000 http://127.0.0.1:4173/ setup-v2-screenshots/setup-1280x720.png
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
