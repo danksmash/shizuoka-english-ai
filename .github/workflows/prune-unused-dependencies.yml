@@ -26,14 +26,10 @@ jobs:
       - name: Install current dependencies
         run: npm ci
 
-      - name: Prove motion and autoprefixer are unused
+      - name: Prove autoprefixer is unused
         shell: bash
         run: |
           set -euo pipefail
-          if git grep -nE "(from[[:space:]]+|require\(|import\()[[:space:]]*['\"]motion([/'\"]|$)" -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs'; then
-            echo 'motion is still referenced in executable source' >&2
-            exit 1
-          fi
           if git grep -n 'autoprefixer' -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs' '*.css' '*.json' ':!package.json' ':!package-lock.json'; then
             echo 'autoprefixer is still referenced outside package metadata' >&2
             exit 1
@@ -43,13 +39,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm uninstall motion autoprefixer --ignore-scripts
+          npm uninstall autoprefixer --ignore-scripts
           npm pkg delete devDependencies.vite
           npm install --package-lock-only --ignore-scripts
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-          if (pkg.dependencies?.motion) throw new Error('motion still present');
+          if (!pkg.dependencies?.motion) throw new Error('motion must remain because App/SpeechInputBar use it');
           if (pkg.devDependencies?.autoprefixer) throw new Error('autoprefixer still present');
           if (!pkg.dependencies?.vite) throw new Error('runtime vite dependency must remain');
           if (pkg.devDependencies?.vite) throw new Error('duplicate devDependency vite still present');
@@ -88,5 +84,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add package.json package-lock.json
           git rm .github/workflows/prune-unused-dependencies.yml
-          git commit -m 'chore: prune unused dependencies'
+          git commit -m 'chore: prune unused dependency metadata'
           git push origin HEAD:codex/prune-unused-dependencies
