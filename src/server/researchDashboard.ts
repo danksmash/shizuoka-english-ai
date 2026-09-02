@@ -139,8 +139,9 @@ const ALLOWED_VALUES: Record<string, string> = {
 };
 
 function csvCell(value: unknown): string {
-  const text = String(value ?? '');
-  return `"${text.replace(/"/g, '""')}"`;
+  const raw = String(value ?? '');
+  const text = typeof value === 'string' && /^[\t\r ]*[=+\-@]/.test(raw) ? `'${raw}` : raw;
+  return `\"${text.replace(/\"/g, '\"\"')}\"`;
 }
 function isNumericField(variable: string): boolean {
   return variable === 'schema_version' || /(_count|_tokens|_number|_seconds|_minutes|_rate|_pitch|_year|_level|_flag|_visible|_words|_types|_turns|_completed|starts_|word_count|turn_sequence|speaker_turn_number|days_since|age$|^reflection_)/.test(variable);
