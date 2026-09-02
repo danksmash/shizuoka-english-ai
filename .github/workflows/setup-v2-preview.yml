@@ -72,7 +72,7 @@ jobs:
               await page.setViewportSize({ width, height });
               await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' });
               await page.getByRole('heading', { name: /会話するAI留学生をえらぼう/ }).waitFor();
-              await page.getByRole('button', { name: /インドネシア Dimas Pratama/ }).click();
+              await page.getByRole('button', { name: /Indonesia Dimas Pratama/ }).click();
               await page.waitForFunction(() => {
                 const images = Array.from(document.images);
                 return images.length >= 21 && images.every((img) => img.complete && img.naturalWidth > 0);
