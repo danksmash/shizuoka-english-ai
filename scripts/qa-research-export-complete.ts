@@ -47,7 +47,7 @@ const sessions = [
 const data = buildResearchExportDataSets(sessions as any);
 assert.deepEqual(Object.keys(data).sort(), ['codebook','expressions','personas','sessions','utterances'].sort(), 'exactly five research CSV datasets must be produced');
 assert.equal(data.sessions.length,2);
-assert.equal(data.personas.length,9,'all nine fixed personas must be exported');
+assert.equal(data.personas.length,20,'all 20 research-target personas must be exported');
 assert.ok(data.utterances.length>=6,'all child and AI utterances must be preserved');
 
 for (const dataset of ['sessions','utterances','expressions','personas','codebook'] as const) {
@@ -103,7 +103,7 @@ assert.ok(data.expressions.some((r)=>r.dictionary_source==='persona'&&r.profile_
 assert.ok(data.expressions.every((row)=>data.utterances.some((u)=>u.utterance_id===row.utterance_id)),'every expression must link to utterances.csv');
 
 const personaIds=new Set(data.personas.map((r)=>String(r.persona_id)));
-assert.equal(personaIds.size,9);
+assert.equal(personaIds.size,20);
 for(const row of data.personas){
   assert.ok(row.country);assert.ok(row.gender);assert.ok(['Inner','Outer','Expanding'].includes(String(row.world_englishes_circle)));
   assert.ok(row.tts_voice_name);assert.ok(row.tts_language_code);assert.ok(row.profile_text_ja);assert.ok(row.persona_dictionary_version);
@@ -123,9 +123,10 @@ assert.equal(filtered.sessions.length,1);
 assert.equal(filtered.sessions[0].session_id,'session_alpha');
 assert.ok(filtered.utterances.every((r)=>r.session_id==='session_alpha'));
 assert.ok(filtered.expressions.every((r)=>r.session_id==='session_alpha'));
-assert.equal(filtered.personas.length,9,'persona master must remain complete regardless of session filters');
+assert.equal(filtered.personas.length,20,'20-person research persona master must remain complete regardless of session filters');
 assert.equal(filtered.codebook.length,data.codebook.length,'codebook must remain complete regardless of session filters');
 const uiClass=filterResearchExportDataSets(data,{grade:'5',classId:'1'});assert.equal(uiClass.sessions.length,1);assert.equal(uiClass.sessions[0].session_id,'session_alpha');
+const legacyOnly={...sessions[0],sessionId:'legacy_chloe',researchId:'RLEGACY',aiStudentId:'chloe_canada',personaId:'chloe_canada'};const legacyExcluded=buildResearchExportDataSets([...sessions,legacyOnly] as any);assert.equal(legacyExcluded.sessions.some((r)=>r.session_id==='legacy_chloe'),false,'legacy non-target persona sessions must not enter research exports');
 const specialRaw=[...sessions,{...sessions[0],sessionId:'session_test',researchId:'RTEST',classId:'テスト'},{...sessions[0],sessionId:'session_reserve',researchId:'RRESERVE',classId:'予備'}];const specialData=buildResearchExportDataSets(specialRaw as any);assert.equal(filterResearchExportDataSets(specialData,{grade:'test'}).sessions.length,1);assert.equal(filterResearchExportDataSets(specialData,{grade:'reserve'}).sessions.length,1);assert.equal(filterResearchExportDataSets(specialData,{classId:'test'}).sessions.length,1);assert.equal(filterResearchExportDataSets(specialData,{classId:'reserve'}).sessions.length,1);
 
 const dashboard=buildResearchDashboardData(sessions as any,{});
@@ -137,7 +138,7 @@ assert.ok(dashboard.charts.daily.length===2);
 assert.ok(dashboard.charts.personas.length===2);
 assert.ok(dashboard.charts.circles.some((r)=>r.label==='Inner'));
 assert.ok(dashboard.topExpressions.some((r)=>r.source==='persona'));for(const item of dashboard.topExpressions)assert.ok(data.expressions.some((r)=>r.speaker==='child'&&String(r.dictionary_source)===String(item.source)&&String(r.expression).toLowerCase()===String(item.expression).toLowerCase()),'top expression must originate from child utterance');
-assert.equal(dashboard.exportFiles.length,5);assert.deepEqual(dashboard.filters.grades,['5','6','test','reserve']);assert.deepEqual(dashboard.filters.classes,['1','2','3','test','reserve']);assert.deepEqual(dashboard.filters.labelConditions,['shown','hidden']);assert.deepEqual(dashboard.filters.topics,['intro','favorites','shizuoka_culture','talents','free']);assert.ok(dashboard.charts.personas.every((r)=>!String(r.label).includes('(')));
+assert.equal(dashboard.exportFiles.length,5);assert.equal(dashboard.filters.personas.length,20);assert.equal(dashboard.filters.personas.includes('chloe_canada'),false);assert.equal(dashboard.filters.personas.includes('aung_myanmar'),false);assert.deepEqual(dashboard.filters.grades,['5','6','test','reserve']);assert.deepEqual(dashboard.filters.classes,['1','2','3','test','reserve']);assert.deepEqual(dashboard.filters.labelConditions,['shown','hidden']);assert.deepEqual(dashboard.filters.topics,['intro','favorites','shizuoka_culture','talents','free']);assert.ok(dashboard.charts.personas.every((r)=>!String(r.label).includes('(')));
 assert.ok(dashboard.systemQuality.some((r)=>r.label==='AI応答失敗'&&r.value===1),'dashboard must expose AI failure events separately');
 assert.ok(dashboard.systemQuality.some((r)=>r.label==='マイクエラー'&&r.value===1),'dashboard must expose microphone errors separately');
 assert.ok(dashboard.systemQuality.some((r)=>r.label==='TTSフォールバック'&&r.value===1),'dashboard must expose TTS fallback separately');
@@ -145,6 +146,10 @@ const schemaCodebook=data.codebook.find((r)=>r.file_name==='sessions.csv'&&r.var
 assert.equal(schemaCodebook.data_type,'number','schema_version must be typed as numeric in codebook');
 const rateCodebook=data.codebook.find((r)=>r.file_name==='sessions.csv'&&r.variable==='student_selected_speech_rate')!;
 assert.equal(rateCodebook.allowed_values,'0.75–1.25','speech rate range must be documented in codebook');
+const profileFieldCodebook=data.codebook.find((r)=>r.file_name==='expressions.csv'&&r.variable==='profile_field')!;
+for(const value of ['likes','major','city','landmark'])assert.ok(String(profileFieldCodebook.allowed_values).includes(value),'profile_field codebook missing '+value);
+const personaCategoryCodebook=data.codebook.find((r)=>r.file_name==='expressions.csv'&&r.variable==='persona_category')!;
+for(const value of ['interest','major','place'])assert.ok(String(personaCategoryCodebook.allowed_values).includes(value),'persona_category codebook missing '+value);
 const betaDate=String(beta.local_date||'');
 const betaSeries=dashboard.charts.daily.find((r)=>r.date===betaDate)!;
 assert.equal(betaSeries.reflection_conveyed,null,'missing reflection must stay null, never become a false zero score');
@@ -172,6 +177,8 @@ assert.ok(server.includes("(dataset==='personas'||dataset==='codebook')?[]:await
 assert.ok(auth.includes('/api/management/research.dashboard'),'researcher auth allowlist missing dashboard endpoint');
 for(const dataset of ['sessions','utterances','expressions','personas','codebook']) assert.ok(page.includes(dataset+'.csv'),'research page missing '+dataset+'.csv');
 assert.ok(page.includes('data-export-dataset'),'research page CSV buttons are not dynamically bound');
+assert.ok(server.includes("INVALID_RESEARCH_DATASET")&&server.includes("res.status(400)"),'invalid research dataset must be rejected with HTTP 400');
+assert.ok(page.includes('async function downloadFile'),'CSV/ZIP downloads must handle failures without leaving the research page');
 assert.ok(page.includes('chartDaily')&&page.includes('chartPersona')&&page.includes('chartWords')&&page.includes('chartReflection'),'four required graph containers must exist');assert.equal(page.includes('id="chartCircle"'),false);
 
 console.log('Research CSV completeness/linkage QA: PASS');

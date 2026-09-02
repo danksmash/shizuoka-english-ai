@@ -22,10 +22,10 @@ for(const dataset of ['sessions','utterances','expressions','personas','codebook
 const documentStub:any={
   getElementById:(id:string)=>element(id),
   querySelectorAll:(selector:string)=>selector==='[data-export-dataset]'?datasetButtons:[],
-  createElement:(tag:string)=>makeElement('created-'+tag),
+  createElement:(tag:string)=>{const e=makeElement('created-'+tag);e.click=()=>downloaded.push({href:e.href,download:e.download});return e;},
   body:{appendChild:()=>{}},
 };
-const location:any={href:'',reload:()=>{}};
+const location:any={href:'',reload:()=>{}};const downloaded:any[]=[];const fetchCalls:string[]=[];
 const sample={
   success:true,
   metrics:{participantCount:128,totalSessions:384,childUtteranceCount:9842,meanChildWordsPerMinute:18.4,completeRate:98.7,latestAt:'2026-09-03 14:32:00'},
@@ -42,12 +42,13 @@ const sample={
     {dataset:'sessions',fileName:'sessions.csv',contains:'session data',analysisUse:'longitudinal',rowCount:384},
     {dataset:'utterances',fileName:'utterances.csv',contains:'utterances',analysisUse:'interaction',rowCount:12000},
     {dataset:'expressions',fileName:'expressions.csv',contains:'expressions',analysisUse:'vocabulary',rowCount:3000},
-    {dataset:'personas',fileName:'personas.csv',contains:'personas',analysisUse:'conditions',rowCount:9},
+    {dataset:'personas',fileName:'personas.csv',contains:'personas',analysisUse:'conditions',rowCount:20},
     {dataset:'codebook',fileName:'codebook.csv',contains:'variables',analysisUse:'reproducibility',rowCount:180},
   ],
 };
-const context:any={console,document:documentStub,window:{},location,alert:()=>{},URL,URLSearchParams,Set,Map,Math,Number,String,Array,Object,Date,
-  fetch:async(url:string)=>({ok:true,json:async()=>url.includes('/api/health')?{appVersion:'1.0.7',build:'test'}:sample}),
+const urlApi:any={createObjectURL:()=>"blob:test",revokeObjectURL:()=>{}};
+const context:any={console,document:documentStub,window:{},location,alert:()=>{},URL:urlApi,URLSearchParams,Set,Map,Math,Number,String,Array,Object,Date,Blob,
+  fetch:async(url:string)=>{fetchCalls.push(url);return {ok:true,status:200,json:async()=>url.includes('/api/health')?{appVersion:'1.0.7',build:'test'}:sample,blob:async()=>new Blob(['test']),headers:{get:()=>null}}},
   setTimeout:()=>0,clearTimeout:()=>{}};
 vm.createContext(context);
 vm.runInContext(match[1],context,{filename:'research-dashboard.js'});
@@ -72,13 +73,16 @@ assert.ok(dashboardUrl.includes('personaId=emma_usa')&&dashboardUrl.includes('co
 context.renderDashboard(sample,params.toString());
 assert.ok(context.appliedQueryUrl('/api/management/research.csv','sessions').includes('personaId=emma_usa'),'applied dashboard filters must be snapshotted for exports');
 
-context.downloadDataset('sessions');
-assert.ok(location.href.startsWith('/api/management/research.csv?'));
-assert.ok(location.href.includes('dataset=sessions')&&location.href.includes('classId=1'),'CSV download must use the same dashboard filters');
+await context.downloadDataset('sessions');
+assert.ok(fetchCalls.some((url)=>url.startsWith('/api/management/research.csv?')&&url.includes('dataset=sessions')&&url.includes('classId=1')),'CSV download must use the same dashboard filters');
+assert.equal(location.href,'','CSV download must not navigate away from the research page');
+assert.ok(downloaded.some((x)=>x.download==='sessions.csv'),'CSV blob must be downloaded with the expected filename');
 
-element('bundleBtn').onclick();
-assert.ok(location.href.startsWith('/api/management/research.bundle.zip'));
-assert.ok(location.href.includes('personaId=emma_usa'),'ZIP download must use the same dashboard filters');
+await element('bundleBtn').onclick();
+assert.ok(fetchCalls.some((url)=>url.startsWith('/api/management/research.bundle.zip')&&url.includes('personaId=emma_usa')),'ZIP download must use the same dashboard filters');
+assert.equal(location.href,'','ZIP download must not navigate away from the research page');
+assert.ok(downloaded.some((x)=>x.download==='research-bundle.zip'),'ZIP blob must be downloaded with the expected filename');
+const savedFetch=context.fetch;context.fetch=async()=>({ok:false,status:503,json:async()=>({error:'RESEARCH_EXPORT_UNAVAILABLE'})});await context.downloadDataset('sessions');assert.ok(element('exportStatus').textContent.includes('RESEARCH_EXPORT_UNAVAILABLE'),'CSV failure must be shown inside the research page');assert.ok(element('exportStatus').className.includes('error'));assert.equal(location.href,'');context.fetch=savedFetch;
 
 context.resetFilters();
 assert.equal(element('start').value,'');assert.equal(element('end').value,'');assert.equal(element('classId').value,'all');assert.equal(element('completeOnly').checked,false);
@@ -93,11 +97,11 @@ assert.ok(pageSource.includes('onchange=scheduleDashboardReload'),'all filter co
 assert.ok(pageSource.includes('appliedQueryUrl'),'CSV and ZIP downloads must use the last successfully rendered filter snapshot');
 assert.ok(pageSource.includes('flex-wrap:wrap'),'research header/actions must wrap instead of overflowing');assert.ok(pageSource.includes('.charts{display:grid;grid-template-columns:repeat(2'),'desktop charts must use two readable columns');assert.ok(pageSource.includes('.svg-label{font-size:15px'),'line graph labels must be readable');assert.ok(pageSource.includes('.bar-label-html{font-size:16px'),'bar graph labels must remain readable HTML text');assert.ok(pageSource.includes('.chart svg{min-width:460px'),'line charts must not shrink labels below their readable base size');assert.ok(pageSource.includes('1分あたり平均発話語数'));assert.equal(pageSource.includes('id="chartCircle"'),false);assert.ok(pageSource.includes('５年')&&pageSource.includes('６年')&&pageSource.includes('１組')&&pageSource.includes('２組')&&pageSource.includes('３組'));assert.ok(pageSource.includes('表示あり')&&pageSource.includes('表示なし'));for(const label of ['自己紹介・あいさつ','好きなもの・すきなこと','静岡のじまん＆世界の文化','できること・得意なこと','自由トーク・おしゃべり'])assert.ok(pageSource.includes(label),'theme missing '+label);
 assert.equal(pageSource.includes('博士'),false,'researcher UI must not display 博士');
-assert.ok(pageSource.includes('#chartPersona{height:390px;overflow-y:visible}'),'persona chart must reserve enough vertical space for all 9 rows');
+assert.ok(pageSource.includes('#chartPersona{height:820px;overflow-y:visible}'),'persona chart must reserve enough vertical space for all 20 rows');
 assert.ok(pageSource.includes('const labelYs=rows.map(function(){return []})'),'line graph must track per-date label positions');
-const ninePersonas=Array.from({length:9},(_,i)=>({label:'Persona '+(i+1),value:9-i}));
-const ninePersonaHtml=context.barSvg(ninePersonas,'value',9);
-assert.equal((ninePersonaHtml.match(/bar-row-html/g)||[]).length,9,'persona chart must render all nine rows');
+const twentyPersonas=Array.from({length:20},(_,i)=>({label:'Persona '+(i+1),value:20-i}));
+const twentyPersonaHtml=context.barSvg(twentyPersonas,'value',20);
+assert.equal((twentyPersonaHtml.match(/bar-row-html/g)||[]).length,20,'persona chart must render all 20 research rows');
 const collisionSvg=context.lineSvg([{date:'2026-08-30',a:4.5,b:4.5,c:4.5}],[{key:'a',label:'A'},{key:'b',label:'B'},{key:'c',label:'C'}]);
 const ys=Array.from(collisionSvg.matchAll(/<text x="[^"]+" y="([^"]+)" text-anchor="middle" class="svg-value"/g)).map((m:any)=>Number(m[1]));
 assert.equal(ys.length,3,'reflection collision test must render three value labels');

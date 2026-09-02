@@ -1,4 +1,4 @@
-import { AI_STUDENTS_LIST } from '../data/curriculum';
+import { AI_STUDENTS_MASTER_LIST, TARGET_20_AI_STUDENT_IDS } from '../data/curriculum';
 import { getPersonaResearchMetadata, PERSONA_DICTIONARY_VERSION } from '../data/personaResearch';
 import { buildResearchDataSets } from './researchExport';
 
@@ -10,6 +10,25 @@ export type ResearchFilterQuery = {
 
 type Row = Record<string, unknown>;
 type ExportDataSets = Record<ResearchExportDatasetName, Row[]>;
+
+const RESEARCH_PERSONAS = TARGET_20_AI_STUDENT_IDS.map((id) => {
+  const persona = AI_STUDENTS_MASTER_LIST.find((item) => item.id === id);
+  if (!persona) throw new Error(`RESEARCH_PERSONA_MISSING:${id}`);
+  return persona;
+});
+const RESEARCH_PERSONA_IDS = new Set(RESEARCH_PERSONAS.map((persona) => String(persona.id)));
+
+function isResearchTargetSession(session: Record<string, any>): boolean {
+  const explicit = String(session.personaId || '');
+  if (explicit && RESEARCH_PERSONA_IDS.has(explicit)) return true;
+  const aiStudentId = String(session.aiStudentId || '');
+  if (!aiStudentId) return false;
+  try {
+    return RESEARCH_PERSONA_IDS.has(String(getPersonaResearchMetadata(aiStudentId as any).personaId));
+  } catch {
+    return false;
+  }
+}
 
 export const RESEARCH_EXPORT_HEADERS: Record<ResearchExportDatasetName, string[]> = {
   sessions: [
@@ -93,7 +112,7 @@ const FIELD_DEFINITION: Record<string, string> = {
   is_reciprocal_question:'相互的質問の場合1', is_repair:'repair表現の場合1', is_reason_expression:'理由表現の場合1',
   dictionary_source:'一致した辞書（curriculum/persona）', expression_id:'辞書内表現ID', expression:'一致した英語表現',
   japanese:'表現の日本語', expression_category:'表現カテゴリー', curriculum_grade:'教科書辞書に対応する学年',
-  curriculum_unit:'教科書辞書に対応する単元', profile_field:'personaプロフィール内の項目（likes/major）',
+  curriculum_unit:'教科書辞書に対応する単元', profile_field:'personaプロフィール内の項目（likes/major/city/landmark）',
   persona_category:'persona辞書カテゴリー', name:'AI留学生の英語名', japanese_name:'AI留学生の日本語表記',
   country:'AI留学生の国', country_japanese:'国の日本語表記', country_native:'国の現地語表記', gender:'AI留学生personaの性別',
   age:'AI留学生personaの年齢', city:'出身都市', role:'personaの役割', major:'専攻', likes:'好きなもの（|区切り）',
@@ -108,7 +127,7 @@ const ALLOWED_VALUES: Record<string, string> = {
   persona_label_condition:'shown | hidden', speaker:'child | ai', dictionary_source:'curriculum | persona',
   persona_gender:'male | female', gender:'male | female', persona_voice_gender:'male | female', voice_gender:'male | female',
   grade_level:'5 | 6', curriculum_grade:'5 | 6', target_duration_minutes:'1 | 2 | 3 | 5',
-  topic:'intro | favorites | shizuoka_culture | talents | free', profile_field:'likes | major', persona_category:'interest | major',
+  topic:'intro | favorites | shizuoka_culture | talents | free', profile_field:'likes | major | city | landmark', persona_category:'interest | major | place',
   student_selected_speech_rate:'0.75–1.25', effective_tts_speech_rate:'0.75–1.25',
   reflection_conveyed_ideas:'1 | 3 | 5', reflection_understood_partner:'1 | 3 | 5',
   reflection_noticed_language_culture:'1 | 3 | 5', data_quality_flag:'complete | missing_reflection | interrupted | missing_core',
@@ -165,7 +184,7 @@ function eventCountMap(rows: Row[]): Map<string, Map<string, number>> {
 }
 
 function personaRows(): Row[] {
-  return AI_STUDENTS_LIST.map((persona) => {
+  return RESEARCH_PERSONAS.map((persona) => {
     const meta = getPersonaResearchMetadata(persona.id);
     return {
       persona_id: persona.id, name: persona.name, japanese_name: persona.japaneseName, country: persona.country,
@@ -180,7 +199,7 @@ function personaRows(): Row[] {
 }
 
 export function buildResearchExportDataSets(rawSessions: Record<string, any>[]): ExportDataSets {
-  const raw = buildResearchDataSets(rawSessions);
+  const raw = buildResearchDataSets(rawSessions.filter(isResearchTargetSession));
   const events = eventCountMap(raw.system_events);
   const turnCounts = new Map<string, { child: number; ai: number }>();
   for (const row of raw.turns) {
@@ -344,7 +363,7 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
       completeRate:data.sessions.length?round((complete/data.sessions.length)*100,1):0, latestAt,
     },
     filters:{
-      classes:['1','2','3','test','reserve'], grades:['5','6','test','reserve'], personas:AI_STUDENTS_LIST.map((persona)=>persona.id),
+      classes:['1','2','3','test','reserve'], grades:['5','6','test','reserve'], personas:RESEARCH_PERSONAS.map((persona)=>persona.id),
       circles:['Inner','Outer','Expanding'], labelConditions:['shown','hidden'], topics:['intro','favorites','shizuoka_culture','talents','free'],
     },
     charts:{ daily:chartRows, aggregation, personas:personaUsage, circles:counts('accent_circle') },
@@ -356,7 +375,7 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
       ['sessions','sessions.csv','セッション基本情報・研究条件・振り返り・システム品質','縦断・条件比較・振り返り・発話量分析'],
       ['utterances','utterances.csv','児童・AIの匿名化された全発話','発話・相互行為・CAF・repair分析'],
       ['expressions','expressions.csv','教科書辞書＋persona辞書への一致表現','語彙・相手志向性・内容分析'],
-      ['personas','personas.csv','9人の固定persona・国・性別・World Englishes・音声条件','刺激条件の確認・属性比較・再現性'],
+      ['personas','personas.csv','研究対象20人の固定persona・国・性別・World Englishes・音声条件','刺激条件の確認・属性比較・再現性'],
       ['codebook','codebook.csv','全CSV列の定義・型・値域・分析用途','変数理解・共同研究・再現可能性'],
     ] as const).map(([dataset,fileName,contains,analysisUse])=>({dataset,fileName,contains,analysisUse,rowCount:data[dataset as ResearchExportDatasetName].length})),
   };

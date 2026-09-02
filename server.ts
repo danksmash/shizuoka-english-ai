@@ -762,7 +762,8 @@ app.get('/api/management/research.csv',requireManagementRole(['researcher']),asy
   try{
     const requested=typeof req.query?.dataset==='string'?req.query.dataset:'sessions';
     const allowed=['sessions','utterances','expressions','personas','codebook'] as const;
-    const dataset:ResearchExportDatasetName=(allowed as readonly string[]).includes(requested)?requested as ResearchExportDatasetName:'sessions';
+    if(!(allowed as readonly string[]).includes(requested)) return res.status(400).json({success:false,error:'INVALID_RESEARCH_DATASET'});
+    const dataset=requested as ResearchExportDatasetName;
     const sourceSessions=(dataset==='personas'||dataset==='codebook')?[]:await getAllSessionsForManagement();
     const datasets=filterResearchExportDataSets(buildResearchExportDataSets(sourceSessions),req.query);
     const csv=serializeResearchCsv(datasets[dataset],dataset);
