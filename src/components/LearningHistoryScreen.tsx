@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { ArrowLeft, BarChart3, CalendarDays, Clock3, MessageCircle, Sparkles } from 'lucide-react';
-import { AI_STUDENTS_LIST, DIALOGUE_TOPICS, getAIStudentById } from '../data/curriculum';
+import { AI_STUDENTS_MASTER_LIST, DIALOGUE_TOPICS, TARGET_20_AI_STUDENT_IDS, getAIStudentById } from '../data/curriculum';
 
 export interface StudentHistoryRow {
   sessionId: string;
@@ -34,6 +34,11 @@ const reflectionKeys = [
   ['noticedLanguageCulture', 'ことば・文化'],
 ] as const;
 
+const TARGET_STUDENT_ID_SET = new Set<string>(TARGET_20_AI_STUDENT_IDS);
+const TARGET_STUDENTS = TARGET_20_AI_STUDENT_IDS
+  .map((id) => AI_STUDENTS_MASTER_LIST.find((student) => student.id === id))
+  .filter((student): student is NonNullable<typeof student> => Boolean(student));
+
 const formatDuration = (seconds: number) => {
   const sec = Math.max(0, Math.round(Number(seconds) || 0));
   const minutes = Math.floor(sec / 60);
@@ -44,24 +49,26 @@ const formatDuration = (seconds: number) => {
 const topicLabel = (topicId: string) => DIALOGUE_TOPICS.find((topic) => topic.id === topicId)?.title || topicId || '—';
 
 export const LearningHistoryScreen: React.FC<LearningHistoryScreenProps> = ({ learningId, rows, loading, error, onBack }) => {
-  const averages = useMemo(() => reflectionKeys.map(([key, label]) => {
-    const values = rows.map((r) => Number(r.reflection?.[key])).filter((v) => Number.isFinite(v) && v >= 1 && v <= 5);
-    return { label, value: values.length ? values.reduce((a, b) => a + b, 0) / values.length : null };
-  }), [rows]);
+  const targetRows = useMemo(() => rows.filter((row) => TARGET_STUDENT_ID_SET.has(row.aiStudentId)), [rows]);
 
-  const recent = useMemo(() => [...rows].sort((a, b) => String(b.endedAt).localeCompare(String(a.endedAt))).slice(0, 20), [rows]);
-  const totalTurns = rows.reduce((sum, r) => sum + Number(r.totalTurns || 0), 0);
-  const totalWords = rows.reduce((sum, r) => sum + Number(r.totalChildWords || 0), 0);
-  const totalDurationSeconds = rows.reduce((sum, r) => sum + Number(r.actualDurationSeconds || 0), 0);
-  const totalVocab = rows.reduce((sum, r) => sum + Number(r.uniqueVocabularyCount || 0), 0);
+  const averages = useMemo(() => reflectionKeys.map(([key, label]) => {
+    const values = targetRows.map((r) => Number(r.reflection?.[key])).filter((v) => Number.isFinite(v) && v >= 1 && v <= 5);
+    return { label, value: values.length ? values.reduce((a, b) => a + b, 0) / values.length : null };
+  }), [targetRows]);
+
+  const recent = useMemo(() => [...targetRows].sort((a, b) => String(b.endedAt).localeCompare(String(a.endedAt))).slice(0, 20), [targetRows]);
+  const totalTurns = targetRows.reduce((sum, r) => sum + Number(r.totalTurns || 0), 0);
+  const totalWords = targetRows.reduce((sum, r) => sum + Number(r.totalChildWords || 0), 0);
+  const totalDurationSeconds = targetRows.reduce((sum, r) => sum + Number(r.actualDurationSeconds || 0), 0);
+  const totalVocab = targetRows.reduce((sum, r) => sum + Number(r.uniqueVocabularyCount || 0), 0);
 
   const topicCounts = useMemo(() => DIALOGUE_TOPICS.map((topic) => ({
-    id: topic.id, label: topic.title, count: rows.filter((row) => row.topic === topic.id).length,
-  })), [rows]);
+    id: topic.id, label: topic.title, count: targetRows.filter((row) => row.topic === topic.id).length,
+  })), [targetRows]);
 
-  const partnerCounts = useMemo(() => AI_STUDENTS_LIST.map((student) => ({
-    id: student.id, label: student.name, count: rows.filter((row) => row.aiStudentId === student.id).length,
-  })), [rows]);
+  const partnerCounts = useMemo(() => TARGET_STUDENTS.map((student) => ({
+    id: student.id, label: student.name, count: targetRows.filter((row) => row.aiStudentId === student.id).length,
+  })), [targetRows]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-3 sm:p-6">
@@ -78,7 +85,7 @@ export const LearningHistoryScreen: React.FC<LearningHistoryScreenProps> = ({ le
           </section>
 
           <section className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-            <div className="rounded-2xl border border-slate-200 bg-white p-3 text-center"><p className="text-[10px] text-slate-500">これまでの対話</p><p className="text-xl font-black text-slate-900">{rows.length}回</p></div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-3 text-center"><p className="text-[10px] text-slate-500">これまでの対話</p><p className="text-xl font-black text-slate-900">{targetRows.length}回</p></div>
             <div className="rounded-2xl border border-slate-200 bg-white p-3 text-center"><p className="text-[10px] text-slate-500">累計対話時間</p><p className="text-xl font-black text-violet-700">{formatDuration(totalDurationSeconds)}</p></div>
             <div className="rounded-2xl border border-slate-200 bg-white p-3 text-center"><p className="text-[10px] text-slate-500">合計ターン</p><p className="text-xl font-black text-blue-700">{totalTurns}</p></div>
             <div className="rounded-2xl border border-slate-200 bg-white p-3 text-center"><p className="text-[10px] text-slate-500">合計発話語数</p><p className="text-xl font-black text-emerald-700">{totalWords}</p></div>
