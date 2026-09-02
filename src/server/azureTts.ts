@@ -9,9 +9,8 @@ export type AzureTtsResult = {
 };
 
 /**
- * Gate 4 human voice evaluation used Azure's unmodified default speaking rate:
- * <voice>text</voice>, with no rate-changing prosody element.
- * Keep that exact synthesis condition as the Golden Speed for Azure voices.
+ * Human listening review selected Azure's unmodified default speaking rate.
+ * Keep that exact synthesis condition as the Golden Speed for Voice Profile v2.
  */
 export const AZURE_GOLDEN_EFFECTIVE_RATE = 1.0 as const;
 
@@ -33,10 +32,9 @@ export function azureTtsConfigured(): boolean {
  * Azure Speech synthesis provider.
  *
  * The requestedRate argument is retained for API compatibility and for the
- * Google/Device fallbacks, but Azure deliberately uses the exact Gate 4
- * human-approved default-rate condition. Voice Profile v2 may define a
- * sentence-boundary pause for a specific reviewed persona; this does not alter
- * speaking rate.
+ * Google/Device fallbacks, but Azure deliberately uses the human-approved
+ * default-rate condition. Voice Profile v2 may define a sentence-boundary
+ * pause for a specific reviewed persona; this does not alter speaking rate.
  */
 export async function synthesizeAzureTts(
   text: string,
