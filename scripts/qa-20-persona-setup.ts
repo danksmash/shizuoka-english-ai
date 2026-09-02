@@ -28,6 +28,19 @@ const oldTargetImports = [
 ];
 for (const oldPath of oldTargetImports) assert.equal(avatarSource.includes(oldPath), false, `target persona must not use old JPG: ${oldPath}`);
 
+const legacyTargetJpgs = [
+  'emma_usa.jpg', 'oliver_uk.jpg', 'liam_aus.jpg', 'bence_hun.jpg',
+  'zofia_pol.jpg', 'rahul_ban.jpg', 'linh_vie.jpg',
+];
+for (const file of legacyTargetJpgs) {
+  assert.equal(fs.existsSync(`src/assets/images/${file}`), false, `legacy target JPG must be removed from src/assets/images: ${file}`);
+  assert.equal(fs.existsSync(`public/images/${file}`), false, `legacy target JPG must be removed from public/images: ${file}`);
+}
+for (const file of ['chloe_can.jpg', 'aung_mya.jpg']) {
+  assert.ok(fs.existsSync(`src/assets/images/${file}`), `legacy compatibility image must remain in src/assets/images: ${file}`);
+  assert.ok(fs.existsSync(`public/images/${file}`), `legacy compatibility image must remain in public/images: ${file}`);
+}
+
 const hashes = new Set<string>();
 let totalBytes = 0;
 for (const file of targetFiles) {
@@ -48,4 +61,4 @@ for (const file of targetFiles) {
 assert.equal(hashes.size, 20, 'all 20 target persona images must be unique');
 assert.ok(totalBytes >= 1_000_000 && totalBytes <= 5_000_000, `unexpected total persona size: ${totalBytes}`);
 for (const id of TARGET_20_AI_STUDENT_IDS) assert.ok(avatarSource.includes(`${id}:`), `missing avatar mapping for target persona ${id}`);
-console.log(`20-person unified WebP QA: PASS (${totalBytes} bytes, no Base64/sprite reconstruction)`);
+console.log(`20-person unified WebP QA: PASS (${totalBytes} bytes, no Base64/sprite reconstruction, legacy target JPG duplicates removed)`);
