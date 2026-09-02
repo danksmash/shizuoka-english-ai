@@ -24,6 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: codex/pr3-azure-primary
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -36,8 +37,12 @@ jobs:
           npm run build
       - name: Verify protected areas and device fallback
         run: |
+          git fetch origin main:refs/remotes/origin/main
           git diff --exit-code origin/main -- src/components src/data/curriculum.ts src/dataContract.ts src/server/persistence.ts src/server/auth.ts src/utils/security.ts
-          git diff origin/main -- src/utils/speech.ts | grep -E '^[-+].*(SpeechRecognition|webkitSpeechRecognition|\.onend|onresult|interimResults|continuous)' && exit 1 || true
+          if git diff origin/main -- src/utils/speech.ts | grep -E '^[-+].*(SpeechRecognition|webkitSpeechRecognition|\.onend|onresult|interimResults|continuous)'; then
+            echo 'SpeechRecognition-protected lines changed.'
+            exit 1
+          fi
           grep -q "onProvider?.('device-fallback'" src/utils/speech.ts
           grep -q "speakStudentVoiceLocal" src/utils/speech.ts
       - name: Authenticate to Google Cloud
