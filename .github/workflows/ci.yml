@@ -17,56 +17,18 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-      - name: QA dialogue
-        run: npm run qa:dialogue
-      - name: QA speech
-        run: npm run qa:speech
-      - name: QA security
-        run: npm run qa:security
-      - name: QA dialogue alignment
-        run: npm run qa:alignment
-      - name: QA starter translations
-        run: npm run qa:starter-translations
-      - name: QA data contract
-        run: npm run qa:data
-      - name: QA management page
-        run: npm run qa:management
-      - name: QA responsive vocabulary
-        run: npm run qa:responsive-vocab
-      - name: QA setup columns
-        run: npm run qa:setup-columns
-      - name: QA feedback learning counts
-        run: npm run qa:feedback-counts
-      - name: QA research temporal context
-        run: QA_RESEARCH_SECTION=temporal npm run qa:research
-      - name: QA research assignment
-        run: QA_RESEARCH_SECTION=assignment npm run qa:research
-      - name: QA research communication
-        run: QA_RESEARCH_SECTION=communication npm run qa:research
-      - name: QA research sequence
-        run: QA_RESEARCH_SECTION=sequence npm run qa:research
-      - name: QA research privacy
-        run: QA_RESEARCH_SECTION=privacy npm run qa:research
-      - name: QA research source guards
-        run: QA_RESEARCH_SECTION=source npm run qa:research
-      - name: QA dashboard sync
-        run: npm run qa:dashboard
-      - name: QA research export
-        run: npm run qa:research-export
-      - name: QA persona master
-        run: npm run qa:persona-master
-      - name: QA 20 persona setup
-        run: npm run qa:20-persona-setup
-      - name: TypeScript
-        run: npm run lint
-      - name: QA research load
-        run: npm run qa:load
+
+      - name: Full QA (dialogue, speech, security, type-check)
+        run: npm run qa
+
       - name: Production build
         run: npm run build
