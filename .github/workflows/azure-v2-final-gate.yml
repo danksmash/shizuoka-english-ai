@@ -1,0 +1,173 @@
+name: Azure Voice Profile v2 final gate
+
+on:
+  push:
+    branches:
+      - codex/azure-voice-v2-golden-speed
+    paths:
+      - 'src/data/azureVoiceProfiles.ts'
+      - 'src/server/azureTts.ts'
+      - 'scripts/qa-azure-voice-profile.ts'
+      - 'scripts/azure-voice-v2-final-gate.ts'
+      - '.github/workflows/azure-v2-final-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GCP_PROJECT: shizuoka-english-ai
+      GCP_REGION: asia-northeast1
+      CANARY_SERVICE: shizuoka-english-ai-voice-v2-final
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/azure-voice-v2-golden-speed
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Full QA and production build
+        run: |
+          npm ci --no-audit --no-fund
+          npm run qa
+          npm run build
+
+      - name: Verify protected areas unchanged
+        run: |
+          git fetch origin main:refs/remotes/origin/main
+          git diff --exit-code origin/main -- src/components src/data/curriculum.ts src/dataContract.ts src/server/persistence.ts src/server/auth.ts src/utils/security.ts
+          if git diff origin/main -- src/utils/speech.ts | grep -E '^[-+].*(SpeechRecognition|webkitSpeechRecognition|\.onend|onresult|interimResults|continuous)'; then
+            echo 'SpeechRecognition-protected lines changed.'
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
+
+      - name: Load Azure key only for offline 120-clip gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY=$(gcloud secrets versions access latest --secret=AZURE_SPEECH_KEY --project="$GCP_PROJECT")
+          test -n "$KEY"
+          echo "AZURE_SPEECH_KEY=$KEY" >> "$GITHUB_ENV"
+
+      - name: Generate and SHA-lock 120 Azure clips
+        run: npx tsx scripts/azure-voice-v2-final-gate.ts
+
+      - name: Audio integrity and duration/WPM QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          python3 - <<'PY'
+          import json, subprocess, statistics, pathlib
+          root=pathlib.Path('azure-v2-final-artifacts')
+          m=json.loads((root/'manifest.json').read_text())
+          rows=m['rows']
+          durations=[]; wpms=[]
+          for r in rows:
+              p=root/r['file']
+              probe=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','default=noprint_wrappers=1:nokey=1',str(p)],capture_output=True,text=True,check=True)
+              d=float(probe.stdout.strip())
+              if not (1.0 <= d <= 20.0): raise SystemExit(f"duration outlier {r['file']}: {d}")
+              wpm=r['words']/d*60.0
+              if not (70 <= wpm <= 240): raise SystemExit(f"WPM outlier {r['file']}: {wpm:.1f}")
+              r['durationSeconds']=round(d,3); r['estimatedWpm']=round(wpm,1)
+              durations.append(d); wpms.append(wpm)
+          (root/'manifest.json').write_text(json.dumps(m,ensure_ascii=False,indent=2))
+          print(f"120 clips duration median={statistics.median(durations):.2f}s WPM median={statistics.median(wpms):.1f}")
+          PY
+          test "$(find azure-v2-final-artifacts/audio -name '*.mp3' | wc -l)" -eq 120
+          test "$(wc -l < azure-v2-final-artifacts/sha256.txt)" -eq 120
+
+      - name: Upload 120-clip Golden Reference
+        uses: actions/upload-artifact@v4
+        with:
+          name: azure-voice-profile-v2-golden-120
+          path: azure-v2-final-artifacts/
+          retention-days: 30
+
+      - name: Deploy isolated v2 canary
+        run: |
+          gcloud run deploy "$CANARY_SERVICE" \
+            --project "$GCP_PROJECT" --source . --region "$GCP_REGION" \
+            --allow-unauthenticated --min-instances 0 --max-instances 10 \
+            --concurrency 40 --timeout 60 --memory 512Mi \
+            --update-env-vars ANTHROPIC_MODEL=claude-sonnet-5,SESSION_RETENTION_DAYS=1095,APP_VERSION=azure-v2-final,APP_BUILD="${GITHUB_SHA:0:12}" \
+            --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,AZURE_SPEECH_KEY=AZURE_SPEECH_KEY:latest
+          URL=$(gcloud run services describe "$CANARY_SERVICE" --project "$GCP_PROJECT" --region "$GCP_REGION" --format='value(status.url)')
+          test -n "$URL"
+          case "$URL" in *shizuoka-english-ai-1075707511474.asia-northeast1.run.app*) echo 'Refusing production service'; exit 1;; esac
+          echo "CANARY_URL=$URL" >> "$GITHUB_ENV"
+
+      - name: Claude smoke and 20-persona TTS identity check
+        shell: bash
+        run: |
+          set -euo pipefail
+          health=$(curl --fail --silent --max-time 30 "$CANARY_URL/api/health")
+          echo "$health" | grep -q '"status":"ok"'
+          chat=$(curl --fail --silent --max-time 50 -X POST "$CANARY_URL/api/chat" -H 'Content-Type: application/json' --data '{"message":"Hello!","history":[],"topic":"intro","aiStudentId":"emma_usa"}')
+          echo "$chat" | grep -q '"success":true'
+          personas=(emma_usa oliver_uk liam_australia minji_korea pavel_belarus lukas_germany aina_malaysia dimas_indonesia bence_hungary yuting_taiwan zofia_poland matas_lithuania ananya_india xinyi_china linh_vietnam rahul_bangladesh nadeesha_srilanka suman_nepal amara_nigeria andrei_romania)
+          for p in "${personas[@]}"; do
+            h=$(mktemp); a=$(mktemp)
+            code=$(curl --silent --max-time 30 -D "$h" -o "$a" -w '%{http_code}' -X POST "$CANARY_URL/api/tts" -H 'Content-Type: application/json' --data "{\"text\":\"Hello! Nice to meet you.\",\"aiStudentId\":\"$p\",\"speakingRate\":0.75}")
+            test "$code" = 200
+            grep -qi 'x-tts-provider: azure-speech' "$h"
+            grep -qi 'x-tts-effective-rate: 1.00' "$h"
+            test "$(wc -c < "$a")" -gt 500
+          done
+
+      - name: 70-user isolated headroom test
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/v2load
+          personas=(emma_usa oliver_uk liam_australia minji_korea pavel_belarus lukas_germany aina_malaysia dimas_indonesia bence_hungary yuting_taiwan zofia_poland matas_lithuania ananya_india xinyi_china linh_vietnam rahul_bangladesh nadeesha_srilanka suman_nepal amara_nigeria andrei_romania)
+          for i in $(seq 1 70); do
+            p=${personas[$(( (i-1) % 20 ))]}
+            (
+              start=$(date +%s%3N)
+              code=$(curl --silent --max-time 40 -o "/tmp/v2load/$i.mp3" -w '%{http_code}' -X POST "$CANARY_URL/api/tts" -H 'Content-Type: application/json' --data "{\"text\":\"Hello! Nice to meet you. What do you like?\",\"aiStudentId\":\"$p\",\"speakingRate\":1.0}")
+              end=$(date +%s%3N)
+              echo "$i,$p,$code,$((end-start)),$(wc -c < /tmp/v2load/$i.mp3)" > "/tmp/v2load/$i.csv"
+            ) &
+          done
+          wait
+          cat /tmp/v2load/*.csv | sort -t, -k1,1n > /tmp/v2load/results.csv
+          python3 - <<'PY'
+          import csv, statistics
+          rows=list(csv.reader(open('/tmp/v2load/results.csv')))
+          assert len(rows)==70, len(rows)
+          codes=[r[2] for r in rows]
+          assert all(c=='200' for c in codes), {c:codes.count(c) for c in set(codes)}
+          sizes=[int(r[4]) for r in rows]; assert min(sizes)>500
+          lats=sorted(int(r[3]) for r in rows)
+          p95=lats[max(0,int(len(lats)*0.95)-1)]
+          print(f"70/70 success, 429=0, p95={p95}ms, max={max(lats)}ms")
+          PY
+
+      - name: Delete isolated canary
+        if: always()
+        run: |
+          gcloud run services delete "$CANARY_SERVICE" --project "$GCP_PROJECT" --region "$GCP_REGION" --quiet || true
