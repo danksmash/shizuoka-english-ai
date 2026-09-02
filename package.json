@@ -1,6 +1,6 @@
 {
   "name": "shizuoka-global-exchange-ai",
-  "description": "小学校５・６年生向け 静岡大学AI留学生（9カ国）との1対1英語対話学習アプリ",
+  "description": "小学校５・６年生向け 研究対象20名のAI留学生との1対1英語対話学習アプリ",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -32,7 +32,6 @@
     "qa:alignment": "tsx scripts/qa-dialogue-alignment.ts",
     "qa:research": "tsx scripts/qa-research-integrated.ts",
     "qa:dashboard": "tsx scripts/qa-dashboard-data-sync.ts",
-    "qa:identity": "tsx scripts/qa-learner-identity-sync.ts",
     "qa:load": "tsx scripts/qa-research-run-load.ts",
     "qa:research-export": "tsx scripts/qa-research-export-complete.ts"
   },
