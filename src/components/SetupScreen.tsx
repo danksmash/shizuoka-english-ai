@@ -31,7 +31,7 @@ const retainLearningId = (learningId: string) => {
   }
 };
 
-const profileCountryLabel = (student: AIStudentProfile) => `${student.countryJapanese} (${student.country})`;
+const profileCountryLabel = (student: AIStudentProfile) => student.country;
 
 const TARGET_STUDENTS = TARGET_20_AI_STUDENT_IDS
   .map((id) => AI_STUDENTS_MASTER_LIST.find((student) => student.id === id))
@@ -114,7 +114,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
           <section className="setup-v2-student-section">
             <div className="setup-v2-section-heading-row">
               <h2><span className="setup-v2-step">1</span>会話するAI留学生をえらぼう（全20名）</h2>
-              <span className="setup-v2-selected-pill">{showLabels ? `${selectedStudent.flag} ${selectedStudent.countryJapanese} 選択中` : `${selectedStudent.name} 選択中`}</span>
+              <span className="setup-v2-selected-pill">{showLabels ? `${selectedStudent.flag} ${selectedStudent.country} 選択中` : `${selectedStudent.name} 選択中`}</span>
             </div>
 
             <div className="setup-v2-student-grid">
@@ -126,12 +126,12 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
                   onClick={() => setSelectedStudentId(student.id)}
                   className={`setup-v2-persona-card ${selected ? 'setup-v2-persona-card-selected' : ''}`}
                   aria-pressed={selected}
-                  aria-label={`${student.countryJapanese} ${student.name} ${student.age}歳 ${student.city}`}
+                  aria-label={`${student.country} ${student.name} ${student.age}歳 ${student.city}`}
                 >
                   {selected && <CheckCircle2 className="setup-v2-card-check" aria-hidden="true" />}
                   <div className="setup-v2-card-country">
                     <span className="setup-v2-card-flag" aria-hidden="true">{student.flag}</span>
-                    <span>{showLabels ? student.countryJapanese : 'AI留学生'}</span>
+                    <span>{showLabels ? student.country : 'AI留学生'}</span>
                   </div>
                   <div className="setup-v2-card-portrait">
                     <StudentAvatar student={student} size="custom" className="setup-v2-card-avatar" />
