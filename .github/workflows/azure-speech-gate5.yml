@@ -5,24 +5,21 @@ on:
     branches:
       - codex/gate5-cloudrun-claude-azure
     paths:
-      - 'scripts/gate5-prepare-canary.mjs'
-      - 'scripts/gate5-load.py'
+      - 'scripts/gate5-load.ts'
       - '.github/workflows/azure-speech-gate5.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   gate5:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     env:
-      PROJECT_ID: shizuoka-english-ai
-      REGION: asia-northeast1
-      SERVICE: shizuoka-english-ai-azure-canary
       GATE5_OUTPUT_DIR: gate5-artifacts
+      GATE5_CHAT_URL: https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app
+      AZURE_SPEECH_REGION: japaneast
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,71 +33,26 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Verify Azure Speech GitHub secret
+      - name: Verify protected production primary and Azure secret
         env:
           AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
         run: |
           test -n "$AZURE_SPEECH_KEY"
-          echo "Azure Speech secret is configured."
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
-          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
-          project_id: shizuoka-english-ai
-
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
-        with:
-          project_id: shizuoka-english-ai
-          version: '>= 416.0.0'
-
-      - name: Synchronize Azure key to Google Secret Manager
-        env:
-          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
-        run: |
-          if ! gcloud secrets describe AZURE_SPEECH_KEY --project "$PROJECT_ID" >/dev/null 2>&1; then
-            gcloud secrets create AZURE_SPEECH_KEY --project "$PROJECT_ID" --replication-policy=automatic
-          fi
-          printf '%s' "$AZURE_SPEECH_KEY" | gcloud secrets versions add AZURE_SPEECH_KEY --project "$PROJECT_ID" --data-file=- >/dev/null
-          echo "Azure Speech key synchronized to Secret Manager without printing its value."
-
-      - name: Prepare isolated canary source
-        run: |
-          node scripts/gate5-prepare-canary.mjs
-          npm run qa
-          npm run build
-          TOKEN=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
-          echo "GATE5_CANARY_TOKEN=$TOKEN" >> "$GITHUB_ENV"
-
-      - name: Deploy isolated Azure canary service
-        run: |
-          gcloud run deploy "$SERVICE" \
-            --project "$PROJECT_ID" \
-            --source . \
-            --region "$REGION" \
-            --allow-unauthenticated \
-            --min-instances 0 \
-            --max-instances 10 \
-            --concurrency 80 \
-            --timeout 60 \
-            --memory 512Mi \
-            --update-env-vars ANTHROPIC_MODEL=claude-sonnet-5,SESSION_RETENTION_DAYS=1095,APP_VERSION=gate5-canary,APP_BUILD="$GITHUB_SHA",AZURE_CANARY_ENABLED=true,AZURE_CANARY_TOKEN="$GATE5_CANARY_TOKEN",AZURE_SPEECH_REGION=japaneast \
-            --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,AZURE_SPEECH_KEY=AZURE_SPEECH_KEY:latest
-          URL=$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')
-          test -n "$URL"
-          echo "GATE5_CANARY_URL=$URL" >> "$GITHUB_ENV"
-
-      - name: Canary health check
-        run: |
-          health=$(curl --fail --silent --show-error --max-time 20 "$GATE5_CANARY_URL/api/health")
+          health=$(curl --fail --silent --show-error --max-time 20 "$GATE5_CHAT_URL/api/health")
           echo "$health" | grep -q '"status":"ok"'
           echo "$health" | grep -q '"model":"claude-sonnet-5"'
           echo "$health" | grep -q '"ttsProvider":"google-chirp3-hd"'
+          echo "Production remains Google Chirp 3 HD; Azure secret stays only in the Actions process."
 
-      - name: Run paired 10 to 35 concurrency load
-        run: python3 scripts/gate5-load.py
+      - name: Full QA and build before load
+        run: |
+          npm run qa
+          npm run build
+
+      - name: Run paired Cloud Run Claude plus exact PR2 Azure provider load at 10 to 35 concurrency
+        env:
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+        run: npx tsx scripts/gate5-load.ts
 
       - name: Upload Gate 5 report
         if: always()
@@ -110,8 +62,3 @@ jobs:
           path: gate5-artifacts/
           if-no-files-found: warn
           retention-days: 14
-
-      - name: Delete isolated canary service
-        if: always()
-        run: |
-          gcloud run services delete "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --quiet || true
