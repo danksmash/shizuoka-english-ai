@@ -1,6 +1,6 @@
 {
   "name": "shizuoka-global-exchange-ai",
-  "description": "小学校５・６年生向け 静岡大学AI留学生（9カ国）との1対1英語対話学習アプリ",
+  "description": "小学校５・６年生向け 研究対象20名のAI留学生との1対1英語対話学習アプリ",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -27,7 +27,7 @@
     "qa:version": "tsx scripts/qa-version-ui.ts",
     "qa:persona-master": "tsx scripts/qa-persona-master.ts",
     "qa:20-persona-setup": "tsx scripts/qa-20-persona-setup.ts",
-    "qa": "npm run qa:dialogue && npm run qa:speech && npm run qa:security && npm run qa:alignment && npm run qa:starter-translations && npm run qa:data && npm run qa:management && npm run qa:responsive-vocab && npm run qa:setup-columns && npm run qa:feedback-counts && npm run qa:research && npm run qa:dashboard && npm run qa:research-export && npm run qa:version && npm run qa:persona-master && npm run qa:20-persona-setup && npm run lint && npm run qa:load",
+    "qa": "npm run qa:dialogue && npm run qa:speech && npm run qa:security && npm run qa:alignment && npm run qa:starter-translations && npm run qa:data && npm run qa:identity && npm run qa:management && npm run qa:responsive-vocab && npm run qa:setup-columns && npm run qa:feedback-counts && npm run qa:research && npm run qa:dashboard && npm run qa:research-export && npm run qa:version && npm run qa:persona-master && npm run qa:20-persona-setup && npm run lint && npm run qa:load",
     "qa:starter-translations": "tsx scripts/qa-starter-translations.ts",
     "qa:alignment": "tsx scripts/qa-dialogue-alignment.ts",
     "qa:research": "tsx scripts/qa-research-integrated.ts",
