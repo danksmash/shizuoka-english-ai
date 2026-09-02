@@ -8,6 +8,13 @@ export type AzureTtsResult = {
   effectiveRate: number;
 };
 
+/**
+ * Gate 4 human voice evaluation used Azure's unmodified default speaking rate:
+ * <voice>text</voice>, with no <prosody rate=...> element.
+ * Keep that exact synthesis condition as the Golden Speed for Azure voices.
+ */
+export const AZURE_GOLDEN_EFFECTIVE_RATE = 1.0 as const;
+
 function escapeXml(value: string): string {
   return value.replace(/[<>&'\"]/g, (char) => ({
     '<': '&lt;',
@@ -18,21 +25,18 @@ function escapeXml(value: string): string {
   }[char] || char));
 }
 
-function normalizeRate(rate: number): number {
-  if (!Number.isFinite(rate)) return 1.0;
-  return Math.max(0.75, Math.min(1.25, rate));
-}
-
 export function azureTtsConfigured(): boolean {
   return Boolean(process.env.AZURE_SPEECH_KEY?.trim());
 }
 
 /**
- * Azure Speech synthesis provider prepared by PR 2.
+ * Azure Speech synthesis provider.
  *
- * IMPORTANT: this function is intentionally not the production primary route.
- * `/api/tts` remains Google Chirp 3 HD until Gates 5-8 pass and PR 3 changes
- * the provider order explicitly.
+ * The requestedRate argument is retained for API compatibility and for the
+ * Google/Device fallbacks, but Azure deliberately uses the exact Gate 4
+ * human-approved default-rate condition. This prevents Web Speech-style
+ * multiplier values (for example 0.90) from being misinterpreted as Azure
+ * relative percentage SSML values.
  */
 export async function synthesizeAzureTts(
   text: string,
@@ -51,13 +55,13 @@ export async function synthesizeAzureTts(
     throw new Error(`AZURE_SPEECH_REGION_MISMATCH:${region}`);
   }
 
-  const rate = normalizeRate(requestedRate);
-  const ratePercent = `${Math.round(rate * 100)}%`;
+  // Do not transform the legacy/browser speaking-rate multiplier into Azure
+  // percentage SSML. Gate 4 evaluation omitted prosody entirely, so reproducing
+  // that exact condition is both the safest fix and the research reference.
+  void requestedRate;
   const ssml = [
     `<speak version="1.0" xml:lang="${escapeXml(profile.synthesisLocale)}">`,
-    `<voice name="${escapeXml(profile.voiceName)}">`,
-    `<prosody rate="${ratePercent}">${escapeXml(text)}</prosody>`,
-    '</voice>',
+    `<voice name="${escapeXml(profile.voiceName)}">${escapeXml(text)}</voice>`,
     '</speak>',
   ].join('');
 
@@ -93,7 +97,7 @@ export async function synthesizeAzureTts(
       provider: 'azure-speech',
       voiceName: profile.voiceName,
       region,
-      effectiveRate: rate,
+      effectiveRate: AZURE_GOLDEN_EFFECTIVE_RATE,
     };
   } finally {
     clearTimeout(timeoutId);
