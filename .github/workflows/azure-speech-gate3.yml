@@ -1,0 +1,48 @@
+name: Gate 3 - Azure Speech environment probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify Azure Speech secret is configured
+        env:
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+        run: |
+          if [ -z "$AZURE_SPEECH_KEY" ]; then
+            echo "AZURE_SPEECH_KEY is not configured in GitHub Actions secrets."
+            exit 2
+          fi
+          echo "Azure Speech secret is configured. Region is fixed to japaneast for Gate 3."
+
+      - name: Run Azure Speech Gate 3 probe
+        env:
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+          AZURE_SPEECH_REGION: japaneast
+          AZURE_GATE3_TPS_LEVELS: 5,10,20,30,35
+          AZURE_GATE3_TIMEOUT_MS: 15000
+          AZURE_GATE3_OUTPUT_DIR: azure-gate3-artifacts
+        run: node scripts/gate3-azure-speech-probe.mjs
+
+      - name: Upload Gate 3 report and probe MP3
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: azure-speech-gate3-report
+          path: azure-gate3-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
