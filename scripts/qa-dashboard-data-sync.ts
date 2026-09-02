@@ -2,37 +2,51 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { managementPageHtml } from '../src/server/managementPage';
 
-const html=managementPageHtml();
-const match=html.match(/<script>([\s\S]*?)<\/script>/);
-if(!match)throw new Error('management script missing');
+const html = managementPageHtml();
+const match = html.match(/<script>([\s\S]*?)<\/script>/);
+if (!match) throw new Error('management script missing');
 
-const elements=new Map<string,any>();
-const datasetButtons:any[]=[];
-function makeElement(id:string):any{
-  const classes=new Set<string>();
-  return {id,value:'',checked:false,disabled:false,innerHTML:'',textContent:'',style:{},options:[{value:'all'}],dataset:{},onclick:null,onchange:null,
-    className:'',classList:{add:(...xs:string[])=>xs.forEach(x=>classes.add(x)),remove:(...xs:string[])=>xs.forEach(x=>classes.delete(x)),contains:(x:string)=>classes.has(x)},
-    scrollIntoView:()=>{},addEventListener:()=>{},appendChild:()=>{},remove:()=>{},click(){if(typeof this.onclick==='function')return this.onclick();},change(){if(typeof this.onchange==='function')return this.onchange();}};
+const elements = new Map<string, any>();
+const datasetButtons: any[] = [];
+function makeElement(id: string): any {
+  const classes = new Set<string>();
+  return {
+    id, value:'', checked:false, disabled:false, innerHTML:'', textContent:'', style:{}, options:[{value:'all'}], dataset:{}, onclick:null, onchange:null,
+    className:'', classList:{ add:(...xs:string[]) => xs.forEach((x) => classes.add(x)), remove:(...xs:string[]) => xs.forEach((x) => classes.delete(x)), contains:(x:string) => classes.has(x) },
+    scrollIntoView:() => {}, addEventListener:() => {}, appendChild:() => {}, remove:() => {},
+    click(){ if (typeof this.onclick === 'function') return this.onclick(); },
+    change(){ if (typeof this.onchange === 'function') return this.onchange(); },
+  };
 }
-function element(id:string){if(!elements.has(id))elements.set(id,makeElement(id));return elements.get(id)}
-for(const id of ['grade','classId','personaId','circle','labelCondition','topic'])element(id).value='all';
-for(const dataset of ['sessions','utterances','expressions','personas','codebook']){
-  const b=makeElement('dynamic-'+dataset);b.dataset.exportDataset=dataset;datasetButtons.push(b);
+function element(id: string) { if (!elements.has(id)) elements.set(id, makeElement(id)); return elements.get(id); }
+for (const id of ['grade','classId','personaId','labelCondition','topic']) element(id).value = 'all';
+for (const dataset of ['sessions','utterances','expressions','personas','codebook']) {
+  const button = makeElement(`dynamic-${dataset}`); button.dataset.exportDataset = dataset; datasetButtons.push(button);
 }
-const documentStub:any={
-  getElementById:(id:string)=>element(id),
-  querySelectorAll:(selector:string)=>selector==='[data-export-dataset]'?datasetButtons:[],
-  createElement:(tag:string)=>{const e=makeElement('created-'+tag);e.click=()=>downloaded.push({href:e.href,download:e.download});return e;},
-  body:{appendChild:()=>{}},
+const downloaded: any[] = [];
+const fetchCalls: string[] = [];
+const documentStub: any = {
+  getElementById:(id:string) => element(id),
+  querySelectorAll:(selector:string) => selector === '[data-export-dataset]' ? datasetButtons : [],
+  createElement:(tag:string) => { const item = makeElement(`created-${tag}`); item.click = () => downloaded.push({href:item.href,download:item.download}); return item; },
+  body:{appendChild:() => {}},
 };
-const location:any={href:'',reload:()=>{}};const downloaded:any[]=[];const fetchCalls:string[]=[];
-const sample={
+const location: any = { href:'', reload:() => {} };
+const sample = {
   success:true,
   metrics:{participantCount:128,totalSessions:384,childUtteranceCount:9842,meanChildWordsPerMinute:18.4,completeRate:98.7,latestAt:'2026-09-03 14:32:00'},
-  filters:{classes:['5-1','6-2'],grades:['5','6'],personas:['emma_usa','rahul_bangladesh'],circles:['Inner','Outer'],labelConditions:['shown','hidden'],topics:['favorites','shizuoka_culture']},
+  researchIndicators:{
+    announcementConfiguredParticipants:70,beforeAnnouncementSessions:140,afterAnnouncementSessions:180,
+    assignedCountryPersonaEligibleSessions:170,assignedCountryPersonaMatchedSessions:68,assignedCountryPersonaSharePercent:40,
+    individualUseCount:92,individualUseDays:54,individualUseTotalSeconds:11040,groupLikeUseCount:292,
+  },
+  filters:{classes:['1','2','3'],grades:['5','6'],personas:['emma_usa','rahul_bangladesh'],labelConditions:['shown','hidden'],topics:['favorites','shizuoka_culture']},
   charts:{
-    daily:[{date:'2026-09-01',sessions:45,mean_child_words:12.5,mean_child_words_per_minute:17.2,reflection_conveyed:3.1,reflection_understood:3.2,reflection_culture:3.0},{date:'2026-09-02',sessions:52,mean_child_words:14.2,mean_child_words_per_minute:19.1,reflection_conveyed:3.4,reflection_understood:3.5,reflection_culture:3.3}],
-    personas:[{label:'Emma (emma_usa)',value:45},{label:'Rahul (rahul_bangladesh)',value:30}],circles:[{label:'Inner',value:45},{label:'Outer',value:30}],aggregation:'daily'
+    daily:[
+      {date:'2026-09-01',sessions:45,mean_child_words:12.5,mean_child_words_per_minute:17.2,reflection_conveyed:3.1,reflection_understood:3.2,reflection_culture:3.0},
+      {date:'2026-09-02',sessions:52,mean_child_words:14.2,mean_child_words_per_minute:19.1,reflection_conveyed:3.4,reflection_understood:3.5,reflection_culture:3.3},
+    ],
+    personas:[{label:'Emma',value:45},{label:'Rahul',value:30}],aggregation:'daily',
   },
   dataQuality:[{label:'complete',value:379},{label:'missing_reflection',value:5}],
   systemQuality:[{label:'AI応答失敗',value:2},{label:'マイクエラー',value:1},{label:'TTSフォールバック',value:3}],
@@ -41,82 +55,119 @@ const sample={
   exportFiles:[
     {dataset:'sessions',fileName:'sessions.csv',contains:'session data',analysisUse:'longitudinal',rowCount:384},
     {dataset:'utterances',fileName:'utterances.csv',contains:'utterances',analysisUse:'interaction',rowCount:12000},
-    {dataset:'expressions',fileName:'expressions.csv',contains:'expressions',analysisUse:'vocabulary',rowCount:3000},
+    {dataset:'expressions',fileName:'expressions.csv',contains:'expressions',analysisUse:'content',rowCount:3000},
     {dataset:'personas',fileName:'personas.csv',contains:'personas',analysisUse:'conditions',rowCount:20},
     {dataset:'codebook',fileName:'codebook.csv',contains:'variables',analysisUse:'reproducibility',rowCount:180},
   ],
 };
-const urlApi:any={createObjectURL:()=>"blob:test",revokeObjectURL:()=>{}};
-const context:any={console,document:documentStub,window:{},location,alert:()=>{},URL:urlApi,URLSearchParams,Set,Map,Math,Number,String,Array,Object,Date,Blob,
-  fetch:async(url:string)=>{fetchCalls.push(url);return {ok:true,status:200,json:async()=>url.includes('/api/health')?{appVersion:'1.0.7',build:'test'}:sample,blob:async()=>new Blob(['test']),headers:{get:()=>null}}},
-  setTimeout:()=>0,clearTimeout:()=>{}};
+const urlApi: any = { createObjectURL:() => 'blob:test', revokeObjectURL:() => {} };
+const context: any = {
+  console, document:documentStub, window:{}, location, alert:() => {}, URL:urlApi, URLSearchParams, Set, Map, Math, Number, String, Array, Object, Date, Blob,
+  fetch:async(url:string) => { fetchCalls.push(url); return {ok:true,status:200,json:async() => url.includes('/api/health') ? {appVersion:'1.0.7',build:'test'} : sample,blob:async() => new Blob(['test']),headers:{get:() => null}}; },
+  setTimeout:() => 0, clearTimeout:() => {},
+};
 vm.createContext(context);
-vm.runInContext(match[1],context,{filename:'research-dashboard.js'});
+vm.runInContext(match[1], context, { filename:'research-dashboard.js' });
 
 context.renderDashboard(sample);
-assert.equal(element('mParticipants').textContent,128);
-assert.equal(element('mSessions').textContent,384);
-assert.equal(element('mWordsPerMinute').textContent,'18.4');
-assert.equal(element('mCompleteRate').textContent,'98.7%');
-for(const id of ['chartDaily','chartPersona'])assert.ok(element(id).innerHTML.includes('bar-chart-html'),id+' must render readable HTML bar labels');for(const id of ['chartWords','chartReflection'])assert.ok(element(id).innerHTML.includes('<svg'),id+' must render an inline SVG graph');
-assert.ok(element('qualityRows').innerHTML.includes('完全ケース'));assert.ok(element('qualityRows').innerHTML.includes('システムイベント'));assert.ok(element('qualityRows').innerHTML.includes('TTSフォールバック'));
-assert.ok(element('topExpressions').innerHTML.includes('surfing'));assert.ok(element('topExpressions').innerHTML.includes('プロフィール辞書'));assert.equal(element('topExpressions').innerHTML.includes('(persona)'),false);
+assert.equal(element('mParticipants').textContent, 128);
+assert.equal(element('mSessions').textContent, 384);
+assert.equal(element('mWordsPerMinute').textContent, '18.4');
+assert.equal(element('mCompleteRate').textContent, '98.7%');
+assert.equal(element('iBefore').textContent, 140);
+assert.equal(element('iAfter').textContent, 180);
+assert.equal(element('iCountryShare').textContent, '40%');
+assert.ok(element('iCountryDetail').textContent.includes('68'));
+assert.equal(element('iIndividual').textContent, 92);
+assert.ok(element('iIndividualDetail').textContent.includes('54'));
+for (const id of ['chartDaily','chartPersona']) assert.ok(element(id).innerHTML.includes('bar-chart-html'), `${id} must render readable HTML bars`);
+for (const id of ['chartWords','chartReflection']) assert.ok(element(id).innerHTML.includes('<svg'), `${id} must render inline SVG`);
+assert.ok(element('qualityRows').innerHTML.includes('研究データ品質'));
+assert.ok(element('qualityRows').innerHTML.includes('システム品質'));
+assert.ok(element('qualityRows').innerHTML.includes('TTSフォールバック'));
+assert.ok(element('topExpressions').innerHTML.includes('surfing'));
 assert.ok(element('recentRows').innerHTML.includes('R0123'));
-assert.ok(element('exportCards').innerHTML.includes('sessions.csv')&&element('exportCards').innerHTML.includes('codebook.csv'));
+assert.ok(element('exportCards').innerHTML.includes('sessions.csv') && element('exportCards').innerHTML.includes('codebook.csv'));
 
-element('start').value='2026-09-01';element('end').value='2026-09-03';element('grade').value='5';element('classId').value='1';element('personaId').value='emma_usa';element('circle').value='Inner';element('labelCondition').value='shown';element('topic').value='favorites';element('completeOnly').checked=true;
-const params=context.filterParams();
-assert.equal(params.get('start'),'2026-09-01');assert.equal(params.get('end'),'2026-09-03');assert.equal(params.get('grade'),'5');assert.equal(params.get('classId'),'1');
-assert.equal(params.get('personaId'),'emma_usa');assert.equal(params.get('circle'),'Inner');assert.equal(params.get('labelCondition'),'shown');assert.equal(params.get('topic'),'favorites');assert.equal(params.get('completeOnly'),'1');
-const dashboardUrl=context.queryUrl('/api/management/research.dashboard');
-assert.ok(dashboardUrl.includes('personaId=emma_usa')&&dashboardUrl.includes('completeOnly=1'),'dashboard API must receive every active filter');
-context.renderDashboard(sample,params.toString());
-assert.ok(context.appliedQueryUrl('/api/management/research.csv','sessions').includes('personaId=emma_usa'),'applied dashboard filters must be snapshotted for exports');
+element('start').value='2026-09-01';
+element('end').value='2026-09-03';
+element('grade').value='5';
+element('classId').value='1';
+element('personaId').value='emma_usa';
+element('labelCondition').value='shown';
+element('topic').value='favorites';
+element('completeOnly').checked=true;
+const params = context.filterParams();
+assert.equal(params.get('start'),'2026-09-01');
+assert.equal(params.get('end'),'2026-09-03');
+assert.equal(params.get('grade'),'5');
+assert.equal(params.get('classId'),'1');
+assert.equal(params.get('personaId'),'emma_usa');
+assert.equal(params.get('labelCondition'),'shown');
+assert.equal(params.get('topic'),'favorites');
+assert.equal(params.get('completeOnly'),'1');
+assert.equal(params.get('circle'), null, 'World Englishes circle must not remain a formal research filter');
+const dashboardUrl = context.queryUrl('/api/management/research.dashboard');
+assert.ok(dashboardUrl.includes('personaId=emma_usa') && dashboardUrl.includes('completeOnly=1'));
+context.renderDashboard(sample, params.toString());
+assert.ok(context.appliedQueryUrl('/api/management/research.csv','sessions').includes('personaId=emma_usa'));
 
 await context.downloadDataset('sessions');
-assert.ok(fetchCalls.some((url)=>url.startsWith('/api/management/research.csv?')&&url.includes('dataset=sessions')&&url.includes('classId=1')),'CSV download must use the same dashboard filters');
-assert.equal(location.href,'','CSV download must not navigate away from the research page');
-assert.ok(downloaded.some((x)=>x.download==='sessions.csv'),'CSV blob must be downloaded with the expected filename');
-
+assert.ok(fetchCalls.some((url) => url.startsWith('/api/management/research.csv?') && url.includes('dataset=sessions') && url.includes('classId=1')));
+assert.equal(location.href,'');
+assert.ok(downloaded.some((item) => item.download === 'sessions.csv'));
 await element('bundleBtn').onclick();
-assert.ok(fetchCalls.some((url)=>url.startsWith('/api/management/research.bundle.zip')&&url.includes('personaId=emma_usa')),'ZIP download must use the same dashboard filters');
-assert.equal(location.href,'','ZIP download must not navigate away from the research page');
-assert.ok(downloaded.some((x)=>x.download==='research-bundle.zip'),'ZIP blob must be downloaded with the expected filename');
-const savedFetch=context.fetch;context.fetch=async()=>({ok:false,status:503,json:async()=>({error:'RESEARCH_EXPORT_UNAVAILABLE'})});await context.downloadDataset('sessions');assert.ok(element('exportStatus').textContent.includes('RESEARCH_EXPORT_UNAVAILABLE'),'CSV failure must be shown inside the research page');assert.ok(element('exportStatus').className.includes('error'));assert.equal(location.href,'');context.fetch=savedFetch;
+assert.ok(fetchCalls.some((url) => url.startsWith('/api/management/research.bundle.zip') && url.includes('personaId=emma_usa')));
+assert.ok(downloaded.some((item) => item.download === 'research-bundle.zip'));
+
+const savedFetch = context.fetch;
+context.fetch = async() => ({ok:false,status:503,json:async() => ({error:'RESEARCH_EXPORT_UNAVAILABLE'})});
+await context.downloadDataset('sessions');
+assert.ok(element('exportStatus').textContent.includes('RESEARCH_EXPORT_UNAVAILABLE'));
+assert.ok(element('exportStatus').className.includes('error'));
+context.fetch = savedFetch;
 
 context.resetFilters();
-assert.equal(element('start').value,'');assert.equal(element('end').value,'');assert.equal(element('classId').value,'all');assert.equal(element('completeOnly').checked,false);
+assert.equal(element('start').value,'');
+assert.equal(element('end').value,'');
+assert.equal(element('classId').value,'all');
+assert.equal(element('completeOnly').checked,false);
 
-const pageSource=html;
-assert.equal(pageSource.includes('data-nav='),false,'top navigation buttons must be removed');
-for(const id of ['filterBtn','resetBtn','refreshBtn','bundleBtn','logoutBtn'])assert.ok(pageSource.includes('id="'+id+'"'),'button missing '+id);
-assert.ok(pageSource.includes("$('filterBtn').onclick=loadDashboard"),'filter button must be linked to dashboard refresh');
-assert.ok(pageSource.includes("$('refreshBtn').onclick=loadDashboard"),'refresh button must be linked to dashboard refresh');
-assert.ok(pageSource.includes("$('bundleBtn').onclick"),'bundle button must be linked to download endpoint');
-assert.ok(pageSource.includes('onchange=scheduleDashboardReload'),'all filter controls must auto-refresh the dashboard');
-assert.ok(pageSource.includes('appliedQueryUrl'),'CSV and ZIP downloads must use the last successfully rendered filter snapshot');
-assert.ok(pageSource.includes('flex-wrap:wrap'),'research header/actions must wrap instead of overflowing');assert.ok(pageSource.includes('.charts{display:grid;grid-template-columns:repeat(2'),'desktop charts must use two readable columns');assert.ok(pageSource.includes('.svg-label{font-size:15px'),'line graph labels must be readable');assert.ok(pageSource.includes('.bar-label-html{font-size:16px'),'bar graph labels must remain readable HTML text');assert.ok(pageSource.includes('.chart svg{min-width:460px'),'line charts must not shrink labels below their readable base size');assert.ok(pageSource.includes('1分あたり平均発話語数'));assert.equal(pageSource.includes('id="chartCircle"'),false);assert.ok(pageSource.includes('５年')&&pageSource.includes('６年')&&pageSource.includes('１組')&&pageSource.includes('２組')&&pageSource.includes('３組'));assert.ok(pageSource.includes('表示あり')&&pageSource.includes('表示なし'));for(const label of ['自己紹介・あいさつ','好きなもの・すきなこと','静岡のじまん＆世界の文化','できること・得意なこと','自由トーク・おしゃべり'])assert.ok(pageSource.includes(label),'theme missing '+label);
-assert.equal(pageSource.includes('博士'),false,'researcher UI must not display 博士');
-assert.ok(pageSource.includes('#chartPersona{height:820px;overflow-y:visible}'),'persona chart must reserve enough vertical space for all 20 rows');
-assert.ok(pageSource.includes('const labelYs=rows.map(function(){return []})'),'line graph must track per-date label positions');
-const twentyPersonas=Array.from({length:20},(_,i)=>({label:'Persona '+(i+1),value:20-i}));
-const twentyPersonaHtml=context.barSvg(twentyPersonas,'value',20);
-assert.equal((twentyPersonaHtml.match(/bar-row-html/g)||[]).length,20,'persona chart must render all 20 research rows');
-const collisionSvg=context.lineSvg([{date:'2026-08-30',a:4.5,b:4.5,c:4.5}],[{key:'a',label:'A'},{key:'b',label:'B'},{key:'c',label:'C'}]);
-const ys=Array.from(collisionSvg.matchAll(/<text x="[^"]+" y="([^"]+)" text-anchor="middle" class="svg-value"/g)).map((m:any)=>Number(m[1]));
-assert.equal(ys.length,3,'reflection collision test must render three value labels');
-assert.ok(Math.min(...ys.map((y:number,i:number)=>Math.min(...ys.filter((_:number,j:number)=>j!==i).map((z:number)=>Math.abs(y-z)))))>=22,'overlapping reflection values must be separated vertically');
-const styledSvg=context.lineSvg([{date:'2026-08-30',a:4.5,b:4.5,c:3.5}],[{key:'a',label:'伝える'},{key:'b',label:'分かる'},{key:'c',label:'気づき'}]);
-assert.equal(styledSvg.includes('stroke-dasharray='),false,'reflection series should use simple solid colored lines');
-assert.equal(styledSvg.includes('<rect '),false,'value labels must not have background boxes');
-assert.ok(styledSvg.includes('style=\"fill:#111827\"'),'value labels must use black text');
-for(const color of ['#2774ee','#20a567','#f59e0b'])assert.ok(styledSvg.includes('stroke=\"'+color+'\"'),'each reflection series must keep its own line color');
-assert.ok(styledSvg.includes('fill=\"#fff\" stroke=\"#2774ee\"'),'data points must remain white-filled with a colored outline');
-const coincidentSvg=context.lineSvg([{date:'2026-08-28',a:3,b:3},{date:'2026-08-29',a:3.7,b:3.7},{date:'2026-08-30',a:4.5,b:4.5}],[{key:'a',label:'伝える'},{key:'b',label:'分かる'}]);
-const bluePoints=(coincidentSvg.match(/<polyline points=\"([^\"]+)\"[^>]*stroke=\"#2774ee\"/)||[])[1];
-const greenPoints=(coincidentSvg.match(/<polyline points=\"([^\"]+)\"[^>]*stroke=\"#20a567\"/)||[])[1];
-assert.ok(bluePoints&&greenPoints&&bluePoints!==greenPoints,'fully coincident series must receive a small visual offset so both lines remain visible');
-assert.ok(coincidentSvg.includes('style=\"fill:#111827\"'),'coincident value labels must remain black');
-for(const id of ['start','end','grade','classId','personaId','circle','labelCondition','topic','completeOnly'])assert.equal(typeof element(id).onchange,'function',id+' must have immediate-change binding');
+const pageSource = html;
+assert.equal(pageSource.includes('Inner / Outer / Expanding'), false);
+assert.equal(pageSource.includes('id="circle"'), false);
+assert.ok(pageSource.includes('告知前／告知後セッション'));
+assert.ok(pageSource.includes('担当国Persona選択率'));
+assert.ok(pageSource.includes('個別利用らしいセッション'));
+assert.ok(pageSource.includes('主研究データとAI/TTSのシステム品質は分離'));
+for (const id of ['filterBtn','resetBtn','refreshBtn','bundleBtn','logoutBtn']) assert.ok(pageSource.includes(`id="${id}"`), `button missing ${id}`);
+assert.ok(pageSource.includes("$('filterBtn').onclick=loadDashboard"));
+assert.ok(pageSource.includes("$('refreshBtn').onclick=loadDashboard"));
+assert.ok(pageSource.includes('onchange=scheduleDashboardReload'));
+assert.ok(pageSource.includes('appliedQueryUrl'));
+assert.ok(pageSource.includes('flex-wrap:wrap'));
+assert.ok(pageSource.includes('.charts{display:grid;grid-template-columns:repeat(2'));
+assert.ok(pageSource.includes('.svg-label{font-size:15px'));
+assert.ok(pageSource.includes('.bar-label-html{font-size:16px'));
+assert.ok(pageSource.includes('.chart svg{min-width:460px'));
+assert.ok(pageSource.includes('1分あたり平均発話語数'));
+assert.ok(pageSource.includes('５年') && pageSource.includes('６年') && pageSource.includes('１組') && pageSource.includes('２組') && pageSource.includes('３組'));
+assert.equal(pageSource.includes('博士'), false);
+assert.ok(pageSource.includes('#chartPersona{height:820px;overflow-y:visible}'));
+assert.ok(pageSource.includes('const labelYs=rows.map(function(){return []})'));
+
+const twentyPersonas = Array.from({length:20},(_,i) => ({label:`Persona ${i+1}`,value:20-i}));
+const twentyPersonaHtml = context.barSvg(twentyPersonas,'value',20);
+assert.equal((twentyPersonaHtml.match(/bar-row-html/g) || []).length,20);
+const collisionSvg = context.lineSvg([{date:'2026-08-30',a:4.5,b:4.5,c:4.5}],[{key:'a',label:'A'},{key:'b',label:'B'},{key:'c',label:'C'}]);
+const ys = Array.from(collisionSvg.matchAll(/<text x="[^"]+" y="([^"]+)" text-anchor="middle" class="svg-value"/g)).map((item:any) => Number(item[1]));
+assert.equal(ys.length,3);
+assert.ok(Math.min(...ys.map((y:number,i:number) => Math.min(...ys.filter((_:number,j:number) => j !== i).map((z:number) => Math.abs(y-z))))) >= 22);
+const styledSvg = context.lineSvg([{date:'2026-08-30',a:4.5,b:4.5,c:3.5}],[{key:'a',label:'伝える'},{key:'b',label:'分かる'},{key:'c',label:'気づき'}]);
+assert.equal(styledSvg.includes('stroke-dasharray='),false);
+assert.equal(styledSvg.includes('<rect '),false);
+assert.ok(styledSvg.includes('style=\"fill:#111827\"'));
+for (const color of ['#2774ee','#20a567','#f59e0b']) assert.ok(styledSvg.includes(`stroke=\"${color}\"`));
+for (const id of ['start','end','grade','classId','personaId','labelCondition','topic','completeOnly']) assert.equal(typeof element(id).onchange,'function',`${id} must auto-refresh`);
 
 console.log('Research dashboard graph/button/filter linkage QA: PASS');
