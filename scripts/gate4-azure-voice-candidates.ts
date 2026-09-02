@@ -135,6 +135,15 @@ function normalizeGender(value: string) {
   return value.trim().toLowerCase();
 }
 
+function isAllowedStandardVoice(voice: AzureVoice) {
+  const shortName = String(voice.ShortName || '');
+  const status = String(voice.Status || '').trim();
+  if (!shortName || !/Neural/i.test(shortName)) return false;
+  if (/(MAI-Voice|Flash|Dragon|Turbo|HD)/i.test(shortName)) return false;
+  if (status && !/^(GA|GenerallyAvailable)$/i.test(status) && !/general/i.test(status)) return false;
+  return true;
+}
+
 async function getVoices(): Promise<AzureVoice[]> {
   const response = await fetch(voicesUrl, {
     headers: { 'Ocp-Apim-Subscription-Key': key },
@@ -162,12 +171,12 @@ function scoreVoice(params: {
 
   let score = 0;
   let selectionClass: Candidate['selectionClass'] = 'general-english-fallback';
-  let rationale = 'English-capable neural voice used as a fallback candidate.';
+  let rationale = 'English-capable standard neural voice used as a fallback candidate.';
 
   if (voiceLocale.toLowerCase() === nativeLocale.toLowerCase() && !/^en-/i.test(voiceLocale)) {
     score += 180;
     selectionClass = 'native-multilingual';
-    rationale = `Native-locale voice ${voiceLocale} explicitly lists English as a secondary locale.`;
+    rationale = `Native-locale standard neural voice ${voiceLocale} explicitly lists English as a secondary locale.`;
   } else if (voiceLocale.toLowerCase() === nativeLocale.toLowerCase() && /^en-/i.test(voiceLocale)) {
     score += 170;
     selectionClass = 'exact-english-locale';
@@ -216,7 +225,7 @@ function selectCandidates(voices: AzureVoice[]): PersonaManifest[] {
     const desiredGender = normalizeGender(profile.gender);
 
     const scored = voices
-      .filter((voice) => normalizeGender(String(voice.Gender || '')) === desiredGender)
+      .filter((voice) => isAllowedStandardVoice(voice) && normalizeGender(String(voice.Gender || '')) === desiredGender)
       .map((voice) => {
         const result = scoreVoice({
           voice,
@@ -231,7 +240,7 @@ function selectCandidates(voices: AzureVoice[]): PersonaManifest[] {
       .filter((item): item is NonNullable<typeof item> => Boolean(item))
       .sort((a, b) => b.score - a.score || String(a.voice.ShortName).localeCompare(String(b.voice.ShortName)));
 
-    if (scored.length < 2) throw new Error(`Could not find two English-capable ${profile.gender} voices for ${personaId}`);
+    if (scored.length < 2) throw new Error(`Could not find two allowed English-capable ${profile.gender} voices for ${personaId}`);
 
     const picked = scored.slice(0, 2).map((row, index): Candidate => {
       const shortName = String(row.voice.ShortName);
@@ -262,6 +271,9 @@ function selectCandidates(voices: AzureVoice[]): PersonaManifest[] {
   const allNames = manifests.flatMap((row) => row.candidates.map((candidate) => candidate.shortName));
   if (new Set(allNames).size !== 40) {
     throw new Error(`Gate 4 requires 40 distinct candidate voices; got ${new Set(allNames).size}`);
+  }
+  if (allNames.some((name) => /(MAI-Voice|Flash|Dragon|Turbo|HD)/i.test(name))) {
+    throw new Error('Disallowed preview/MAI/HD candidate leaked into Gate 4 selection.');
   }
   return manifests;
 }
@@ -325,7 +337,7 @@ function playSeries(personaId,label){const audios=[...document.querySelectorAll(
 manifest.forEach((p)=>{const card=document.createElement('section');card.className='card';card.innerHTML='<h2>'+p.name+' — '+p.country+'</h2><div class="pair"></div><div class="choice"><b>選択：</b><label><input type="radio" name="pick-'+p.personaId+'" value="A"> A</label><label><input type="radio" name="pick-'+p.personaId+'" value="B"> B</label><label><input type="radio" name="pick-'+p.personaId+'" value="RETRY"> どちらも不自然</label> <input type="text" id="comment-'+p.personaId+'" placeholder="任意コメント" /></div>';
  const pair=card.querySelector('.pair');
  p.candidates.forEach((c)=>{const box=document.createElement('div');box.className='candidate';let clips='';sentences.forEach((s,i)=>{const n=String(i+1).padStart(2,'0');const src='audio/'+p.personaId+'/'+c.label+'/'+n+'.mp3';clips+='<div class="clip"><span>'+n+'</span><audio controls preload="none" data-persona="'+p.personaId+'" data-label="'+c.label+'" src="'+src+'"></audio></div>';});box.innerHTML='<h3>候補 '+c.label+'</h3><button type="button" data-play="'+c.label+'">5文を連続再生</button>'+clips+'<details><summary>技術情報</summary><div class="meta">'+c.shortName+' / voice locale '+c.voiceLocale+' / synthesis '+c.synthesisLocale+'<br>'+c.rationale+'</div></details>';box.querySelector('[data-play]').onclick=()=>playSeries(p.personaId,c.label);pair.appendChild(box);});root.appendChild(card);});
-document.getElementById('make').onclick=()=>{const rows=[['persona_id','name','country','choice','comment']];manifest.forEach((p)=>{const checked=document.querySelector('input[name="pick-'+p.personaId+'"]:checked');const comment=document.getElementById('comment-'+p.personaId).value||'';rows.push([p.personaId,p.name,p.country,checked?checked.value:'',comment]);});const esc=(v)=>'"'+String(v).replaceAll('"','""')+'"';document.getElementById('out').value=rows.map(r=>r.map(esc).join(',')).join('\n');};
+document.getElementById('make').onclick=()=>{const rows=[['persona_id','name','country','choice','comment']];manifest.forEach((p)=>{const checked=document.querySelector('input[name="pick-'+p.personaId+'"]:checked');const comment=(document.getElementById('comment-'+p.personaId) as HTMLInputElement).value||'';rows.push([p.personaId,p.name,p.country,checked?checked.value:'',comment]);});const esc=(v)=>'"'+String(v).replaceAll('"','""')+'"';(document.getElementById('out') as HTMLTextAreaElement).value=rows.map(r=>r.map(esc).join(',')).join('\n');};
 </script>
 </body>
 </html>`;
@@ -387,6 +399,7 @@ const manifestJson = {
   candidateVoiceCount: manifest.flatMap((p) => p.candidates).length,
   evaluationSentenceCount: evaluationSentences.length,
   clipCount: tasks.length,
+  candidatePolicy: 'Standard prebuilt Neural voices only; MAI, Flash, Dragon, Turbo and HD candidates excluded.',
   allCandidateVoiceNamesUnique: new Set(manifest.flatMap((p) => p.candidates.map((c) => c.shortName))).size === 40,
   duplicateAudioHashGroups: duplicateGroups,
   evaluationPriority: ['naturalness', 'child_intelligibility', 'persona_distinguishability', 'stability', 'nationality_likeness_last'],
@@ -407,6 +420,7 @@ await fs.writeFile(path.join(outputDir, 'evaluation.html'), buildEvaluationHtml(
 await fs.writeFile(path.join(outputDir, 'README.txt'), [
   'Azure Speech Gate 4 candidate evaluation package',
   '',
+  'Policy: Standard prebuilt Neural voices only. MAI/Flash/Dragon/Turbo/HD candidates are excluded.',
   '1. Unzip this artifact.',
   '2. Open evaluation.html in a browser.',
   '3. For each of 20 personas, compare Candidate A and B using the five common sentences.',
@@ -422,6 +436,7 @@ console.log(`- Region: ${region}`);
 console.log(`- voices/list: ${voices.length}`);
 console.log(`- Personas: ${manifest.length}`);
 console.log(`- Candidate voices: ${manifest.flatMap((p) => p.candidates).length} (40 unique voice names)`);
+console.log(`- Policy: Standard prebuilt Neural only; MAI/Flash/Dragon/Turbo/HD excluded`);
 console.log(`- Evaluation clips: ${tasks.length}`);
 console.log(`- Duplicate audio hash groups: ${duplicateGroups.length}`);
 for (const persona of manifest) {
