@@ -1,0 +1,131 @@
+name: Research page integrity fix
+on:
+  push:
+    branches:
+      - codex/fix-research-page-integrity
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Apply minimal research-page fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(path, old, new, count=1):
+              p=Path(path); s=p.read_text()
+              actual=s.count(old)
+              if actual != count:
+                  raise SystemExit(f'{path}: expected {count} matches, found {actual} for {old[:80]!r}')
+              p.write_text(s.replace(old,new,count))
+
+          # researchDashboard.ts: research data must use exactly the 20 target personas.
+          replace_exact('src/server/researchDashboard.ts',
+            "import { AI_STUDENTS_LIST } from '../data/curriculum';",
+            "import { AI_STUDENTS_MASTER_LIST, TARGET_20_AI_STUDENT_IDS } from '../data/curriculum';")
+          replace_exact('src/server/researchDashboard.ts',
+            "type ExportDataSets = Record<ResearchExportDatasetName, Row[]>;",
+            "type ExportDataSets = Record<ResearchExportDatasetName, Row[]>;\n\nconst RESEARCH_PERSONAS = TARGET_20_AI_STUDENT_IDS.map((id) => {\n  const persona = AI_STUDENTS_MASTER_LIST.find((item) => item.id === id);\n  if (!persona) throw new Error(`RESEARCH_PERSONA_MISSING:${id}`);\n  return persona;\n});\nconst RESEARCH_PERSONA_IDS = new Set(RESEARCH_PERSONAS.map((persona) => persona.id));\n\nfunction isResearchTargetSession(session: Record<string, any>): boolean {\n  const explicit = String(session.personaId || '');\n  if (explicit && RESEARCH_PERSONA_IDS.has(explicit as any)) return true;\n  const aiStudentId = String(session.aiStudentId || '');\n  if (!aiStudentId) return false;\n  try {\n    return RESEARCH_PERSONA_IDS.has(getPersonaResearchMetadata(aiStudentId as any).personaId as any);\n  } catch {\n    return false;\n  }\n}")
+          replace_exact('src/server/researchDashboard.ts',
+            "  return AI_STUDENTS_LIST.map((persona) => {",
+            "  return RESEARCH_PERSONAS.map((persona) => {")
+          replace_exact('src/server/researchDashboard.ts',
+            "  const raw = buildResearchDataSets(rawSessions);",
+            "  const raw = buildResearchDataSets(rawSessions.filter(isResearchTargetSession));")
+          replace_exact('src/server/researchDashboard.ts',
+            "personas:AI_STUDENTS_LIST.map((persona)=>persona.id)",
+            "personas:RESEARCH_PERSONAS.map((persona)=>persona.id)")
+          replace_exact('src/server/researchDashboard.ts',
+            "['personas','personas.csv','9人の固定persona・国・性別・World Englishes・音声条件','刺激条件の確認・属性比較・再現性']",
+            "['personas','personas.csv','研究対象20人の固定persona・国・性別・World Englishes・音声条件','刺激条件の確認・属性比較・再現性']")
+          replace_exact('src/server/researchDashboard.ts',
+            "profile_field:'personaプロフィール内の項目（likes/major）'",
+            "profile_field:'personaプロフィール内の項目（likes/major/city/landmark）'")
+          replace_exact('src/server/researchDashboard.ts',
+            "topic:'intro | favorites | shizuoka_culture | talents | free', profile_field:'likes | major', persona_category:'interest | major',",
+            "topic:'intro | favorites | shizuoka_culture | talents | free', profile_field:'likes | major | city | landmark', persona_category:'interest | major | place',")
+
+          # research page: show all 20 target personas and keep the page in place when downloads fail.
+          replace_exact('src/server/managementPage.ts',
+            "#chartPersona{height:390px;overflow-y:visible}",
+            "#chartPersona{height:820px;overflow-y:visible}")
+          replace_exact('src/server/managementPage.ts',
+            "$('chartPersona').innerHTML=barSvg((d.charts||{}).personas||[],'value',9)",
+            "$('chartPersona').innerHTML=barSvg((d.charts||{}).personas||[],'value',20)")
+          old_download = "function downloadDataset(dataset){if(dashboardLoading)return;$('exportStatus').textContent=dataset+'.csv を現在表示中の条件でダウンロードします';location.href=appliedQueryUrl('/api/management/research.csv',dataset)}"
+          new_download = "async function downloadFile(url,fileName,message){if(dashboardLoading)return;$('exportStatus').className='status';$('exportStatus').textContent=message;try{const r=await fetch(url,{credentials:'same-origin'});if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||('HTTP '+r.status))}const blob=await r.blob();const href=URL.createObjectURL(blob);const a=document.createElement('a');a.href=href;a.download=fileName;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(href);$('exportStatus').textContent=fileName+' をダウンロードしました'}catch(e){$('exportStatus').textContent='ダウンロード失敗: '+e.message;$('exportStatus').className='status error'}}\nfunction downloadDataset(dataset){return downloadFile(appliedQueryUrl('/api/management/research.csv',dataset),dataset+'.csv',dataset+'.csv を現在表示中の条件でダウンロードします')}"
+          replace_exact('src/server/managementPage.ts', old_download, new_download)
+          replace_exact('src/server/managementPage.ts',
+            "$('bundleBtn').onclick=function(){if(dashboardLoading)return;$('exportStatus').textContent='5 CSV一括ZIPを現在表示中の条件でダウンロードします';location.href=appliedQueryUrl('/api/management/research.bundle.zip')}",
+            "$('bundleBtn').onclick=function(){return downloadFile(appliedQueryUrl('/api/management/research.bundle.zip'),'research-bundle.zip','5 CSV一括ZIPを現在表示中の条件でダウンロードします')}")
+
+          # server: reject misspelled/unknown dataset names instead of silently returning sessions.csv.
+          replace_exact('server.ts',
+            "    const dataset:ResearchExportDatasetName=(allowed as readonly string[]).includes(requested)?requested as ResearchExportDatasetName:'sessions';",
+            "    if(!(allowed as readonly string[]).includes(requested)) return res.status(400).json({success:false,error:'INVALID_RESEARCH_DATASET'});\n    const dataset=requested as ResearchExportDatasetName;")
+
+          # Export QA: 20 research personas, legacy exclusion, codebook values, invalid dataset rejection.
+          p=Path('scripts/qa-research-export-complete.ts'); s=p.read_text()
+          s=s.replace("assert.equal(data.personas.length,9,'all nine fixed personas must be exported');","assert.equal(data.personas.length,20,'all 20 research-target personas must be exported');")
+          s=s.replace("assert.equal(personaIds.size,9);","assert.equal(personaIds.size,20);")
+          s=s.replace("assert.equal(filtered.personas.length,9,'persona master must remain complete regardless of session filters');","assert.equal(filtered.personas.length,20,'20-person research persona master must remain complete regardless of session filters');")
+          s=s.replace("assert.ok(page.includes('data-export-dataset'),'research page CSV buttons are not dynamically bound');","assert.ok(page.includes('data-export-dataset'),'research page CSV buttons are not dynamically bound');\nassert.ok(server.includes(\"INVALID_RESEARCH_DATASET\")&&server.includes(\"res.status(400)\"),'invalid research dataset must be rejected with HTTP 400');\nassert.ok(page.includes('async function downloadFile'),'CSV/ZIP downloads must handle failures without leaving the research page');")
+          marker="const rateCodebook=data.codebook.find((r)=>r.file_name==='sessions.csv'&&r.variable==='student_selected_speech_rate')!;\nassert.equal(rateCodebook.allowed_values,'0.75–1.25','speech rate range must be documented in codebook');"
+          insert=marker+"\nconst profileFieldCodebook=data.codebook.find((r)=>r.file_name==='expressions.csv'&&r.variable==='profile_field')!;\nfor(const value of ['likes','major','city','landmark'])assert.ok(String(profileFieldCodebook.allowed_values).includes(value),'profile_field codebook missing '+value);\nconst personaCategoryCodebook=data.codebook.find((r)=>r.file_name==='expressions.csv'&&r.variable==='persona_category')!;\nfor(const value of ['interest','major','place'])assert.ok(String(personaCategoryCodebook.allowed_values).includes(value),'persona_category codebook missing '+value);"
+          if marker not in s: raise SystemExit('qa export codebook marker missing')
+          s=s.replace(marker,insert,1)
+          legacy_marker="const specialRaw=[...sessions,{...sessions[0],sessionId:'session_test',researchId:'RTEST',classId:'テスト'},{...sessions[0],sessionId:'session_reserve',researchId:'RRESERVE',classId:'予備'}];"
+          legacy_insert="const legacyOnly={...sessions[0],sessionId:'legacy_chloe',researchId:'RLEGACY',aiStudentId:'chloe_canada',personaId:'chloe_canada'};const legacyExcluded=buildResearchExportDataSets([...sessions,legacyOnly] as any);assert.equal(legacyExcluded.sessions.some((r)=>r.session_id==='legacy_chloe'),false,'legacy non-target persona sessions must not enter research exports');\n"+legacy_marker
+          if legacy_marker not in s: raise SystemExit('qa export legacy marker missing')
+          s=s.replace(legacy_marker,legacy_insert,1)
+          p.write_text(s)
+
+          # Dashboard QA: 20-row persona display + blob download/error handling.
+          p=Path('scripts/qa-dashboard-data-sync.ts'); s=p.read_text()
+          s=s.replace("{dataset:'personas',fileName:'personas.csv',contains:'personas',analysisUse:'conditions',rowCount:9}","{dataset:'personas',fileName:'personas.csv',contains:'personas',analysisUse:'conditions',rowCount:20}")
+          s=s.replace("const location:any={href:'',reload:()=>{}};","const location:any={href:'',reload:()=>{}};const downloaded:any[]=[];const fetchCalls:string[]=[];")
+          s=s.replace("createElement:(tag:string)=>makeElement('created-'+tag),","createElement:(tag:string)=>{const e=makeElement('created-'+tag);e.click=()=>downloaded.push({href:e.href,download:e.download});return e;},")
+          old_fetch="fetch:async(url:string)=>({ok:true,json:async()=>url.includes('/api/health')?{appVersion:'1.0.7',build:'test'}:sample}),"
+          new_fetch="fetch:async(url:string)=>{fetchCalls.push(url);return {ok:true,status:200,json:async()=>url.includes('/api/health')?{appVersion:'1.0.7',build:'test'}:sample,blob:async()=>new Blob(['test']),headers:{get:()=>null}}},"
+          if old_fetch not in s: raise SystemExit('dashboard fetch stub missing')
+          s=s.replace(old_fetch,new_fetch,1)
+          s=s.replace("const context:any={console,document:documentStub,window:{},location,alert:()=>{},URL,URLSearchParams,Set,Map,Math,Number,String,Array,Object,Date,","const urlApi:any={createObjectURL:()=>\"blob:test\",revokeObjectURL:()=>{}};\nconst context:any={console,document:documentStub,window:{},location,alert:()=>{},URL:urlApi,URLSearchParams,Set,Map,Math,Number,String,Array,Object,Date,Blob,")
+          old_csv_test="context.downloadDataset('sessions');\nassert.ok(location.href.startsWith('/api/management/research.csv?'));\nassert.ok(location.href.includes('dataset=sessions')&&location.href.includes('classId=1'),'CSV download must use the same dashboard filters');\n\nelement('bundleBtn').onclick();\nassert.ok(location.href.startsWith('/api/management/research.bundle.zip'));\nassert.ok(location.href.includes('personaId=emma_usa'),'ZIP download must use the same dashboard filters');"
+          new_csv_test="await context.downloadDataset('sessions');\nassert.ok(fetchCalls.some((url)=>url.startsWith('/api/management/research.csv?')&&url.includes('dataset=sessions')&&url.includes('classId=1')),'CSV download must use the same dashboard filters');\nassert.equal(location.href,'','CSV download must not navigate away from the research page');\nassert.ok(downloaded.some((x)=>x.download==='sessions.csv'),'CSV blob must be downloaded with the expected filename');\n\nawait element('bundleBtn').onclick();\nassert.ok(fetchCalls.some((url)=>url.startsWith('/api/management/research.bundle.zip')&&url.includes('personaId=emma_usa')),'ZIP download must use the same dashboard filters');\nassert.equal(location.href,'','ZIP download must not navigate away from the research page');\nassert.ok(downloaded.some((x)=>x.download==='research-bundle.zip'),'ZIP blob must be downloaded with the expected filename');\nconst savedFetch=context.fetch;context.fetch=async()=>({ok:false,status:503,json:async()=>({error:'RESEARCH_EXPORT_UNAVAILABLE'})});await context.downloadDataset('sessions');assert.ok(element('exportStatus').textContent.includes('RESEARCH_EXPORT_UNAVAILABLE'),'CSV failure must be shown inside the research page');assert.ok(element('exportStatus').className.includes('error'));assert.equal(location.href,'');context.fetch=savedFetch;"
+          if old_csv_test not in s: raise SystemExit('dashboard old download test missing')
+          s=s.replace(old_csv_test,new_csv_test,1)
+          s=s.replace("assert.ok(pageSource.includes('#chartPersona{height:390px;overflow-y:visible}'),'persona chart must reserve enough vertical space for all 9 rows');","assert.ok(pageSource.includes('#chartPersona{height:820px;overflow-y:visible}'),'persona chart must reserve enough vertical space for all 20 rows');")
+          s=s.replace("const ninePersonas=Array.from({length:9},(_,i)=>({label:'Persona '+(i+1),value:9-i}));\nconst ninePersonaHtml=context.barSvg(ninePersonas,'value',9);\nassert.equal((ninePersonaHtml.match(/bar-row-html/g)||[]).length,9,'persona chart must render all nine rows');","const twentyPersonas=Array.from({length:20},(_,i)=>({label:'Persona '+(i+1),value:20-i}));\nconst twentyPersonaHtml=context.barSvg(twentyPersonas,'value',20);\nassert.equal((twentyPersonaHtml.match(/bar-row-html/g)||[]).length,20,'persona chart must render all 20 research rows');")
+          p.write_text(s)
+          PY
+      - name: Guard scope
+        run: |
+          git diff --name-only
+          test "$(git diff --name-only | sort | tr '\n' ' ')" = "scripts/qa-dashboard-data-sync.ts scripts/qa-research-export-complete.ts server.ts src/server/managementPage.ts src/server/researchDashboard.ts "
+      - name: Run full QA
+        run: npm run qa
+      - name: Production build
+        run: npm run build
+      - name: Commit clean implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/research-page-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server.ts src/server/researchDashboard.ts src/server/managementPage.ts scripts/qa-dashboard-data-sync.ts scripts/qa-research-export-complete.ts .github/workflows/research-page-fix.yml
+          git commit -m 'fix: align research page and CSV exports with 20 personas'
+          git push origin HEAD:codex/fix-research-page-integrity
