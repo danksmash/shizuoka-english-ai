@@ -19,7 +19,6 @@ assert.equal(setup.includes('setup-student-card-compact'), false, 'old compact t
 assert.ok((setup.match(/<StudentAvatar/g) || []).length >= 2, 'StudentAvatar must be used in both persona cards and selected profile');
 assert.ok(setup.includes('student.countryJapanese'), 'left persona cards must show Japanese country names');
 assert.ok(setup.includes('student.japaneseName'), 'left persona cards must show Japanese persona names when labels are shown');
-assert.ok(setup.includes('aspect-ratio: 4 / 5'), 'placeholder guard');
 assert.ok(setupCss.includes('grid-template-columns: repeat(5, minmax(0, 1fr))'), 'desktop persona grid must be 5 columns');
 assert.ok(setupCss.includes('grid-template-rows: repeat(4, minmax(0, 1fr))'), 'desktop persona grid must be 4 rows');
 assert.ok(setupCss.includes('aspect-ratio: 4 / 5'), 'persona and selected profile portraits must preserve 4:5 ratio');
