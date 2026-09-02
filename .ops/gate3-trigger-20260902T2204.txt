@@ -1,0 +1,1 @@
+Trigger Azure Speech Gate 3 probe after AZURE_SPEECH_KEY registration.
