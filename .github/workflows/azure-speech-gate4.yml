@@ -48,6 +48,7 @@ jobs:
           AZURE_GATE4_OUTPUT_DIR: azure-gate4-artifacts
         run: npx tsx scripts/gate4-azure-voice-candidates.ts
 
+      # Finalization converts the generated page to plain browser JavaScript and compiles it before upload.
       - name: Finalize and syntax-check evaluation HTML
         env:
           AZURE_GATE4_OUTPUT_DIR: azure-gate4-artifacts
