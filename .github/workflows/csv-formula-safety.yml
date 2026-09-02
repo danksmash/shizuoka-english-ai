@@ -24,38 +24,19 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-
           p=Path('src/server/researchDashboard.ts')
           s=p.read_text()
           start=s.index('function csvCell(value: unknown): string {')
           end=s.index('\nfunction isNumericField', start)
-          new="""function csvCell(value: unknown): string {
-  const raw = String(value ?? '');
-  const text = typeof value === 'string' && /^[\\t\\r ]*[=+\\-@]/.test(raw) ? `'${raw}` : raw;
-  return `\"${text.replace(/\"/g, '\"\"')}\"`;
-}"""
+          new="function csvCell(value: unknown): string {\n  const raw = String(value ?? '');\n  const text = typeof value === 'string' && /^[\\t\\r ]*[=+\\-@]/.test(raw) ? `'${raw}` : raw;\n  return `\\\"${text.replace(/\\\"/g, '\\\"\\\"')}\\\"`;\n}"
           p.write_text(s[:start]+new+s[end:])
-
           p=Path('scripts/qa-research-export-complete.ts')
           s=p.read_text()
-          marker="""for (const dataset of ['sessions','utterances','expressions','personas','codebook'] as const) {
-  const expected = RESEARCH_EXPORT_HEADERS[dataset];"""
-          insert="""const formulaProbeRows=[
-  {english_text_anonymized:'=1+1',word_count:-1},
-  {english_text_anonymized:'  @SUM(A1:A2)',word_count:2},
-  {english_text_anonymized:'normal text',word_count:3},
-];
-const formulaProbeCsv=serializeResearchCsv(formulaProbeRows as any,'utterances');
-assert.ok(formulaProbeCsv.includes(\"\\\"'=1+1\\\"\"),'formula-like string must be neutralized at CSV serialization time');
-assert.ok(formulaProbeCsv.includes(\"\\\"'  @SUM(A1:A2)\\\"\"),'formula-like string after leading spaces must be neutralized');
-assert.ok(formulaProbeCsv.includes('\\\"normal text\\\"'),'ordinary text must remain unchanged');
-assert.ok(formulaProbeCsv.includes('\\\"-1\\\"'),'numeric negative values must remain numeric text and must not be prefixed');
-assert.equal(formulaProbeRows[0].english_text_anonymized,'=1+1','internal research data must remain unchanged by CSV serialization');
-
-"""+marker
+          marker="for (const dataset of ['sessions','utterances','expressions','personas','codebook'] as const) {\n  const expected = RESEARCH_EXPORT_HEADERS[dataset];"
+          probe="const formulaProbeRows=[\n  {english_text_anonymized:'=1+1',word_count:-1},\n  {english_text_anonymized:'  @SUM(A1:A2)',word_count:2},\n  {english_text_anonymized:'normal text',word_count:3},\n];\nconst formulaProbeCsv=serializeResearchCsv(formulaProbeRows as any,'utterances');\nassert.ok(formulaProbeCsv.includes(\"\\\"'=1+1\\\"\"),'formula-like string must be neutralized at CSV serialization time');\nassert.ok(formulaProbeCsv.includes(\"\\\"'  @SUM(A1:A2)\\\"\"),'formula-like string after leading spaces must be neutralized');\nassert.ok(formulaProbeCsv.includes('\\\"normal text\\\"'),'ordinary text must remain unchanged');\nassert.ok(formulaProbeCsv.includes('\\\"-1\\\"'),'numeric negative values must remain numeric text and must not be prefixed');\nassert.equal(formulaProbeRows[0].english_text_anonymized,'=1+1','internal research data must remain unchanged by CSV serialization');\n\n"
           if s.count(marker)!=1:
               raise SystemExit(f'qa marker count={s.count(marker)}')
-          p.write_text(s.replace(marker,insert,1))
+          p.write_text(s.replace(marker,probe+marker,1))
           PY
       - name: Guard scope
         run: |
