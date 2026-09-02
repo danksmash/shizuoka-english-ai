@@ -322,8 +322,8 @@ function speakStudentVoiceLocal(
 }
 
 /**
- * Text to Speech with Google Cloud Chirp 3 HD as the primary voice.
- * The original device voice remains as a fallback so a TTS outage cannot stop a lesson.
+ * Text to Speech using the server-selected cloud provider.
+ * Provider order: Azure Speech -> Google Chirp 3 HD -> device fallback.
  */
 export function speakStudentVoice(
   text: string,
@@ -332,7 +332,7 @@ export function speakStudentVoice(
   onStart?: () => void,
   onEnd?: () => void,
   onError?: (e: unknown) => void,
-  onProvider?: (provider: 'google-chirp3-hd' | 'device-fallback', effectiveRate: number) => void
+  onProvider?: (provider: 'azure-speech' | 'google-chirp3-hd' | 'device-fallback', effectiveRate: number) => void
 ): SpeechSynthesisUtterance | null {
   if (typeof window === 'undefined') return null;
 
@@ -357,7 +357,7 @@ export function speakStudentVoice(
         return;
       }
       localFallbackStarted = true;
-      console.warn('Google Cloud TTS unavailable; using device TTS fallback:', error);
+      console.warn('Cloud TTS unavailable; using device TTS fallback:', error);
       cleanupCloudAudio();
       onProvider?.('device-fallback', Math.max(0.75, Math.min(1.25, customRate || student.voiceRate || 1.0)));
       speakStudentVoiceLocal(text, student, customRate, onStart, onEnd, onError);
@@ -379,7 +379,8 @@ export function speakStudentVoice(
       }
 
       if (!response.ok) throw new Error(`Cloud TTS HTTP ${response.status}`);
-      onProvider?.('google-chirp3-hd', Number(response.headers.get('X-TTS-Effective-Rate') || rate));
+      const cloudProvider = response.headers.get('X-TTS-Provider') === 'azure-speech' ? 'azure-speech' : 'google-chirp3-hd';
+      onProvider?.(cloudProvider, Number(response.headers.get('X-TTS-Effective-Rate') || rate));
       const blob = await response.blob();
       if (!blob.size) throw new Error('Cloud TTS returned empty audio');
       if (requestId !== activeCloudRequestId) return;
