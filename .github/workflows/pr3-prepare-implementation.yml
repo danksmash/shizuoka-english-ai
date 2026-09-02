@@ -1,0 +1,184 @@
+name: Prepare PR3 Azure primary implementation
+
+on:
+  push:
+    branches:
+      - codex/pr3-azure-primary
+    paths:
+      - '.github/workflows/pr3-prepare-implementation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/pr3-azure-primary
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Apply narrowly scoped PR3 changes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          server = Path('server.ts')
+          s = server.read_text()
+          import_anchor = "import { managementPageHtml } from './src/server/managementPage';\n"
+          azure_import = "import { azureTtsConfigured, synthesizeAzureTts } from './src/server/azureTts';\n"
+          if azure_import not in s:
+              assert import_anchor in s
+              s = s.replace(import_anchor, import_anchor + azure_import, 1)
+
+          s = s.replace("    ttsProvider: 'google-chirp3-hd',\n", "    ttsProvider: 'azure-speech-primary',\n    azureTtsConfigured: azureTtsConfigured(),\n", 1)
+
+          start = s.index("app.post('/api/tts', async (req, res) => {")
+          end = s.index("app.post('/api/chat', async (req, res) => {", start)
+          new_tts = r'''app.post('/api/tts', async (req, res) => {
+  const requestStart = Date.now();
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  if (!checkRateLimit(ip)) {
+    return res.status(429).json({ success: false, error: 'Rate limited' });
+  }
+
+  const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+  const aiStudentId = typeof req.body?.aiStudentId === 'string' ? req.body.aiStudentId : '';
+  const requestedRate = Number(req.body?.speakingRate || 1.0);
+  const speakingRate = Math.max(
+    0.75,
+    Math.min(1.25, Number.isFinite(requestedRate) ? requestedRate : 1.0)
+  );
+
+  if (!text || text.length > 300) {
+    return res.status(400).json({ success: false, error: 'Invalid TTS text' });
+  }
+  if (!isAIStudentId(aiStudentId)) {
+    return res.status(400).json({ success: false, error: 'Unknown AI student' });
+  }
+
+  // PR3 provider order: Azure Speech -> Google Chirp 3 HD -> device fallback.
+  // Device fallback remains entirely client-side and is unchanged.
+  try {
+    const azure = await synthesizeAzureTts(text, aiStudentId, speakingRate, 3_500);
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'private, max-age=900');
+    res.setHeader('X-TTS-Provider', 'azure-speech');
+    res.setHeader('X-TTS-Cache', 'MISS');
+    res.setHeader('X-TTS-Effective-Rate', azure.effectiveRate.toFixed(2));
+    res.setHeader('X-TTS-Latency-Ms', String(Date.now() - requestStart));
+    return res.send(azure.audio);
+  } catch (azureError: any) {
+    console.error('Azure TTS failed; trying Google Chirp 3 HD', {
+      message: azureError?.message,
+      aiStudentId,
+    });
+  }
+
+  try {
+    const { audio, cache } = await cachedGoogleTts(text, aiStudentId, speakingRate);
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'private, max-age=900');
+    res.setHeader('X-TTS-Provider', 'google-chirp3-hd');
+    res.setHeader('X-TTS-Cache', cache);
+    res.setHeader('X-TTS-Effective-Rate', speakingRate.toFixed(2));
+    res.setHeader('X-TTS-Latency-Ms', String(Date.now() - requestStart));
+    return res.send(audio);
+  } catch (googleError: any) {
+    console.error('Google TTS fallback failed', { message: googleError?.message, aiStudentId });
+    return res.status(503).json({ success: false, error: 'TTS unavailable' });
+  }
+});
+
+'''
+          s = s[:start] + new_tts + s[end:]
+          server.write_text(s)
+
+          speech = Path('src/utils/speech.ts')
+          t = speech.read_text()
+          t = t.replace(
+              " * Text to Speech with Google Cloud Chirp 3 HD as the primary voice.\n * The original device voice remains as a fallback so a TTS outage cannot stop a lesson.\n",
+              " * Text to Speech using the server-selected cloud provider.\n * PR3 order is Azure Speech -> Google Chirp 3 HD -> device fallback.\n"
+          )
+          t = t.replace(
+              "  onProvider?: (provider: 'google-chirp3-hd' | 'device-fallback', effectiveRate: number) => void\n",
+              "  onProvider?: (provider: 'azure-speech' | 'google-chirp3-hd' | 'device-fallback', effectiveRate: number) => void\n",
+              1
+          )
+          old = "      onProvider?.('google-chirp3-hd', Number(response.headers.get('X-TTS-Effective-Rate') || rate));\n"
+          new = "      const cloudProvider = response.headers.get('X-TTS-Provider') === 'azure-speech' ? 'azure-speech' : 'google-chirp3-hd';\n      onProvider?.(cloudProvider, Number(response.headers.get('X-TTS-Effective-Rate') || rate));\n"
+          assert old in t
+          t = t.replace(old, new, 1)
+          t = t.replace("      console.warn('Google Cloud TTS unavailable; using device TTS fallback:', error);", "      console.warn('Cloud TTS unavailable; using device TTS fallback:', error);", 1)
+          speech.write_text(t)
+
+          deploy = Path('.github/workflows/cloud-run-deploy.yml')
+          d = deploy.read_text()
+          d = d.replace(
+              '--update-env-vars ANTHROPIC_MODEL=claude-sonnet-5,SESSION_RETENTION_DAYS=1095,APP_VERSION=1.0.7,APP_BUILD="$BUILD_SHA" \\\n            --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest',
+              '--update-env-vars ANTHROPIC_MODEL=claude-sonnet-5,SESSION_RETENTION_DAYS=1095,APP_VERSION=1.0.7,APP_BUILD="$BUILD_SHA",AZURE_SPEECH_REGION=japaneast \\\n            --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,AZURE_SPEECH_KEY=AZURE_SPEECH_KEY:latest'
+          )
+          d = d.replace("          echo \"$health\" | grep -q '\"ttsProvider\":\"google-chirp3-hd\"'\n", "          echo \"$health\" | grep -q '\"ttsProvider\":\"azure-speech-primary\"'\n          echo \"$health\" | grep -q '\"azureTtsConfigured\":true'\n", 1)
+          marker = "      - name: Production Google TTS voice check\n"
+          if marker in d:
+              d = d[:d.index(marker)] + r'''      - name: Production Azure primary voice check
+        run: |
+          API_URL="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app"
+          for student in \
+            emma_usa oliver_uk liam_australia minji_korea pavel_belarus \
+            lukas_germany aina_malaysia dimas_indonesia bence_hungary yuting_taiwan \
+            zofia_poland matas_lithuania ananya_india xinyi_china linh_vietnam \
+            rahul_bangladesh nadeesha_srilanka suman_nepal amara_nigeria andrei_romania; do
+            tts_headers=$(mktemp)
+            tts_audio=$(mktemp)
+            status=$(curl --silent --show-error --max-time 20 \
+              -D "$tts_headers" \
+              -o "$tts_audio" \
+              -w '%{http_code}' \
+              -X POST "$API_URL/api/tts" \
+              -H 'Content-Type: application/json' \
+              --data "{\"text\":\"Hello. Nice to meet you.\",\"aiStudentId\":\"$student\",\"speakingRate\":0.95}")
+            test "$status" = "200"
+            grep -qi 'content-type: audio/mpeg' "$tts_headers"
+            grep -qi 'x-tts-provider: azure-speech' "$tts_headers"
+            grep -qi 'x-tts-effective-rate: 0.95' "$tts_headers"
+            test "$(wc -c < "$tts_audio")" -gt 500
+            rm -f "$tts_headers" "$tts_audio"
+          done
+'''
+          deploy.write_text(d)
+          PY
+
+      - name: Verify protected areas are untouched
+        run: |
+          git diff --exit-code origin/main -- \
+            src/components \
+            src/data/curriculum.ts \
+            src/dataContract.ts \
+            src/server/persistence.ts \
+            src/server/auth.ts \
+            src/utils/security.ts || true
+          git diff -- src/utils/speech.ts | grep -E '^[-+].*(SpeechRecognition|onend|recognition)' && exit 1 || true
+
+      - name: Install, full QA, and production build
+        run: |
+          npm ci --no-audit --no-fund
+          npm run qa
+          npm run build
+
+      - name: Commit implementation only after PASS
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server.ts src/utils/speech.ts .github/workflows/cloud-run-deploy.yml
+          if git diff --cached --quiet; then
+            echo 'PR3 implementation already prepared.'
+            exit 0
+          fi
+          git commit -m 'feat: make Azure Speech primary with Chirp fallback'
+          git push origin HEAD:codex/pr3-azure-primary
