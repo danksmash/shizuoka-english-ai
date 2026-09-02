@@ -27,6 +27,10 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Apply minimal PR3 patch
         run: python3 scripts/apply-pr3.py
+      - name: Protect SpeechRecognition and research-critical areas
+        run: |
+          git diff -- src/utils/speech.ts | grep -E '^[-+].*(SpeechRecognition|webkitSpeechRecognition|onend|recognitionRef|accumulateSpeechResults)' && exit 1 || true
+          git diff --exit-code origin/main -- src/components src/data/curriculum.ts src/dataContract.ts src/server/persistence.ts src/server/auth.ts src/utils/security.ts
       - name: Full regression
         run: |
           npx tsx scripts/qa-azure-primary.ts
@@ -34,10 +38,9 @@ jobs:
           npm run build
       - name: Commit verified app implementation only
         run: |
-          git restore .github/workflows/cloud-run-deploy.yml
           rm -f scripts/apply-pr3.py
           git config user.name danksmash
           git config user.email danksmash@gmail.com
-          git add server.ts scripts/qa-azure-primary.ts scripts/apply-pr3.py
+          git add server.ts src/utils/speech.ts scripts/qa-azure-primary.ts scripts/apply-pr3.py
           git commit -m 'feat: switch TTS primary to Azure with Chirp fallback'
           git push origin HEAD:codex/pr3-azure-primary
