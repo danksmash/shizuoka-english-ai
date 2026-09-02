@@ -1,0 +1,53 @@
+name: Fix Firestore retention timestamp
+on:
+  push:
+    branches:
+      - codex/fix-firestore-retention-timestamp
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/fix-firestore-retention-timestamp
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Convert retention expiry to Firestore timestamp
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/server/persistence.ts')
+          s=p.read_text()
+          old="retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000).toISOString(),"
+          new="retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000),"
+          assert s.count(old)==1, f'expected one retention string expression, got {s.count(old)}'
+          p.write_text(s.replace(old,new))
+
+          q=Path('scripts/qa-data-contract.ts')
+          t=q.read_text()
+          needle="const exportSource=await readFile('src/server/researchExport.ts','utf8');"
+          insert="const firestore=await readFile('src/server/firestore.ts','utf8');assert.ok(persistence.includes('retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000),'));assert.equal(persistence.includes('retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000).toISOString()'),false);assert.ok(firestore.includes('if (value instanceof Date) return { timestampValue: value.toISOString() }'));\n"
+          assert t.count(needle)==1
+          q.write_text(t.replace(needle,insert+needle))
+          PY
+      - name: Full QA and production build
+        run: |
+          npm run qa
+          npm run build
+      - name: Finalize branch
+        run: |
+          set -euo pipefail
+          git diff --check
+          rm .github/workflows/fix-retention-timestamp.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/server/persistence.ts scripts/qa-data-contract.ts .github/workflows/fix-retention-timestamp.yml
+          git commit -m 'fix: store retention expiry as Firestore timestamp'
+          git push origin HEAD:codex/fix-firestore-retention-timestamp
