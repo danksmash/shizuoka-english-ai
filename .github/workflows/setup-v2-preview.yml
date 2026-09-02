@@ -33,8 +33,10 @@ jobs:
           VITE_PERSONA_LABEL_CONDITION: shown
         run: npm run build
 
-      - name: Install Chromium for visual QA
-        run: npx --yes playwright@1.55.0 install --with-deps chromium
+      - name: Install Playwright and Chromium for visual QA
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
 
       - name: Start production preview
         run: |
@@ -46,12 +48,47 @@ jobs:
           cat /tmp/setup-v2-preview.log
           exit 1
 
-      - name: Capture reference viewport screenshots
+      - name: Capture fully decoded reference screenshots
         run: |
           mkdir -p setup-v2-screenshots
-          npx --yes playwright@1.55.0 screenshot --browser=chromium --viewport-size="1672,941" --wait-for-timeout=5000 http://127.0.0.1:4173/ setup-v2-screenshots/setup-1672x941.png
-          npx --yes playwright@1.55.0 screenshot --browser=chromium --viewport-size="1366,768" --wait-for-timeout=5000 http://127.0.0.1:4173/ setup-v2-screenshots/setup-1366x768.png
-          npx --yes playwright@1.55.0 screenshot --browser=chromium --viewport-size="1280,720" --wait-for-timeout=5000 http://127.0.0.1:4173/ setup-v2-screenshots/setup-1280x720.png
+          node <<'NODE'
+          const { chromium } = require('playwright');
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage({ viewport: { width: 1672, height: 941 } });
+            await page.addInitScript(() => {
+              window.sessionStorage.setItem('ai-exchange-learning-id', '6RSX');
+            });
+            await page.route('**/api/health', async (route) => {
+              await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({ status: 'ok', learningDataConfigured: true }),
+              });
+            });
+
+            for (const [width, height] of [[1672, 941], [1366, 768], [1280, 720]]) {
+              await page.setViewportSize({ width, height });
+              await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' });
+              await page.getByRole('heading', { name: /会話するAI留学生をえらぼう/ }).waitFor();
+              await page.getByRole('button', { name: /インドネシア Dimas Pratama/ }).click();
+              await page.waitForFunction(() => {
+                const images = Array.from(document.images);
+                return images.length >= 21 && images.every((img) => img.complete && img.naturalWidth > 0);
+              }, null, { timeout: 20000 });
+              await page.evaluate(async () => {
+                await Promise.all(Array.from(document.images).map((img) => img.decode().catch(() => undefined)));
+              });
+              await page.screenshot({ path: `setup-v2-screenshots/setup-${width}x${height}.png` });
+            }
+
+            await browser.close();
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
