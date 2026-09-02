@@ -16,5 +16,6 @@
   "canary_70_max_ms": 3796,
   "canonical_sha_list_location": "GitHub Actions artifact 9870847470 / sha256.txt",
   "canonical_manifest_location": "GitHub Actions artifact 9870847470 / manifest.json",
+  "security_status": "pre-rotation validation only; production merge requires Azure Speech key rotation and a clean post-rotation verification run",
   "note": "The Golden Reference artifact contains all 120 MP3 files, the complete 120-line SHA-256 list, and per-clip duration/WPM manifest. The artifact ZIP digest above locks the complete reference package. The isolated 70-user canary was deleted after PASS."
 }
