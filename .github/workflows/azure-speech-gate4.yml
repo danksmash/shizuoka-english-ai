@@ -6,6 +6,7 @@ on:
       - codex/gate4-azure-voice-candidates
     paths:
       - 'scripts/gate4-azure-voice-candidates.ts'
+      - 'scripts/gate4-evaluation-finalize.mjs'
       - '.github/workflows/azure-speech-gate4.yml'
   workflow_dispatch:
 
@@ -46,6 +47,11 @@ jobs:
           AZURE_GATE4_TIMEOUT_MS: 15000
           AZURE_GATE4_OUTPUT_DIR: azure-gate4-artifacts
         run: npx tsx scripts/gate4-azure-voice-candidates.ts
+
+      - name: Finalize and syntax-check evaluation HTML
+        env:
+          AZURE_GATE4_OUTPUT_DIR: azure-gate4-artifacts
+        run: node scripts/gate4-evaluation-finalize.mjs
 
       - name: Upload Gate 4 evaluation package
         if: always()
