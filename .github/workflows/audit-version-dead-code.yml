@@ -23,6 +23,6 @@ jobs:
           )
           echo "References outside legacy module/QA/doc/audit workflow:"
           git grep -n -E 'app-version|getAppVersionMetadata|injectManagementVersionIntoBundle|isVersionedCommit' -- . "${EXCLUDES[@]}" || true
-          count=$(git grep -l -E 'app-version|getAppVersionMetadata|injectManagementVersionIntoBundle|isVersionedCommit' -- . "${EXCLUDES[@]}" | wc -l)
+          count=$( (git grep -l -E 'app-version|getAppVersionMetadata|injectManagementVersionIntoBundle|isVersionedCommit' -- . "${EXCLUDES[@]}" || true) | wc -l )
           test "$count" -eq 0
           echo "PASS: legacy dynamic version module has no runtime/build references outside its own QA/doc."
