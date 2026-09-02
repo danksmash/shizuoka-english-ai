@@ -17,16 +17,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-
       - name: QA dialogue
         run: npm run qa:dialogue
       - name: QA speech
@@ -47,8 +44,12 @@ jobs:
         run: npm run qa:setup-columns
       - name: QA feedback learning counts
         run: npm run qa:feedback-counts
-      - name: QA research context
-        run: QA_RESEARCH_SECTION=context npm run qa:research
+      - name: QA research temporal context
+        run: QA_RESEARCH_SECTION=temporal npm run qa:research
+      - name: QA research assignment
+        run: QA_RESEARCH_SECTION=assignment npm run qa:research
+      - name: QA research communication
+        run: QA_RESEARCH_SECTION=communication npm run qa:research
       - name: QA research sequence
         run: QA_RESEARCH_SECTION=sequence npm run qa:research
       - name: QA research privacy
@@ -67,6 +68,5 @@ jobs:
         run: npm run lint
       - name: QA research load
         run: npm run qa:load
-
       - name: Production build
         run: npm run build
