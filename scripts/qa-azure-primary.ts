@@ -25,12 +25,11 @@ if (!speech.includes("response.headers.get('X-TTS-Provider') === 'azure-speech'"
   throw new Error('client provider provenance missing');
 }
 
-// Gate 4 A/B evaluation used Azure default speed with no prosody rate.
-// This assertion is intentionally part of PR CI so the accepted human-audition
-// synthesis condition cannot silently regress in a later provider change.
-// Prevent the regression that converted 0.90 into rate="90%".
+// Voice Profile v2 keeps the human-approved Azure default speaking rate.
+// Prevent the regression that converted a Web Speech multiplier such as 0.90
+// into an Azure relative percentage rate.
 if (!azureTts.includes('AZURE_GOLDEN_EFFECTIVE_RATE = 1.0')) {
-  throw new Error('Gate 4 Golden Speed constant missing');
+  throw new Error('Azure Golden Speed constant missing');
 }
 if (!azureTts.includes('void requestedRate;')) {
   throw new Error('Azure must explicitly ignore legacy/browser requestedRate');
@@ -45,4 +44,4 @@ if (!azureTts.includes('effectiveRate: AZURE_GOLDEN_EFFECTIVE_RATE')) {
   throw new Error('Azure effective-rate provenance must report Golden Speed');
 }
 
-console.log('Azure primary + Gate 4 Golden Speed QA passed');
+console.log('Azure primary + Voice Profile v2 Golden Speed QA passed');
