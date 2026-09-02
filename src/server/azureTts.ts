@@ -10,7 +10,7 @@ export type AzureTtsResult = {
 
 /**
  * Gate 4 human voice evaluation used Azure's unmodified default speaking rate:
- * <voice>text</voice>, with no <prosody rate=...> element.
+ * <voice>text</voice>, with no rate-changing prosody element.
  * Keep that exact synthesis condition as the Golden Speed for Azure voices.
  */
 export const AZURE_GOLDEN_EFFECTIVE_RATE = 1.0 as const;
