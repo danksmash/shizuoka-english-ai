@@ -62,4 +62,6 @@ jobs:
           git config user.email danksmash@gmail.com
           git add src/utils/speech.ts
           git commit -m 'fix: record actual Azure or Chirp TTS provider'
+          git fetch origin codex/pr3-azure-primary
+          git rebase origin/codex/pr3-azure-primary
           git push origin HEAD:codex/pr3-azure-primary
