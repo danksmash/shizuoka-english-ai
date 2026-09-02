@@ -70,27 +70,39 @@
 
 既定のセッション保存期間は **1095日（3年）** です。
 
-Cloud Run環境変数 `SESSION_RETENTION_DAYS` で30〜3650日の範囲に変更できます。各セッション文書には、この値から計算した `retentionExpiresAt` を保存します。
+Cloud Run環境変数 `SESSION_RETENTION_DAYS` で30〜3650日の範囲に変更できます。各セッション文書には、この値から計算した `retentionExpiresAt` をFirestoreのtimestamp型で保存します。
 
-ただし、**`retentionExpiresAt` が存在するだけではFirestoreから自動削除されません。** 実際の自動削除には、Google Cloud側でFirestore TTLポリシーを `retentionExpiresAt` フィールドへ設定する必要があります。
+**2026年9月2日の本番監査時点では、`sessions` collection groupの `retentionExpiresAt` にFirestore TTLポリシーを設定済みで、状態は `ACTIVE` です。**
 
-研究倫理審査、共同研究契約、所属機関の規程等で別の保存期間が決まった場合は、その要件を優先してCloud Run設定とFirestore TTL設定を一致させます。
+同日の移行では、既存28セッションの `retentionExpiresAt` を、期限日時そのものを変更せずstring型からtimestamp型へ変換しました。移行後の独立した読み取り専用監査で、28件すべてがtimestamp型、解析不能値0件、監査時点の期限切れ0件であることを確認しています。監査時点の最短期限は2029年8月27日、最長期限は2029年8月29日です。
 
-## 6. バックアップの現在位置
+TTLは期限日時を迎えた文書をFirestore側で削除するための仕組みであり、研究倫理審査、共同研究契約、所属機関の規程等で別の保存期間が決まった場合は、Cloud Runの `SESSION_RETENTION_DAYS` とFirestore側の運用を合わせて再確認します。
 
-リポジトリのアプリコードはFirestoreへの保存・取得を行いますが、**FirestoreのScheduled Backup、PITR、Google Driveへの自動バックアップをこのリポジトリから自動設定する処理は現在ありません。**
+## 6. バックアップと復元保護
 
-したがって、バックアップを有効にしたい場合はGoogle Cloud側の運用設定として別途構成し、設定済みであることをGoogle Cloud Console等で確認する必要があります。
+バックアップ・復元保護はGoogle Cloud側の運用設定であり、アプリの通常コードとは分離して管理します。
+
+**2026年9月2日の本番監査時点では、次を確認済みです。**
+
+- Firestore Point-in-Time Recovery（PITR）：有効
+- PITRのversion retention：604800秒（7日）
+- Firestore Delete Protection：有効
+- Scheduled Backup：有効
+- Backup recurrence：日次
+- Scheduled Backup保持期間：8467200秒（98日＝14週間）
+- 監査時に確認できたバックアップ：5件
+- 上記5件の状態：すべて `READY`
+
+これらは2026年9月2日時点の確認結果であり、将来のGoogle Cloud設定変更を自動的に保証する記述ではありません。研究利用前・重要な設定変更後には再監査します。
 
 推奨運用：
 
-- Firestore Scheduled Backupを有効化する。
-- 必要に応じてPITRを併用する。
-- バックアップ保持期間は研究倫理・組織規程・費用を踏まえて決める。
+- PITR、Delete Protection、Scheduled Backupが維持されていることを定期確認する。
 - 復元試験は本番 `(default)` を直接上書きせず、可能な範囲で別データベース／検証環境へ復元して確認する。
 - 復元後は件数、代表セッション、匿名化Exportの整合性を確認する。
+- TTLや保存期間を変更する前には、復元可能なバックアップが存在することを確認する。
 
-Google Driveへ研究用CSV等を定期保存する仕組みを追加する場合は、Firestoreの正式バックアップとは別系統の **二次バックアップ／研究用Export保管** として設計し、Googleアカウント権限、保存先、暗号化、保持期間、研究倫理上の扱いを別途決めます。
+Google Driveへ研究用CSV等を定期保存する仕組みは、Firestoreの正式バックアップとは別系統の **二次バックアップ／研究用Export保管** です。2026年9月2日時点では、このリポジトリからGoogle Driveへ自動保存する処理は設定していません。追加する場合は、Googleアカウント権限、保存先、暗号化、保持期間、研究倫理上の扱いを別途決めます。
 
 ## 7. 秘密情報
 
@@ -108,10 +120,13 @@ Cloud Run / Google Cloud Secret Manager / GitHub Actions等の適切な秘密情
 アプリが正常に動いていることと、TTL・バックアップ設定が有効であることは別です。研究利用前には少なくとも次を個別に確認します。
 
 - Cloud Runの `SESSION_RETENTION_DAYS`
-- Firestore TTLポリシーが `retentionExpiresAt` に設定されているか
-- Scheduled Backupの有効／無効
+- Firestore TTLポリシーが `sessions.retentionExpiresAt` で `ACTIVE` か
+- セッションの `retentionExpiresAt` がtimestamp型か
+- Scheduled Backupの有効／無効と保持期間
 - PITRの有効／無効
+- Delete Protectionの有効／無効
+- READY状態のバックアップが存在するか
 - 復元権限と復元手順
 - 研究Exportの保存先とアクセス権限
 
-この文書はアプリコード上の現在仕様と、Google Cloud側で別途必要となる運用設定を区別して記載します。
+この文書は、アプリコード上の仕様とGoogle Cloud側の運用設定を区別し、時点付きの本番監査結果についてはその確認日を明記して記録します。
