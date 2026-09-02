@@ -219,7 +219,7 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
     history: safeHistory, systemEvents: events,
     encounteredVocab: args.encounteredVocab.slice(0, 200).map((item) => ({ id: item.id, word: item.word, japanese: item.japanese, category: item.category })),
     reflection: args.reflection || null, updatedAt: new Date().toISOString(), createdAt: existing?.createdAt || new Date().toISOString(),
-    retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000).toISOString(),
+    retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000),
   };
   await setDocument(SESSION_COLLECTION, args.sessionId, document);
   return document;
