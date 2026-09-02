@@ -56,8 +56,16 @@ async function runFlow(index: number): Promise<FlowResult> {
 
   let reply = '';
   try {
-    const parsed = JSON.parse(chatBody) as { success?: boolean; route?: string; data?: { reply?: string } };
-    if (parsed.success !== true || parsed.route !== 'anthropic-resilient') throw new Error(`route=${parsed.route || ''},success=${String(parsed.success)}`);
+    const parsed = JSON.parse(chatBody) as {
+      success?: boolean;
+      isFallback?: boolean;
+      data?: { reply?: string };
+      _diagnostics?: { route?: string; model?: string };
+    };
+    const route = parsed._diagnostics?.route || '';
+    if (parsed.success !== true || parsed.isFallback !== false || route !== 'anthropic-resilient') {
+      throw new Error(`route=${route},success=${String(parsed.success)},fallback=${String(parsed.isFallback)}`);
+    }
     reply = String(parsed.data?.reply || '').trim();
     if (!reply) throw new Error('empty reply');
   } catch (error) {
