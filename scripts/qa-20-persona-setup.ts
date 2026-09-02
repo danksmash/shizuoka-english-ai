@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import { AI_STUDENTS_MASTER_LIST, TARGET_20_AI_STUDENT_IDS } from '../src/data/curriculum';
 
 const setup = fs.readFileSync('src/components/SetupScreen.tsx', 'utf8');
+const history = fs.readFileSync('src/components/LearningHistoryScreen.tsx', 'utf8');
 const setupCss = fs.readFileSync('src/setup-screen-v2.css', 'utf8');
 const main = fs.readFileSync('src/main.tsx', 'utf8');
 
@@ -12,6 +13,14 @@ assert.ok(setup.includes('会話するAI留学生をえらぼう（全20名）')
 assert.ok(setup.includes('TARGET_20_AI_STUDENT_IDS'), 'setup must derive visible personas from research target IDs');
 assert.equal(TARGET_20_AI_STUDENT_IDS.length, 20);
 for (const id of TARGET_20_AI_STUDENT_IDS) assert.ok(AI_STUDENTS_MASTER_LIST.some((p) => p.id === id), `missing target persona ${id}`);
+
+assert.ok(history.includes('TARGET_20_AI_STUDENT_IDS'), 'learning history must use the same target-20 persona IDs as setup');
+assert.ok(history.includes('AI_STUDENTS_MASTER_LIST'), 'learning history must resolve all current target personas from the master list');
+assert.ok(history.includes('const TARGET_STUDENT_ID_SET = new Set<string>(TARGET_20_AI_STUDENT_IDS);'), 'learning history must define the target-20 ID set');
+assert.ok(history.includes('const targetRows = useMemo(() => rows.filter((row) => TARGET_STUDENT_ID_SET.has(row.aiStudentId)), [rows]);'), 'learning history must filter legacy non-target sessions before aggregation');
+assert.ok(history.includes('const partnerCounts = useMemo(() => TARGET_STUDENTS.map'), 'learning history partner counts must include all target-20 personas');
+assert.ok(history.includes('{targetRows.length}回'), 'learning history total dialogue count must use target-20 rows');
+assert.equal(history.includes('AI_STUDENTS_LIST.map'), false, 'learning history must not use the legacy persona list for partner counts');
 
 assert.ok(setup.includes('setup-v2-student-grid'), 'setup must use isolated v2 student grid');
 assert.ok(setup.includes('setup-v2-persona-card'), 'setup must use isolated v2 persona cards');
@@ -87,4 +96,4 @@ for (const file of targetFiles) {
 assert.equal(hashes.size, 20, 'all 20 target persona images must be unique');
 assert.ok(totalBytes >= 1_000_000 && totalBytes <= 5_000_000, `unexpected total persona size: ${totalBytes}`);
 for (const id of TARGET_20_AI_STUDENT_IDS) assert.ok(avatarSource.includes(`${id}:`), `missing avatar mapping for target persona ${id}`);
-console.log(`20-person setup v2 + unified WebP QA: PASS (${totalBytes} bytes, 5x4 portraits, English country labels, no Base64/sprite reconstruction)`);
+console.log(`20-person setup v2 + learning history + unified WebP QA: PASS (${totalBytes} bytes, 5x4 portraits, target-20 history, English country labels, no Base64/sprite reconstruction)`);
