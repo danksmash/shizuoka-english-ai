@@ -1,0 +1,76 @@
+name: Gate 6 - Static Azure audio generation
+
+on:
+  push:
+    branches:
+      - codex/gate6-static-azure-audio
+    paths:
+      - 'scripts/gate6-static-azure-audio.ts'
+      - '.github/workflows/azure-speech-gate6.yml'
+      - 'src/server/azureTts.ts'
+      - 'src/data/azureVoiceProfiles.ts'
+      - 'src/data/curriculum.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate6:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GATE6_OUTPUT_DIR: gate6-artifacts
+      AZURE_SPEECH_REGION: japaneast
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify production primary remains Google and Azure key is isolated
+        env:
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+        run: |
+          test -n "$AZURE_SPEECH_KEY"
+          grep -q "ttsProvider: 'google-chirp3-hd'" server.ts
+          grep -q "X-TTS-Provider', 'google-chirp3-hd'" server.ts
+          echo "Production primary is still Google Chirp 3 HD."
+
+      - name: Full QA and production build
+        run: |
+          npm run qa
+          npm run build
+
+      - name: Generate and verify 120 fixed Azure MP3 files
+        env:
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+          GATE6_CONCURRENCY: '6'
+          GATE6_TIMEOUT_MS: '15000'
+        run: npx tsx scripts/gate6-static-azure-audio.ts
+
+      - name: Independent artifact count and manifest checks
+        run: |
+          test "$(find gate6-artifacts/static/audio/azure-voice-profile-v1 -type f -name '*.mp3' | wc -l)" -eq 120
+          test "$(grep -c '  static/audio/azure-voice-profile-v1/' gate6-artifacts/sha256sums.txt)" -eq 120
+          grep -q '"status": "PASS"' gate6-artifacts/manifest.json
+          grep -q '"clipCount": 120' gate6-artifacts/manifest.json
+          grep -q '"missingClipCount": 0' gate6-artifacts/manifest.json
+          grep -q '"duplicateAudioShaGroups": \[\]' gate6-artifacts/manifest.json
+          echo "Gate 6 independent staticization QA: PASS"
+
+      - name: Upload Gate 6 static audio package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: azure-speech-gate6-static-audio
+          path: gate6-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
