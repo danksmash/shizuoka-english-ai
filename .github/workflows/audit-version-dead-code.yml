@@ -15,8 +15,14 @@ jobs:
       - name: Verify obsolete version code is isolated
         run: |
           set -euo pipefail
-          echo "References to app-version.ts symbols/files:"
-          git grep -n -E 'app-version|getAppVersionMetadata|injectManagementVersionIntoBundle|isVersionedCommit' -- . ':!scripts/app-version.ts' ':!scripts/qa-version-ui.ts' ':!docs/VERSIONING.md' || true
-          count=$(git grep -l -E 'app-version|getAppVersionMetadata|injectManagementVersionIntoBundle|isVersionedCommit' -- . ':!scripts/app-version.ts' ':!scripts/qa-version-ui.ts' ':!docs/VERSIONING.md' | wc -l)
+          EXCLUDES=(
+            ':!scripts/app-version.ts'
+            ':!scripts/qa-version-ui.ts'
+            ':!docs/VERSIONING.md'
+            ':!.github/workflows/audit-version-dead-code.yml'
+          )
+          echo "References outside legacy module/QA/doc/audit workflow:"
+          git grep -n -E 'app-version|getAppVersionMetadata|injectManagementVersionIntoBundle|isVersionedCommit' -- . "${EXCLUDES[@]}" || true
+          count=$(git grep -l -E 'app-version|getAppVersionMetadata|injectManagementVersionIntoBundle|isVersionedCommit' -- . "${EXCLUDES[@]}" | wc -l)
           test "$count" -eq 0
           echo "PASS: legacy dynamic version module has no runtime/build references outside its own QA/doc."
