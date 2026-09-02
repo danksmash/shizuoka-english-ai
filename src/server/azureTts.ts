@@ -34,9 +34,9 @@ export function azureTtsConfigured(): boolean {
  *
  * The requestedRate argument is retained for API compatibility and for the
  * Google/Device fallbacks, but Azure deliberately uses the exact Gate 4
- * human-approved default-rate condition. This prevents Web Speech-style
- * multiplier values (for example 0.90) from being misinterpreted as Azure
- * relative percentage SSML values.
+ * human-approved default-rate condition. Voice Profile v2 may define a
+ * sentence-boundary pause for a specific reviewed persona; this does not alter
+ * speaking rate.
  */
 export async function synthesizeAzureTts(
   text: string,
@@ -55,13 +55,16 @@ export async function synthesizeAzureTts(
     throw new Error(`AZURE_SPEECH_REGION_MISMATCH:${region}`);
   }
 
-  // Do not transform the legacy/browser speaking-rate multiplier into Azure
-  // percentage SSML. Gate 4 evaluation omitted prosody entirely, so reproducing
-  // that exact condition is both the safest fix and the research reference.
   void requestedRate;
+  const msttsNamespace = profile.sentenceBoundaryMs
+    ? ' xmlns:mstts="http://www.w3.org/2001/mstts"'
+    : '';
+  const sentenceBoundary = profile.sentenceBoundaryMs
+    ? `<mstts:silence type="Sentenceboundary-exact" value="${profile.sentenceBoundaryMs}ms"/>`
+    : '';
   const ssml = [
-    `<speak version="1.0" xml:lang="${escapeXml(profile.synthesisLocale)}">`,
-    `<voice name="${escapeXml(profile.voiceName)}">${escapeXml(text)}</voice>`,
+    `<speak version="1.0"${msttsNamespace} xml:lang="${escapeXml(profile.synthesisLocale)}">`,
+    `<voice name="${escapeXml(profile.voiceName)}">${sentenceBoundary}${escapeXml(text)}</voice>`,
     '</speak>',
   ].join('');
 
