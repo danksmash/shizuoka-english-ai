@@ -26,6 +26,8 @@ if (!speech.includes("response.headers.get('X-TTS-Provider') === 'azure-speech'"
 }
 
 // Gate 4 A/B evaluation used Azure default speed with no prosody rate.
+// This assertion is intentionally part of PR CI so the accepted human-audition
+// synthesis condition cannot silently regress in a later provider change.
 // Prevent the regression that converted 0.90 into rate="90%".
 if (!azureTts.includes('AZURE_GOLDEN_EFFECTIVE_RATE = 1.0')) {
   throw new Error('Gate 4 Golden Speed constant missing');
