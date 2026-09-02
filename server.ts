@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAIStudentById } from './src/data/curriculum';
 import { GOOGLE_TTS_VOICES } from './src/data/personaResearch';
+import { azureTtsConfigured, synthesizeAzureTts } from './src/server/azureTts';
 import { detectVocabularyInText } from './src/data/vocabulary56';
 import { getTopicLearningGoals } from './src/data/topicLearningGoals';
 import { calculateCanonicalStats, canonicalizeHistory, isAIStudentId, isDialogueDuration, isDialogueTopic, isValidLearningCode, normalizeLearningCode, validateSessionSaveInput } from './src/dataContract';
@@ -318,7 +319,9 @@ app.get('/api/health', (_req, res) => {
     appVersion: process.env.APP_VERSION || 'unknown',
     build: process.env.APP_BUILD || 'unknown',
     resilience: 'single-attempt-model-fallback',
-    ttsProvider: 'google-chirp3-hd',
+    ttsProvider: 'azure-speech',
+    ttsFallback: 'google-chirp3-hd',
+    azureTtsConfigured: azureTtsConfigured(),
     learningDataConfigured: persistenceConfigured(),
     managementConfigured: managementAuthConfigured(),
   });
@@ -347,16 +350,29 @@ app.post('/api/tts', async (req, res) => {
   }
 
   try {
-    const { audio, cache } = await cachedGoogleTts(text, aiStudentId, speakingRate);
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Cache-Control', 'private, max-age=900');
-    res.setHeader('X-TTS-Provider', 'google-chirp3-hd');
-    res.setHeader('X-TTS-Cache', cache);
-    res.setHeader('X-TTS-Effective-Rate', speakingRate.toFixed(2));
-    res.setHeader('X-TTS-Latency-Ms', String(Date.now() - requestStart));
-    return res.send(audio);
+    try {
+      const azure = await synthesizeAzureTts(text, aiStudentId, speakingRate, 3_500);
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Cache-Control', 'private, max-age=900');
+      res.setHeader('X-TTS-Provider', 'azure-speech');
+      res.setHeader('X-TTS-Cache', 'MISS');
+      res.setHeader('X-TTS-Effective-Rate', azure.effectiveRate.toFixed(2));
+      res.setHeader('X-TTS-Latency-Ms', String(Date.now() - requestStart));
+      return res.send(azure.audio);
+    } catch (azureError: any) {
+      console.error('Azure TTS failed; trying Google Chirp fallback', { message: azureError?.message, aiStudentId });
+      const { audio, cache } = await cachedGoogleTts(text, aiStudentId, speakingRate);
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Cache-Control', 'private, max-age=900');
+      res.setHeader('X-TTS-Provider', 'google-chirp3-hd');
+      res.setHeader('X-TTS-Fallback-From', 'azure-speech');
+      res.setHeader('X-TTS-Cache', cache);
+      res.setHeader('X-TTS-Effective-Rate', speakingRate.toFixed(2));
+      res.setHeader('X-TTS-Latency-Ms', String(Date.now() - requestStart));
+      return res.send(audio);
+    }
   } catch (error: any) {
-    console.error('Google TTS failed', { message: error?.message, aiStudentId });
+    console.error('All server TTS providers failed', { message: error?.message, aiStudentId });
     return res.status(503).json({ success: false, error: 'TTS unavailable' });
   }
 });
