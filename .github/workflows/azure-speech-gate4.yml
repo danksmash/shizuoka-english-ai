@@ -1,0 +1,57 @@
+name: Gate 4 - Azure Voice candidate generation
+
+on:
+  push:
+    branches:
+      - codex/gate4-azure-voice-candidates
+    paths:
+      - 'scripts/gate4-azure-voice-candidates.ts'
+      - '.github/workflows/azure-speech-gate4.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify Azure Speech secret
+        env:
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+        run: |
+          if [ -z "$AZURE_SPEECH_KEY" ]; then
+            echo "AZURE_SPEECH_KEY is not configured."
+            exit 2
+          fi
+          echo "Azure Speech secret is configured."
+
+      - name: Generate 40 candidates and 200 evaluation clips
+        env:
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+          AZURE_SPEECH_REGION: japaneast
+          AZURE_GATE4_CONCURRENCY: 4
+          AZURE_GATE4_TIMEOUT_MS: 15000
+          AZURE_GATE4_OUTPUT_DIR: azure-gate4-artifacts
+        run: npx tsx scripts/gate4-azure-voice-candidates.ts
+
+      - name: Upload Gate 4 evaluation package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: azure-speech-gate4-evaluation
+          path: azure-gate4-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
