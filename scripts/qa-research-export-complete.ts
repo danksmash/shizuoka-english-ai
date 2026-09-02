@@ -50,6 +50,18 @@ assert.equal(data.sessions.length,2);
 assert.equal(data.personas.length,20,'all 20 research-target personas must be exported');
 assert.ok(data.utterances.length>=6,'all child and AI utterances must be preserved');
 
+const formulaProbeRows=[
+  {english_text_anonymized:'=1+1',word_count:-1},
+  {english_text_anonymized:'  @SUM(A1:A2)',word_count:2},
+  {english_text_anonymized:'normal text',word_count:3},
+];
+const formulaProbeCsv=serializeResearchCsv(formulaProbeRows as any,'utterances');
+assert.ok(formulaProbeCsv.includes("\"'=1+1\""),'formula-like string must be neutralized at CSV serialization time');
+assert.ok(formulaProbeCsv.includes("\"'  @SUM(A1:A2)\""),'formula-like string after leading spaces must be neutralized');
+assert.ok(formulaProbeCsv.includes('\"normal text\"'),'ordinary text must remain unchanged');
+assert.ok(formulaProbeCsv.includes('\"-1\"'),'numeric negative values must remain numeric text and must not be prefixed');
+assert.equal(formulaProbeRows[0].english_text_anonymized,'=1+1','internal research data must remain unchanged by CSV serialization');
+
 for (const dataset of ['sessions','utterances','expressions','personas','codebook'] as const) {
   const expected = RESEARCH_EXPORT_HEADERS[dataset];
   assert.ok(expected.length>0, dataset+' headers missing');
