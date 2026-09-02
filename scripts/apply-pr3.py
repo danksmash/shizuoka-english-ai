@@ -28,7 +28,7 @@ old = """  try {
 """
 new = """  try {
     try {
-      const azure = await synthesizeAzureTts(text, aiStudentId, speakingRate);
+      const azure = await synthesizeAzureTts(text, aiStudentId, speakingRate, 3_500);
       res.setHeader('Content-Type', 'audio/mpeg');
       res.setHeader('Cache-Control', 'private, max-age=900');
       res.setHeader('X-TTS-Provider', 'azure-speech');
@@ -57,32 +57,38 @@ assert old in s
 s = s.replace(old, new, 1)
 server_path.write_text(s)
 
-deploy_path = Path('.github/workflows/cloud-run-deploy.yml')
-s = deploy_path.read_text()
-old = '--update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest'
-new = '--update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,AZURE_SPEECH_KEY=AZURE_SPEECH_KEY:latest'
-assert old in s
-s = s.replace(old, new, 1)
-s = s.replace("grep -q '\"ttsProvider\":\"google-chirp3-hd\"'", "grep -q '\"ttsProvider\":\"azure-speech\"'", 1)
-s = s.replace('name: Production Google TTS voice check', 'name: Production Azure primary voice check', 1)
-s = s.replace('Google TTS is not active for $student yet (HTTP $status). Device TTS fallback remains available.', 'Server TTS failed for $student (HTTP $status). Device TTS fallback remains available.', 1)
-s = s.replace("grep -qi 'x-tts-provider: google-chirp3-hd' \"$tts_headers\"", "grep -qi 'x-tts-provider: azure-speech' \"$tts_headers\"", 1)
-deploy_path.write_text(s)
+speech_path = Path('src/utils/speech.ts')
+t = speech_path.read_text()
+t = t.replace(
+    " * Text to Speech with Google Cloud Chirp 3 HD as the primary voice.\n * The original device voice remains as a fallback so a TTS outage cannot stop a lesson.\n",
+    " * Text to Speech using the server-selected cloud provider.\n * PR3 order is Azure Speech -> Google Chirp 3 HD -> device fallback.\n",
+    1,
+)
+old = "  onProvider?: (provider: 'google-chirp3-hd' | 'device-fallback', effectiveRate: number) => void\n"
+new = "  onProvider?: (provider: 'azure-speech' | 'google-chirp3-hd' | 'device-fallback', effectiveRate: number) => void\n"
+assert old in t
+t = t.replace(old, new, 1)
+old = "      onProvider?.('google-chirp3-hd', Number(response.headers.get('X-TTS-Effective-Rate') || rate));\n"
+new = "      const cloudProvider = response.headers.get('X-TTS-Provider') === 'azure-speech' ? 'azure-speech' : 'google-chirp3-hd';\n      onProvider?.(cloudProvider, Number(response.headers.get('X-TTS-Effective-Rate') || rate));\n"
+assert old in t
+t = t.replace(old, new, 1)
+t = t.replace("      console.warn('Google Cloud TTS unavailable; using device TTS fallback:', error);", "      console.warn('Cloud TTS unavailable; using device TTS fallback:', error);", 1)
+speech_path.write_text(t)
 
 qa = Path('scripts/qa-azure-primary.ts')
 qa.write_text("""import fs from 'node:fs';
 const server=fs.readFileSync('server.ts','utf8');
-const deploy=fs.readFileSync('.github/workflows/cloud-run-deploy.yml','utf8');
+const speech=fs.readFileSync('src/utils/speech.ts','utf8');
 const must=[
   \"import { azureTtsConfigured, synthesizeAzureTts } from './src/server/azureTts';\",
   \"ttsProvider: 'azure-speech'\",
   \"ttsFallback: 'google-chirp3-hd'\",
-  \"const azure = await synthesizeAzureTts(text, aiStudentId, speakingRate);\",
+  \"const azure = await synthesizeAzureTts(text, aiStudentId, speakingRate, 3_500);\",
   \"X-TTS-Fallback-From\",
 ];
 for(const x of must){if(!server.includes(x)) throw new Error('missing '+x);}
-if(!deploy.includes('AZURE_SPEECH_KEY=AZURE_SPEECH_KEY:latest')) throw new Error('deployment secret missing');
-if(!deploy.includes(\"x-tts-provider: azure-speech\")) throw new Error('production Azure assertion missing');
 if(server.includes(\"ttsProvider: 'google-chirp3-hd'\")) throw new Error('health still reports Google primary');
+if(!speech.includes(\"provider: 'azure-speech' | 'google-chirp3-hd' | 'device-fallback'\")) throw new Error('client provider union missing Azure');
+if(!speech.includes(\"response.headers.get('X-TTS-Provider') === 'azure-speech'\")) throw new Error('client provider provenance missing');
 console.log('Azure primary QA passed');
 """)
