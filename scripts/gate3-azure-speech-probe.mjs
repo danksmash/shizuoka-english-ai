@@ -104,7 +104,7 @@ async function pacedBurst({ tps, voiceName, locale }) {
         resolve();
       }
     }, delay);
-  }))));
+  })));
   const wallMs = performance.now() - started;
   const statusCounts = {};
   for (const row of results) statusCounts[row.status] = (statusCounts[row.status] || 0) + 1;
