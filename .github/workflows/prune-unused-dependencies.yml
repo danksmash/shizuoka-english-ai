@@ -1,0 +1,92 @@
+name: Prune unused dependencies
+
+on:
+  push:
+    branches:
+      - codex/prune-unused-dependencies
+
+permissions:
+  contents: write
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: codex/prune-unused-dependencies
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install current dependencies
+        run: npm ci
+
+      - name: Prove motion and autoprefixer are unused
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -nE "(from[[:space:]]+|require\(|import\()[[:space:]]*['\"]motion([/'\"]|$)" -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs'; then
+            echo 'motion is still referenced in executable source' >&2
+            exit 1
+          fi
+          if git grep -n 'autoprefixer' -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs' '*.css' '*.json' ':!package.json' ':!package-lock.json'; then
+            echo 'autoprefixer is still referenced outside package metadata' >&2
+            exit 1
+          fi
+
+      - name: Prune unused and duplicate package entries
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm uninstall motion autoprefixer --ignore-scripts
+          npm pkg delete devDependencies.vite
+          npm install --package-lock-only --ignore-scripts
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          if (pkg.dependencies?.motion) throw new Error('motion still present');
+          if (pkg.devDependencies?.autoprefixer) throw new Error('autoprefixer still present');
+          if (!pkg.dependencies?.vite) throw new Error('runtime vite dependency must remain');
+          if (pkg.devDependencies?.vite) throw new Error('duplicate devDependency vite still present');
+          NODE
+
+      - name: Clean install after pruning
+        shell: bash
+        run: |
+          rm -rf node_modules
+          npm ci
+
+      - name: Full QA and production build
+        run: |
+          npm run qa
+          npm run build
+
+      - name: Remove one-shot workflow and guard final diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/prune-unused-dependencies.yml
+          mapfile -t changed < <(git status --short | sed -E 's/^.. //' | sort)
+          printf '%s\n' "${changed[@]}"
+          for path in "${changed[@]}"; do
+            case "$path" in
+              package.json|package-lock.json|.github/workflows/prune-unused-dependencies.yml) ;;
+              *) echo "Unexpected changed file: $path" >&2; exit 1 ;;
+            esac
+          done
+
+      - name: Commit pruned dependency metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json package-lock.json
+          git rm .github/workflows/prune-unused-dependencies.yml
+          git commit -m 'chore: prune unused dependencies'
+          git push origin HEAD:codex/prune-unused-dependencies
