@@ -32,11 +32,12 @@ jobs:
           npx tsx scripts/qa-azure-primary.ts
           npm run qa
           npm run build
-      - name: Commit verified PR3 implementation
+      - name: Commit verified app implementation only
         run: |
-          rm -f .github/workflows/pr3-implement.yml scripts/apply-pr3.py
+          git restore .github/workflows/cloud-run-deploy.yml
+          rm -f scripts/apply-pr3.py
           git config user.name danksmash
           git config user.email danksmash@gmail.com
-          git add server.ts .github/workflows/cloud-run-deploy.yml scripts/qa-azure-primary.ts .github/workflows/pr3-implement.yml scripts/apply-pr3.py
+          git add server.ts scripts/qa-azure-primary.ts scripts/apply-pr3.py
           git commit -m 'feat: switch TTS primary to Azure with Chirp fallback'
           git push origin HEAD:codex/pr3-azure-primary
