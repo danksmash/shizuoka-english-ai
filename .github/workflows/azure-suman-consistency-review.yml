@@ -1,0 +1,42 @@
+name: Azure Suman voice consistency review
+
+on:
+  push:
+    branches:
+      - codex/azure-voice-v2-golden-speed
+    paths:
+      - 'scripts/azure-suman-consistency-review.mjs'
+      - '.github/workflows/azure-suman-consistency-review.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/azure-voice-v2-golden-speed
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Generate Suman consistency package
+        env:
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+          AZURE_SPEECH_REGION: japaneast
+          AZURE_SUMAN_REVIEW_OUTPUT: suman-review-artifacts
+        run: node scripts/azure-suman-consistency-review.mjs
+      - name: Validate package
+        run: |
+          test -f suman-review-artifacts/index.html
+          test -f suman-review-artifacts/manifest.json
+          test "$(find suman-review-artifacts/audio -name '*.mp3' | wc -l)" -ge 12
+      - name: Upload review package
+        uses: actions/upload-artifact@v4
+        with:
+          name: azure-suman-consistency-review
+          path: suman-review-artifacts/
+          retention-days: 7
