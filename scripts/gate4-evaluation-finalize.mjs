@@ -7,7 +7,10 @@ const htmlPath = path.join(outputDir, 'evaluation.html');
 let html = await fs.readFile(htmlPath, 'utf8');
 html = html
   .replaceAll(' as HTMLInputElement', '')
-  .replaceAll(' as HTMLTextAreaElement', '');
+  .replaceAll(' as HTMLTextAreaElement', '')
+  // The TypeScript template literal can materialize the intended "\\n" separator
+  // as a literal newline inside the generated browser string. Normalize it back.
+  .replaceAll(".join('\n');", ".join('\\\\n');");
 
 if (/\sas\sHTML(?:Input|TextArea)Element/.test(html)) {
   throw new Error('TypeScript-only cast remains in evaluation.html');
