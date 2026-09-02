@@ -18,13 +18,17 @@ jobs:
           ref: codex/setup-main-reference-5x4
           fetch-depth: 0
 
-      - name: Apply guarded visual tuning
+      - name: Apply guarded CSS tuning
         run: |
           python - <<'PY'
           from pathlib import Path
 
           css_path = Path('src/setup-screen-v2.css')
           css = css_path.read_text()
+          if 'width: min(100%, 1612px);' in css:
+              print('setup v2 CSS already tuned')
+              raise SystemExit(0)
+
           replacements = {
               'width: min(100%, 1720px);\n  min-height: calc(100dvh - clamp(16px, 1.7vw, 28px));':
               'width: min(100%, 1612px);\n  height: min(calc(100dvh - 20px), 904px);\n  min-height: 0;',
@@ -36,27 +40,16 @@ jobs:
                   raise SystemExit(f'missing guarded CSS pattern: {old!r}')
               css = css.replace(old, new, 1)
           css_path.write_text(css)
-
-          preview_path = Path('.github/workflows/setup-v2-preview.yml')
-          preview = preview_path.read_text()
-          old_build = '''      - name: Production build\n        run: npm run build\n'''
-          new_build = '''      - name: Production build\n        env:\n          VITE_API_BASE_URL: https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app\n          VITE_PERSONA_LABEL_CONDITION: shown\n        run: npm run build\n'''
-          if old_build not in preview:
-              raise SystemExit('missing guarded production build block')
-          preview = preview.replace(old_build, new_build, 1)
-          if '--wait-for-timeout=1500' not in preview:
-              raise SystemExit('missing screenshot wait marker')
-          preview = preview.replace('--wait-for-timeout=1500', '--wait-for-timeout=5000')
-          preview_path.write_text(preview)
           PY
 
-      - name: Remove one-shot workflow
-        run: rm .github/workflows/setup-v2-one-shot-tune.yml
-
-      - name: Commit tuned branch
+      - name: Commit CSS if changed
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/setup-screen-v2.css .github/workflows/setup-v2-preview.yml .github/workflows/setup-v2-one-shot-tune.yml
+          git add src/setup-screen-v2.css
+          if git diff --cached --quiet; then
+            echo 'No CSS change needed.'
+            exit 0
+          fi
           git commit -m 'style: align setup v2 with reference viewport'
           git push origin HEAD:codex/setup-main-reference-5x4
