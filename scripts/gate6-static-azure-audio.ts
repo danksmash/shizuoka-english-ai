@@ -81,7 +81,6 @@ if (tasks.length !== 120) throw new Error(`Expected 120 fixed clips, got ${tasks
 
 await fs.rm(outputDir, { recursive: true, force: true });
 await fs.mkdir(outputDir, { recursive: true });
-const staticRoot = path.join(outputDir, 'static', 'audio', AZURE_VOICE_PROFILE_VERSION);
 const records: ClipRecord[] = [];
 const failures: string[] = [];
 
