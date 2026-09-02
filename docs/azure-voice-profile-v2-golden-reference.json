@@ -10,10 +10,11 @@
   "unique_clip_sha256_count": 120,
   "duration_median_seconds": 3.82,
   "estimated_wpm_median": 162.0,
-  "clips": [
-    {"personaId":"emma_usa","voiceName":"en-US-AvaMultilingualNeural","synthesisLocale":"en-US","sentenceBoundaryMs":null,"clip":1,"sha256":"0100d874d231528bb6f0a6e62f61693c3342b65069f7655491022afe2958e187"},
-    {"personaId":"emma_usa","voiceName":"en-US-AvaMultilingualNeural","synthesisLocale":"en-US","sentenceBoundaryMs":null,"clip":2,"sha256":"2d802df93c292b93e9b7db2e808d51433b9612dbf0a9151a03d253219b017e30"},
-    {"personaId":"emma_usa","voiceName":"en-US-AvaMultilingualNeural","synthesisLocale":"en-US","sentenceBoundaryMs":null,"clip":3,"sha256":"ce3d76361efdf81dc89fe8b46c6a15d7928e0873a145d2f988b8d48e4671d618"}
-  ],
-  "note": "Canonical full 120-clip SHA list and per-clip duration/WPM are preserved in GitHub Actions artifact 9870847470 from validation run 33693132569. This repository file records the immutable run/artifact digest and summary; the artifact contained 120 unique MP3 SHA-256 values and passed duration/WPM QA."
+  "canary_70_success": 70,
+  "canary_70_http_429": 0,
+  "canary_70_p95_ms": 3703,
+  "canary_70_max_ms": 3796,
+  "canonical_sha_list_location": "GitHub Actions artifact 9870847470 / sha256.txt",
+  "canonical_manifest_location": "GitHub Actions artifact 9870847470 / manifest.json",
+  "note": "The Golden Reference artifact contains all 120 MP3 files, the complete 120-line SHA-256 list, and per-clip duration/WPM manifest. The artifact ZIP digest above locks the complete reference package. The isolated 70-user canary was deleted after PASS."
 }
