@@ -47,8 +47,14 @@ jobs:
         run: npm run qa:setup-columns
       - name: QA feedback learning counts
         run: npm run qa:feedback-counts
-      - name: QA research integrated
-        run: npm run qa:research
+      - name: QA research context
+        run: QA_RESEARCH_SECTION=context npm run qa:research
+      - name: QA research sequence
+        run: QA_RESEARCH_SECTION=sequence npm run qa:research
+      - name: QA research privacy
+        run: QA_RESEARCH_SECTION=privacy npm run qa:research
+      - name: QA research source guards
+        run: QA_RESEARCH_SECTION=source npm run qa:research
       - name: QA dashboard sync
         run: npm run qa:dashboard
       - name: QA research export
