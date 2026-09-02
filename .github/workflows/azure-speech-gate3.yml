@@ -1,13 +1,31 @@
 name: Gate 3 - Azure Speech environment probe
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/azure-speech-gate3.yml'
+      - 'scripts/gate3-azure-speech-probe.mjs'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  syntax:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check Gate 3 probe syntax
+        run: node --check scripts/gate3-azure-speech-probe.mjs
+
   probe:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
