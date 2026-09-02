@@ -326,6 +326,11 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
     });
   }
 
-  return { sessions: sessionRows, turns: turnRows, expressions: expressionRows, system_events: eventRows }
-    satisfies Record<ResearchDatasetName, Record<string, unknown>[]>;
+  const result: Record<ResearchDatasetName, Record<string, unknown>[]> = {
+    sessions: sessionRows,
+    turns: turnRows,
+    expressions: expressionRows,
+    system_events: eventRows,
+  };
+  return result;
 }
