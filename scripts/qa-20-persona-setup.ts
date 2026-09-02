@@ -5,10 +5,34 @@ import sharp from 'sharp';
 import { AI_STUDENTS_MASTER_LIST, TARGET_20_AI_STUDENT_IDS } from '../src/data/curriculum';
 
 const setup = fs.readFileSync('src/components/SetupScreen.tsx', 'utf8');
+const setupCss = fs.readFileSync('src/setup-screen-v2.css', 'utf8');
+const main = fs.readFileSync('src/main.tsx', 'utf8');
+
 assert.ok(setup.includes('会話するAI留学生をえらぼう（全20名）'), 'setup heading must show 20 personas');
 assert.ok(setup.includes('TARGET_20_AI_STUDENT_IDS'), 'setup must derive visible personas from research target IDs');
 assert.equal(TARGET_20_AI_STUDENT_IDS.length, 20);
 for (const id of TARGET_20_AI_STUDENT_IDS) assert.ok(AI_STUDENTS_MASTER_LIST.some((p) => p.id === id), `missing target persona ${id}`);
+
+assert.ok(setup.includes('setup-v2-student-grid'), 'setup must use isolated v2 student grid');
+assert.ok(setup.includes('setup-v2-persona-card'), 'setup must use isolated v2 persona cards');
+assert.equal(setup.includes('setup-student-card-compact'), false, 'old compact text-only cards must not remain');
+assert.ok((setup.match(/<StudentAvatar/g) || []).length >= 2, 'StudentAvatar must be used in both persona cards and selected profile');
+assert.ok(setup.includes("showLabels ? student.country : 'AI留学生'"), 'left persona cards must show English country names');
+assert.ok(setup.includes('`${selectedStudent.flag} ${selectedStudent.country} 選択中`'), 'selected-country pill must show the English country name');
+assert.equal(setup.includes('countryJapanese'), false, 'setup screen must not render Japanese country labels');
+assert.ok(setup.includes('student.japaneseName'), 'left persona cards must show Japanese persona names when labels are shown');
+assert.ok(setupCss.includes('grid-template-columns: repeat(5, minmax(0, 1fr))'), 'desktop persona grid must be 5 columns');
+assert.ok(setupCss.includes('grid-template-rows: repeat(4, minmax(0, 1fr))'), 'desktop persona grid must be 4 rows');
+assert.ok(setupCss.includes('aspect-ratio: 4 / 5'), 'persona and selected profile portraits must preserve 4:5 ratio');
+assert.equal(setupCss.includes('zoom:'), false, 'setup v2 must not depend on CSS zoom');
+assert.ok(main.includes("import './setup-screen-v2.css';"), 'setup v2 stylesheet must be loaded');
+assert.ok(setup.includes('profileCountryLabel(selectedStudent)'), 'profile must use the country label helper');
+assert.ok(setup.includes('const profileCountryLabel = (student: AIStudentProfile) => student.country;'), 'profile country label must be English only');
+assert.equal(setup.includes('countryLabel(selectedStudent)'), false, 'old nested country label rendering must not remain');
+assert.ok(setup.includes("useState<1 | 2 | 3 | 5>(1)"), 'duration state must remain 1/2/3/5 only');
+assert.ok(setup.includes('([1, 2, 3, 5] as const)'), 'duration controls must remain 1/2/3/5');
+assert.ok(setup.includes('normalizeLearningCode') && setup.includes('isValidLearningCode') && setup.includes('onValidateLearningCode'), 'learning ID validation logic must remain present');
+assert.ok(setup.includes("labelCondition = 'shown'") && setup.includes('const showLabels ='), 'labelCondition research behavior must remain');
 
 const avatarSource = fs.readFileSync('src/data/studentImages.ts', 'utf8');
 assert.equal(avatarSource.includes('.b64'), false, 'Base64 avatar assets must not be used');
@@ -63,4 +87,4 @@ for (const file of targetFiles) {
 assert.equal(hashes.size, 20, 'all 20 target persona images must be unique');
 assert.ok(totalBytes >= 1_000_000 && totalBytes <= 5_000_000, `unexpected total persona size: ${totalBytes}`);
 for (const id of TARGET_20_AI_STUDENT_IDS) assert.ok(avatarSource.includes(`${id}:`), `missing avatar mapping for target persona ${id}`);
-console.log(`20-person unified WebP QA: PASS (${totalBytes} bytes, no Base64/sprite reconstruction, unused public image copies removed)`);
+console.log(`20-person setup v2 + unified WebP QA: PASS (${totalBytes} bytes, 5x4 portraits, English country labels, no Base64/sprite reconstruction)`);
