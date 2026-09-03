@@ -3,6 +3,7 @@ import { ReflectionAnswers, ResearchSystemEvent, calculateCanonicalStats, isAISt
 import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, PersonaLabelCondition, VisualVocabularyItem } from '../types';
 import { getPersonaResearchMetadata } from '../data/personaResearch';
 import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, setDocument } from './firestore';
+import { resolveTtsRuntimeMetadata } from './ttsRuntimeMetadata';
 
 const STUDENT_COLLECTION = 'students';
 const SESSION_COLLECTION = 'sessions';
@@ -197,7 +198,6 @@ export async function updateStudentClass(studentId: string, classId: string, att
     await setDocument(STUDENT_COLLECTION, id, { ...withoutInternal(record), classId: cid, ...(attendance !== '' ? { attendanceNumber: attendance } : {}), updatedAt: now });
   }
 }
-
 export async function reissueStudentCode(studentId: string, newCode: string): Promise<{ studentId: string; researchId: string; classId: string; teacherStudentId: string; learningId: string; attendanceNumber: number | '' }> {
   const records = (await listCollection(STUDENT_COLLECTION, 1000)).filter((row) => row.studentId === studentId);
   if (!records.length) throw new Error('STUDENT_NOT_FOUND');
@@ -252,6 +252,7 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
   const eventValues = (type: string) => events.filter((event) => event.type === type).map((event) => Number(event.value || 0)).filter(Number.isFinite);
   const sumEvent = (type: string) => eventValues(type).reduce((sum, value) => sum + value, 0);
   const latestEvent = (type: string) => [...events].reverse().find((event) => event.type === type)?.value || '';
+  const ttsRuntime = resolveTtsRuntimeMetadata(args.aiStudentId, latestEvent('tts_provider'));
   const document = {
     schemaVersion: 4, researchSchemaVersion: 'research-2026-v1', sessionId: args.sessionId, studentId: args.studentId, researchId: args.researchId,
     classId: currentClassId, academicYear: academicYearForLocalDate(localDate), gradeLevel: gradeLevelForClassId(currentClassId), aiStudentId: args.aiStudentId, topic: args.topic,
@@ -259,7 +260,7 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
     aiInputTokens: sumEvent('ai_input_tokens'), aiOutputTokens: sumEvent('ai_output_tokens'), aiCacheReadTokens: sumEvent('ai_cache_read_tokens'), aiCacheCreationTokens: sumEvent('ai_cache_creation_tokens'),
     personaId: personaMeta.personaId, personaCountry: personaMeta.country, personaGender: personaMeta.gender, personaAccentName: personaMeta.accentName, worldEnglishesCircle: personaMeta.worldEnglishesCircle,
     personaLabelCondition: args.personaLabelCondition === 'hidden' ? 'hidden' : 'shown', countryLabelVisible: args.countryLabelVisible !== false, accentLabelVisible: args.accentLabelVisible !== false, flagVisible: args.flagVisible !== false,
-    ttsProvider: latestEvent('tts_provider') || 'not_observed', ttsVoiceName: personaMeta.voiceName, ttsLanguageCode: personaMeta.voiceLanguageCode, personaVoiceGender: personaMeta.voiceGender, personaVoicePitch: personaMeta.voicePitch, personaDefaultVoiceRate: personaMeta.defaultVoiceRate,
+    ttsProvider: ttsRuntime.provider, ttsVoiceName: ttsRuntime.voiceName, ttsLanguageCode: ttsRuntime.languageCode, personaVoiceGender: personaMeta.voiceGender, personaVoicePitch: personaMeta.voicePitch, personaDefaultVoiceRate: personaMeta.defaultVoiceRate,
     studentSelectedSpeechRate: Number(args.studentSelectedSpeechRate || 1), effectiveTtsSpeechRate: Number(latestEvent('tts_effective_rate') || args.effectiveTtsSpeechRate || args.studentSelectedSpeechRate || 1), personaDictionaryVersion: personaMeta.personaDictionaryVersion,
     targetDurationMinutes: args.targetDurationMinutes, actualDurationSeconds: stats.actualDurationSeconds,
     startedAt: new Date(args.startedAt).toISOString(), endedAt: new Date(args.endedAt).toISOString(), localDate,
@@ -297,7 +298,6 @@ export async function getStudentHistory(studentId: string): Promise<Record<strin
     totalChildWords: session.totalChildWords, uniqueVocabularyCount: session.uniqueVocabularyCount, reflection: session.reflection || null,
   }));
 }
-
 export async function getAllSessionsForManagement(): Promise<Record<string, any>[]> {
   const [sessions, students] = await Promise.all([
     listCollection(SESSION_COLLECTION, 1000),
