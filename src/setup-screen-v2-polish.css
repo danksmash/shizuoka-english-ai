@@ -28,6 +28,16 @@
   font-size: clamp(15px, 1.12vw, 20px);
 }
 
+.setup-v2-profile-country-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.setup-v2-profile-country-japanese {
+  color: #1760dc;
+  font-weight: 1000;
+}
+
 .setup-v2-profile-name-row h3 {
   font-size: clamp(24px, 1.85vw, 34px);
 }
