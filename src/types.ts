@@ -9,12 +9,10 @@ export type CountryCode =
   | 'UK'
   | 'USA'
   | 'Australia'
-  | 'Canada'
   | 'Hungary'
   | 'Poland'
   | 'Bangladesh'
   | 'Vietnam'
-  | 'Myanmar'
   | 'South Korea'
   | 'Belarus'
   | 'Germany'
@@ -39,12 +37,10 @@ export type AIStudentId =
   | 'emma_usa'
   | 'oliver_uk'
   | 'liam_australia'
-  | 'chloe_canada'
   | 'bence_hungary'
   | 'zofia_poland'
   | 'rahul_bangladesh'
   | 'linh_vietnam'
-  | 'aung_myanmar'
   | 'minji_korea'
   | 'pavel_belarus'
   | 'lukas_germany'
@@ -77,7 +73,7 @@ export interface AIStudentProfile {
   city: string;
   role: string;
   major: string;
-  avatarImage: string;
+  avatarImage?: string;
   heritageLandmark?: string;
   accentName: string;
   worldEnglishesCircle: WorldEnglishesCircle;

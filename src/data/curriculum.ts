@@ -29,7 +29,7 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     id: 'emma_usa', name: 'Emma Johnson', japaneseName: 'エマ・ジョンソン', gender: 'female', age: 20,
     country: 'United States', countryJapanese: 'アメリカ合衆国 (米国)', countryNative: 'USA', countryCode: 'USA',
     flag: '🇺🇸', city: 'California (カリフォルニア)', role: '静岡大学 交換留学生 (大学2年生)',
-    major: 'メディア・コミュニケーション', avatarImage: './images/emma_usa.jpg',
+    major: 'メディア・コミュニケーション',
     heritageLandmark: '🌁 Golden Gate Bridge (ゴールデンゲートブリッジ)',
     accentName: 'アメリカ英語 (General American)', worldEnglishesCircle: 'Inner', voiceLang: 'en-US', voiceGender: 'female', voicePitch: 1.26, voiceRate: 0.96,
     fillerWords: [], characteristicPhrases: [],
@@ -49,7 +49,7 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     id: 'oliver_uk', name: 'Oliver Wright', japaneseName: 'オリバー・ライト', gender: 'male', age: 21,
     country: 'United Kingdom', countryJapanese: 'イギリス (英国)', countryNative: 'UK', countryCode: 'UK',
     flag: '🇬🇧', city: 'Oxford (オックスフォード)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: '環境科学・日本文化', avatarImage: './images/oliver_uk.jpg',
+    major: '環境科学・日本文化',
     heritageLandmark: '🏛️ Big Ben & London (ビッグベン・ロンドン)',
     accentName: 'イギリス英語 (British RP)', worldEnglishesCircle: 'Inner', voiceLang: 'en-GB', voiceGender: 'male', voicePitch: 1.06, voiceRate: 0.90,
     fillerWords: [], characteristicPhrases: [],
@@ -69,7 +69,7 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     id: 'liam_australia', name: 'Liam Walker', japaneseName: 'リアム・ウォーカー', gender: 'male', age: 22,
     country: 'Australia', countryJapanese: 'オーストラリア', countryNative: 'Australia', countryCode: 'Australia',
     flag: '🇦🇺', city: 'Sydney (シドニー)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: '海洋生物学・海洋保全', avatarImage: './images/liam_aus.jpg',
+    major: '海洋生物学・海洋保全',
     heritageLandmark: '🎭 Sydney Opera House (シドニー・オペラハウス)',
     accentName: 'オーストラリア英語 (Australian English)', worldEnglishesCircle: 'Inner', voiceLang: 'en-AU', voiceGender: 'male', voicePitch: 0.98, voiceRate: 0.92,
     fillerWords: [], characteristicPhrases: [],
@@ -86,30 +86,10 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     ),
   },
   {
-    id: 'chloe_canada', name: 'Chloe Tremblay', japaneseName: 'クロエ・トランブレイ', gender: 'female', age: 21,
-    country: 'Canada', countryJapanese: 'カナダ', countryNative: 'Canada', countryCode: 'Canada',
-    flag: '🇨🇦', city: 'Vancouver (バンクーバー)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: '森林環境学・国際関係', avatarImage: './images/chloe_can.jpg',
-    heritageLandmark: '🏔️ Canadian Rockies (カナディアン・ロッキー)',
-    accentName: 'カナダ英語 (Canadian English)', worldEnglishesCircle: 'Inner', voiceLang: 'en-CA', voiceGender: 'female', voicePitch: 1.20, voiceRate: 0.88,
-    fillerWords: [], characteristicPhrases: [],
-    likes: ['Skiing ⛷️ (スキー)', 'Maple Syrup 🥞 (メープルパンケーキ)', 'Nature 🌲 (豊かな自然)', 'Mt. Fuji 🗻 (富士山の景色)'],
-    japaneseBio: 'カナダ・バンクーバー出身。山や森の自然が好きで、富士山の景色にも関心がある留学生です。',
-    characterMessage: "Hello! I am Chloe from Canada. Let's talk in English!",
-    starterPromptDefault: "Hello! I'm Chloe from Canada. What's your name?",
-    topicPrompts: topicPrompts(
-      "Hello! I'm Chloe from Canada. What's your name?",
-      "I like skiing and pancakes. What do you like?",
-      "I like Mt. Fuji. What do you like in Shizuoka?",
-      "I can skate and bake. What can you do?",
-      "We can talk about anything. What do you like?"
-    ),
-  },
-  {
     id: 'bence_hungary', name: 'Bence Kovács', japaneseName: 'ベンツェ・コヴァーチ', gender: 'male', age: 21,
     country: 'Hungary', countryJapanese: 'ハンガリー', countryNative: 'Magyarország', countryCode: 'Hungary',
     flag: '🇭🇺', city: 'Budapest (ブダペスト)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: '情報工学・ロボティクス', avatarImage: './images/bence_hun.jpg',
+    major: '情報工学・ロボティクス',
     heritageLandmark: '🏛️ Budapest Parliament (ブダペスト国会議事堂)',
     accentName: '中央ヨーロッパ英語 (European English)', worldEnglishesCircle: 'Expanding', voiceLang: 'en-US', voiceGender: 'male', voicePitch: 0.94, voiceRate: 0.86,
     fillerWords: [], characteristicPhrases: [],
@@ -129,7 +109,7 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     id: 'zofia_poland', name: 'Zofia Nowak', japaneseName: 'ゾフィア・ノヴァク', gender: 'female', age: 20,
     country: 'Poland', countryJapanese: 'ポーランド', countryNative: 'Polska', countryCode: 'Poland',
     flag: '🇵🇱', city: 'Warsaw (ワルシャワ)', role: '静岡大学 交換留学生 (大学2年生)',
-    major: '建築デザイン・美術史', avatarImage: './images/zofia_pol.jpg',
+    major: '建築デザイン・美術史',
     heritageLandmark: '🏰 Warsaw Old Town (ワルシャワ旧市街世界遺産)',
     accentName: '東ヨーロッパ英語 (Polish English Accent)', worldEnglishesCircle: 'Expanding', voiceLang: 'en-GB', voiceGender: 'female', voicePitch: 1.30, voiceRate: 0.94,
     fillerWords: [], characteristicPhrases: [],
@@ -149,7 +129,7 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     id: 'rahul_bangladesh', name: 'Rahul Hasan', japaneseName: 'ラフル・ハサン', gender: 'male', age: 22,
     country: 'Bangladesh', countryJapanese: 'バングラデシュ', countryNative: 'বাংলাদেশ', countryCode: 'Bangladesh',
     flag: '🇧🇩', city: 'Dhaka (ダッカ)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: '農学・茶葉栽培科学', avatarImage: './images/rahul_ban.jpg',
+    major: '農学・茶葉栽培科学',
     heritageLandmark: '🏛️ Ahsan Manzil Palace (ピンク・パレス宮殿)',
     accentName: '南アジア英語 (South Asian English)', worldEnglishesCircle: 'Outer', voiceLang: 'en-IN', voiceGender: 'male', voicePitch: 1.10, voiceRate: 0.92,
     fillerWords: [], characteristicPhrases: [],
@@ -169,7 +149,7 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     id: 'linh_vietnam', name: 'Linh Nguyen', japaneseName: 'リン・グエン', gender: 'female', age: 20,
     country: 'Vietnam', countryJapanese: 'ベトナム', countryNative: 'Việt Nam', countryCode: 'Vietnam',
     flag: '🇻🇳', city: 'Hanoi (ハノイ)', role: '静岡大学 交換留学生 (大学2年生)',
-    major: '国際言語文化学・観光', avatarImage: './images/linh_vie.jpg',
+    major: '国際言語文化学・観光',
     heritageLandmark: '🏞️ Ha Long Bay (下龍湾・ハロン湾世界遺産)',
     accentName: '東南アジア英語 (Southeast Asian English)', worldEnglishesCircle: 'Expanding', voiceLang: 'en-US', voiceGender: 'female', voicePitch: 1.36, voiceRate: 0.90,
     fillerWords: [], characteristicPhrases: [],
@@ -186,34 +166,10 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     ),
   },
   {
-    id: 'aung_myanmar', name: 'Aung Min', japaneseName: 'アウン・ミン', gender: 'male', age: 21,
-    country: 'Myanmar', countryJapanese: 'ミャンマー', countryNative: 'မြန်မာ', countryCode: 'Myanmar',
-    flag: '🇲🇲', city: 'Yangon (ヤンゴン)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: '歴史・アジア交流学', avatarImage: './images/aung_mya.jpg',
-    heritageLandmark: '🕌 Bagan Ancient Pagodas (バガン歴史遺産)',
-    accentName: '東南アジア英語 (Southeast Asian English)', worldEnglishesCircle: 'Expanding', voiceLang: 'en-GB', voiceGender: 'male', voicePitch: 0.92, voiceRate: 0.85,
-    fillerWords: [], characteristicPhrases: [],
-    likes: ['History 🏛️ (歴史)', 'Football ⚽ (サッカー)', 'Green Tea 🍵 (緑茶)', 'Baking bread 🥖 (パン作り)'],
-    japaneseBio: 'ミャンマー・ヤンゴン出身。歴史やお寺、パン作りが好きで、とても温厚で優しい留学生です！',
-    characterMessage: "Hello! I am Aung from Myanmar. Let's talk in English!",
-    starterPromptDefault: "Hello! I'm Aung from Myanmar. What's your name?",
-    topicPrompts: topicPrompts(
-      "Hello! I'm Aung from Myanmar. What's your name?",
-      "I like football and history. What do you like?",
-      "I like green tea. What do you like in Shizuoka?",
-      "I can bake bread. What can you do?",
-      "We can talk about anything. What do you like?"
-    ),
-  },
-];
-
-
-export const NEW_AI_STUDENTS_13: AIStudentProfile[] = [
-  {
     id: 'minji_korea', name: 'Minji Kim', japaneseName: 'ミンジ・キム', gender: 'female', age: 21,
     country: 'South Korea', countryJapanese: '韓国', countryNative: '대한민국', countryCode: 'South Korea',
     flag: '🇰🇷', city: 'Busan (釜山)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: '教育学・児童発達', avatarImage: './images/minji_kor.jpg',
+    major: '教育学・児童発達',
     heritageLandmark: '🏖️ Haeundae Beach (海雲台ビーチ)',
     accentName: '韓国英語 (Korean English)', worldEnglishesCircle: 'Expanding', voiceLang: 'en-US', voiceGender: 'female', voicePitch: 1.18, voiceRate: 0.90,
     fillerWords: [], characteristicPhrases: [],
@@ -233,7 +189,7 @@ export const NEW_AI_STUDENTS_13: AIStudentProfile[] = [
     id: 'pavel_belarus', name: 'Pavel Ivanov', japaneseName: 'パーヴェル・イワノフ', gender: 'male', age: 22,
     country: 'Belarus', countryJapanese: 'ベラルーシ', countryNative: 'Беларусь', countryCode: 'Belarus',
     flag: '🇧🇾', city: 'Minsk (ミンスク)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: '数理・データ科学', avatarImage: './images/pavel_blr.jpg',
+    major: '数理・データ科学',
     heritageLandmark: '🏰 Mir Castle (ミール城)',
     accentName: '東ヨーロッパ英語 (Belarusian English)', worldEnglishesCircle: 'Expanding', voiceLang: 'en-GB', voiceGender: 'male', voicePitch: 0.96, voiceRate: 0.88,
     fillerWords: [], characteristicPhrases: [],
@@ -253,7 +209,7 @@ export const NEW_AI_STUDENTS_13: AIStudentProfile[] = [
     id: 'lukas_germany', name: 'Lukas Müller', japaneseName: 'ルーカス・ミュラー', gender: 'male', age: 21,
     country: 'Germany', countryJapanese: 'ドイツ', countryNative: 'Deutschland', countryCode: 'Germany',
     flag: '🇩🇪', city: 'Hamburg (ハンブルク)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: '機械工学', avatarImage: './images/lukas_deu.jpg',
+    major: '機械工学',
     heritageLandmark: '🎼 Elbphilharmonie (エルプフィルハーモニー)',
     accentName: '中央ヨーロッパ英語 (German English)', worldEnglishesCircle: 'Expanding', voiceLang: 'en-GB', voiceGender: 'male', voicePitch: 1.00, voiceRate: 0.90,
     fillerWords: [], characteristicPhrases: [],
@@ -273,7 +229,7 @@ export const NEW_AI_STUDENTS_13: AIStudentProfile[] = [
     id: 'aina_malaysia', name: 'Aina Rahman', japaneseName: 'アイナ・ラーマン', gender: 'female', age: 20,
     country: 'Malaysia', countryJapanese: 'マレーシア', countryNative: 'Malaysia', countryCode: 'Malaysia',
     flag: '🇲🇾', city: 'Penang (ペナン)', role: '静岡大学 交換留学生 (大学2年生)',
-    major: '環境デザイン', avatarImage: './images/aina_mys.jpg',
+    major: '環境デザイン',
     heritageLandmark: '🏘️ George Town (ジョージタウン)',
     accentName: 'マレーシア英語 (Malaysian English)', worldEnglishesCircle: 'Outer', voiceLang: 'en-US', voiceGender: 'female', voicePitch: 1.22, voiceRate: 0.90,
     fillerWords: [], characteristicPhrases: [],
@@ -293,7 +249,7 @@ export const NEW_AI_STUDENTS_13: AIStudentProfile[] = [
     id: 'dimas_indonesia', name: 'Dimas Pratama', japaneseName: 'ディマス・プラタマ', gender: 'male', age: 22,
     country: 'Indonesia', countryJapanese: 'インドネシア', countryNative: 'Indonesia', countryCode: 'Indonesia',
     flag: '🇮🇩', city: 'Yogyakarta (ジョグジャカルタ)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: '観光・文化遺産学', avatarImage: './images/dimas_idn.jpg',
+    major: '観光・文化遺産学',
     heritageLandmark: '🛕 Borobudur (ボロブドゥール寺院)',
     accentName: '東南アジア英語 (Indonesian English)', worldEnglishesCircle: 'Expanding', voiceLang: 'en-US', voiceGender: 'male', voicePitch: 0.98, voiceRate: 0.89,
     fillerWords: [], characteristicPhrases: [],
@@ -313,7 +269,7 @@ export const NEW_AI_STUDENTS_13: AIStudentProfile[] = [
     id: 'yuting_taiwan', name: 'Yu-Ting Lin', japaneseName: 'ユーティン・リン', gender: 'female', age: 21,
     country: 'Taiwan', countryJapanese: '台湾', countryNative: '臺灣', countryCode: 'Taiwan',
     flag: '🇹🇼', city: 'Taipei (台北)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: 'ビジュアル・コミュニケーションデザイン', avatarImage: './images/yuting_twn.jpg',
+    major: 'ビジュアル・コミュニケーションデザイン',
     heritageLandmark: '🏙️ Taipei 101 (台北101)',
     accentName: '台湾英語 (Taiwan English)', worldEnglishesCircle: 'Expanding', voiceLang: 'en-US', voiceGender: 'female', voicePitch: 1.26, voiceRate: 0.91,
     fillerWords: [], characteristicPhrases: [],
@@ -333,7 +289,7 @@ export const NEW_AI_STUDENTS_13: AIStudentProfile[] = [
     id: 'matas_lithuania', name: 'Matas Jankauskas', japaneseName: 'マタス・ヤンカウスカス', gender: 'male', age: 20,
     country: 'Lithuania', countryJapanese: 'リトアニア', countryNative: 'Lietuva', countryCode: 'Lithuania',
     flag: '🇱🇹', city: 'Kaunas (カウナス)', role: '静岡大学 交換留学生 (大学2年生)',
-    major: 'スポーツ科学・健康', avatarImage: './images/matas_ltu.jpg',
+    major: 'スポーツ科学・健康',
     heritageLandmark: '🏰 Trakai Island Castle (トラカイ島城)',
     accentName: 'バルト地域英語 (Lithuanian English)', worldEnglishesCircle: 'Expanding', voiceLang: 'en-GB', voiceGender: 'male', voicePitch: 0.96, voiceRate: 0.90,
     fillerWords: [], characteristicPhrases: [],
@@ -353,7 +309,7 @@ export const NEW_AI_STUDENTS_13: AIStudentProfile[] = [
     id: 'ananya_india', name: 'Ananya Sharma', japaneseName: 'アナニャ・シャルマ', gender: 'female', age: 22,
     country: 'India', countryJapanese: 'インド', countryNative: 'भारत', countryCode: 'India',
     flag: '🇮🇳', city: 'Bengaluru (ベンガルール)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: 'コンピュータ科学', avatarImage: './images/ananya_ind.jpg',
+    major: 'コンピュータ科学',
     heritageLandmark: '🏛️ Vidhana Soudha (ヴィダーナ・サウダ)',
     accentName: 'インド英語 (Indian English)', worldEnglishesCircle: 'Outer', voiceLang: 'en-IN', voiceGender: 'female', voicePitch: 1.16, voiceRate: 0.90,
     fillerWords: [], characteristicPhrases: [],
@@ -373,7 +329,7 @@ export const NEW_AI_STUDENTS_13: AIStudentProfile[] = [
     id: 'xinyi_china', name: 'Xinyi Zhang', japaneseName: 'シンイー・ジャン', gender: 'female', age: 21,
     country: 'China', countryJapanese: '中国', countryNative: '中国', countryCode: 'China',
     flag: '🇨🇳', city: 'Shanghai (上海)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: '経済・国際ビジネス', avatarImage: './images/xinyi_chn.jpg',
+    major: '経済・国際ビジネス',
     heritageLandmark: '🌆 The Bund (外灘)',
     accentName: '中国英語 (Chinese English)', worldEnglishesCircle: 'Expanding', voiceLang: 'en-US', voiceGender: 'female', voicePitch: 1.20, voiceRate: 0.90,
     fillerWords: [], characteristicPhrases: [],
@@ -393,7 +349,7 @@ export const NEW_AI_STUDENTS_13: AIStudentProfile[] = [
     id: 'nadeesha_srilanka', name: 'Nadeesha Perera', japaneseName: 'ナディーシャ・ペレラ', gender: 'female', age: 20,
     country: 'Sri Lanka', countryJapanese: 'スリランカ', countryNative: 'ශ්‍රී ලංකාව', countryCode: 'Sri Lanka',
     flag: '🇱🇰', city: 'Kandy (キャンディ)', role: '静岡大学 交換留学生 (大学2年生)',
-    major: '環境科学・生物多様性', avatarImage: './images/nadeesha_lka.jpg',
+    major: '環境科学・生物多様性',
     heritageLandmark: '🪨 Sigiriya (シーギリヤ・ロック)',
     accentName: 'スリランカ英語 (Sri Lankan English)', worldEnglishesCircle: 'Outer', voiceLang: 'en-IN', voiceGender: 'female', voicePitch: 1.18, voiceRate: 0.89,
     fillerWords: [], characteristicPhrases: [],
@@ -413,7 +369,7 @@ export const NEW_AI_STUDENTS_13: AIStudentProfile[] = [
     id: 'suman_nepal', name: 'Suman Gurung', japaneseName: 'スマン・グルン', gender: 'male', age: 21,
     country: 'Nepal', countryJapanese: 'ネパール', countryNative: 'नेपाल', countryCode: 'Nepal',
     flag: '🇳🇵', city: 'Pokhara (ポカラ)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: '地理学・防災', avatarImage: './images/suman_npl.jpg',
+    major: '地理学・防災',
     heritageLandmark: '🏞️ Phewa Lake (フェワ湖)',
     accentName: '南アジア英語 (Nepali English)', worldEnglishesCircle: 'Expanding', voiceLang: 'en-IN', voiceGender: 'male', voicePitch: 0.98, voiceRate: 0.88,
     fillerWords: [], characteristicPhrases: [],
@@ -433,7 +389,7 @@ export const NEW_AI_STUDENTS_13: AIStudentProfile[] = [
     id: 'amara_nigeria', name: 'Amara Okafor', japaneseName: 'アマラ・オカフォー', gender: 'female', age: 22,
     country: 'Nigeria', countryJapanese: 'ナイジェリア', countryNative: 'Nigeria', countryCode: 'Nigeria',
     flag: '🇳🇬', city: 'Lagos (ラゴス)', role: '静岡大学 交換留学生 (大学3年生)',
-    major: '国際関係学', avatarImage: './images/amara_nga.jpg',
+    major: '国際関係学',
     heritageLandmark: '🌉 Lekki-Ikoyi Link Bridge (レッキ・イコイ橋)',
     accentName: 'ナイジェリア英語 (Nigerian English)', worldEnglishesCircle: 'Outer', voiceLang: 'en-GB', voiceGender: 'female', voicePitch: 1.20, voiceRate: 0.92,
     fillerWords: [], characteristicPhrases: [],
@@ -453,7 +409,7 @@ export const NEW_AI_STUDENTS_13: AIStudentProfile[] = [
     id: 'andrei_romania', name: 'Andrei Popescu', japaneseName: 'アンドレイ・ポペスク', gender: 'male', age: 20,
     country: 'Romania', countryJapanese: 'ルーマニア', countryNative: 'România', countryCode: 'Romania',
     flag: '🇷🇴', city: 'Cluj-Napoca (クルジュ＝ナポカ)', role: '静岡大学 交換留学生 (大学2年生)',
-    major: '建築・都市デザイン', avatarImage: './images/andrei_rou.jpg',
+    major: '建築・都市デザイン',
     heritageLandmark: '⛏️ Salina Turda (サリーナ・トゥルダ)',
     accentName: '東ヨーロッパ英語 (Romanian English)', worldEnglishesCircle: 'Expanding', voiceLang: 'en-GB', voiceGender: 'male', voicePitch: 0.96, voiceRate: 0.89,
     fillerWords: [], characteristicPhrases: [],
@@ -471,7 +427,7 @@ export const NEW_AI_STUDENTS_13: AIStudentProfile[] = [
   },
 ];
 
-export const AI_STUDENTS_MASTER_LIST: AIStudentProfile[] = [...AI_STUDENTS_LIST, ...NEW_AI_STUDENTS_13];
+export const AI_STUDENTS_MASTER_LIST: AIStudentProfile[] = AI_STUDENTS_LIST;
 
 export const TARGET_20_AI_STUDENT_IDS: AIStudentProfile['id'][] = [
   'emma_usa', 'oliver_uk', 'liam_australia',
@@ -482,10 +438,9 @@ export const TARGET_20_AI_STUDENT_IDS: AIStudentProfile['id'][] = [
 ];
 
 export function getAIStudentById(id: string): AIStudentProfile {
-  const exact = AI_STUDENTS_MASTER_LIST.find((s) => s.id === id);
-  if (exact) return exact;
-  const prefix = id.split('_')[0];
-  return AI_STUDENTS_MASTER_LIST.find((s) => s.id.startsWith(prefix)) || AI_STUDENTS_MASTER_LIST[0];
+  const exact = AI_STUDENTS_MASTER_LIST.find((student) => student.id === id);
+  if (!exact) throw new Error(`UNKNOWN_AI_STUDENT_ID:${id}`);
+  return exact;
 }
 
 export const DIALOGUE_TOPICS: TopicOption[] = [

@@ -22,8 +22,6 @@ for (const profile of profiles) {
   if (profile.sentenceBoundaryMs !== undefined && profile.sentenceBoundaryMs !== 250) fail(`Unexpected sentence pause for ${profile.personaId}`);
 }
 
-if (AZURE_VOICE_PROFILES.chloe_canada) fail('Legacy Chloe must not receive an Azure v2 research profile');
-if (AZURE_VOICE_PROFILES.aung_myanmar) fail('Legacy Aung must not receive an Azure v2 research profile');
 
 const expected: Record<string, { voice: string; choice: 'A' | 'B' | 'refined'; pause?: number }> = {
   emma_usa: { voice: 'en-US-AvaMultilingualNeural', choice: 'A' },

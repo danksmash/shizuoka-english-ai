@@ -2,7 +2,7 @@ import { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, Perso
 import { maskTextForResearchExport } from './utils/privacy';
 
 export const AI_STUDENT_IDS = [
-  'emma_usa','oliver_uk','liam_australia','chloe_canada','bence_hungary','zofia_poland','rahul_bangladesh','linh_vietnam','aung_myanmar',
+  'emma_usa','oliver_uk','liam_australia','bence_hungary','zofia_poland','rahul_bangladesh','linh_vietnam',
   'minji_korea','pavel_belarus','lukas_germany','aina_malaysia','dimas_indonesia','yuting_taiwan','matas_lithuania',
   'ananya_india','xinyi_china','nadeesha_srilanka','suman_nepal','amara_nigeria','andrei_romania',
 ] as const satisfies readonly AIStudentId[];

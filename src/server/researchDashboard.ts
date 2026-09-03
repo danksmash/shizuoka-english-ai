@@ -464,7 +464,8 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
     return [...map.entries()].map(([label,value]) => ({ label,value })).sort((a,b) => b.value - a.value || a.label.localeCompare(b.label,'ja'));
   };
   const personaNames = new Map(data.personas.map((row) => [String(row.persona_id), String(row.name)]));
-  const personaUsage = counts('persona_id').map((item) => ({ ...item, label: personaNames.get(item.label) || item.label }));
+  const personaUsageCounts = new Map(counts('persona_id').map((item) => [item.label, item.value]));
+  const personaUsage = RESEARCH_PERSONAS.map((persona) => ({ label: persona.name, value: personaUsageCounts.get(persona.id) || 0 }));
 
   const topMap = new Map<string, { count:number; source:string }>();
   for (const row of filteredTechnicalExpressions.filter((item) => item.speaker === 'child')) {
