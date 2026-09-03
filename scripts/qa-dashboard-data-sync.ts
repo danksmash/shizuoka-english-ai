@@ -150,6 +150,10 @@ assert.ok(pageSource.includes('.charts{display:grid;grid-template-columns:repeat
 assert.ok(pageSource.includes('.svg-label{font-size:15px'));
 assert.ok(pageSource.includes('.bar-label-html{font-size:16px'));
 assert.ok(pageSource.includes('.chart svg{min-width:460px'));
+assert.ok(pageSource.includes('.table-wrap{overflow-x:hidden;overflow-y:visible'), 'recent sessions wrapper must not scroll horizontally');
+assert.ok(pageSource.includes('.recent{width:100%;table-layout:fixed'), 'recent sessions table must fit the card width');
+assert.ok(pageSource.includes('.recent th:nth-child(4),.recent td:nth-child(4){width:26%}'), 'topic column must have an explicit responsive share');
+assert.equal(pageSource.includes('.table-wrap{overflow:auto'), false, 'legacy horizontal scroll wrapper must not return');
 assert.ok(pageSource.includes('1分あたり平均発話語数'));
 assert.ok(pageSource.includes('５年') && pageSource.includes('６年') && pageSource.includes('１組') && pageSource.includes('２組') && pageSource.includes('３組'));
 assert.equal(pageSource.includes('博士'), false);
