@@ -39,9 +39,9 @@ assert.equal(ids('I want to go to Australia.').has('vocab6-want-go'), true);
 assert.equal(ids('I want to be a teacher.').has('vocab6-want-be'), true);
 assert.equal(ids("What's your best memory?").has('vocab6-memory'), true);
 
-// Every dialogue theme must have three distinct, theme-specific goals.
+// Every formal dialogue theme must have three distinct, theme-specific goals.
 const topicEntries = Object.entries(TOPIC_LEARNING_GOALS);
-assert.equal(topicEntries.length, 5, 'all five dialogue themes must have goals');
+assert.equal(topicEntries.length, 6, 'all six dialogue themes must have goals');
 for (const [topic, goals] of topicEntries) {
   assert.equal(goals.length, 3, `${topic} must have exactly three pupil-friendly goals`);
   assert.equal(new Set(goals.map((goal) => goal.label)).size, 3, `${topic} goals must be distinct`);
