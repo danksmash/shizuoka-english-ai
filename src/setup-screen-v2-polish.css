@@ -1,0 +1,132 @@
+/* Approved Setup screen visual polish: sample 3.
+ * Keep the established v2 layout/data flow intact and adjust only typography
+ * and the selected-profile visual balance. Avoid forced overrides and fixed profile heights.
+ */
+
+.setup-v2-section-heading-row h2,
+.setup-v2-topic h2,
+.setup-v2-duration h2 {
+  font-size: clamp(17px, 1.18vw, 21px);
+  line-height: 1.1;
+}
+
+.setup-v2-step {
+  width: clamp(32px, 2.15vw, 38px);
+  font-size: clamp(16px, 1.08vw, 19px);
+}
+
+.setup-v2-topic h2 svg {
+  width: 21px;
+  height: 21px;
+}
+
+.setup-v2-profile {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 38%);
+}
+
+.setup-v2-profile-country {
+  font-size: clamp(15px, 1.12vw, 20px);
+}
+
+.setup-v2-profile-name-row h3 {
+  font-size: clamp(24px, 1.85vw, 34px);
+}
+
+.setup-v2-profile-name-row span {
+  font-size: clamp(14px, 1.04vw, 18px);
+}
+
+.setup-v2-profile-origin {
+  font-size: clamp(14px, 1.02vw, 18px);
+}
+
+.setup-v2-profile-bio {
+  font-size: clamp(10.5px, 0.8vw, 13.5px);
+}
+
+.setup-v2-profile-facts {
+  font-size: clamp(10.5px, 0.76vw, 13px);
+}
+
+.setup-v2-profile-avatar {
+  width: min(100%, clamp(220px, 18vw, 300px));
+}
+
+/* Keep the Japanese topic title size from setup-screen-v2.css unchanged.
+ * Enlarge only the English subtitle for easier reading.
+ */
+.setup-v2-topic-grid button > small {
+  margin-top: 4px;
+  font-size: clamp(9.5px, 0.68vw, 12px);
+  line-height: 1.08;
+}
+
+@media (max-height: 790px) and (min-width: 1024px) {
+  .setup-v2-section-heading-row h2,
+  .setup-v2-topic h2,
+  .setup-v2-duration h2 {
+    font-size: clamp(15.5px, 1.1vw, 19px);
+  }
+
+  .setup-v2-step {
+    width: clamp(30px, 2vw, 35px);
+    font-size: clamp(15px, 1vw, 18px);
+  }
+
+  .setup-v2-profile {
+    grid-template-columns: minmax(0, 1fr) minmax(190px, 34%);
+  }
+
+  .setup-v2-profile-avatar {
+    width: min(100%, clamp(190px, 15vw, 230px));
+  }
+
+  .setup-v2-profile-country {
+    font-size: clamp(14px, 1.05vw, 18px);
+  }
+
+  .setup-v2-profile-name-row h3 {
+    font-size: clamp(22px, 1.65vw, 29px);
+  }
+
+  .setup-v2-profile-name-row span {
+    font-size: clamp(13px, 0.95vw, 16px);
+  }
+
+  .setup-v2-profile-origin {
+    font-size: clamp(13px, 0.94vw, 16px);
+  }
+
+  .setup-v2-profile-bio {
+    font-size: clamp(10px, 0.72vw, 12px);
+  }
+
+  .setup-v2-profile-facts {
+    font-size: clamp(9.8px, 0.7vw, 11.5px);
+  }
+
+  .setup-v2-topic-grid button > small {
+    font-size: clamp(9px, 0.64vw, 11px);
+  }
+}
+
+@media (max-width: 1023px) and (min-width: 701px) {
+  .setup-v2-profile {
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 34%);
+  }
+
+  .setup-v2-profile-avatar {
+    width: min(100%, clamp(200px, 28vw, 260px));
+  }
+}
+
+@media (max-width: 700px) {
+  .setup-v2-profile {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-v2-profile-avatar {
+    justify-self: center;
+    width: min(70vw, 250px);
+  }
+}

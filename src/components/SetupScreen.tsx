@@ -88,7 +88,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
                 <span className="setup-v2-badge setup-v2-badge-blue">静岡大学 留学生交流プログラム</span>
                 <span className="setup-v2-badge setup-v2-badge-green">小学校5・6年生向け English</span>
               </div>
-              <h1>AI留学生 1対1 えいご対話プラクティス</h1>
+              <h1>AI留学生えいご対話プラクティス</h1>
             </div>
           </div>
           {learningDataEnabled && <div className="setup-v2-learning-id-wrap">
