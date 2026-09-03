@@ -7,49 +7,68 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   dialogue-live:
     if: github.head_ref == 'fix/formalize-six-dialogue-topics'
     runs-on: ubuntu-latest
-    environment: production
-    env:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      ANTHROPIC_MODEL: claude-sonnet-5
-      PORT: '3100'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v4
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
         with:
-          node-version: '20'
-          cache: npm
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
 
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
 
-      - name: Start branch server without persistence configuration
+      - name: Deploy isolated branch canary without research persistence
         run: |
-          test -n "$ANTHROPIC_API_KEY"
-          npm run dev >/tmp/dialogue-live-server.log 2>&1 &
-          echo $! >/tmp/dialogue-live-server.pid
-          for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            if curl --fail --silent --max-time 5 http://127.0.0.1:3100/api/health >/tmp/dialogue-health.json; then
-              break
-            fi
-            sleep 1
-          done
-          grep -q '"aiConfigured":true' /tmp/dialogue-health.json
-          grep -q '"learningDataConfigured":false' /tmp/dialogue-health.json
+          RUNTIME_SA=$(gcloud run services describe shizuoka-english-ai \
+            --project shizuoka-english-ai \
+            --region asia-northeast1 \
+            --format='value(spec.template.spec.serviceAccountName)')
+          if [ -z "$RUNTIME_SA" ]; then
+            PROJECT_NUMBER=$(gcloud projects describe shizuoka-english-ai --format='value(projectNumber)')
+            RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+          fi
+          test -n "$RUNTIME_SA"
+          gcloud run deploy shizuoka-english-ai-dialogue-canary \
+            --project shizuoka-english-ai \
+            --source . \
+            --region asia-northeast1 \
+            --allow-unauthenticated \
+            --service-account "$RUNTIME_SA" \
+            --min-instances 0 \
+            --max-instances 1 \
+            --concurrency 10 \
+            --timeout 60 \
+            --memory 512Mi \
+            --update-env-vars ANTHROPIC_MODEL=claude-sonnet-5,APP_VERSION=dialogue-canary,APP_BUILD="${GITHUB_SHA:0:12}" \
+            --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest
 
-      - name: Verify natural direct answers across six topics
+      - name: Verify persistence disabled and natural direct answers
         run: |
-          python3 - <<'PY'
-          import json, urllib.request
+          CANARY_URL=$(gcloud run services describe shizuoka-english-ai-dialogue-canary \
+            --project shizuoka-english-ai \
+            --region asia-northeast1 \
+            --format='value(status.url)')
+          test -n "$CANARY_URL"
+          health=$(curl --fail --silent --show-error --max-time 20 "$CANARY_URL/api/health")
+          echo "$health" | grep -q '"aiConfigured":true'
+          echo "$health" | grep -q '"learningDataConfigured":false'
+          CANARY_URL="$CANARY_URL" python3 - <<'PY'
+          import json, os, urllib.request
 
-          url = 'http://127.0.0.1:3100/api/chat'
+          url = os.environ['CANARY_URL'].rstrip('/') + '/api/chat'
 
           def ask(topic, message, starter):
               payload = {
@@ -106,12 +125,10 @@ jobs:
           print('LIVE DIALOGUE GATE PASS: daily_routine direct answers + five-topic regression')
           PY
 
-      - name: Confirm no research persistence was enabled
+      - name: Remove isolated canary service
         if: always()
         run: |
-          if [ -f /tmp/dialogue-health.json ]; then
-            grep -q '"learningDataConfigured":false' /tmp/dialogue-health.json
-          fi
-          if [ -f /tmp/dialogue-live-server.pid ]; then
-            kill "$(cat /tmp/dialogue-live-server.pid)" 2>/dev/null || true
-          fi
+          gcloud run services delete shizuoka-english-ai-dialogue-canary \
+            --project shizuoka-english-ai \
+            --region asia-northeast1 \
+            --quiet || true
