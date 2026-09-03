@@ -12,6 +12,7 @@ jobs:
   dialogue-live:
     if: github.head_ref == 'fix/formalize-six-dialogue-topics'
     runs-on: ubuntu-latest
+    environment: production
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_MODEL: claude-sonnet-5
@@ -108,7 +109,9 @@ jobs:
       - name: Confirm no research persistence was enabled
         if: always()
         run: |
-          grep -q '"learningDataConfigured":false' /tmp/dialogue-health.json
+          if [ -f /tmp/dialogue-health.json ]; then
+            grep -q '"learningDataConfigured":false' /tmp/dialogue-health.json
+          fi
           if [ -f /tmp/dialogue-live-server.pid ]; then
             kill "$(cat /tmp/dialogue-live-server.pid)" 2>/dev/null || true
           fi
