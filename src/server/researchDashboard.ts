@@ -166,7 +166,7 @@ const ALLOWED_VALUES: Record<string, string> = {
   grade_level:'5 | 6',
   persona_gender:'male | female', gender:'male | female',
   target_duration_minutes:'1 | 2 | 3 | 5',
-  topic:'intro | favorites | shizuoka_culture | talents | free',
+  topic:'intro | favorites | shizuoka_culture | talents | daily_routine | free',
   reflection_conveyed_ideas:'1 | 3 | 5',
   reflection_understood_partner:'1 | 3 | 5',
   reflection_noticed_language_culture:'1 | 3 | 5',
@@ -381,7 +381,7 @@ function average(values: number[]): number {
 function topicLabel(id: string): string {
   return ({
     intro:'自己紹介・あいさつ', favorites:'好きなもの・すきなこと', shizuoka_culture:'静岡のじまん＆世界の文化',
-    talents:'できること・得意なこと', free:'自由トーク・おしゃべり',
+    talents:'できること・得意なこと', daily_routine:'ふだんの生活・一日のようす', free:'自由トーク・おしゃべり',
   } as Record<string,string>)[id] || id;
 }
 function localDateTimeMs(value: unknown): number {
@@ -574,7 +574,7 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
       grades:['5','6','test','reserve'],
       personas:RESEARCH_PERSONAS.map((persona) => persona.id),
       labelConditions:['shown','hidden'],
-      topics:['intro','favorites','shizuoka_culture','talents','free'],
+      topics:['intro','favorites','shizuoka_culture','talents','daily_routine','free'],
     },
     charts:{ daily:chartRows, aggregation, personas:personaUsage },
     dataQuality:quality,
