@@ -6,7 +6,7 @@
 import { ChatMessage, DialogueTopic } from '../types';
 
 // Topic-based and Persona-based starter prompt translations
-export const STARTER_PROMPTS_JAPANESE: Record<string, Record<DialogueTopic, string>> = {
+const BASE_STARTER_PROMPTS_JAPANESE: Record<string, Record<Exclude<DialogueTopic, 'daily_routine'>, string>> = {
   oliver_uk: {
     intro: 'こんにちは！イギリスから来たオリバーです。あなたのお名前は何ですか？',
     favorites: '僕はサッカーと紅茶が好きです。あなたは何が好きですか？',
@@ -162,6 +162,15 @@ export const STARTER_PROMPTS_JAPANESE: Record<string, Record<DialogueTopic, stri
     free: '何についてでも話せます。あなたは何が好きですか？',
   },
 };
+
+export const DAILY_ROUTINE_STARTER_JAPANESE = '私はふだん7時に起きます。あなたは何時に起きますか？';
+
+export const STARTER_PROMPTS_JAPANESE: Record<string, Record<DialogueTopic, string>> = Object.fromEntries(
+  Object.entries(BASE_STARTER_PROMPTS_JAPANESE).map(([studentId, prompts]) => [
+    studentId,
+    { ...prompts, daily_routine: DAILY_ROUTINE_STARTER_JAPANESE },
+  ]),
+) as Record<string, Record<DialogueTopic, string>>;
 
 // Common vocabulary translation dictionary for elementary school 5th/6th grade
 const VOCAB_MAP: Record<string, string> = {

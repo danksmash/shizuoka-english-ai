@@ -171,7 +171,7 @@ export interface FeedbackData {
   };
 }
 
-export type DialogueTopic = 'intro' | 'favorites' | 'shizuoka_culture' | 'talents' | 'free';
+export type DialogueTopic = 'intro' | 'favorites' | 'shizuoka_culture' | 'talents' | 'daily_routine' | 'free';
 
 export interface TopicOption {
   id: DialogueTopic;

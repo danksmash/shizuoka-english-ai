@@ -32,14 +32,18 @@ export function buildAlignedReply(parsed: any, personaName: string = 'AI Student
     }))
     .filter((segment) => segment.english && segment.japanese);
 
-  let selected = validSegments;
+  let selected = validSegments.slice(0, 2);
   if (validSegments.length > 2) {
     const finalQuestion = [...validSegments].reverse().find((segment) => /\?\s*$/.test(segment.english));
-    selected = finalQuestion && finalQuestion !== validSegments[0]
-      ? [validSegments[0], finalQuestion]
-      : validSegments.slice(0, 2);
-  } else {
-    selected = validSegments.slice(0, 2);
+    if (finalQuestion) {
+      const first = validSegments[0];
+      const firstWords = first.english.split(/\s+/).filter(Boolean);
+      const firstIsBriefReaction =
+        firstWords.length <= 3 &&
+        !/\b(i|you|my|your|we|he|she|they|it)\b/i.test(first.english);
+      const directAnswer = firstIsBriefReaction && validSegments[1] ? validSegments[1] : first;
+      selected = finalQuestion !== directAnswer ? [directAnswer, finalQuestion] : [directAnswer];
+    }
   }
 
   if (selected.length === 0) {

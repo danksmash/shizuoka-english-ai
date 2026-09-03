@@ -2,10 +2,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { canonicalizeHistory, maskHistoryForStorage, validateSessionSaveInput } from '../src/dataContract';
 import { safePlainTextForClipboard, maskTextForResearchExport } from '../src/utils/privacy';
-import { AI_STUDENTS_MASTER_LIST, DIALOGUE_TOPICS, TARGET_20_AI_STUDENT_IDS } from '../src/data/curriculum';
-import { STARTER_PROMPTS_JAPANESE } from '../src/utils/translation';
+import { AI_STUDENTS_MASTER_LIST, DAILY_ROUTINE_STARTER_ENGLISH, DIALOGUE_TOPICS, TARGET_20_AI_STUDENT_IDS } from '../src/data/curriculum';
+import { DAILY_ROUTINE_STARTER_JAPANESE, STARTER_PROMPTS_JAPANESE } from '../src/utils/translation';
 import { getTopicLearningGoals } from '../src/data/topicLearningGoals';
-import { DAILY_ROUTINE_STARTER_ENGLISH, DAILY_ROUTINE_STARTER_JAPANESE } from '../src/data/dailyRoutineTopic';
 import { maskHighRiskPII } from '../src/utils/security';
 
 const history=canonicalizeHistory([{id:'a',sender:'ai',englishText:'Hello!',japaneseText:'こんにちは！',timestamp:1000},{id:'b',sender:'child',englishText:'I like soccer.',japaneseText:'サッカーが好きです。',timestamp:1500}]);
@@ -26,6 +25,7 @@ const copied=safePlainTextForClipboard('Email child@example.com phone 090-1234-5
 const persistence=await readFile('src/server/persistence.ts','utf8');assert.ok(persistence.includes('learningId: normalized'));assert.ok(persistence.includes("existing ? [] : await queryCollection"));assert.ok(persistence.includes("schemaVersion: 4"));
 const firestore=await readFile('src/server/firestore.ts','utf8');assert.ok(persistence.includes('retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000),'));assert.equal(persistence.includes('retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000).toISOString()'),false);assert.ok(firestore.includes('if (value instanceof Date) return { timestampValue: value.toISOString() }'));
 const exportSource=await readFile('src/server/researchExport.ts','utf8');assert.ok(exportSource.includes('persona_label_condition'));assert.ok(exportSource.includes('student_selected_speech_rate'));assert.ok(/dictionary_source\s*:\s*['"]persona['"]/.test(exportSource));assert.equal(exportSource.includes('learningId'),false);
+const dataContractSource=await readFile('src/dataContract.ts','utf8');assert.equal(dataContractSource.includes('dailyRoutineTopic'),false);
 const server=await readFile('server.ts','utf8');assert.ok(server.includes("'claude-sonnet-5'"));assert.ok(server.includes("output_config: { effort: 'medium' }"));assert.ok(server.includes("requireManagementRole(['researcher'])"));assert.equal(server.includes("requireManagementRole(['teacher'])"),false);assert.equal(server.includes("'/api/management/student-codes'"),false);assert.equal(server.includes("'/api/management/sessions'"),false);
 const management=await readFile('src/server/managementPage.ts','utf8');assert.ok(management.includes('/api/management/research.csv'));assert.ok(management.includes('匿名化'));assert.equal(management.includes('教師用管理'),false);assert.ok(management.includes('value="daily_routine"'));assert.ok(management.includes("daily_routine:'ふだんの生活・一日のようす'"));
 const researchDashboard=await readFile('src/server/researchDashboard.ts','utf8');assert.ok(researchDashboard.includes('daily_routine | free'));assert.ok(researchDashboard.includes("daily_routine:'ふだんの生活・一日のようす'"));assert.ok(researchDashboard.includes("'daily_routine','free'"));
