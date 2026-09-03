@@ -1,0 +1,174 @@
+name: Minji/Zofia younger Azure voice preview
+
+on:
+  push:
+    branches:
+      - canary/minji-zofia-younger-voice-preview
+    paths:
+      - 'src/data/azureVoiceProfiles.ts'
+      - '.github/workflows/minji-zofia-voice-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  generate-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PROJECT_ID: shizuoka-english-ai
+      REGION: asia-northeast1
+      SERVICE: shizuoka-english-ai-voice-preview
+      OUT_DIR: voice-preview-artifacts
+    steps:
+      - name: Checkout preview branch
+        uses: actions/checkout@v4
+        with:
+          ref: canary/minji-zofia-younger-voice-preview
+          fetch-depth: 0
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+
+      - name: Build and generate listening package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT_DIR"
+
+          RUNTIME_SA=$(gcloud run services describe shizuoka-english-ai \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(spec.template.spec.serviceAccountName)')
+          if [ -z "$RUNTIME_SA" ]; then
+            PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
+            RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+          fi
+          test -n "$RUNTIME_SA"
+
+          cat > "$OUT_DIR/README.txt" <<'EOF'
+          Minji / Zofia Azure voice age-fit comparison
+          ============================================
+          Production remains unchanged while these clips are reviewed.
+          All clips use Azure default speaking rate (effective rate 1.00).
+          Listen to all three clips for each candidate before choosing.
+
+          00_current
+            Minji: en-US-EmmaMultilingualNeural
+            Zofia: en-GB-AdaMultilingualNeural
+
+          01_candidate_A
+            Minji: en-US-AvaNeural
+            Zofia: en-GB-LibbyNeural
+
+          02_candidate_B
+            Minji: en-US-JennyNeural
+            Zofia: en-GB-BellaNeural
+
+          03_candidate_C
+            Minji: en-US-EmmaNeural
+            Zofia: en-GB-HollieNeural
+
+          Suggested listening criteria:
+          - sounds plausibly about 20-21 years old
+          - friendly university-student quality, not childlike or middle-aged
+          - clear English for Grade 5-6 learners
+          - natural questions and sentence endings
+          - no distracting synthetic instability
+          EOF
+
+          variants=(
+            '00_current|en-US-EmmaMultilingualNeural|en-GB-AdaMultilingualNeural'
+            '01_candidate_A|en-US-AvaNeural|en-GB-LibbyNeural'
+            '02_candidate_B|en-US-JennyNeural|en-GB-BellaNeural'
+            '03_candidate_C|en-US-EmmaNeural|en-GB-HollieNeural'
+          )
+
+          generate_clip() {
+            local base_url="$1"
+            local persona="$2"
+            local text="$3"
+            local output="$4"
+            local payload headers status
+            payload=$(python3 -c 'import json,sys; print(json.dumps({"text":sys.argv[1],"aiStudentId":sys.argv[2],"speakingRate":1.0}))' "$text" "$persona")
+            headers=$(mktemp)
+            status=$(curl --silent --show-error --max-time 30 \
+              -D "$headers" \
+              -o "$output" \
+              -w '%{http_code}' \
+              -X POST "$base_url/api/tts" \
+              -H 'Content-Type: application/json' \
+              --data "$payload")
+            test "$status" = '200'
+            grep -qi 'content-type: audio/mpeg' "$headers"
+            grep -qi 'x-tts-provider: azure-speech' "$headers"
+            grep -qi 'x-tts-effective-rate: 1.00' "$headers"
+            test "$(wc -c < "$output")" -gt 500
+            rm -f "$headers"
+          }
+
+          for item in "${variants[@]}"; do
+            IFS='|' read -r label minji_voice zofia_voice <<< "$item"
+            mkdir -p "$OUT_DIR/$label/minji" "$OUT_DIR/$label/zofia"
+
+            BUILD_SHA="${GITHUB_SHA:0:12}"
+            gcloud run deploy "$SERVICE" \
+              --project "$PROJECT_ID" \
+              --source . \
+              --region "$REGION" \
+              --allow-unauthenticated \
+              --service-account "$RUNTIME_SA" \
+              --min-instances 0 \
+              --max-instances 1 \
+              --concurrency 10 \
+              --timeout 60 \
+              --memory 512Mi \
+              --set-env-vars AZURE_SPEECH_REGION=japaneast,APP_VERSION=voice-preview,APP_BUILD="$BUILD_SHA",AZURE_VOICE_PREVIEW_MODE=1,AZURE_MINJI_PREVIEW_VOICE="$minji_voice",AZURE_ZOFIA_PREVIEW_VOICE="$zofia_voice" \
+              --set-secrets AZURE_SPEECH_KEY=AZURE_SPEECH_KEY:latest
+
+            URL=$(gcloud run services describe "$SERVICE" \
+              --project "$PROJECT_ID" \
+              --region "$REGION" \
+              --format='value(status.url)')
+            test -n "$URL"
+
+            generate_clip "$URL" minji_korea "Hi! I'm Minji from South Korea. What's your name?" "$OUT_DIR/$label/minji/01_intro.mp3"
+            generate_clip "$URL" minji_korea "I like music and Korean food. What food do you like?" "$OUT_DIR/$label/minji/02_favorites.mp3"
+            generate_clip "$URL" minji_korea "That sounds interesting! Can you tell me more?" "$OUT_DIR/$label/minji/03_followup.mp3"
+
+            generate_clip "$URL" zofia_poland "Hello! I'm Zofia from Poland. What's your name?" "$OUT_DIR/$label/zofia/01_intro.mp3"
+            generate_clip "$URL" zofia_poland "I like piano and drawing. What do you like?" "$OUT_DIR/$label/zofia/02_favorites.mp3"
+            generate_clip "$URL" zofia_poland "That sounds interesting! Can you tell me more?" "$OUT_DIR/$label/zofia/03_followup.mp3"
+          done
+
+          find "$OUT_DIR" -type f -name '*.mp3' -print0 | sort -z | xargs -0 sha256sum > "$OUT_DIR/sha256.txt"
+          test "$(find "$OUT_DIR" -type f -name '*.mp3' | wc -l)" -eq 24
+          echo 'VOICE_PREVIEW_GENERATION_PASS clips=24'
+
+      - name: Delete temporary preview service
+        if: always()
+        run: |
+          gcloud run services delete "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --quiet || true
+
+      - name: Upload listening package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: minji-zofia-younger-voice-preview
+          path: voice-preview-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
