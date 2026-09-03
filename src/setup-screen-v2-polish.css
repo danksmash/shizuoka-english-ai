@@ -1,6 +1,6 @@
 /* Approved Setup screen visual polish: sample 3.
  * Keep the established v2 layout/data flow intact and adjust only typography
- * and the selected-profile visual balance. No !important/zoom/fixed profile height.
+ * and the selected-profile visual balance. Avoid forced overrides and fixed profile heights.
  */
 
 .setup-v2-section-heading-row h2,
