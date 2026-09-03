@@ -37,3 +37,22 @@ assert.equal(text.includes("const forbidden = ['chloe_canada'"), false, 'QA forb
 
 fs.writeFileSync(path, text);
 await import(`./strict-20-migration.mjs?patched=${Date.now()}`);
+
+// The device fallback still carried two retired branches outside the core persona tables.
+{
+  const speechPath = 'src/utils/speech.ts';
+  let speech = fs.readFileSync(speechPath, 'utf8');
+  for (const id of ['chloe_canada', 'aung_myanmar']) {
+    const voicePattern = new RegExp(`\\n  ${id}: \\{[\\s\\S]*?\\n  \\},`);
+    const voiceMatches = speech.match(voicePattern);
+    assert.ok(voiceMatches, `missing retired device voice branch: ${id}`);
+    speech = speech.replace(voicePattern, '');
+    const farewellPattern = new RegExp(`\\n    case '${id}': return \\{[^\\n]+\\};`);
+    assert.ok(farewellPattern.test(speech), `missing retired farewell branch: ${id}`);
+    speech = speech.replace(farewellPattern, '');
+  }
+  speech = speech.replace('All 9 students sound bright, youthful (college students), energetic, and unmistakably distinct from each other', 'Current persona-specific overrides remain optional; all 20 personas have a safe field-based device fallback');
+  fs.writeFileSync(speechPath, speech);
+}
+
+console.log('Strict 20-person speech compatibility cleanup applied successfully.');
