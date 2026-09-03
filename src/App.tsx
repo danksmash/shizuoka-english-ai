@@ -19,6 +19,7 @@ import {
 } from './types';
 import { getAIStudentById } from './data/curriculum';
 import { detectVocabularyInText } from './data/vocabulary56';
+import { interpretContextualAsr } from './utils/contextualAsr';
 import { generateFallbackFeedback } from './utils/feedbackFallback';
 import {
   speakStudentVoice,
@@ -36,6 +37,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''
 const apiUrl = (path: string) => `${API_BASE_URL}${path}`;
 const PERSONA_LABEL_CONDITION: 'shown' | 'hidden' = import.meta.env.VITE_PERSONA_LABEL_CONDITION === 'hidden' ? 'hidden' : 'shown';
 const LABELS_VISIBLE = PERSONA_LABEL_CONDITION === 'shown';
+const CONTEXTUAL_ASR_ENABLED = import.meta.env.VITE_CONTEXTUAL_ASR_ENABLED !== 'false';
 
 export default function App() {
   const [phase, setPhase] = useState<'setup' | 'dialogue' | 'reflection' | 'feedback' | 'history'>('setup');
@@ -210,6 +212,16 @@ export default function App() {
     setIsRecording(false); setIsListening(false);
   };
 
+  const interpretSpokenText = useCallback((text: string) => {
+    const previousAiText = [...messagesRef.current].reverse().find((message) => message.sender === 'ai')?.englishText || '';
+    return interpretContextualAsr({
+      text,
+      previousAiText,
+      topic: profileRef.current.selectedTopic,
+      enabled: CONTEXTUAL_ASR_ENABLED,
+    }).text;
+  }, []);
+
   const handleSendMessage = async (text: string) => {
     if (!dialogueActiveRef.current || phase !== 'dialogue' || remainingSeconds <= 0 || !text.trim() || isAiResponding) return;
     if (isRecording) stopRecordingInternal();
@@ -286,7 +298,7 @@ export default function App() {
       const spokenText = liveTranscriptRef.current.trim();
       recordResearchEvent('mic_stop_send', spokenText ? 'with_speech' : 'empty');
       stopRecordingInternal();
-      if (spokenText) { await handleSendMessage(spokenText); liveTranscriptRef.current=''; setSpeechTranscript(''); }
+      if (spokenText) { const interpretedText=interpretSpokenText(spokenText); await handleSendMessage(interpretedText); liveTranscriptRef.current=''; setSpeechTranscript(''); }
       else { setMicHintMessage('英語が聞き取れませんでした。もう1度マイクを押して話してみてね！'); setTimeout(() => setMicHintMessage(''), 4000); }
       return;
     }
@@ -332,7 +344,8 @@ export default function App() {
     dialogueActiveRef.current=false; chatAbortControllerRef.current?.abort(); chatAbortControllerRef.current=null; setIsAiResponding(false); stopSpeaking(); stopRecordingInternal();
     if (timerRef.current) clearInterval(timerRef.current);
     if (farewellSafetyTimerRef.current) { clearTimeout(farewellSafetyTimerRef.current); farewellSafetyTimerRef.current=null; }
-    const pendingText=(liveTranscriptRef.current || speechTranscript || '').trim();
+    const pendingRawText=(liveTranscriptRef.current || speechTranscript || '').trim();
+    const pendingText=pendingRawText ? interpretSpokenText(pendingRawText) : '';
     let currentHistory=[...messagesRef.current];
     if (pendingText && !currentHistory.some((m) => m.sender==='child' && m.englishText.trim()===pendingText)) {
       extractAndAddVocab(pendingText); const words=countEnglishWords(pendingText);

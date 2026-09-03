@@ -9,6 +9,13 @@ const TOPIC_CONTEXTS: Record<DialogueTopic, string> = {
   free: 'Follow the child naturally across familiar everyday topics while keeping the English easy.',
 };
 
+export const INFORMATION_GAP_STRATEGY_ENABLED =
+  typeof process === 'undefined' || process.env.CONTEXTUAL_DIALOGUE_STRATEGY_ENABLED !== 'false';
+
+const INFORMATION_GAP_STRATEGY =
+  'When the child newly introduces a local food, place, cultural item, or other specific thing that has not been explained in the conversation, give the child room to explain it. React briefly and prefer one easy, natural follow-up about what it is, what it is like, or how the child enjoys it. Do not pretend not to know common things, do not ask What is ...? mechanically, and if it is already explained or clearly familiar to the persona, respond naturally instead.';
+
 export function getDialogueTopicContext(topic: DialogueTopic): string {
-  return TOPIC_CONTEXTS[topic];
+  const base = TOPIC_CONTEXTS[topic];
+  return INFORMATION_GAP_STRATEGY_ENABLED ? base + ' ' + INFORMATION_GAP_STRATEGY : base;
 }
