@@ -156,6 +156,8 @@ jobs:
       - name: Production Azure primary voice check
         run: |
           API_URL="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app"
+          # Voice Profile v2 uses the human-approved Gate 4 Azure default speed.
+          # Legacy/browser requested rates must not change Azure's effective rate.
           for student in \
             emma_usa oliver_uk liam_australia minji_korea pavel_belarus \
             lukas_germany aina_malaysia dimas_indonesia bence_hungary yuting_taiwan \
@@ -169,11 +171,11 @@ jobs:
               -w '%{http_code}' \
               -X POST "$API_URL/api/tts" \
               -H 'Content-Type: application/json' \
-              --data "{\"text\":\"Hello. Nice to meet you.\",\"aiStudentId\":\"$student\",\"speakingRate\":0.95}")
+              --data "{\"text\":\"Hello. Nice to meet you.\",\"aiStudentId\":\"$student\",\"speakingRate\":1.0}")
             test "$status" = "200"
             grep -qi 'content-type: audio/mpeg' "$tts_headers"
             grep -qi 'x-tts-provider: azure-speech' "$tts_headers"
-            grep -qi 'x-tts-effective-rate: 0.95' "$tts_headers"
+            grep -qi 'x-tts-effective-rate: 1.00' "$tts_headers"
             test "$(wc -c < "$tts_audio")" -gt 500
             rm -f "$tts_headers" "$tts_audio"
           done
