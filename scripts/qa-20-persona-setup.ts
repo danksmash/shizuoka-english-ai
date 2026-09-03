@@ -7,12 +7,43 @@ import { AI_STUDENTS_MASTER_LIST, TARGET_20_AI_STUDENT_IDS } from '../src/data/c
 const setup = fs.readFileSync('src/components/SetupScreen.tsx', 'utf8');
 const history = fs.readFileSync('src/components/LearningHistoryScreen.tsx', 'utf8');
 const setupCss = fs.readFileSync('src/setup-screen-v2.css', 'utf8');
+const setupPolishCss = fs.readFileSync('src/setup-screen-v2-polish.css', 'utf8');
 const main = fs.readFileSync('src/main.tsx', 'utf8');
 
 assert.ok(setup.includes('会話するAI留学生をえらぼう（全20名）'), 'setup heading must show 20 personas');
 assert.ok(setup.includes('TARGET_20_AI_STUDENT_IDS'), 'setup must derive visible personas from research target IDs');
 assert.equal(TARGET_20_AI_STUDENT_IDS.length, 20);
 for (const id of TARGET_20_AI_STUDENT_IDS) assert.ok(AI_STUDENTS_MASTER_LIST.some((p) => p.id === id), `missing target persona ${id}`);
+
+const expectedCountryJapaneseById: Record<string, string> = {
+  emma_usa: 'アメリカ合衆国',
+  oliver_uk: 'イギリス',
+  liam_australia: 'オーストラリア',
+  minji_korea: '韓国',
+  pavel_belarus: 'ベラルーシ',
+  lukas_germany: 'ドイツ',
+  aina_malaysia: 'マレーシア',
+  dimas_indonesia: 'インドネシア',
+  bence_hungary: 'ハンガリー',
+  yuting_taiwan: '台湾',
+  zofia_poland: 'ポーランド',
+  matas_lithuania: 'リトアニア',
+  ananya_india: 'インド',
+  xinyi_china: '中国',
+  linh_vietnam: 'ベトナム',
+  rahul_bangladesh: 'バングラデシュ',
+  nadeesha_srilanka: 'スリランカ',
+  suman_nepal: 'ネパール',
+  amara_nigeria: 'ナイジェリア',
+  andrei_romania: 'ルーマニア',
+};
+for (const id of TARGET_20_AI_STUDENT_IDS) {
+  const persona = AI_STUDENTS_MASTER_LIST.find((p) => p.id === id);
+  assert.ok(persona, `missing target persona ${id}`);
+  assert.ok(persona.countryJapanese.trim().length > 0, `missing Japanese country label for ${id}`);
+  const primaryJapaneseLabel = persona.countryJapanese.replace(/\s*\([^)]*\)\s*$/, '');
+  assert.equal(primaryJapaneseLabel, expectedCountryJapaneseById[id], `unexpected Japanese country label for ${id}`);
+}
 
 assert.ok(history.includes('TARGET_20_AI_STUDENT_IDS'), 'learning history must use the same target-20 persona IDs as setup');
 assert.ok(history.includes('AI_STUDENTS_MASTER_LIST'), 'learning history must resolve all current target personas from the master list');
@@ -26,17 +57,25 @@ assert.ok(setup.includes('setup-v2-student-grid'), 'setup must use isolated v2 s
 assert.ok(setup.includes('setup-v2-persona-card'), 'setup must use isolated v2 persona cards');
 assert.equal(setup.includes('setup-student-card-compact'), false, 'old compact text-only cards must not remain');
 assert.ok((setup.match(/<StudentAvatar/g) || []).length >= 2, 'StudentAvatar must be used in both persona cards and selected profile');
-assert.ok(setup.includes("showLabels ? student.country : 'AI留学生'"), 'left persona cards must show English country names');
-assert.ok(setup.includes('`${selectedStudent.flag} ${selectedStudent.country} 選択中`'), 'selected-country pill must show the English country name');
-assert.equal(setup.includes('countryJapanese'), false, 'setup screen must not render Japanese country labels');
+assert.ok(setup.includes("showLabels ? student.country : 'AI留学生'"), 'left persona cards must remain English-country-only');
+assert.ok(setup.includes('`${selectedStudent.flag} ${selectedStudent.country} 選択中`'), 'selected-country pill must remain English country name only');
+assert.ok(setup.includes("const profileCountryLabel = (student: AIStudentProfile) => student.country;"), 'selected profile must retain the English country label helper');
+assert.ok(setup.includes("const profileCountryJapaneseLabel = (student: AIStudentProfile) => student.countryJapanese.replace(/\\s*\\([^)]*\\)\\s*$/, '');"), 'selected profile must derive the primary Japanese country label from persona data');
+assert.ok(setup.includes('setup-v2-profile-country-label'), 'selected profile must group English and Japanese country labels');
+assert.ok(setup.includes('setup-v2-profile-country-japanese'), 'selected profile must use a dedicated Japanese country label class');
+assert.ok(setup.includes('（{profileCountryJapaneseLabel(selectedStudent)}）'), 'selected profile must render Japanese country text in full-width parentheses');
+assert.equal((setup.match(/profileCountryJapaneseLabel\(selectedStudent\)/g) || []).length, 1, 'Japanese country label must render only in the selected profile');
 assert.ok(setup.includes('student.japaneseName'), 'left persona cards must show Japanese persona names when labels are shown');
 assert.ok(setupCss.includes('grid-template-columns: repeat(5, minmax(0, 1fr))'), 'desktop persona grid must be 5 columns');
 assert.ok(setupCss.includes('grid-template-rows: repeat(4, minmax(0, 1fr))'), 'desktop persona grid must be 4 rows');
 assert.ok(setupCss.includes('aspect-ratio: 4 / 5'), 'persona and selected profile portraits must preserve 4:5 ratio');
 assert.equal(setupCss.includes('zoom:'), false, 'setup v2 must not depend on CSS zoom');
+assert.ok(setupPolishCss.includes('.setup-v2-profile-country-japanese'), 'selected-profile Japanese country class must be styled');
+assert.ok(setupPolishCss.includes('color: #1760dc;'), 'selected-profile Japanese country label must use the established blue');
+assert.ok(setupPolishCss.includes('.setup-v2-profile-country-label'), 'selected-profile country label wrapper must support safe wrapping');
 assert.ok(main.includes("import './setup-screen-v2.css';"), 'setup v2 stylesheet must be loaded');
-assert.ok(setup.includes('profileCountryLabel(selectedStudent)'), 'profile must use the country label helper');
-assert.ok(setup.includes('const profileCountryLabel = (student: AIStudentProfile) => student.country;'), 'profile country label must be English only');
+assert.ok(main.includes("import './setup-screen-v2-polish.css';"), 'setup v2 polish stylesheet must be loaded');
+assert.ok(setup.includes('profileCountryLabel(selectedStudent)'), 'profile must use the English country label helper');
 assert.equal(setup.includes('countryLabel(selectedStudent)'), false, 'old nested country label rendering must not remain');
 assert.ok(setup.includes("useState<1 | 2 | 3 | 5>(1)"), 'duration state must remain 1/2/3/5 only');
 assert.ok(setup.includes('([1, 2, 3, 5] as const)'), 'duration controls must remain 1/2/3/5');
@@ -95,4 +134,4 @@ assert.equal(hashes.size, 20, 'all 20 target persona images must be unique');
 assert.ok(totalBytes >= 1_000_000 && totalBytes <= 5_000_000, `unexpected total persona size: ${totalBytes}`);
 for (const id of TARGET_20_AI_STUDENT_IDS) assert.ok(avatarSource.includes(`${id}:`), `missing avatar mapping for target persona ${id}`);
 for (const alias of ['liam_aus:','bence_hun:','zofia_pol:','linh_vie:','rahul_ban:','chloe_can:','aung_mya:']) assert.equal(avatarSource.includes(alias), false, `old avatar alias must be removed: ${alias}`);
-console.log(`20-person setup v2 + learning history + unified WebP QA: PASS (${totalBytes} bytes, 5x4 portraits, strict-20 history, English country labels, no legacy aliases/Base64/sprite reconstruction)`);
+console.log(`20-person setup v2 + learning history + unified WebP QA: PASS (${totalBytes} bytes, 5x4 portraits, strict-20 history, selected-profile EN+JA country labels, no legacy aliases/Base64/sprite reconstruction)`);

@@ -32,6 +32,7 @@ const retainLearningId = (learningId: string) => {
 };
 
 const profileCountryLabel = (student: AIStudentProfile) => student.country;
+const profileCountryJapaneseLabel = (student: AIStudentProfile) => student.countryJapanese.replace(/\s*\([^)]*\)\s*$/, '');
 
 const TARGET_STUDENTS = TARGET_20_AI_STUDENT_IDS
   .map((id) => AI_STUDENTS_MASTER_LIST.find((student) => student.id === id))
@@ -149,7 +150,10 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
           <section className="setup-v2-controls">
             <div className="setup-v2-profile">
               <div className="setup-v2-profile-copy">
-                {showLabels && <div className="setup-v2-profile-country"><span>{selectedStudent.flag}</span><strong>{profileCountryLabel(selectedStudent)}</strong></div>}
+                {showLabels && <div className="setup-v2-profile-country">
+                  <span aria-hidden="true">{selectedStudent.flag}</span>
+                  <span className="setup-v2-profile-country-label"><strong>{profileCountryLabel(selectedStudent)}</strong><span className="setup-v2-profile-country-japanese">（{profileCountryJapaneseLabel(selectedStudent)}）</span></span>
+                </div>}
                 <div className="setup-v2-profile-name-row">
                   <h3>{selectedStudent.name}</h3>
                   <span>{selectedStudent.japaneseName}</span>
