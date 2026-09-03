@@ -1,5 +1,6 @@
 import { AI_STUDENTS_MASTER_LIST, TARGET_20_AI_STUDENT_IDS } from '../src/data/curriculum';
 import { AZURE_SPEECH_REGION, AZURE_VOICE_PROFILE_VERSION, AZURE_VOICE_PROFILES } from '../src/data/azureVoiceProfiles';
+import { synthesizeAzureTts } from '../src/server/azureTts';
 
 const fail = (message: string): never => { throw new Error(message); };
 
@@ -53,4 +54,40 @@ for (const profile of profiles) {
   if (profile.ageFitReview !== e.ageFitReview) fail(`Age-fit review mismatch for ${profile.personaId}`);
 }
 
-console.log(`Azure Voice Profile QA: PASS (${profiles.length} target personas, ${new Set(profiles.map((p) => p.voiceName)).size} unique voices, ${AZURE_VOICE_PROFILE_VERSION})`);
+const originalFetch = globalThis.fetch;
+const originalKey = process.env.AZURE_SPEECH_KEY;
+const originalRegion = process.env.AZURE_SPEECH_REGION;
+const requests: string[] = [];
+try {
+  process.env.AZURE_SPEECH_KEY = 'qa-only-placeholder';
+  process.env.AZURE_SPEECH_REGION = 'japaneast';
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push(String(init?.body || ''));
+    return new Response(new Uint8Array(800), { status: 200, headers: { 'content-type': 'audio/mpeg' } });
+  }) as typeof fetch;
+
+  const slow = await synthesizeAzureTts('Hello.', 'emma_usa', 0.75);
+  if (slow.effectiveRate !== 0.75) fail(`Azure slow rate must remain 0.75; got ${slow.effectiveRate}`);
+  if (!requests.at(-1)?.includes('<prosody rate="0.75">Hello.</prosody>')) fail('Azure SSML must apply the 0.75x UI rate');
+
+  const normal = await synthesizeAzureTts('Hello.', 'emma_usa', 1.0);
+  if (normal.effectiveRate !== 1.0) fail(`Azure normal rate must remain 1.00; got ${normal.effectiveRate}`);
+  if (!requests.at(-1)?.includes('<prosody rate="1.00">Hello.</prosody>')) fail('Azure SSML must preserve the 1.00x baseline rate');
+
+  const fast = await synthesizeAzureTts('Hello. Nice to meet you.', 'liam_australia', 1.25);
+  const fastSsml = requests.at(-1) || '';
+  if (fast.effectiveRate !== 1.25) fail(`Azure fast rate must remain 1.25; got ${fast.effectiveRate}`);
+  if (!fastSsml.includes('<prosody rate="1.25">Hello. Nice to meet you.</prosody>')) fail('Azure SSML must apply the 1.25x UI rate');
+  if (!fastSsml.includes('xmlns:mstts="http://www.w3.org/2001/mstts"')) fail('Liam sentence-pause namespace must remain');
+  if (!fastSsml.includes('<mstts:silence type="Sentenceboundary-exact" value="250ms"/>')) fail('Liam 250ms sentence-boundary pause must remain');
+
+  const clampedSlow = await synthesizeAzureTts('Hello.', 'emma_usa', 0.5);
+  const clampedFast = await synthesizeAzureTts('Hello.', 'emma_usa', 1.5);
+  if (clampedSlow.effectiveRate !== 0.75 || clampedFast.effectiveRate !== 1.25) fail('Azure rate must remain clamped to the student UI range 0.75-1.25');
+} finally {
+  globalThis.fetch = originalFetch;
+  if (originalKey === undefined) delete process.env.AZURE_SPEECH_KEY; else process.env.AZURE_SPEECH_KEY = originalKey;
+  if (originalRegion === undefined) delete process.env.AZURE_SPEECH_REGION; else process.env.AZURE_SPEECH_REGION = originalRegion;
+}
+
+console.log(`Azure Voice Profile QA: PASS (${profiles.length} target personas, ${new Set(profiles.map((p) => p.voiceName)).size} unique voices, ${AZURE_VOICE_PROFILE_VERSION}, 0.75-1.25 speaking-rate control)`);
