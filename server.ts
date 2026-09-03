@@ -295,6 +295,7 @@ Conversation rules:
 13. The selected topic changes WHAT you talk about, not the English difficulty.
 14. The selected conversation duration changes only how long the dialogue continues, not the English difficulty.
 
+Persona field of study: ${p.major}.
 Persona interests: ${p.likes.join(', ')}.
 
 Return strictly valid JSON:

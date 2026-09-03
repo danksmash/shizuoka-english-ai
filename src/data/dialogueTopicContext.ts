@@ -5,7 +5,7 @@ const TOPIC_CONTEXTS: Record<DialogueTopic, string> = {
   favorites: 'Talk naturally about things each person likes, such as food, sports, animals, subjects, music, and hobbies.',
   shizuoka_culture: 'Share simple things about Shizuoka, Japan, the persona home country, food, places, and culture.',
   talents: 'Talk naturally about things each person can do or is good at.',
-  daily_routine: 'Talk naturally about everyday routines and time: getting up, breakfast, university or school, helping at home, free time, dinner, and bedtime. For consistent simple persona answers when a routine fact is needed, use: get up at 7:00, breakfast at 7:30, university at 9:00, dinner at 7:00 p.m., bedtime at 11:00 p.m.; sometimes help by cooking or cleaning.',
+  daily_routine: 'Talk naturally about everyday routines and time: getting up, breakfast, university or school, helping at home, free time, dinner, bedtime, and weekends.',
   free: 'Follow the child naturally across familiar everyday topics while keeping the English easy.',
 };
 

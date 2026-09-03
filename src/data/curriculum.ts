@@ -1,19 +1,26 @@
 import { AIStudentProfile, DialogueTopic, TopicOption } from '../types';
 
-export const DAILY_ROUTINE_STARTER_ENGLISH = 'I usually get up at seven. What time do you get up?';
+export const GUIDED_TOPIC_STARTERS_ENGLISH: Record<Exclude<DialogueTopic, 'intro' | 'free'>, string> = {
+  favorites: "Let's talk about our favorite things. What do you like?",
+  shizuoka_culture: "Let's talk about Shizuoka and culture. What do you like about Shizuoka?",
+  talents: "Let's talk about things we can do. What can you do?",
+  daily_routine: "Let's talk about our daily lives. What do you do in the morning?",
+};
+
+export const DAILY_ROUTINE_STARTER_ENGLISH = GUIDED_TOPIC_STARTERS_ENGLISH.daily_routine;
 
 const topicPrompts = (
   intro: string,
-  favorites: string,
-  culture: string,
-  talents: string,
+  _favorites: string,
+  _culture: string,
+  _talents: string,
   free: string
 ): Record<DialogueTopic, string> => ({
   intro,
-  favorites,
-  shizuoka_culture: culture,
-  talents,
-  daily_routine: DAILY_ROUTINE_STARTER_ENGLISH,
+  favorites: GUIDED_TOPIC_STARTERS_ENGLISH.favorites,
+  shizuoka_culture: GUIDED_TOPIC_STARTERS_ENGLISH.shizuoka_culture,
+  talents: GUIDED_TOPIC_STARTERS_ENGLISH.talents,
+  daily_routine: GUIDED_TOPIC_STARTERS_ENGLISH.daily_routine,
   free,
 });
 

@@ -1,5 +1,5 @@
 import { AI_STUDENTS_MASTER_LIST, TARGET_20_AI_STUDENT_IDS } from '../src/data/curriculum';
-import { STARTER_PROMPTS_JAPANESE } from '../src/utils/translation';
+import { GUIDED_TOPIC_STARTERS_JAPANESE, STARTER_PROMPTS_JAPANESE } from '../src/utils/translation';
 import type { DialogueTopic } from '../src/types';
 
 const topics: DialogueTopic[] = ['intro', 'favorites', 'shizuoka_culture', 'talents', 'daily_routine', 'free'];
@@ -21,6 +21,9 @@ for (const id of TARGET_20_AI_STUDENT_IDS) {
 
     if (!english) failures.push(`${student.id}/${topic}: English starter is missing`);
     if (!japanese) failures.push(`${student.id}/${topic}: Japanese translation is missing`);
+    if (japanese && topic !== 'intro' && topic !== 'free' && japanese !== GUIDED_TOPIC_STARTERS_JAPANESE[topic]) {
+      failures.push(`${student.id}/${topic}: Japanese guided starter mismatch`);
+    }
     if (japanese && topic !== 'intro' && nativeGreetings.some((greeting) => japanese.includes(greeting))) {
       failures.push(`${student.id}/${topic}: translation adds a greeting not spoken in English`);
     }

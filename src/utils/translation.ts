@@ -163,12 +163,25 @@ const BASE_STARTER_PROMPTS_JAPANESE: Record<string, Record<Exclude<DialogueTopic
   },
 };
 
-export const DAILY_ROUTINE_STARTER_JAPANESE = '私はふだん7時に起きます。あなたは何時に起きますか？';
+export const GUIDED_TOPIC_STARTERS_JAPANESE: Record<Exclude<DialogueTopic, 'intro' | 'free'>, string> = {
+  favorites: '好きなものについて話しましょう。あなたは何が好きですか？',
+  shizuoka_culture: '静岡と文化について話しましょう。あなたは静岡の何が好きですか？',
+  talents: 'できることについて話しましょう。あなたは何ができますか？',
+  daily_routine: 'ふだんの生活について話しましょう。あなたは朝、何をしますか？',
+};
+
+export const DAILY_ROUTINE_STARTER_JAPANESE = GUIDED_TOPIC_STARTERS_JAPANESE.daily_routine;
 
 export const STARTER_PROMPTS_JAPANESE: Record<string, Record<DialogueTopic, string>> = Object.fromEntries(
   Object.entries(BASE_STARTER_PROMPTS_JAPANESE).map(([studentId, prompts]) => [
     studentId,
-    { ...prompts, daily_routine: DAILY_ROUTINE_STARTER_JAPANESE },
+    {
+      ...prompts,
+      favorites: GUIDED_TOPIC_STARTERS_JAPANESE.favorites,
+      shizuoka_culture: GUIDED_TOPIC_STARTERS_JAPANESE.shizuoka_culture,
+      talents: GUIDED_TOPIC_STARTERS_JAPANESE.talents,
+      daily_routine: GUIDED_TOPIC_STARTERS_JAPANESE.daily_routine,
+    },
   ]),
 ) as Record<string, Record<DialogueTopic, string>>;
 
