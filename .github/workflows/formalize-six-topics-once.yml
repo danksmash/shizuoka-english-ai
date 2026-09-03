@@ -27,12 +27,15 @@ jobs:
 
       - name: Commit generated source changes
         run: |
+          # Workflow files cannot be pushed by the branch GITHUB_TOKEN here.
+          # Keep the production-smoke workflow change for a separate connector commit.
+          git checkout -- .github/workflows/cloud-run-deploy.yml
           if git diff --quiet && git diff --cached --quiet; then
             echo "No codemod changes needed."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src server.ts scripts .github/workflows/cloud-run-deploy.yml
+          git add src server.ts scripts
           git commit -m "fix: formalize six dialogue topics"
           git push origin HEAD:fix/formalize-six-dialogue-topics
