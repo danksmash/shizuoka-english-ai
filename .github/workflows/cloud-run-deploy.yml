@@ -142,6 +142,8 @@ jobs:
           assert reply.strip(), reply
           PY
 
+          API_URL="$API_URL" node scripts/qa-production-persona-arrival.mjs
+
           python3 - <<'PY'
           import json,time
           now=int(time.time()*1000)
