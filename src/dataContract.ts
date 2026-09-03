@@ -1,5 +1,6 @@
 import { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, PersonaLabelCondition, VisualVocabularyItem } from './types';
 import { maskTextForResearchExport } from './utils/privacy';
+import './data/dailyRoutineTopic';
 
 export const AI_STUDENT_IDS = [
   'emma_usa','oliver_uk','liam_australia','chloe_canada','bence_hungary','zofia_poland','rahul_bangladesh','linh_vietnam','aung_myanmar',
@@ -7,7 +8,8 @@ export const AI_STUDENT_IDS = [
   'ananya_india','xinyi_china','nadeesha_srilanka','suman_nepal','amara_nigeria','andrei_romania',
 ] as const satisfies readonly AIStudentId[];
 
-export const DIALOGUE_TOPIC_IDS = ['intro','favorites','shizuoka_culture','talents','free'] as const satisfies readonly DialogueTopic[];
+// Runtime registry includes the isolated Unit 3 extension while the established persona model remains unchanged.
+export const DIALOGUE_TOPIC_IDS = ['intro','favorites','shizuoka_culture','talents','daily_routine','free'] as const;
 export const DIALOGUE_DURATIONS_MINUTES = [1, 2, 3, 5] as const satisfies readonly DialogueDurationMinutes[];
 
 export interface StudentIdentity { learningCode: string; }
