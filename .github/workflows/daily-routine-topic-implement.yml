@@ -1,0 +1,203 @@
+name: Implement daily routine topic safely
+
+on:
+  push:
+    branches:
+      - feat/daily-routine-dialogue-topic
+
+permissions:
+  contents: write
+
+jobs:
+  implement-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Apply minimal isolated changes
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}: {old[:100]}')
+              p.write_text(text.replace(old, new, 1))
+
+          daily_module = r'''import { AI_STUDENTS_MASTER_LIST, DIALOGUE_TOPICS } from './curriculum';
+          import { TOPIC_LEARNING_GOALS } from './topicLearningGoals';
+          import { STARTER_PROMPTS_JAPANESE } from '../utils/translation';
+
+          /**
+           * Mitsumura Here We Go! 6 Unit 3 extension.
+           *
+           * This module deliberately augments the existing stable curriculum objects at
+           * startup instead of rewriting the 20 persona definitions. The same starter is
+           * used for every persona so the new topic does not silently alter persona facts
+           * or introduce a new research stimulus difference between personas.
+           */
+          export const DAILY_ROUTINE_TOPIC_ID = 'daily_routine' as const;
+          export const DAILY_ROUTINE_STARTER_ENGLISH = 'I usually get up at seven. What time do you get up?';
+          export const DAILY_ROUTINE_STARTER_JAPANESE = '私はふだん7時に起きます。あなたは何時に起きますか？';
+
+          if (!DIALOGUE_TOPICS.some((topic) => String(topic.id) === DAILY_ROUTINE_TOPIC_ID)) {
+            const freeIndex = DIALOGUE_TOPICS.findIndex((topic) => topic.id === 'free');
+            const option = {
+              id: DAILY_ROUTINE_TOPIC_ID,
+              title: 'ふだんの生活・一日のようす',
+              subTitle: 'Daily Routines & Time',
+              description: '起きる時間や、ふだんしていることをたずね合って、おたがいのことをもっと知ろう！',
+              iconName: 'Clock3',
+              examplePhrases: [
+                'What time do you get up?',
+                'I get up at seven.',
+                'I usually ... / I sometimes ...',
+                'How about you?',
+              ],
+            } as any;
+            if (freeIndex >= 0) DIALOGUE_TOPICS.splice(freeIndex, 0, option);
+            else DIALOGUE_TOPICS.push(option);
+          }
+
+          for (const student of AI_STUDENTS_MASTER_LIST) {
+            (student.topicPrompts as unknown as Record<string, string>)[DAILY_ROUTINE_TOPIC_ID] = DAILY_ROUTINE_STARTER_ENGLISH;
+            const translations = (STARTER_PROMPTS_JAPANESE as unknown as Record<string, Record<string, string>>)[student.id]
+              || ((STARTER_PROMPTS_JAPANESE as unknown as Record<string, Record<string, string>>)[student.id] = {});
+            translations[DAILY_ROUTINE_TOPIC_ID] = DAILY_ROUTINE_STARTER_JAPANESE;
+          }
+
+          (TOPIC_LEARNING_GOALS as unknown as Record<string, Array<{ label: string; examples: string; sourceHint: string }>>)[DAILY_ROUTINE_TOPIC_ID] = [
+            {
+              label: '何時に何をするかたずねよう',
+              examples: 'What time do you get up? / What time do you ...?',
+              sourceHint: '6年 Unit 3 What time do you get up?',
+            },
+            {
+              label: '自分の生活を時間といっしょに伝えよう',
+              examples: 'I get up at seven. / I ... at ...',
+              sourceHint: '6年 Unit 3 What time do you get up?',
+            },
+            {
+              label: 'ふだんしていることを伝え合おう',
+              examples: 'I usually ... / I sometimes ... / How about you?',
+              sourceHint: '6年 Unit 3 What time do you get up?',
+            },
+          ];
+          '''
+          Path('src/data/dailyRoutineTopic.ts').write_text(daily_module)
+
+          replace_once(
+              'src/dataContract.ts',
+              "import { maskTextForResearchExport } from './utils/privacy';\n",
+              "import { maskTextForResearchExport } from './utils/privacy';\nimport './data/dailyRoutineTopic';\n",
+          )
+          replace_once(
+              'src/dataContract.ts',
+              "export const DIALOGUE_TOPIC_IDS = ['intro','favorites','shizuoka_culture','talents','free'] as const satisfies readonly DialogueTopic[];",
+              "// Runtime registry includes the isolated Unit 3 extension while legacy persona types remain unchanged.\nexport const DIALOGUE_TOPIC_IDS = ['intro','favorites','shizuoka_culture','talents','daily_routine','free'] as const;",
+          )
+
+          replace_once(
+              'src/server/researchDashboard.ts',
+              "topic:'intro | favorites | shizuoka_culture | talents | free',",
+              "topic:'intro | favorites | shizuoka_culture | talents | daily_routine | free',",
+          )
+          replace_once(
+              'src/server/researchDashboard.ts',
+              "talents:'できること・得意なこと', free:'自由トーク・おしゃべり',",
+              "talents:'できること・得意なこと', daily_routine:'ふだんの生活・一日のようす', free:'自由トーク・おしゃべり',",
+          )
+          replace_once(
+              'src/server/researchDashboard.ts',
+              "topics:['intro','favorites','shizuoka_culture','talents','free'],",
+              "topics:['intro','favorites','shizuoka_culture','talents','daily_routine','free'],",
+          )
+
+          p = Path('src/server/managementPage.ts')
+          text = p.read_text()
+          old = '<option value="free">自由トーク・おしゃべり</option>'
+          if text.count(old) != 1:
+              raise SystemExit(f'managementPage topic option anchor count={text.count(old)}')
+          text = text.replace(old, '<option value="daily_routine">ふだんの生活・一日のようす</option>' + old, 1)
+          text, n = re.subn(
+              r"(const topicLabels=\{.*?)(free:'自由トーク・おしゃべり')",
+              r"\1daily_routine:'ふだんの生活・一日のようす',\2",
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if n != 1:
+              raise SystemExit('managementPage topicLabels anchor not found')
+          p.write_text(text)
+
+          p = Path('scripts/qa-data-contract.ts')
+          text = p.read_text()
+          replace = "import { safePlainTextForClipboard } from '../src/utils/privacy';\n"
+          addition = """import { safePlainTextForClipboard } from '../src/utils/privacy';
+          import { AI_STUDENTS_MASTER_LIST, DIALOGUE_TOPICS, TARGET_20_AI_STUDENT_IDS } from '../src/data/curriculum';
+          import { STARTER_PROMPTS_JAPANESE } from '../src/utils/translation';
+          import { getTopicLearningGoals } from '../src/data/topicLearningGoals';
+          import { DAILY_ROUTINE_STARTER_ENGLISH, DAILY_ROUTINE_STARTER_JAPANESE } from '../src/data/dailyRoutineTopic';
+          import { maskHighRiskPII } from '../src/utils/security';
+          """
+          if text.count(replace) != 1:
+              raise SystemExit('qa-data import anchor not found')
+          text = text.replace(replace, addition, 1)
+          anchor = "const valid=validateSessionSaveInput({sessionId:'session_12345678',learningCode:'A7M4',aiStudentId:'emma_usa',topic:'favorites',targetDurationMinutes:3,startedAt:1000,endedAt:2000,history,reflection:{conveyedIdeas:3,understoodPartner:3,noticedLanguageCulture:3},personaLabelCondition:'shown',studentSelectedSpeechRate:1,effectiveTtsSpeechRate:1});assert.equal(valid.ok,true);\n"
+          checks = anchor + """const dailyValid=validateSessionSaveInput({sessionId:'session_daily_12345678',learningCode:'A7M4',aiStudentId:'emma_usa',topic:'daily_routine' as any,targetDurationMinutes:3,startedAt:1000,endedAt:2000,history});assert.equal(dailyValid.ok,true);
+          assert.equal(validateSessionSaveInput({sessionId:'session_daily_bad_12345678',learningCode:'A7M4',aiStudentId:'emma_usa',topic:'not_a_topic',targetDurationMinutes:3,startedAt:1000,endedAt:2000,history}).ok,false);
+          const dailyTopic=DIALOGUE_TOPICS.find((topic)=>String(topic.id)==='daily_routine');assert.ok(dailyTopic);assert.equal(dailyTopic?.title,'ふだんの生活・一日のようす');
+          assert.equal(DIALOGUE_TOPICS.length,6);assert.equal(DIALOGUE_TOPICS.filter((topic)=>String(topic.id)==='daily_routine').length,1);
+          for(const id of TARGET_20_AI_STUDENT_IDS){const student=AI_STUDENTS_MASTER_LIST.find((item)=>item.id===id)!;assert.equal((student.topicPrompts as any).daily_routine,DAILY_ROUTINE_STARTER_ENGLISH);assert.equal((STARTER_PROMPTS_JAPANESE as any)[id]?.daily_routine,DAILY_ROUTINE_STARTER_JAPANESE);}
+          const dailyGoals=getTopicLearningGoals('daily_routine' as any);assert.equal(dailyGoals.length,3);assert.ok(dailyGoals.some((goal)=>goal.examples.includes('What time do you get up?')));
+          const routineSentence='I get up at 7:00.';assert.equal(maskHighRiskPII(routineSentence).maskedText,routineSentence);assert.equal(maskTextForResearchExport(routineSentence),routineSentence);
+          """
+          if text.count(anchor) != 1:
+              raise SystemExit('qa-data valid anchor not found')
+          text = text.replace(anchor, checks, 1)
+          old_tail = "const management=await readFile('src/server/managementPage.ts','utf8');assert.ok(management.includes('/api/management/research.csv'));assert.ok(management.includes('匿名化'));assert.equal(management.includes('教師用管理'),false);\n"
+          new_tail = old_tail + "const researchDashboard=await readFile('src/server/researchDashboard.ts','utf8');assert.ok(researchDashboard.includes(\"daily_routine | free\"));assert.ok(researchDashboard.includes(\"daily_routine:'ふだんの生活・一日のようす'\"));assert.ok(researchDashboard.includes(\"'daily_routine','free'\"));assert.ok(management.includes('value=\\\"daily_routine\\\"'));assert.ok(management.includes(\"daily_routine:'ふだんの生活・一日のようす'\"));\n"
+          if text.count(old_tail) != 1:
+              raise SystemExit('qa-data management anchor not found')
+          text = text.replace(old_tail, new_tail, 1)
+          p.write_text(text)
+
+          # This workflow is temporary and must not remain in the finished branch.
+          Path('.github/workflows/daily-routine-topic-implement.yml').unlink()
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Full regression QA
+        run: npm run qa
+
+      - name: Production build
+        run: npm run build
+
+      - name: Confirm protected areas are untouched
+        run: |
+          git diff --check
+          git diff --name-only HEAD | tee /tmp/changed.txt
+          ! grep -Eq '^(src/utils/speech.ts|src/server/azureTts.ts|src/data/azureVoiceProfiles.ts|src/data/studentImages.ts|src/assets/personas/|src/components/SpeechInputBar.tsx|src/components/ReflectionScreen.tsx|src/server/persistence.ts|src/server/firestore.ts)$' /tmp/changed.txt
+
+      - name: Commit verified implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: add daily routine dialogue topic'
+          git push origin HEAD:feat/daily-routine-dialogue-topic
