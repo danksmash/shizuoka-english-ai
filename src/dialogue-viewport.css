@@ -34,13 +34,11 @@
   max-height: 100%;
 }
 
-/* Use the in-panel SpeechInputBar at every width. */
+/* Use the in-panel SpeechInputBar at every width. Never scroll the input itself:
+ * its microphone must remain visible while the message stream gives up height. */
 #root > .min-h-screen:has(> .flex-1 > main > .min-h-\[65dvh\]) > .flex-1 > main > .min-h-\[65dvh\] > .hidden.lg\:block {
   display: block;
   flex: 0 0 auto;
-  max-height: min(46dvh, 20rem);
-  overflow-y: auto;
-  overscroll-behavior: contain;
   border-top: 1px solid rgb(226 232 240);
 }
 
@@ -86,9 +84,5 @@
     padding-top: 0.5rem;
     padding-bottom: 0.5rem;
     gap: 0.5rem;
-  }
-
-  #root > .min-h-screen:has(> .flex-1 > main > .min-h-\[65dvh\]) > .flex-1 > main > .min-h-\[65dvh\] > .hidden.lg\:block {
-    max-height: min(50dvh, 17rem);
   }
 }
