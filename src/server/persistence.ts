@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { ReflectionAnswers, ResearchSystemEvent, calculateCanonicalStats, maskHistoryForStorage } from '../dataContract';
+import { ReflectionAnswers, ResearchSystemEvent, calculateCanonicalStats, isAIStudentId, maskHistoryForStorage } from '../dataContract';
 import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, PersonaLabelCondition, VisualVocabularyItem } from '../types';
 import { getPersonaResearchMetadata } from '../data/personaResearch';
 import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, setDocument } from './firestore';
@@ -242,7 +242,7 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
   const stats = calculateCanonicalStats(safeHistory, args.startedAt, args.endedAt, args.targetDurationMinutes, args.encounteredVocab);
   const existing = await getDocument(SESSION_COLLECTION, args.sessionId);
   if (existing && existing.studentId && existing.studentId !== args.studentId) throw new Error('SESSION_ID_CONFLICT');
-  const studentSessions = existing ? [] : await queryCollection(SESSION_COLLECTION, 'studentId', args.studentId, 5000);
+  const studentSessions = existing ? [] : (await queryCollection(SESSION_COLLECTION, 'studentId', args.studentId, 5000)).filter((session) => isAIStudentId(session.aiStudentId));
   const lifetimeSessionNumber = existing?.lifetimeSessionNumber || studentSessions.length + 1;
   const localDate = new Date(args.startedAt).toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
   const dailySessionNumber = existing?.dailySessionNumber || studentSessions.filter((session) => session.localDate === localDate).length + 1;
@@ -286,11 +286,14 @@ function learnerTeacherVisibleSession(session: Record<string, any>): boolean {
 }
 
 export async function getStudentHistory(studentId: string): Promise<Record<string, unknown>[]> {
-  const rows = (await queryCollection(SESSION_COLLECTION, 'studentId', studentId, 5000)).filter(learnerTeacherVisibleSession);
-  return rows.sort((a, b) => String(a.endedAt || '').localeCompare(String(b.endedAt || ''))).map((session) => ({
+  const rows = (await queryCollection(SESSION_COLLECTION, 'studentId', studentId, 5000))
+    .filter(learnerTeacherVisibleSession)
+    .filter((session) => isAIStudentId(session.aiStudentId))
+    .sort((a, b) => String(a.endedAt || '').localeCompare(String(b.endedAt || '')));
+  return rows.map((session, index) => ({
     sessionId: session.sessionId, aiStudentId: session.aiStudentId, topic: session.topic,
     targetDurationMinutes: session.targetDurationMinutes, actualDurationSeconds: session.actualDurationSeconds,
-    endedAt: session.endedAt, lifetimeSessionNumber: session.lifetimeSessionNumber, totalTurns: session.totalTurns,
+    endedAt: session.endedAt, lifetimeSessionNumber: index + 1, totalTurns: session.totalTurns,
     totalChildWords: session.totalChildWords, uniqueVocabularyCount: session.uniqueVocabularyCount, reflection: session.reflection || null,
   }));
 }

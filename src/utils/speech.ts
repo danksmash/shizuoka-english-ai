@@ -109,7 +109,7 @@ export function playChime(type: 'start' | 'stop' | 'success' | 'fanfare' | 'pop'
  * Persona-specific voice keywords and pitch/rate tuning to ensure:
  * 1. Gender strictly matches student's illustration (male vs female)
  * 2. Accent highlights national traits (British RP, General American, Aussie, Canadian, European, South Asian, Southeast Asian)
- * 3. All 9 students sound bright, youthful (college students), energetic, and unmistakably distinct from each other
+ * 3. Current persona-specific overrides remain optional; all 20 personas have a safe field-based device fallback
  */
 interface PersonaVoiceConfig {
   preferredNames: string[];
@@ -140,13 +140,6 @@ const PERSONA_VOICE_MAP: Record<string, PersonaVoiceConfig> = {
     defaultPitch: 0.98,
     defaultRate: 0.92,
   },
-  chloe_canada: {
-    // Female, 21 - Sweet, gentle, friendly Canadian
-    preferredNames: ['clara', 'linda', 'karen', 'canadian', 'en-ca'],
-    fallbackLang: 'en-CA',
-    defaultPitch: 1.20,
-    defaultRate: 0.88,
-  },
   bence_hungary: {
     // Male, 21 - Articulate, intelligent, crisp Central European
     preferredNames: ['alex', 'fred', 'tom', 'guy', 'brian'],
@@ -174,13 +167,6 @@ const PERSONA_VOICE_MAP: Record<string, PersonaVoiceConfig> = {
     fallbackLang: 'en-US',
     defaultPitch: 1.36,
     defaultRate: 0.90,
-  },
-  aung_myanmar: {
-    // Male, 21 - Calm, courteous, resonant Southeast Asian
-    preferredNames: ['david', 'george', 'richard', 'alan', 'en-gb'],
-    fallbackLang: 'en-GB',
-    defaultPitch: 0.92,
-    defaultRate: 0.85,
   },
 };
 
@@ -466,12 +452,10 @@ export function getStudentFarewellMessage(studentId: string): { english: string;
     case 'oliver_uk': return { english: "Time is up! I was very happy to talk with you. Thank you, and see you again!", japanese: '時間になりました！あなたとお話しできてとても嬉しかったよ。ありがとう！またね！' };
     case 'emma_usa': return { english: "Time is up! I was so happy to talk with you today. Thank you, and see you soon!", japanese: '時間になりました！今日はあなたとお話しできてとても嬉しかったよ。ありがとう！またね！' };
     case 'liam_australia': return { english: "Time is up! I was really happy to chat with you. Thanks a lot, and see ya!", japanese: '時間になりました！あなたとお話しできて本当に嬉しかったよ。ありがとう！またね！' };
-    case 'chloe_canada': return { english: "Time is up! I was very happy to talk with you. Thank you so much, and have a wonderful day!", japanese: '時間になりました！あなたとお話しできてとても嬉しかったです。ありがとう！素敵な一日をね！' };
     case 'bence_hungary': return { english: "Time is up! I was happy to talk with you today. Thank you! Szia, and see you next time!", japanese: '時間になりました！今日はあなたとお話しできて嬉しかったよ。ありがとう！Szia、またね！' };
     case 'zofia_poland': return { english: "Time is up! I was so happy to talk with you. Thank you! Cześć, and see you again!", japanese: '時間になりました！あなたとお話しできてとても嬉しかったよ。ありがとう！Cześć、またね！' };
     case 'rahul_bangladesh': return { english: "Time is up! I was very happy to talk with you, my friend. Thank you, and have a wonderful day!", japanese: '時間になりました！友だちとしてあなたとお話しできてとても嬉しかったよ。ありがとう！素敵な一日を！' };
     case 'linh_vietnam': return { english: "Time is up! I was really happy to talk with you today. Thank you! See you soon!", japanese: '時間になりました！今日はあなたとお話しできて本当に嬉しかったよ。ありがとう！またね！' };
-    case 'aung_myanmar': return { english: "Time is up! I was very happy to talk with you. Thank you for our lovely chat. See you!", japanese: '時間になりました！あなたとお話しできてとても嬉しかったよ。楽しいお話をありがとう！またね！' };
     default: return { english: "Time is up! I was very happy to talk with you today. Thank you, and see you next time!", japanese: '時間になりました！今日はあなたとお話しできてとても嬉しかったよ。ありがとう！またね！' };
   }
 }

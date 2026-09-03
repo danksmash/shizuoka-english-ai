@@ -18,37 +18,26 @@ import nadeeshaImg from '../assets/personas/nadeesha_srilanka.webp';
 import sumanImg from '../assets/personas/suman_nepal.webp';
 import amaraImg from '../assets/personas/amara_nigeria.webp';
 import andreiImg from '../assets/personas/andrei_romania.webp';
-import chloeImg from '../assets/images/chloe_can.jpg';
-import aungImg from '../assets/images/aung_mya.jpg';
 
 export const STUDENT_AVATAR_MAP: Record<string, string> = {
   emma_usa: emmaImg,
   oliver_uk: oliverImg,
-  liam_aus: liamImg,
   liam_australia: liamImg,
   minji_korea: minjiImg,
   pavel_belarus: pavelImg,
   lukas_germany: lukasImg,
   aina_malaysia: ainaImg,
   dimas_indonesia: dimasImg,
-  bence_hun: benceImg,
   bence_hungary: benceImg,
   yuting_taiwan: yutingImg,
-  zofia_pol: zofiaImg,
   zofia_poland: zofiaImg,
   matas_lithuania: matasImg,
   ananya_india: ananyaImg,
   xinyi_china: xinyiImg,
-  linh_vie: linhImg,
   linh_vietnam: linhImg,
-  rahul_ban: rahulImg,
   rahul_bangladesh: rahulImg,
   nadeesha_srilanka: nadeeshaImg,
   suman_nepal: sumanImg,
   amara_nigeria: amaraImg,
   andrei_romania: andreiImg,
-  chloe_can: chloeImg,
-  chloe_canada: chloeImg,
-  aung_mya: aungImg,
-  aung_myanmar: aungImg,
 };

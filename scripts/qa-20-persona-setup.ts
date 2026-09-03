@@ -70,9 +70,7 @@ for (const file of legacyTargetJpgs) {
   assert.equal(fs.existsSync(`public/images/${file}`), false, `legacy target JPG must be removed from public/images: ${file}`);
 }
 for (const file of ['chloe_can.jpg', 'aung_mya.jpg']) {
-  assert.ok(fs.existsSync(`src/assets/images/${file}`), `legacy compatibility image must remain in src/assets/images: ${file}`);
-  assert.ok(avatarSource.includes(`../assets/images/${file}`), `studentImages.ts must retain legacy compatibility import: ${file}`);
-  assert.equal(fs.existsSync(`public/images/${file}`), false, `unused public compatibility duplicate must be removed: ${file}`);
+  assert.equal(fs.existsSync(`src/assets/images/${file}`), false, `retired persona image must be removed: ${file}`);
 }
 assert.equal(fs.existsSync('public/images/shizuoka_exchange_banner.jpg'), false, 'unused public banner must be removed');
 
@@ -96,4 +94,5 @@ for (const file of targetFiles) {
 assert.equal(hashes.size, 20, 'all 20 target persona images must be unique');
 assert.ok(totalBytes >= 1_000_000 && totalBytes <= 5_000_000, `unexpected total persona size: ${totalBytes}`);
 for (const id of TARGET_20_AI_STUDENT_IDS) assert.ok(avatarSource.includes(`${id}:`), `missing avatar mapping for target persona ${id}`);
-console.log(`20-person setup v2 + learning history + unified WebP QA: PASS (${totalBytes} bytes, 5x4 portraits, target-20 history, English country labels, no Base64/sprite reconstruction)`);
+for (const alias of ['liam_aus:','bence_hun:','zofia_pol:','linh_vie:','rahul_ban:','chloe_can:','aung_mya:']) assert.equal(avatarSource.includes(alias), false, `old avatar alias must be removed: ${alias}`);
+console.log(`20-person setup v2 + learning history + unified WebP QA: PASS (${totalBytes} bytes, 5x4 portraits, strict-20 history, English country labels, no legacy aliases/Base64/sprite reconstruction)`);

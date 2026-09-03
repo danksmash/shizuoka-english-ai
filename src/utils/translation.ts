@@ -28,13 +28,6 @@ const BASE_STARTER_PROMPTS_JAPANESE: Record<string, Record<Exclude<DialogueTopic
     talents: '僕は速く泳げます。あなたは何ができますか？',
     free: '何についてでも話せます。あなたは何が好きですか？',
   },
-  chloe_canada: {
-    intro: 'こんにちは！カナダから来たクロエです。あなたのお名前は何ですか？',
-    favorites: '私はスキーとパンケーキが好きです。あなたは何が好きですか？',
-    shizuoka_culture: '私は富士山が好きです。あなたは静岡の何が好きですか？',
-    talents: '私はスケートとお菓子作りができます。あなたは何ができますか？',
-    free: '何についてでも話せます。あなたは何が好きですか？',
-  },
   bence_hungary: {
     intro: 'こんにちは！ハンガリーから来たベンツェです。あなたのお名前は何ですか？',
     favorites: '僕はパズルとゲームが好きです。あなたは何が好きですか？',
@@ -152,13 +145,6 @@ const BASE_STARTER_PROMPTS_JAPANESE: Record<string, Record<Exclude<DialogueTopic
     favorites: '僕は星と音楽が好きです。あなたは何が好きですか？',
     shizuoka_culture: '僕は静岡のお城が好きです。あなたはどんな場所が好きですか？',
     talents: '僕はバイオリンを弾けます。あなたは何ができますか？',
-    free: '何についてでも話せます。あなたは何が好きですか？',
-  },
-  aung_myanmar: {
-    intro: 'こんにちは！ミャンマーから来たアウンです。あなたのお名前は何ですか？',
-    favorites: '僕はサッカーと歴史が好きです。あなたは何が好きですか？',
-    shizuoka_culture: '僕は緑茶が好きです。あなたは静岡の何が好きですか？',
-    talents: '僕はパンを焼けます。あなたは何ができますか？',
     free: '何についてでも話せます。あなたは何が好きですか？',
   },
 };
