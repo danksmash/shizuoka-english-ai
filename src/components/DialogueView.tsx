@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Volume2, User, Sparkles } from 'lucide-react';
 import { ChatMessage, AIStudentProfile } from '../types';
 import { StudentAvatar } from './StudentAvatar';
@@ -23,17 +23,35 @@ export const DialogueView: React.FC<DialogueViewProps> = ({
   const showLabels = labelCondition === 'shown';
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll to bottom on new message
+  const scrollToLatest = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.requestAnimationFrame(() => {
+      const container = scrollRef.current;
+      if (!container) return;
+      container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
+    });
+  }, []);
+
+  // New child/AI messages and the thinking indicator must remain visible.
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, isAiResponding]);
+    scrollToLatest();
+  }, [messages, isAiResponding, scrollToLatest]);
+
+  // The speech input can grow while recording, showing help phrases, or using
+  // keyboard input. Keep the message stream pinned to its latest content when
+  // that changes the available Chromebook/tablet/phone viewport height.
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => scrollToLatest());
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [scrollToLatest]);
 
   return (
     <div
       ref={scrollRef}
-      className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 scroll-smooth"
+      className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4"
     >
       {/* Welcome Banner */}
       <div className="text-center py-2 flex flex-wrap items-center justify-center gap-2">
