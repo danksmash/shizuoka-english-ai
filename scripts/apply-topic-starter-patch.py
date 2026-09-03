@@ -145,19 +145,3 @@ replace_once(
     }
     if (japanese && topic !== 'intro' && nativeGreetings.some((greeting) => japanese.includes(greeting))) {"""
 )
-
-replace_once(
-    '.github/workflows/cloud-run-deploy.yml',
-    '\"message\":\"What time do you get up?\"',
-    '\"message\":\"I get up at seven. What do you do in the morning?\"'
-)
-replace_once(
-    '.github/workflows/cloud-run-deploy.yml',
-    '\"englishText\":\"I usually get up at seven. What time do you get up?\"',
-    '\"englishText\":\"Let\\u0027s talk about our daily lives. What do you do in the morning?\"'
-)
-replace_once(
-    '.github/workflows/cloud-run-deploy.yml',
-    "          assert ('seven' in reply or '7' in reply), reply",
-    "          assert reply.strip(), reply"
-)
