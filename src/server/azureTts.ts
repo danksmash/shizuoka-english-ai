@@ -10,7 +10,7 @@ export type AzureTtsResult = {
 
 /**
  * Human listening review selected Azure's unmodified default speaking rate.
- * Keep that exact synthesis condition as the Golden Speed for Voice Profile v2.
+ * Keep that exact synthesis condition as the Golden Speed for Voice Profile v3.
  */
 export const AZURE_GOLDEN_EFFECTIVE_RATE = 1.0 as const;
 
@@ -33,7 +33,7 @@ export function azureTtsConfigured(): boolean {
  *
  * The requestedRate argument is retained for API compatibility and for the
  * Google/Device fallbacks, but Azure deliberately uses the human-approved
- * default-rate condition. Voice Profile v2 may define a sentence-boundary
+ * default-rate condition. Voice Profile v3 may define a sentence-boundary
  * pause for a specific reviewed persona; this does not alter speaking rate.
  */
 export async function synthesizeAzureTts(

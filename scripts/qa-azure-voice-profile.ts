@@ -3,13 +3,13 @@ import { AZURE_SPEECH_REGION, AZURE_VOICE_PROFILE_VERSION, AZURE_VOICE_PROFILES 
 
 const fail = (message: string): never => { throw new Error(message); };
 
-if (AZURE_VOICE_PROFILE_VERSION !== 'azure-voice-profile-v2') fail('Unexpected Azure voice profile version');
+if (AZURE_VOICE_PROFILE_VERSION !== 'azure-voice-profile-v3') fail('Unexpected Azure voice profile version');
 if (AZURE_SPEECH_REGION !== 'japaneast') fail(`Azure Speech region must remain japaneast; got ${AZURE_SPEECH_REGION}`);
 if (TARGET_20_AI_STUDENT_IDS.length !== 20) fail(`Expected 20 target personas; got ${TARGET_20_AI_STUDENT_IDS.length}`);
 
 const profiles = TARGET_20_AI_STUDENT_IDS.map((id) => AZURE_VOICE_PROFILES[id] || fail(`Missing Azure voice profile for ${id}`));
 if (profiles.length !== 20) fail(`Expected 20 Azure profiles; got ${profiles.length}`);
-if (new Set(profiles.map((p) => p.voiceName)).size !== 20) fail('Azure Voice Profile v2 must use 20 distinct selected voice names');
+if (new Set(profiles.map((p) => p.voiceName)).size !== 20) fail('Azure Voice Profile v3 must use 20 distinct selected voice names');
 
 for (const profile of profiles) {
   if (profile.personaId !== TARGET_20_AI_STUDENT_IDS.find((id) => id === profile.personaId)) fail(`Unexpected personaId ${profile.personaId}`);
@@ -18,23 +18,22 @@ for (const profile of profiles) {
   if (!/^en-|^de-DE$|^zh-CN$/.test(profile.voiceLocale)) fail(`Unexpected selected voice locale for ${profile.personaId}: ${profile.voiceLocale}`);
   if (!/^en-/.test(profile.synthesisLocale)) fail(`Synthesis locale must be English for ${profile.personaId}: ${profile.synthesisLocale}`);
   if (!/Neural$/i.test(profile.voiceName)) fail(`Only prebuilt Neural voices are allowed: ${profile.voiceName}`);
-  if (/(MAI-Voice|Flash|Dragon|Turbo|HD)/i.test(profile.voiceName)) fail(`Disallowed Azure voice family in v2: ${profile.voiceName}`);
+  if (/(MAI-Voice|Flash|Dragon|Turbo|HD)/i.test(profile.voiceName)) fail(`Disallowed Azure voice family in v3: ${profile.voiceName}`);
   if (profile.sentenceBoundaryMs !== undefined && profile.sentenceBoundaryMs !== 250) fail(`Unexpected sentence pause for ${profile.personaId}`);
 }
 
-
-const expected: Record<string, { voice: string; choice: 'A' | 'B' | 'refined'; pause?: number }> = {
+const expected: Record<string, { voice: string; choice: 'A' | 'B' | 'refined'; pause?: number; ageFitReview?: 'round1-A' | 'round3-B' }> = {
   emma_usa: { voice: 'en-US-AvaMultilingualNeural', choice: 'A' },
   oliver_uk: { voice: 'en-GB-OllieMultilingualNeural', choice: 'A' },
   liam_australia: { voice: 'en-AU-KenNeural', choice: 'B', pause: 250 },
-  minji_korea: { voice: 'en-US-EmmaMultilingualNeural', choice: 'A' },
+  minji_korea: { voice: 'en-US-AshleyNeural', choice: 'A', ageFitReview: 'round3-B' },
   pavel_belarus: { voice: 'en-GB-AlfieNeural', choice: 'B' },
   lukas_germany: { voice: 'de-DE-FlorianMultilingualNeural', choice: 'A' },
   aina_malaysia: { voice: 'en-US-JennyMultilingualNeural', choice: 'A' },
   dimas_indonesia: { voice: 'en-US-RyanMultilingualNeural', choice: 'B' },
   bence_hungary: { voice: 'en-US-BrianMultilingualNeural', choice: 'A' },
   yuting_taiwan: { voice: 'en-US-AmandaMultilingualNeural', choice: 'A' },
-  zofia_poland: { voice: 'en-GB-AdaMultilingualNeural', choice: 'A' },
+  zofia_poland: { voice: 'en-GB-LibbyNeural', choice: 'A', ageFitReview: 'round1-A' },
   matas_lithuania: { voice: 'en-GB-OliverNeural', choice: 'B' },
   ananya_india: { voice: 'en-IN-AashiNeural', choice: 'B' },
   xinyi_china: { voice: 'zh-CN-XiaoyuMultilingualNeural', choice: 'A' },
@@ -47,10 +46,11 @@ const expected: Record<string, { voice: string; choice: 'A' | 'B' | 'refined'; p
 };
 
 for (const profile of profiles) {
-  const e = expected[profile.personaId] || fail(`Missing expected v2 profile for ${profile.personaId}`);
+  const e = expected[profile.personaId] || fail(`Missing expected v3 profile for ${profile.personaId}`);
   if (profile.voiceName !== e.voice) fail(`Voice mismatch for ${profile.personaId}: ${profile.voiceName}`);
   if (profile.gate4Choice !== e.choice) fail(`Human choice mismatch for ${profile.personaId}: ${profile.gate4Choice}`);
   if (profile.sentenceBoundaryMs !== e.pause) fail(`Sentence pause mismatch for ${profile.personaId}`);
+  if (profile.ageFitReview !== e.ageFitReview) fail(`Age-fit review mismatch for ${profile.personaId}`);
 }
 
 console.log(`Azure Voice Profile QA: PASS (${profiles.length} target personas, ${new Set(profiles.map((p) => p.voiceName)).size} unique voices, ${AZURE_VOICE_PROFILE_VERSION})`);

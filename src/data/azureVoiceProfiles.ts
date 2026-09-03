@@ -1,6 +1,6 @@
 import type { AIStudentId } from '../types';
 
-export const AZURE_VOICE_PROFILE_VERSION = 'azure-voice-profile-v2' as const;
+export const AZURE_VOICE_PROFILE_VERSION = 'azure-voice-profile-v3' as const;
 export const AZURE_SPEECH_REGION = 'japaneast' as const;
 
 export type AzureVoiceProfile = {
@@ -12,16 +12,18 @@ export type AzureVoiceProfile = {
   gate4Choice: 'A' | 'B' | 'refined';
   selectionClass: 'exact-english-locale' | 'native-multilingual' | 'regional-english-proxy' | 'general-english-fallback';
   sentenceBoundaryMs?: number;
+  ageFitReview?: 'round1-A' | 'round3-B';
 };
 
 /**
- * Human-reviewed Azure Voice Profile v2 for the 20 research personas.
+ * Human-reviewed Azure Voice Profile v3 for the 20 research personas.
  *
  * Research wording: these are distinct synthetic English voice profiles that
  * reflect regional English varieties / International English. They are not
  * claims of authentic national accents.
  *
- * v2 preserves Azure default speaking rate for all personas. Liam uses a
+ * v3 preserves Azure default speaking rate for all personas. Minji and Zofia use
+ * age-fit replacements selected by human listening review; Liam uses a
  * 250 ms sentence-boundary pause selected in human listening review. Suman
  * uses ArjunIndicNeural after a dedicated sentence-to-sentence consistency
  * review. Legacy-only personas remain outside the research profile.
@@ -30,14 +32,14 @@ export const AZURE_VOICE_PROFILES: Partial<Record<AIStudentId, AzureVoiceProfile
   emma_usa: { personaId: 'emma_usa', voiceName: 'en-US-AvaMultilingualNeural', voiceLocale: 'en-US', synthesisLocale: 'en-US', gender: 'female', gate4Choice: 'A', selectionClass: 'exact-english-locale' },
   oliver_uk: { personaId: 'oliver_uk', voiceName: 'en-GB-OllieMultilingualNeural', voiceLocale: 'en-GB', synthesisLocale: 'en-GB', gender: 'male', gate4Choice: 'A', selectionClass: 'exact-english-locale' },
   liam_australia: { personaId: 'liam_australia', voiceName: 'en-AU-KenNeural', voiceLocale: 'en-AU', synthesisLocale: 'en-AU', gender: 'male', gate4Choice: 'B', selectionClass: 'exact-english-locale', sentenceBoundaryMs: 250 },
-  minji_korea: { personaId: 'minji_korea', voiceName: 'en-US-EmmaMultilingualNeural', voiceLocale: 'en-US', synthesisLocale: 'en-US', gender: 'female', gate4Choice: 'A', selectionClass: 'exact-english-locale' },
+  minji_korea: { personaId: 'minji_korea', voiceName: 'en-US-AshleyNeural', voiceLocale: 'en-US', synthesisLocale: 'en-US', gender: 'female', gate4Choice: 'A', selectionClass: 'exact-english-locale', ageFitReview: 'round3-B' },
   pavel_belarus: { personaId: 'pavel_belarus', voiceName: 'en-GB-AlfieNeural', voiceLocale: 'en-GB', synthesisLocale: 'en-GB', gender: 'male', gate4Choice: 'B', selectionClass: 'exact-english-locale' },
   lukas_germany: { personaId: 'lukas_germany', voiceName: 'de-DE-FlorianMultilingualNeural', voiceLocale: 'de-DE', synthesisLocale: 'en-GB', gender: 'male', gate4Choice: 'A', selectionClass: 'native-multilingual' },
   aina_malaysia: { personaId: 'aina_malaysia', voiceName: 'en-US-JennyMultilingualNeural', voiceLocale: 'en-US', synthesisLocale: 'en-US', gender: 'female', gate4Choice: 'A', selectionClass: 'exact-english-locale' },
   dimas_indonesia: { personaId: 'dimas_indonesia', voiceName: 'en-US-RyanMultilingualNeural', voiceLocale: 'en-US', synthesisLocale: 'en-US', gender: 'male', gate4Choice: 'B', selectionClass: 'exact-english-locale' },
   bence_hungary: { personaId: 'bence_hungary', voiceName: 'en-US-BrianMultilingualNeural', voiceLocale: 'en-US', synthesisLocale: 'en-US', gender: 'male', gate4Choice: 'A', selectionClass: 'exact-english-locale' },
   yuting_taiwan: { personaId: 'yuting_taiwan', voiceName: 'en-US-AmandaMultilingualNeural', voiceLocale: 'en-US', synthesisLocale: 'en-US', gender: 'female', gate4Choice: 'A', selectionClass: 'exact-english-locale' },
-  zofia_poland: { personaId: 'zofia_poland', voiceName: 'en-GB-AdaMultilingualNeural', voiceLocale: 'en-GB', synthesisLocale: 'en-GB', gender: 'female', gate4Choice: 'A', selectionClass: 'exact-english-locale' },
+  zofia_poland: { personaId: 'zofia_poland', voiceName: 'en-GB-LibbyNeural', voiceLocale: 'en-GB', synthesisLocale: 'en-GB', gender: 'female', gate4Choice: 'A', selectionClass: 'exact-english-locale', ageFitReview: 'round1-A' },
   matas_lithuania: { personaId: 'matas_lithuania', voiceName: 'en-GB-OliverNeural', voiceLocale: 'en-GB', synthesisLocale: 'en-GB', gender: 'male', gate4Choice: 'B', selectionClass: 'exact-english-locale' },
   ananya_india: { personaId: 'ananya_india', voiceName: 'en-IN-AashiNeural', voiceLocale: 'en-IN', synthesisLocale: 'en-IN', gender: 'female', gate4Choice: 'B', selectionClass: 'exact-english-locale' },
   xinyi_china: { personaId: 'xinyi_china', voiceName: 'zh-CN-XiaoyuMultilingualNeural', voiceLocale: 'zh-CN', synthesisLocale: 'en-US', gender: 'female', gate4Choice: 'A', selectionClass: 'native-multilingual' },
