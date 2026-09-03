@@ -1,0 +1,25 @@
+{
+  "voice_profile_version": "azure-voice-profile-v3",
+  "baseline_main_sha": "c7da42e17e0d7f90e14b2bd51d7f904c28edb75d",
+  "effective_rate": 1.0,
+  "changed_personas": [
+    {
+      "persona_id": "minji_korea",
+      "age": 21,
+      "previous_voice": "en-US-EmmaMultilingualNeural",
+      "selected_voice": "en-US-AshleyNeural",
+      "human_review": "round3-B",
+      "preview_artifact_id": 9885844330
+    },
+    {
+      "persona_id": "zofia_poland",
+      "age": 20,
+      "previous_voice": "en-GB-AdaMultilingualNeural",
+      "selected_voice": "en-GB-LibbyNeural",
+      "human_review": "round1-A",
+      "preview_artifact_id": 9884709355
+    }
+  ],
+  "unchanged_persona_count": 18,
+  "research_note": "Human listening review changed only Minji and Zofia for better age fit. Azure default speaking rate remains 1.00. The v2 Golden Reference remains an immutable historical baseline."
+}
