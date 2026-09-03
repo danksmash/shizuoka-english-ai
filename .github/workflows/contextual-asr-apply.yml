@@ -31,7 +31,9 @@ jobs:
         run: npm ci
 
       - name: Apply contextual ASR implementation
-        run: node scripts/apply-contextual-asr.mjs
+        run: |
+          node scripts/apply-contextual-asr.mjs
+          node scripts/post-contextual-asr-fix.mjs
 
       - name: Target contextual ASR QA
         run: npm run qa:contextual-asr
