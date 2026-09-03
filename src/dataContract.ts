@@ -1,6 +1,5 @@
 import { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, PersonaLabelCondition, VisualVocabularyItem } from './types';
 import { maskTextForResearchExport } from './utils/privacy';
-import './data/dailyRoutineTopic';
 
 export const AI_STUDENT_IDS = [
   'emma_usa','oliver_uk','liam_australia','chloe_canada','bence_hungary','zofia_poland','rahul_bangladesh','linh_vietnam','aung_myanmar',

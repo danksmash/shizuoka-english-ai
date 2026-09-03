@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAIStudentById } from './src/data/curriculum';
+import { getDialogueTopicContext } from './src/data/dialogueTopicContext';
 import { GOOGLE_TTS_VOICES } from './src/data/personaResearch';
 import { azureTtsConfigured, synthesizeAzureTts } from './src/server/azureTts';
 import { detectVocabularyInText } from './src/data/vocabulary56';
@@ -278,7 +279,7 @@ Conversation rules:
 1. Answer the student's actual message first.
 2. If the student asks a question, answer it directly before asking one short related question.
 3. Respond to the communicative purpose of the student's latest utterance first.
-   - If the student asks a question, answer that exact question first using the persona facts.
+   - If the student asks a question, answer that exact question first using the persona facts and current topic context.
    - If the student shares information, react to that information first.
    - If the student gives a short Yes/No answer, use the preceding conversation for context.
    - If the student asks for repetition, rephrase the previous idea in easier English.
@@ -435,6 +436,7 @@ app.post('/api/chat', async (req, res) => {
 ${formattedHistory || '(start)'}
 
 Selected topic: ${String(topic || 'favorites')}
+Topic context: ${getDialogueTopicContext(topic)}
 Student's latest input: "${safeUserMessage}"
 ${hasHighRiskPII ? 'A private detail was masked. Continue naturally without asking for it.' : ''}
 

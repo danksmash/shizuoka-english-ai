@@ -81,6 +81,23 @@ export const TOPIC_LEARNING_GOALS: Record<DialogueTopic, TopicLearningGoal[]> = 
       sourceHint: '6年 Unit 6・7',
     },
   ],
+  daily_routine: [
+    {
+      label: '何時に何をするかたずねよう',
+      examples: 'What time do you get up? / What time do you ...?',
+      sourceHint: '6年 Unit 3 What time do you get up?',
+    },
+    {
+      label: '自分の生活を時間といっしょに伝えよう',
+      examples: 'I get up at seven. / I ... at ...',
+      sourceHint: '6年 Unit 3 What time do you get up?',
+    },
+    {
+      label: 'ふだんしていることを伝え合おう',
+      examples: 'I usually ... / I sometimes ... / How about you?',
+      sourceHint: '6年 Unit 3 What time do you get up?',
+    },
+  ],
   free: [
     {
       label: '知っている質問を使って話題を広げよう',

@@ -1,5 +1,7 @@
 import { AIStudentProfile, DialogueTopic, TopicOption } from '../types';
 
+export const DAILY_ROUTINE_STARTER_ENGLISH = 'I usually get up at seven. What time do you get up?';
+
 const topicPrompts = (
   intro: string,
   favorites: string,
@@ -11,6 +13,7 @@ const topicPrompts = (
   favorites,
   shizuoka_culture: culture,
   talents,
+  daily_routine: DAILY_ROUTINE_STARTER_ENGLISH,
   free,
 });
 
@@ -510,6 +513,14 @@ export const DIALOGUE_TOPICS: TopicOption[] = [
     description: '「I can ~」を使って、自分の得意なことやできる技を自慢しよう！',
     iconName: 'Star',
     examplePhrases: ['I can swim fast / play football / play piano.', 'I can run fast / cook / speak English.', "I can solve a Rubik's cube.", 'Can you play basketball?'],
+  },
+  {
+    id: 'daily_routine',
+    title: 'ふだんの生活・一日のようす',
+    subTitle: 'Daily Routines & Time',
+    description: '起きる時間や、ふだんしていることをたずね合って、おたがいのことをもっと知ろう！',
+    iconName: 'Clock3',
+    examplePhrases: ['What time do you get up?', 'I get up at seven.', 'I usually ... / I sometimes ...', 'How about you?'],
   },
   {
     id: 'free',
