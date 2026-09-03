@@ -120,6 +120,28 @@ jobs:
           echo "$chat" | grep -q '"route":"anthropic-resilient"'
           echo "$chat" | grep -q '"model":"claude-sonnet-5"'
 
+          # This calls /api/chat only and cannot create or modify a Firestore research session.
+          routine=""
+          for attempt in 1 2 3; do
+            if routine=$(curl --fail --silent --show-error --max-time 50 \
+              -X POST "$API_URL/api/chat" \
+              -H 'Content-Type: application/json' \
+              --data '{"message":"What time do you get up?","history":[{"id":"ai-start","sender":"ai","englishText":"I usually get up at seven. What time do you get up?","timestamp":1}],"topic":"daily_routine","aiStudentId":"emma_usa"}'); then
+              if echo "$routine" | grep -q '"success":true' && echo "$routine" | grep -q '"route":"anthropic-resilient"'; then
+                break
+              fi
+            fi
+            sleep 3
+          done
+          ROUTINE_JSON="$routine" python3 - <<'PY'
+          import json, os
+          data = json.loads(os.environ['ROUTINE_JSON'])
+          assert data.get('success') is True, data
+          assert data.get('_diagnostics', {}).get('route') == 'anthropic-resilient', data
+          reply = str(data.get('data', {}).get('reply', '')).lower()
+          assert ('seven' in reply or '7' in reply), reply
+          PY
+
           python3 - <<'PY'
           import json,time
           now=int(time.time()*1000)
