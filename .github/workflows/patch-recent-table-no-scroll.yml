@@ -1,0 +1,79 @@
+name: Patch recent sessions table no scroll
+
+on:
+  push:
+    branches:
+      - fix/research-recent-table-no-scroll
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Apply focused dashboard table layout fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          page = Path('src/server/managementPage.ts')
+          text = page.read_text()
+          old = '.table-wrap{overflow:auto;max-width:100%;min-width:0}.recent{width:100%;border-collapse:collapse;font-size:12px}.recent th,.recent td{border-bottom:1px solid #e5edf7;padding:7px;text-align:left;white-space:nowrap}.recent th{background:#f3f7fc}'
+          new = '.table-wrap{overflow-x:hidden;overflow-y:visible;max-width:100%;min-width:0}.recent{width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px}.recent th,.recent td{border-bottom:1px solid #e5edf7;padding:7px 5px;text-align:left;white-space:normal;overflow-wrap:anywhere;vertical-align:middle}.recent th{background:#f3f7fc}.recent th:nth-child(1),.recent td:nth-child(1){width:22%}.recent th:nth-child(2),.recent td:nth-child(2){width:13%}.recent th:nth-child(3),.recent td:nth-child(3){width:19%}.recent th:nth-child(4),.recent td:nth-child(4){width:26%}.recent th:nth-child(5),.recent td:nth-child(5){width:8%}.recent th:nth-child(6),.recent td:nth-child(6){width:12%}'
+          if old in text:
+              text = text.replace(old, new, 1)
+              page.write_text(text)
+          elif new not in text:
+              raise SystemExit('Expected recent table CSS not found')
+
+          qa = Path('scripts/qa-dashboard-data-sync.ts')
+          q = qa.read_text()
+          anchor = "assert.ok(pageSource.includes('.chart svg{min-width:460px'));\n"
+          addition = (
+              "assert.ok(pageSource.includes('.table-wrap{overflow-x:hidden;overflow-y:visible'), 'recent sessions wrapper must not scroll horizontally');\n"
+              "assert.ok(pageSource.includes('.recent{width:100%;table-layout:fixed'), 'recent sessions table must fit the card width');\n"
+              "assert.ok(pageSource.includes('.recent th:nth-child(4),.recent td:nth-child(4){width:26%}'), 'topic column must have an explicit responsive share');\n"
+              "assert.equal(pageSource.includes('.table-wrap{overflow:auto'), false, 'legacy horizontal scroll wrapper must not return');\n"
+          )
+          if addition not in q:
+              if anchor not in q:
+                  raise SystemExit('QA insertion anchor not found')
+              q = q.replace(anchor, anchor + addition, 1)
+              qa.write_text(q)
+          PY
+
+      - name: Target dashboard QA
+        run: npm run qa:dashboard
+
+      - name: Full QA
+        run: npm run qa
+
+      - name: Production build
+        run: npm run build
+
+      - name: Commit verified source changes
+        run: |
+          if git diff --quiet -- src/server/managementPage.ts scripts/qa-dashboard-data-sync.ts; then
+            echo 'No source changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/server/managementPage.ts scripts/qa-dashboard-data-sync.ts
+          git commit -m 'fix: fit recent research sessions table without horizontal scroll'
+          git push origin HEAD:fix/research-recent-table-no-scroll
