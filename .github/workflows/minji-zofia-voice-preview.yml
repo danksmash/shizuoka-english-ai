@@ -58,27 +58,23 @@ jobs:
           test -n "$RUNTIME_SA"
 
           cat > "$OUT_DIR/README.txt" <<'EOF'
-          Minji / Zofia Azure voice age-fit comparison
-          ============================================
+          Minji / Zofia Azure voice age-fit comparison - round 2
+          =====================================================
           Production remains unchanged while these clips are reviewed.
           All clips use Azure default speaking rate (effective rate 1.00).
           Listen to all three clips for each candidate before choosing.
 
-          00_current
-            Minji: en-US-EmmaMultilingualNeural
-            Zofia: en-GB-AdaMultilingualNeural
+          Candidate A
+            Minji: ko-KR-JiMinNeural
+            Zofia: en-GB-LibbyNeural  (retained from round 1)
 
-          01_candidate_A
-            Minji: en-US-AvaNeural
-            Zofia: en-GB-LibbyNeural
+          Candidate B
+            Minji: ko-KR-SeoHyeonNeural
+            Zofia: en-GB-AbbiNeural
 
-          02_candidate_B
-            Minji: en-US-JennyNeural
-            Zofia: en-GB-BellaNeural
-
-          03_candidate_C
-            Minji: en-US-EmmaNeural
-            Zofia: en-GB-HollieNeural
+          Candidate C
+            Minji: ko-KR-YuJinNeural
+            Zofia: en-GB-OliviaNeural
 
           Suggested listening criteria:
           - sounds plausibly about 20-21 years old
@@ -89,10 +85,9 @@ jobs:
           EOF
 
           variants=(
-            '00_current|en-US-EmmaMultilingualNeural|en-GB-AdaMultilingualNeural'
-            '01_candidate_A|en-US-AvaNeural|en-GB-LibbyNeural'
-            '02_candidate_B|en-US-JennyNeural|en-GB-BellaNeural'
-            '03_candidate_C|en-US-EmmaNeural|en-GB-HollieNeural'
+            '01_candidate_A|ko-KR-JiMinNeural|en-GB-LibbyNeural'
+            '02_candidate_B|ko-KR-SeoHyeonNeural|en-GB-AbbiNeural'
+            '03_candidate_C|ko-KR-YuJinNeural|en-GB-OliviaNeural'
           )
 
           generate_clip() {
@@ -153,8 +148,8 @@ jobs:
           done
 
           find "$OUT_DIR" -type f -name '*.mp3' -print0 | sort -z | xargs -0 sha256sum > "$OUT_DIR/sha256.txt"
-          test "$(find "$OUT_DIR" -type f -name '*.mp3' | wc -l)" -eq 24
-          echo 'VOICE_PREVIEW_GENERATION_PASS clips=24'
+          test "$(find "$OUT_DIR" -type f -name '*.mp3' | wc -l)" -eq 18
+          echo 'VOICE_PREVIEW_GENERATION_PASS clips=18'
 
       - name: Delete temporary preview service
         if: always()
@@ -168,7 +163,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: minji-zofia-younger-voice-preview
+          name: minji-zofia-younger-voice-preview-round2
           path: voice-preview-artifacts/
           if-no-files-found: warn
           retention-days: 14
