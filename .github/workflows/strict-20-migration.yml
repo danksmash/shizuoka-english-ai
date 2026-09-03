@@ -34,19 +34,18 @@ jobs:
           from pathlib import Path
           path = Path('scripts/strict-20-migration.mjs')
           text = path.read_text()
-          old = """  for (const id of ['chloe_canada', 'aung_myanmar']) {
-            s = replaceRegexOnce(s, new RegExp(`^  ${id}: \\{[^\\n]+\\},\\n`, 'm'), '', `remove ${id} Google TTS`);
-            s = replaceRegexOnce(s, new RegExp(`^  ${id}: \\{[^\\n]+\\},\\n`, 'm'), '', `remove ${id} major dictionary`);
-          }"""
-          new = """  for (const id of ['chloe_canada', 'aung_myanmar']) {
+          section = text.index('// 5. Remove retired personas from TTS and research dictionaries.')
+          start = text.index("  for (const id of ['chloe_canada', 'aung_myanmar']) {", section)
+          end = text.index('  write(path, s);', start)
+          block = """  for (const id of ['chloe_canada', 'aung_myanmar']) {
             const pattern = new RegExp(`^  ${id}: \\{[^\\n]+\\},\\n`, 'gm');
             const matches = [...s.matchAll(pattern)];
             assert.equal(matches.length, 2, `remove ${id} research dictionaries: expected 2 matches, got ${matches.length}`);
             s = s.replace(pattern, '');
-          }"""
-          if old not in text:
-              raise SystemExit('migration helper patch target missing')
-          path.write_text(text.replace(old, new))
+          }
+"""
+          text = text[:start] + block + text[end:]
+          path.write_text(text)
           PY
 
       - name: Apply strict 20-persona migration
