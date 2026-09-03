@@ -1,4 +1,4 @@
-name: Minji/Zofia younger Azure voice preview
+name: Minji younger Azure voice preview - round 3
 
 on:
   push:
@@ -41,7 +41,7 @@ jobs:
         with:
           project_id: shizuoka-english-ai
 
-      - name: Build and generate listening package
+      - name: Build and generate Minji listening package
         shell: bash
         run: |
           set -euo pipefail
@@ -58,45 +58,45 @@ jobs:
           test -n "$RUNTIME_SA"
 
           cat > "$OUT_DIR/README.txt" <<'EOF'
-          Minji / Zofia Azure voice age-fit comparison - round 2
-          =====================================================
+          Minji Azure voice age-fit comparison - round 3
+          ==============================================
           Production remains unchanged while these clips are reviewed.
+          Zofia is already selected as en-GB-LibbyNeural and is not regenerated here.
           All clips use Azure default speaking rate (effective rate 1.00).
-          Listen to all three clips for each candidate before choosing.
 
-          Candidate A
-            Minji: ko-KR-JiMinNeural
-            Zofia: en-GB-LibbyNeural  (retained from round 1)
+          Reference
+            Minji current: en-US-EmmaMultilingualNeural
 
-          Candidate B
-            Minji: ko-KR-SeoHyeonNeural
-            Zofia: en-GB-AbbiNeural
+          Candidate A - explicit child voice
+            Minji: en-US-AnaNeural
 
-          Candidate C
-            Minji: ko-KR-YuJinNeural
-            Zofia: en-GB-OliviaNeural
+          Candidate B - youthful female comparison
+            Minji: en-US-AshleyNeural
+
+          Candidate C - youthful female comparison
+            Minji: en-US-CoraNeural
 
           Suggested listening criteria:
-          - sounds plausibly about 20-21 years old
-          - friendly university-student quality, not childlike or middle-aged
+          - closer in timbre/brightness to EmmaMultilingual than the round-2 Korean voices
+          - younger impression without sounding implausibly small-child-like for a 21-year-old persona
+          - friendly university-student quality
           - clear English for Grade 5-6 learners
           - natural questions and sentence endings
-          - no distracting synthetic instability
           EOF
 
           variants=(
-            '01_candidate_A|ko-KR-JiMinNeural|en-GB-LibbyNeural'
-            '02_candidate_B|ko-KR-SeoHyeonNeural|en-GB-AbbiNeural'
-            '03_candidate_C|ko-KR-YuJinNeural|en-GB-OliviaNeural'
+            '00_reference|en-US-EmmaMultilingualNeural'
+            '01_candidate_A_child|en-US-AnaNeural'
+            '02_candidate_B|en-US-AshleyNeural'
+            '03_candidate_C|en-US-CoraNeural'
           )
 
           generate_clip() {
             local base_url="$1"
-            local persona="$2"
-            local text="$3"
-            local output="$4"
+            local text="$2"
+            local output="$3"
             local payload headers status
-            payload=$(python3 -c 'import json,sys; print(json.dumps({"text":sys.argv[1],"aiStudentId":sys.argv[2],"speakingRate":1.0}))' "$text" "$persona")
+            payload=$(python3 -c 'import json,sys; print(json.dumps({"text":sys.argv[1],"aiStudentId":"minji_korea","speakingRate":1.0}))' "$text")
             headers=$(mktemp)
             status=$(curl --silent --show-error --max-time 30 \
               -D "$headers" \
@@ -114,8 +114,8 @@ jobs:
           }
 
           for item in "${variants[@]}"; do
-            IFS='|' read -r label minji_voice zofia_voice <<< "$item"
-            mkdir -p "$OUT_DIR/$label/minji" "$OUT_DIR/$label/zofia"
+            IFS='|' read -r label minji_voice <<< "$item"
+            mkdir -p "$OUT_DIR/$label/minji"
 
             BUILD_SHA="${GITHUB_SHA:0:12}"
             gcloud run deploy "$SERVICE" \
@@ -129,7 +129,7 @@ jobs:
               --concurrency 10 \
               --timeout 60 \
               --memory 512Mi \
-              --set-env-vars AZURE_SPEECH_REGION=japaneast,APP_VERSION=voice-preview,APP_BUILD="$BUILD_SHA",AZURE_VOICE_PREVIEW_MODE=1,AZURE_MINJI_PREVIEW_VOICE="$minji_voice",AZURE_ZOFIA_PREVIEW_VOICE="$zofia_voice" \
+              --set-env-vars AZURE_SPEECH_REGION=japaneast,APP_VERSION=voice-preview,APP_BUILD="$BUILD_SHA",AZURE_VOICE_PREVIEW_MODE=1,AZURE_MINJI_PREVIEW_VOICE="$minji_voice",AZURE_ZOFIA_PREVIEW_VOICE=en-GB-LibbyNeural \
               --set-secrets AZURE_SPEECH_KEY=AZURE_SPEECH_KEY:latest
 
             URL=$(gcloud run services describe "$SERVICE" \
@@ -138,18 +138,14 @@ jobs:
               --format='value(status.url)')
             test -n "$URL"
 
-            generate_clip "$URL" minji_korea "Hi! I'm Minji from South Korea. What's your name?" "$OUT_DIR/$label/minji/01_intro.mp3"
-            generate_clip "$URL" minji_korea "I like music and Korean food. What food do you like?" "$OUT_DIR/$label/minji/02_favorites.mp3"
-            generate_clip "$URL" minji_korea "That sounds interesting! Can you tell me more?" "$OUT_DIR/$label/minji/03_followup.mp3"
-
-            generate_clip "$URL" zofia_poland "Hello! I'm Zofia from Poland. What's your name?" "$OUT_DIR/$label/zofia/01_intro.mp3"
-            generate_clip "$URL" zofia_poland "I like piano and drawing. What do you like?" "$OUT_DIR/$label/zofia/02_favorites.mp3"
-            generate_clip "$URL" zofia_poland "That sounds interesting! Can you tell me more?" "$OUT_DIR/$label/zofia/03_followup.mp3"
+            generate_clip "$URL" "Hi! I'm Minji from South Korea. What's your name?" "$OUT_DIR/$label/minji/01_intro.mp3"
+            generate_clip "$URL" "I like music and Korean food. What food do you like?" "$OUT_DIR/$label/minji/02_favorites.mp3"
+            generate_clip "$URL" "That sounds interesting! Can you tell me more?" "$OUT_DIR/$label/minji/03_followup.mp3"
           done
 
           find "$OUT_DIR" -type f -name '*.mp3' -print0 | sort -z | xargs -0 sha256sum > "$OUT_DIR/sha256.txt"
-          test "$(find "$OUT_DIR" -type f -name '*.mp3' | wc -l)" -eq 18
-          echo 'VOICE_PREVIEW_GENERATION_PASS clips=18'
+          test "$(find "$OUT_DIR" -type f -name '*.mp3' | wc -l)" -eq 12
+          echo 'MINJI_VOICE_PREVIEW_GENERATION_PASS clips=12'
 
       - name: Delete temporary preview service
         if: always()
@@ -163,7 +159,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: minji-zofia-younger-voice-preview-round2
+          name: minji-younger-voice-preview-round3
           path: voice-preview-artifacts/
           if-no-files-found: warn
           retention-days: 14
