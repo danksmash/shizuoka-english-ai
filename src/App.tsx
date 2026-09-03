@@ -288,7 +288,7 @@ export default function App() {
       case 'no-speech': return '声が聞こえなかったよ。もう一度マイクを押して話してみよう！';
       case 'audio-capture': return 'マイクを使えません。ほかのアプリがマイクを使っていないか確認してください。';
       case 'network': return '音声認識サービスにつながりませんでした。通信状態を確認してください。';
-      default: return '音声認識を開始できませんでした。もう一度試すか、文字入力を使ってください。';
+      default: return '音声認識を開始できませんでした。もう一度試してください。';
     }
   };
 
@@ -327,10 +327,10 @@ export default function App() {
     if (recognition) {
       recognitionRef.current = recognition;
       try { recognition.start(); }
-      catch (e) { recordResearchEvent('mic_error', 'start'); console.warn('Speech Rec start error:', e); setMicHintMessage('マイクを開始できませんでした。もう一度試してください。'); setIsRecording(false); setIsListening(false); }
+      catch (e) { recordResearchEvent('mic_error', 'start'); console.warn('Speech Rec start error', e); setMicHintMessage('マイクを開始できませんでした。もう一度試してください。'); setIsRecording(false); setIsListening(false); }
     } else {
       recordResearchEvent('mic_error', 'unsupported');
-      setMicHintMessage('このブラウザでは音声認識が制限されています。文字入力を使ってください。'); setIsRecording(false); setIsListening(false); setTimeout(() => setMicHintMessage(''), 5000);
+      setMicHintMessage('このブラウザでは音声認識を利用できません。Chromeなど音声認識に対応したブラウザで開いてください。'); setIsRecording(false); setIsListening(false); setTimeout(() => setMicHintMessage(''), 5000);
     }
   };
 
@@ -433,7 +433,7 @@ export default function App() {
               <div className="sm:hidden flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50 text-xs font-bold text-slate-700">{LABELS_VISIBLE && <span className="text-xl">{currentAiStudent.flag}</span>}<span>{currentAiStudent.name}</span><span className="ml-auto text-slate-500">Turns {turnCount} · Words {totalChildWords}</span></div>
               <DialogueView labelCondition={PERSONA_LABEL_CONDITION} messages={messages} studentName={profile.name} aiStudent={currentAiStudent} isAiResponding={isAiResponding} onPlayAudio={(text)=>{recordResearchEvent('ai_replay','transcript');playAiVoice(text);}}/>
               <AnimatePresence>{micHintMessage&&<motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:10}} className="mx-3 sm:mx-4 mb-2 bg-amber-50 border border-amber-300 rounded-xl p-2.5 text-xs font-bold text-amber-900 text-center shadow-xs">{micHintMessage}</motion.div>}</AnimatePresence>
-              <div className="hidden lg:block"><SpeechInputBar isRecording={isRecording} transcript={speechTranscript} isAiResponding={isAiResponding} onToggleRecording={handleToggleRecording} onSendMessage={handleSendMessage} onClearTranscript={()=>{setSpeechTranscript('');liveTranscriptRef.current='';}} onResearchEvent={recordResearchEvent}/></div>
+              <div className="hidden lg:block"><SpeechInputBar isRecording={isRecording} transcript={speechTranscript} isAiResponding={isAiResponding} onToggleRecording={handleToggleRecording}/></div>
             </div>
 
             <div className="col-span-12 lg:col-span-3 hidden lg:flex flex-col gap-4 overflow-y-auto min-h-0">
@@ -442,7 +442,7 @@ export default function App() {
           </main>
 
           <div className="lg:hidden fixed left-0 right-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur-md shadow-[0_-8px_24px_rgba(15,23,42,0.10)] pb-[env(safe-area-inset-bottom)]">
-            <SpeechInputBar compact isRecording={isRecording} transcript={speechTranscript} isAiResponding={isAiResponding} onToggleRecording={handleToggleRecording} onSendMessage={handleSendMessage} onClearTranscript={()=>{setSpeechTranscript('');liveTranscriptRef.current='';}} onResearchEvent={recordResearchEvent}/>
+            <SpeechInputBar compact isRecording={isRecording} transcript={speechTranscript} isAiResponding={isAiResponding} onToggleRecording={handleToggleRecording}/>
           </div>
 
           <AnimatePresence>{farewellBanner&&<div id="farewell-overlay" onClick={handleSkipFarewell} className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer select-none"><motion.div initial={{scale:.9,opacity:0,y:10}} animate={{scale:1,opacity:1,y:0}} exit={{scale:.95,opacity:0}} onClick={(e)=>{e.stopPropagation();handleSkipFarewell();}} className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl text-center border-4 border-amber-300"><div className="text-3xl mb-2">🎉 {currentAiStudent.flag}</div><h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-1">Time is up! (対話終了)</h2><div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 my-4 text-left"><p className="text-base sm:text-lg font-black text-blue-950">“{farewellBanner.english}”</p><p className="text-xs sm:text-sm font-bold text-slate-600 mt-2">{farewellBanner.japanese}</p></div><button id="farewell-next-btn" type="button" onClick={(e)=>{e.stopPropagation();handleSkipFarewell();}} className="w-full min-h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-2xl">📊 レポート・アドバイスを見る</button></motion.div></div>}</AnimatePresence>

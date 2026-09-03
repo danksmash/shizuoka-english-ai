@@ -51,19 +51,53 @@ assert.ok(css.includes('env(safe-area-inset-bottom)'), 'phone/tablet safe area m
 // DialogueView is the only accumulating vertical scroll region and must return
 // to the latest content after either a new message or an input-height change.
 assert.ok(dialogue.includes('flex-1 min-h-0 overflow-y-auto overscroll-contain'), 'message stream must be the shrinkable scroll region');
-assert.ok(dialogue.includes('container.scrollTo({ top: container.scrollHeight, behavior: \'auto\' })'), 'new content must scroll immediately to the latest message');
+assert.ok(dialogue.includes("container.scrollTo({ top: container.scrollHeight, behavior: 'auto' })"), 'new content must scroll immediately to the latest message');
 assert.ok(dialogue.includes('ResizeObserver'), 'input/layout height changes must keep the latest message visible');
 assert.ok(dialogue.includes('[messages, isAiResponding, scrollToLatest]'), 'new messages and thinking state must trigger latest-message scroll');
 
-// Existing App structure is deliberately preserved; layout correction must not
-// touch speech recognition, ASR, provider selection, or research events.
-assert.ok(app.includes('hidden lg:block"><SpeechInputBar'), 'existing in-panel SpeechInputBar must remain');
-assert.ok(app.includes('lg:hidden fixed left-0 right-0 bottom-0'), 'legacy duplicate stays in DOM only for low-risk CSS retirement');
+// Pre-operation dialogue input is voice-only. Help phrases and manual keyboard
+// entry must not remain reachable or emit research events from this component.
+for (const removedMarker of [
+  'COMMON_HELP_PHRASES',
+  'manualText',
+  'showKeyboardInput',
+  'showPhrases',
+  'Keyboard',
+  'Sparkles',
+  'onSendMessage',
+  'onClearTranscript',
+  'onResearchEvent',
+  'help_open',
+  'help_phrase_select',
+  'text_input_open',
+  'text_message_send',
+  'お助け',
+  '文字入力',
+  '<input',
+]) {
+  assert.equal(speechInput.includes(removedMarker), false, `voice-only SpeechInputBar must not contain ${removedMarker}`);
+}
+assert.ok(speechInput.includes('音声を聞き取り中…'), 'pupil speech-recognition transcript status must remain visible');
 assert.ok(speechInput.includes('min-h-16'), 'primary microphone tap target must remain large for pupils');
 assert.ok(speechInput.includes('onToggleRecording'), 'microphone behavior contract must remain connected');
+
+// App must preserve the established speech-recognition -> send path while no
+// longer wiring manual text/help callbacks into SpeechInputBar.
+assert.ok(app.includes('hidden lg:block"><SpeechInputBar'), 'existing in-panel SpeechInputBar must remain');
+assert.ok(app.includes('lg:hidden fixed left-0 right-0 bottom-0'), 'legacy duplicate stays in DOM only for low-risk CSS retirement');
+assert.ok(app.includes('await handleSendMessage(interpretedText)'), 'recognized speech must still be sent through the established message path');
+assert.equal(app.includes('文字入力を使ってください'), false, 'speech errors must not point pupils to removed keyboard input');
+const speechInputUsages = app.match(/<SpeechInputBar[^>]*\/>/g) || [];
+assert.equal(speechInputUsages.length, 2, 'App must keep exactly the existing two responsive SpeechInputBar mount points');
+for (const usage of speechInputUsages) {
+  assert.ok(usage.includes('onToggleRecording={handleToggleRecording}'), 'every SpeechInputBar must keep microphone wiring');
+  assert.equal(usage.includes('onSendMessage='), false, 'manual-send callback must not be wired to SpeechInputBar');
+  assert.equal(usage.includes('onClearTranscript='), false, 'manual transcript-clear callback must not be wired to SpeechInputBar');
+  assert.equal(usage.includes('onResearchEvent='), false, 'removed help/text UI must not emit research events');
+}
 
 for (const [width, height, name] of targetViewports) {
   assert.ok(width >= 390 && height >= 600, `${name} target must have a valid supported viewport`);
 }
 
-console.log(`Chromebook-first dialogue viewport QA: PASS (${targetViewports.length} target viewport classes)`);
+console.log(`Chromebook-first voice-only dialogue viewport QA: PASS (${targetViewports.length} target viewport classes)`);
