@@ -15,11 +15,13 @@ let text = fs.readFileSync(path, 'utf8');
   text = text.slice(0, start) + block + text.slice(end);
 }
 
-text = text.replace(
-  "  s = removePersonaBlock(s, 'chloe_canada', 'remove retired Canada starter translations');\n  s = removePersonaBlock(s, 'aung_myanmar', 'remove retired Myanmar starter translations');",
-  "  for (const id of ['chloe_canada', 'aung_myanmar']) {\n    s = replaceRegexOnce(s, new RegExp(`\\n  ${id}: \\{[\\s\\S]*?\\n  \\},`), '', `remove retired starter translation ${id}`);\n  }",
-);
-assert.equal(text.includes("removePersonaBlock(s, 'chloe_canada'"), false, 'translation patch failed');
+{
+  const section = text.indexOf('// 6. Remove retired starter translations.');
+  const next = text.indexOf('// 7. Make student history numbering depend only on supported current personas.', section);
+  assert.ok(section >= 0 && next > section, 'translation migration section missing');
+  const replacement = `// 6. Remove retired starter translations.\n{\n  const path = 'src/utils/translation.ts';\n  let s = read(path);\n  for (const id of ['chloe_canada', 'aung_myanmar']) {\n    s = replaceRegexOnce(s, new RegExp(\`\\\\n  \${id}: \\\\{[\\\\s\\\\S]*?\\\\n  \\\\},\`), '', \`remove retired starter translation \${id}\`);\n  }\n  write(path, s);\n}\n\n`;
+  text = text.slice(0, section) + replacement + text.slice(next);
+}
 
 text = text.replace(
   "  s = s.replace(/^\\s*avatarImage: '[^']+',\\n/gm, '');",
