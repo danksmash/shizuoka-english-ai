@@ -1,0 +1,54 @@
+name: Strict 20-persona migration
+
+on:
+  push:
+    branches:
+      - codex/strict-20-persona-unification
+
+permissions:
+  contents: write
+
+jobs:
+  migrate-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/strict-20-persona-unification
+          fetch-depth: 0
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Apply strict 20-persona migration
+        run: node scripts/strict-20-migration.mjs
+
+      - name: Verify retired persona references are absent from active source
+        run: |
+          if git grep -n -E 'chloe_canada|aung_myanmar|NEW_AI_STUDENTS_13' -- src scripts server.ts; then
+            echo 'Retired persona reference remains in active source.' >&2
+            exit 1
+          fi
+
+      - name: Full QA
+        run: npm run qa
+
+      - name: Production build
+        run: npm run build
+
+      - name: Commit verified migration
+        run: |
+          rm -f scripts/strict-20-migration.mjs
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor: unify app on strict 20-persona model'
+          git push origin HEAD:codex/strict-20-persona-unification
