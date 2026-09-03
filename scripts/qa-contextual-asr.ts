@@ -61,8 +61,11 @@ const asrSource = readFileSync('src/utils/contextualAsr.ts', 'utf8');
 assert.equal(/know to[\s\S]{0,80}natto|natto[\s\S]{0,80}know to/i.test(asrSource), false, 'fixed know-to/natto replacement mapping is forbidden');
 
 const infoGapContext = getDialogueTopicContext('favorites');
-assert.ok(infoGapContext.includes('give the child room to explain it'), 'information-gap strategy must be present');
-assert.ok(infoGapContext.includes('Do not pretend not to know common things'), 'strategy must avoid mechanical ignorance');
-assert.ok(infoGapContext.includes('do not ask What is ...? mechanically'), 'strategy must avoid scripted What-is behavior');
+assert.ok(infoGapContext.includes('respond as this exchange-student persona rather than as an encyclopedia'), 'strategy must ground knowledge in the persona');
+assert.ok(infoGapContext.includes('Even if the underlying AI model knows facts about the item'), 'strategy must prevent world-knowledge preemption');
+assert.ok(infoGapContext.includes('invite the child to explain it'), 'strategy must preserve an information gap');
+assert.ok(infoGapContext.includes('not obviously internationally familiar'), 'strategy must preserve common-item familiarity');
+assert.ok(infoGapContext.includes('Never pretend ignorance mechanically'), 'strategy must avoid mechanical ignorance');
+assert.ok(infoGapContext.includes('never force the same question'), 'strategy must avoid scripted What-is behavior');
 
 console.log('CONTEXTUAL ASR & INFORMATION-GAP QA PASS');
