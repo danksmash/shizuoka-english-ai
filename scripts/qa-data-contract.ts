@@ -1,10 +1,22 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { canonicalizeHistory, maskHistoryForStorage, validateSessionSaveInput } from '../src/dataContract';
-import { safePlainTextForClipboard } from '../src/utils/privacy';
+import { safePlainTextForClipboard, maskTextForResearchExport } from '../src/utils/privacy';
+import { AI_STUDENTS_MASTER_LIST, DIALOGUE_TOPICS, TARGET_20_AI_STUDENT_IDS } from '../src/data/curriculum';
+import { STARTER_PROMPTS_JAPANESE } from '../src/utils/translation';
+import { getTopicLearningGoals } from '../src/data/topicLearningGoals';
+import { DAILY_ROUTINE_STARTER_ENGLISH, DAILY_ROUTINE_STARTER_JAPANESE } from '../src/data/dailyRoutineTopic';
+import { maskHighRiskPII } from '../src/utils/security';
 
 const history=canonicalizeHistory([{id:'a',sender:'ai',englishText:'Hello!',japaneseText:'こんにちは！',timestamp:1000},{id:'b',sender:'child',englishText:'I like soccer.',japaneseText:'サッカーが好きです。',timestamp:1500}]);
 const valid=validateSessionSaveInput({sessionId:'session_12345678',learningCode:'A7M4',aiStudentId:'emma_usa',topic:'favorites',targetDurationMinutes:3,startedAt:1000,endedAt:2000,history,reflection:{conveyedIdeas:3,understoodPartner:3,noticedLanguageCulture:3},personaLabelCondition:'shown',studentSelectedSpeechRate:1,effectiveTtsSpeechRate:1});assert.equal(valid.ok,true);
+const dailyValid=validateSessionSaveInput({sessionId:'session_daily_12345678',learningCode:'A7M4',aiStudentId:'emma_usa',topic:'daily_routine' as any,targetDurationMinutes:3,startedAt:1000,endedAt:2000,history});assert.equal(dailyValid.ok,true);
+assert.equal(validateSessionSaveInput({sessionId:'session_daily_bad_12345678',learningCode:'A7M4',aiStudentId:'emma_usa',topic:'not_a_topic',targetDurationMinutes:3,startedAt:1000,endedAt:2000,history}).ok,false);
+const dailyTopic=DIALOGUE_TOPICS.find((topic)=>String(topic.id)==='daily_routine');assert.ok(dailyTopic);assert.equal(dailyTopic?.title,'ふだんの生活・一日のようす');
+assert.equal(DIALOGUE_TOPICS.length,6);assert.equal(DIALOGUE_TOPICS.filter((topic)=>String(topic.id)==='daily_routine').length,1);
+for(const id of TARGET_20_AI_STUDENT_IDS){const student=AI_STUDENTS_MASTER_LIST.find((item)=>item.id===id)!;assert.equal((student.topicPrompts as any).daily_routine,DAILY_ROUTINE_STARTER_ENGLISH);assert.equal((STARTER_PROMPTS_JAPANESE as any)[id]?.daily_routine,DAILY_ROUTINE_STARTER_JAPANESE);}
+const dailyGoals=getTopicLearningGoals('daily_routine' as any);assert.equal(dailyGoals.length,3);assert.ok(dailyGoals.some((goal)=>goal.examples.includes('What time do you get up?')));
+const routineSentence='I get up at 7:00.';assert.equal(maskHighRiskPII(routineSentence).maskedText,routineSentence);assert.equal(maskTextForResearchExport(routineSentence),routineSentence);
 for(const code of ['A7M','A7M45','A-7M',''])assert.equal(validateSessionSaveInput({sessionId:'session_12345678',learningCode:code,aiStudentId:'emma_usa',topic:'favorites',targetDurationMinutes:3,startedAt:1000,endedAt:2000,history}).ok,false);
 for(const duration of [1,2,3,5])assert.equal(validateSessionSaveInput({sessionId:'session_12345678',learningCode:'A7M4',aiStudentId:'emma_usa',topic:'favorites',targetDurationMinutes:duration,startedAt:1000,endedAt:2000,history}).ok,true);
 assert.equal(validateSessionSaveInput({sessionId:'session_12345678',learningCode:'A7M4',aiStudentId:'emma_usa',topic:'favorites',targetDurationMinutes:10,startedAt:1000,endedAt:2000,history}).ok,false);
@@ -15,6 +27,7 @@ const persistence=await readFile('src/server/persistence.ts','utf8');assert.ok(p
 const firestore=await readFile('src/server/firestore.ts','utf8');assert.ok(persistence.includes('retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000),'));assert.equal(persistence.includes('retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000).toISOString()'),false);assert.ok(firestore.includes('if (value instanceof Date) return { timestampValue: value.toISOString() }'));
 const exportSource=await readFile('src/server/researchExport.ts','utf8');assert.ok(exportSource.includes('persona_label_condition'));assert.ok(exportSource.includes('student_selected_speech_rate'));assert.ok(/dictionary_source\s*:\s*['"]persona['"]/.test(exportSource));assert.equal(exportSource.includes('learningId'),false);
 const server=await readFile('server.ts','utf8');assert.ok(server.includes("'claude-sonnet-5'"));assert.ok(server.includes("output_config: { effort: 'medium' }"));assert.ok(server.includes("requireManagementRole(['researcher'])"));assert.equal(server.includes("requireManagementRole(['teacher'])"),false);assert.equal(server.includes("'/api/management/student-codes'"),false);assert.equal(server.includes("'/api/management/sessions'"),false);
-const management=await readFile('src/server/managementPage.ts','utf8');assert.ok(management.includes('/api/management/research.csv'));assert.ok(management.includes('匿名化'));assert.equal(management.includes('教師用管理'),false);
+const management=await readFile('src/server/managementPage.ts','utf8');assert.ok(management.includes('/api/management/research.csv'));assert.ok(management.includes('匿名化'));assert.equal(management.includes('教師用管理'),false);assert.ok(management.includes('value="daily_routine"'));assert.ok(management.includes("daily_routine:'ふだんの生活・一日のようす'"));
+const researchDashboard=await readFile('src/server/researchDashboard.ts','utf8');assert.ok(researchDashboard.includes('daily_routine | free'));assert.ok(researchDashboard.includes("daily_routine:'ふだんの生活・一日のようす'"));assert.ok(researchDashboard.includes("'daily_routine','free'"));
 const auth=await readFile('src/server/auth.ts','utf8');assert.ok(auth.includes('/api/management/research.summary'));
 console.log('DATA CONTRACT QA PASS');
