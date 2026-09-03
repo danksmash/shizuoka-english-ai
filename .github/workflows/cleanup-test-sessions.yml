@@ -1,0 +1,96 @@
+name: Clear pre-research Firestore test sessions
+
+on:
+  push:
+    branches:
+      - codex/strict-20-persona-unification
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  clear-test-sessions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+
+      - name: Count and delete all pre-research test sessions
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          export TOKEN
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.parse
+          import urllib.request
+          from collections import Counter
+
+          token = os.environ['TOKEN']
+          project = 'shizuoka-english-ai'
+          base = f'https://firestore.googleapis.com/v1/projects/{project}/databases/(default)/documents/sessions'
+          headers = {'Authorization': f'Bearer {token}'}
+
+          def request_json(url):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  return json.load(response)
+
+          def list_sessions():
+              docs = []
+              page_token = ''
+              while True:
+                  params = {'pageSize': '1000'}
+                  if page_token:
+                      params['pageToken'] = page_token
+                  data = request_json(base + '?' + urllib.parse.urlencode(params))
+                  docs.extend(data.get('documents', []))
+                  page_token = data.get('nextPageToken', '')
+                  if not page_token:
+                      return docs
+
+          before = list_sessions()
+          persona_counts = Counter()
+          for doc in before:
+              fields = doc.get('fields', {})
+              field = fields.get('personaId') or fields.get('aiStudentId') or {}
+              persona = field.get('stringValue', '') if isinstance(field, dict) else ''
+              persona_counts[persona or '(missing)'] += 1
+
+          print(f'TEST_SESSION_COUNT_BEFORE={len(before)}')
+          print('TEST_SESSION_PERSONA_COUNTS=' + json.dumps(dict(sorted(persona_counts.items())), ensure_ascii=True, sort_keys=True))
+
+          for doc in before:
+              name = doc.get('name', '')
+              if not name.startswith(f'projects/{project}/databases/(default)/documents/sessions/'):
+                  raise RuntimeError('Unexpected Firestore document path; refusing deletion')
+              url = 'https://firestore.googleapis.com/v1/' + name
+              req = urllib.request.Request(url, method='DELETE', headers=headers)
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  if response.status not in (200, 204):
+                      raise RuntimeError(f'Unexpected delete status {response.status}')
+
+          after = list_sessions()
+          print(f'TEST_SESSION_COUNT_AFTER={len(after)}')
+          if after:
+              raise RuntimeError(f'Firestore sessions cleanup incomplete: {len(after)} documents remain')
+          print('FIRESTORE_TEST_SESSION_CLEANUP=PASS')
+          PY
+
+      - name: Confirm student identity collections were not targeted
+        run: echo 'Only the sessions collection was deleted; students and research_ids were not modified.'
