@@ -49,6 +49,16 @@ export const AZURE_VOICE_PROFILES: Partial<Record<AIStudentId, AzureVoiceProfile
   andrei_romania: { personaId: 'andrei_romania', voiceName: 'en-GB-ThomasNeural', voiceLocale: 'en-GB', synthesisLocale: 'en-GB', gender: 'male', gate4Choice: 'A', selectionClass: 'regional-english-proxy' },
 };
 
+function getPreviewOverride(personaId: AIStudentId): string | null {
+  if (typeof process === 'undefined' || !process.env || process.env.AZURE_VOICE_PREVIEW_MODE !== '1') return null;
+  if (personaId === 'minji_korea') return process.env.AZURE_MINJI_PREVIEW_VOICE || null;
+  if (personaId === 'zofia_poland') return process.env.AZURE_ZOFIA_PREVIEW_VOICE || null;
+  return null;
+}
+
 export function getAzureVoiceProfile(personaId: string): AzureVoiceProfile | null {
-  return AZURE_VOICE_PROFILES[personaId as AIStudentId] || null;
+  const base = AZURE_VOICE_PROFILES[personaId as AIStudentId] || null;
+  if (!base) return null;
+  const previewVoiceName = getPreviewOverride(base.personaId);
+  return previewVoiceName ? { ...base, voiceName: previewVoiceName } : base;
 }
