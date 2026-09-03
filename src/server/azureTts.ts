@@ -8,12 +8,6 @@ export type AzureTtsResult = {
   effectiveRate: number;
 };
 
-/**
- * Human listening review selected Azure's unmodified default speaking rate.
- * Keep that exact synthesis condition as the Golden Speed for Voice Profile v3.
- */
-export const AZURE_GOLDEN_EFFECTIVE_RATE = 1.0 as const;
-
 function escapeXml(value: string): string {
   return value.replace(/[<>&'\"]/g, (char) => ({
     '<': '&lt;',
@@ -24,6 +18,11 @@ function escapeXml(value: string): string {
   }[char] || char));
 }
 
+function normalizeRate(rate: number): number {
+  if (!Number.isFinite(rate)) return 1.0;
+  return Math.max(0.75, Math.min(1.25, rate));
+}
+
 export function azureTtsConfigured(): boolean {
   return Boolean(process.env.AZURE_SPEECH_KEY?.trim());
 }
@@ -31,10 +30,10 @@ export function azureTtsConfigured(): boolean {
 /**
  * Azure Speech synthesis provider.
  *
- * The requestedRate argument is retained for API compatibility and for the
- * Google/Device fallbacks, but Azure deliberately uses the human-approved
- * default-rate condition. Voice Profile v3 may define a sentence-boundary
- * pause for a specific reviewed persona; this does not alter speaking rate.
+ * The student-facing 0.75-1.25 speaking-rate control is applied to Azure via
+ * SSML prosody. A rate of 1.00 remains the reviewed baseline voice condition.
+ * Voice Profile v3 may also define a sentence-boundary pause for a specific
+ * reviewed persona; that pause is preserved independently of speaking rate.
  */
 export async function synthesizeAzureTts(
   text: string,
@@ -53,7 +52,7 @@ export async function synthesizeAzureTts(
     throw new Error(`AZURE_SPEECH_REGION_MISMATCH:${region}`);
   }
 
-  void requestedRate;
+  const rate = normalizeRate(requestedRate);
   const msttsNamespace = profile.sentenceBoundaryMs
     ? ' xmlns:mstts="http://www.w3.org/2001/mstts"'
     : '';
@@ -62,7 +61,7 @@ export async function synthesizeAzureTts(
     : '';
   const ssml = [
     `<speak version="1.0"${msttsNamespace} xml:lang="${escapeXml(profile.synthesisLocale)}">`,
-    `<voice name="${escapeXml(profile.voiceName)}">${sentenceBoundary}${escapeXml(text)}</voice>`,
+    `<voice name="${escapeXml(profile.voiceName)}">${sentenceBoundary}<prosody rate="${rate.toFixed(2)}">${escapeXml(text)}</prosody></voice>`,
     '</speak>',
   ].join('');
 
@@ -98,7 +97,7 @@ export async function synthesizeAzureTts(
       provider: 'azure-speech',
       voiceName: profile.voiceName,
       region,
-      effectiveRate: AZURE_GOLDEN_EFFECTIVE_RATE,
+      effectiveRate: rate,
     };
   } finally {
     clearTimeout(timeoutId);
