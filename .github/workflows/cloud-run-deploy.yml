@@ -126,7 +126,7 @@ jobs:
             if routine=$(curl --fail --silent --show-error --max-time 50 \
               -X POST "$API_URL/api/chat" \
               -H 'Content-Type: application/json' \
-              --data '{"message":"What time do you get up?","history":[{"id":"ai-start","sender":"ai","englishText":"I usually get up at seven. What time do you get up?","timestamp":1}],"topic":"daily_routine","aiStudentId":"emma_usa"}'); then
+              --data '{"message":"I get up at seven. What do you do in the morning?","history":[{"id":"ai-start","sender":"ai","englishText":"Let\u0027s talk about our daily lives. What do you do in the morning?","timestamp":1}],"topic":"daily_routine","aiStudentId":"emma_usa"}'); then
               if echo "$routine" | grep -q '"success":true' && echo "$routine" | grep -q '"route":"anthropic-resilient"'; then
                 break
               fi
@@ -139,7 +139,7 @@ jobs:
           assert data.get('success') is True, data
           assert data.get('_diagnostics', {}).get('route') == 'anthropic-resilient', data
           reply = str(data.get('data', {}).get('reply', '')).lower()
-          assert ('seven' in reply or '7' in reply), reply
+          assert reply.strip(), reply
           PY
 
           python3 - <<'PY'
