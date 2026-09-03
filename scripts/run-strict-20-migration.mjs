@@ -55,4 +55,17 @@ await import(`./strict-20-migration.mjs?patched=${Date.now()}`);
   fs.writeFileSync(speechPath, speech);
 }
 
-console.log('Strict 20-person speech compatibility cleanup applied successfully.');
+// Update the data-contract regression to assert the new current-persona-only numbering rules.
+{
+  const qaPath = 'scripts/qa-data-contract.ts';
+  let qa = fs.readFileSync(qaPath, 'utf8');
+  const old = 'assert.ok(persistence.includes("existing ? [] : await queryCollection"));';
+  assert.ok(qa.includes(old), 'old persistence regression assertion missing');
+  qa = qa.replace(
+    old,
+    'assert.ok(persistence.includes(".filter((session) => isAIStudentId(session.aiStudentId))"));assert.ok(persistence.includes("lifetimeSessionNumber: index + 1"));',
+  );
+  fs.writeFileSync(qaPath, qa);
+}
+
+console.log('Strict 20-person speech/history compatibility cleanup applied successfully.');
