@@ -1,0 +1,153 @@
+name: Contextual ASR Claude canary
+
+on:
+  push:
+    branches:
+      - canary/contextual-asr-claude
+    paths:
+      - .github/workflows/contextual-asr-claude-canary.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  claude-canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PROJECT_ID: shizuoka-english-ai
+      REGION: asia-northeast1
+      CANARY_SERVICE: shizuoka-english-ai-contextual-canary
+    steps:
+      - name: Checkout canary branch
+        uses: actions/checkout@v4
+        with:
+          ref: canary/contextual-asr-claude
+          fetch-depth: 0
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
+
+      - name: Deploy isolated canary with Secret Manager reference
+        run: |
+          RUNTIME_SA=$(gcloud run services describe shizuoka-english-ai \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(spec.template.spec.serviceAccountName)')
+          if [ -z "$RUNTIME_SA" ]; then
+            PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
+            RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+          fi
+          test -n "$RUNTIME_SA"
+          BUILD_SHA="${GITHUB_SHA:0:12}"
+          gcloud run deploy "$CANARY_SERVICE" \
+            --project "$PROJECT_ID" \
+            --source . \
+            --region "$REGION" \
+            --allow-unauthenticated \
+            --service-account "$RUNTIME_SA" \
+            --min-instances 0 \
+            --max-instances 1 \
+            --concurrency 10 \
+            --timeout 60 \
+            --memory 512Mi \
+            --set-env-vars ANTHROPIC_MODEL=claude-sonnet-5,CONTEXTUAL_DIALOGUE_STRATEGY_ENABLED=true,APP_VERSION=canary,APP_BUILD="$BUILD_SHA" \
+            --set-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest
+          CANARY_URL=$(gcloud run services describe "$CANARY_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(status.url)')
+          test -n "$CANARY_URL"
+          echo "CANARY_URL=$CANARY_URL" >> "$GITHUB_ENV"
+
+      - name: Verify canary health
+        run: |
+          health=""
+          for attempt in 1 2 3 4 5; do
+            if health=$(curl --fail --silent --show-error --max-time 20 "$CANARY_URL/api/health"); then
+              break
+            fi
+            sleep 3
+          done
+          echo "$health" | grep -q '"status":"ok"'
+          echo "$health" | grep -q '"aiConfigured":true'
+          echo "$health" | grep -q '"model":"claude-sonnet-5"'
+
+      - name: Run dialogue-quality canary
+        run: |
+          CANARY_URL="$CANARY_URL" node --input-type=module <<'NODE'
+          const endpoint = `${process.env.CANARY_URL}/api/chat`;
+          async function chat(aiText, childText, topic='favorites') {
+            const history = [
+              { id:'ai-1', sender:'ai', englishText:aiText, japaneseText:'', timestamp:Date.now()-1000 },
+              { id:'child-1', sender:'child', englishText:childText, japaneseText:'', timestamp:Date.now() },
+            ];
+            const response = await fetch(endpoint, {
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({ message:childText, history, topic, aiStudentId:'emma_usa' }),
+            });
+            const json = await response.json();
+            if (!response.ok || !json?.success || !json?.data?.reply) {
+              throw new Error(`chat failed: ${response.status} ${JSON.stringify(json).slice(0,500)}`);
+            }
+            if (json?._diagnostics?.route !== 'anthropic-resilient') {
+              throw new Error(`unexpected route: ${JSON.stringify(json?._diagnostics)}`);
+            }
+            return String(json.data.reply).replace(/\s+/g,' ').trim();
+          }
+
+          const nattoReplies = [];
+          for (let i=0;i<4;i+=1) nattoReplies.push(await chat('What food do you like?', 'I like natto.'));
+          console.log('NATTO_REPLIES=' + JSON.stringify(nattoReplies));
+          const explanationCue = /(what(?:'s| is)?\s+(?:natto|it)|what\s+kind|what\s+is\s+it\s+like|tell\s+me|can\s+you\s+tell|what\s+is\s+it\s+made|what\s+does\s+it\s+(?:taste|look|smell)\s+like)/i;
+          const nattoQuestions = nattoReplies.filter((reply)=>/\?/.test(reply)).length;
+          const nattoExplanation = nattoReplies.filter((reply)=>explanationCue.test(reply)).length;
+          if (nattoQuestions < 4) throw new Error(`natto responses must all continue naturally with a question: ${nattoQuestions}/4`);
+          if (nattoExplanation < 3) throw new Error(`information-gap behavior too weak for natto: ${nattoExplanation}/4`);
+          if (nattoReplies.some((reply)=>/i\s+(?:love|like)\s+natto\s+too/i.test(reply))) {
+            throw new Error('natto canary produced unsupported persona preference');
+          }
+
+          const sushiReplies = [];
+          for (let i=0;i<2;i+=1) sushiReplies.push(await chat('What food do you like?', 'I like sushi.'));
+          console.log('SUSHI_REPLIES=' + JSON.stringify(sushiReplies));
+          if (sushiReplies.some((reply)=>/what(?:'s| is)\s+sushi/i.test(reply))) {
+            throw new Error('common sushi must not trigger mechanical ignorance');
+          }
+
+          const hamamatsuReplies = [];
+          for (let i=0;i<2;i+=1) hamamatsuReplies.push(await chat('Where do you live?', 'I live in Hamamatsu.', 'intro'));
+          console.log('HAMAMATSU_REPLIES=' + JSON.stringify(hamamatsuReplies));
+          if (hamamatsuReplies.some((reply)=>/what(?:'s| is)\s+hamamatsu/i.test(reply))) {
+            throw new Error('Shizuoka University persona must not mechanically ask what Hamamatsu is');
+          }
+
+          const blackHanpenReplies = [];
+          for (let i=0;i<2;i+=1) blackHanpenReplies.push(await chat('What food do you like?', 'I like black hanpen.'));
+          console.log('BLACK_HANPEN_REPLIES=' + JSON.stringify(blackHanpenReplies));
+          if (blackHanpenReplies.filter((reply)=>explanationCue.test(reply.replace(/black hanpen/gi,'natto'))).length < 1) {
+            throw new Error('black hanpen should create at least one explanation-oriented follow-up');
+          }
+
+          console.log(`CLAUDE_CONTEXTUAL_DIALOGUE_CANARY_PASS natto_explanation=${nattoExplanation}/4`);
+          NODE
+
+      - name: Delete isolated canary service
+        if: always()
+        run: |
+          gcloud run services delete "$CANARY_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --quiet || true
