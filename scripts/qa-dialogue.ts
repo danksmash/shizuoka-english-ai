@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { AI_STUDENTS_MASTER_LIST, GUIDED_TOPIC_STARTERS_ENGLISH, TARGET_20_AI_STUDENT_IDS } from '../src/data/curriculum';
 import { getDialogueTopicContext } from '../src/data/dialogueTopicContext';
 import type { DialogueTopic } from '../src/types';
@@ -37,10 +38,28 @@ for (const id of TARGET_20_AI_STUDENT_IDS) {
     for (const duration of durations) { void duration; checked += 1; if (student.topicPrompts[topic] !== starter) failures.push(`${student.id}/${topic}: starter unexpectedly varies by duration`); }
   }
 }
+
+const introContext = getDialogueTopicContext('intro');
+if (!introContext.includes('Get to know each other naturally:')) {
+  failures.push('intro context must frame Core 1 as natural getting-to-know-each-other conversation');
+}
+
+const serverSource = readFileSync('server.ts', 'utf8');
+const requiredCore1Rules = [
+  'Keep the conversation natural, warm, and genuinely responsive.',
+  'Do not sound like a textbook, quiz, or scripted lesson.',
+  "Answer the student's actual message first.",
+  'If the student shares information, react to that information first.',
+  'After responding, usually ask one short, natural question when it helps the conversation continue. Do not force a question when it would be unnatural.',
+];
+for (const rule of requiredCore1Rules) {
+  if (!serverSource.includes(rule)) failures.push(`Core 1 natural-conversation rule missing from system instruction: ${rule}`);
+}
+
 const dailyRoutineContext = getDialogueTopicContext('daily_routine');
 for (const fixedTime of ['7:00', '7:30', '9:00', '11:00']) {
   if (dailyRoutineContext.includes(fixedTime)) failures.push(`daily_routine context must not force fixed time ${fixedTime}`);
 }
 if (TARGET_20_AI_STUDENT_IDS.length !== 20) failures.push(`Expected 20 target personas, found ${TARGET_20_AI_STUDENT_IDS.length}`);
 if (failures.length) { console.error('Dialogue QA FAILED'); failures.forEach((failure) => console.error(`- ${failure}`)); process.exit(1); }
-console.log(`Dialogue QA PASS: ${TARGET_20_AI_STUDENT_IDS.length} students × ${topics.length} topics × ${durations.length} durations = ${checked} combinations checked.`);
+console.log(`Dialogue QA PASS: ${TARGET_20_AI_STUDENT_IDS.length} students × ${topics.length} topics × ${durations.length} durations = ${checked} combinations checked; Core 1 natural-conversation contract protected.`);
