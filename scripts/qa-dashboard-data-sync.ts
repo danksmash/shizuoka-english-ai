@@ -156,6 +156,7 @@ assert.ok(pageSource.includes('.recent th:nth-child(4),.recent td:nth-child(4){w
 assert.equal(pageSource.includes('.table-wrap{overflow:auto'), false, 'legacy horizontal scroll wrapper must not return');
 assert.ok(pageSource.includes('1分あたり平均発話語数'));
 assert.ok(pageSource.includes('５年') && pageSource.includes('６年') && pageSource.includes('１組') && pageSource.includes('２組') && pageSource.includes('３組'));
+assert.ok(pageSource.includes('<option value="pilotb">Pilot B</option>'), 'Pilot B class filter must remain available');
 assert.equal(pageSource.includes('博士'), false);
 assert.ok(pageSource.includes('#chartPersona{height:820px;overflow-y:visible}'));
 assert.ok(pageSource.includes('const labelYs=rows.map(function(){return []})'));
