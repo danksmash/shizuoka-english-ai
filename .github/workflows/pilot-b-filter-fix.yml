@@ -1,0 +1,73 @@
+name: Pilot B filter placement fix
+on:
+  push:
+    branches: [codex/pilot-b-isolation]
+permissions:
+  contents: write
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/pilot-b-isolation
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Fix Pilot B filter placement and strengthen QA
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('src/server/managementPage.ts')
+          s = p.read_text()
+          wrong_grade = '<option value="reserve">予備</option><option value="pilotb">Pilot B</option></select></label><label>学級'
+          if wrong_grade not in s:
+              raise SystemExit('wrong Pilot B grade option not found')
+          s = s.replace(wrong_grade, '<option value="reserve">予備</option></select></label><label>学級', 1)
+          class_block = '<label>学級<select id="classId"><option value="all">すべて</option><option value="1">１組</option><option value="2">２組</option><option value="3">３組</option><option value="test">テスト</option><option value="reserve">予備</option></select></label>'
+          class_fixed = '<label>学級<select id="classId"><option value="all">すべて</option><option value="1">１組</option><option value="2">２組</option><option value="3">３組</option><option value="test">テスト</option><option value="reserve">予備</option><option value="pilotb">Pilot B</option></select></label>'
+          if class_block not in s:
+              raise SystemExit('class dropdown insertion point not found')
+          p.write_text(s.replace(class_block, class_fixed, 1))
+
+          p = Path('scripts/qa-dashboard-data-sync.ts')
+          s = p.read_text()
+          old = "assert.ok(pageSource.includes('<option value=\"pilotb\">Pilot B</option>'), 'Pilot B class filter must remain available');"
+          new = """const gradeSelectHtml = pageSource.match(/<select id=\\\"grade\\\">([\\s\\S]*?)<\\/select>/)?.[1] || '';
+const classSelectHtml = pageSource.match(/<select id=\\\"classId\\\">([\\s\\S]*?)<\\/select>/)?.[1] || '';
+assert.equal(gradeSelectHtml.includes('value=\\\"pilotb\\\"'), false, 'Pilot B must not appear in the grade filter');
+assert.ok(classSelectHtml.includes('<option value=\\\"pilotb\\\">Pilot B</option>'), 'Pilot B must appear in the class filter');"""
+          if old not in s:
+              raise SystemExit('old Pilot B dashboard assertion not found')
+          s = s.replace(old, new, 1)
+
+          anchor = "assert.equal(element('completeOnly').checked,false);"
+          extra = """
+element('grade').value='all';
+element('classId').value='pilotb';
+const pilotParams = context.filterParams();
+assert.equal(pilotParams.get('grade'), null, 'Pilot B must not be encoded as a grade');
+assert.equal(pilotParams.get('classId'),'pilotb');
+assert.ok(context.queryUrl('/api/management/research.dashboard').includes('classId=pilotb'));
+"""
+          if anchor not in s:
+              raise SystemExit('dashboard filter parameter QA insertion point not found')
+          p.write_text(s.replace(anchor, anchor + extra, 1))
+          PY
+      - name: Install dependencies
+        run: npm ci
+      - name: Full regression QA
+        run: npm run qa
+      - name: Production build
+        run: npm run build
+      - name: Commit verified fix and remove one-shot workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/pilot-b-filter-fix.yml
+          git add src/server/managementPage.ts scripts/qa-dashboard-data-sync.ts
+          git commit -m 'fix: place Pilot B in class research filter'
+          git push
