@@ -53,3 +53,4 @@ assert.match(rahul, /\btea\b/, 'Rahul should naturally use his established tea-r
 assert.doesNotMatch(rahul, /i (?:do not|don't) like tea/, 'Rahul must not contradict his established tea-related persona facts');
 
 console.log('PRODUCTION PERSONA ARRIVAL CLAUDE SMOKE PASS');
+await import('./qa-production-intro-conversation.mjs');

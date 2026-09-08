@@ -77,7 +77,7 @@ assert.ok(main.includes("import './setup-screen-v2.css';"), 'setup v2 stylesheet
 assert.ok(main.includes("import './setup-screen-v2-polish.css';"), 'setup v2 polish stylesheet must be loaded');
 assert.ok(setup.includes('profileCountryLabel(selectedStudent)'), 'profile must use the English country label helper');
 assert.equal(setup.includes('countryLabel(selectedStudent)'), false, 'old nested country label rendering must not remain');
-assert.ok(setup.includes("useState<1 | 2 | 3 | 5>(1)"), 'duration state must remain 1/2/3/5 only');
+assert.ok(setup.includes("useState<1 | 2 | 3 | 5>(2)"), 'duration state must keep 1/2/3/5 choices and default to 2 minutes');
 assert.ok(setup.includes('([1, 2, 3, 5] as const)'), 'duration controls must remain 1/2/3/5');
 assert.ok(setup.includes('normalizeLearningCode') && setup.includes('isValidLearningCode') && setup.includes('onValidateLearningCode'), 'learning ID validation logic must remain present');
 assert.ok(setup.includes("labelCondition = 'shown'") && setup.includes('const showLabels ='), 'labelCondition research behavior must remain');
@@ -134,4 +134,4 @@ assert.equal(hashes.size, 20, 'all 20 target persona images must be unique');
 assert.ok(totalBytes >= 1_000_000 && totalBytes <= 5_000_000, `unexpected total persona size: ${totalBytes}`);
 for (const id of TARGET_20_AI_STUDENT_IDS) assert.ok(avatarSource.includes(`${id}:`), `missing avatar mapping for target persona ${id}`);
 for (const alias of ['liam_aus:','bence_hun:','zofia_pol:','linh_vie:','rahul_ban:','chloe_can:','aung_mya:']) assert.equal(avatarSource.includes(alias), false, `old avatar alias must be removed: ${alias}`);
-console.log(`20-person setup v2 + learning history + unified WebP QA: PASS (${totalBytes} bytes, 5x4 portraits, strict-20 history, selected-profile EN+JA country labels, no legacy aliases/Base64/sprite reconstruction)`);
+console.log(`20-person setup v2 + learning history + unified WebP QA: PASS (${totalBytes} bytes, 5x4 portraits, strict-20 history, selected-profile EN+JA country labels, default 2min, no legacy aliases/Base64/sprite reconstruction)`);

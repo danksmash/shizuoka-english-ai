@@ -42,7 +42,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
   const showLabels = labelCondition === 'shown';
   const [selectedStudentId, setSelectedStudentId] = useState('emma_usa');
   const [selectedTopic, setSelectedTopic] = useState<DialogueTopic>('intro');
-  const [durationMinutes, setDurationMinutes] = useState<1 | 2 | 3 | 5>(1);
+  const [durationMinutes, setDurationMinutes] = useState<1 | 2 | 3 | 5>(2);
   const [learningCode, setLearningCode] = useState(readRetainedLearningId);
   const [codeError, setCodeError] = useState('');
   const [checkingCode, setCheckingCode] = useState(false);
