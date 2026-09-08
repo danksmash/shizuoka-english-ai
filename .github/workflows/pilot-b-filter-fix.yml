@@ -19,7 +19,6 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
 
           p = Path('src/server/managementPage.ts')
           s = p.read_text()
@@ -36,23 +35,12 @@ jobs:
           p = Path('scripts/qa-dashboard-data-sync.ts')
           s = p.read_text()
           old = "assert.ok(pageSource.includes('<option value=\"pilotb\">Pilot B</option>'), 'Pilot B class filter must remain available');"
-          new = """const gradeSelectHtml = pageSource.match(/<select id=\\\"grade\\\">([\\s\\S]*?)<\\/select>/)?.[1] || '';
-const classSelectHtml = pageSource.match(/<select id=\\\"classId\\\">([\\s\\S]*?)<\\/select>/)?.[1] || '';
-assert.equal(gradeSelectHtml.includes('value=\\\"pilotb\\\"'), false, 'Pilot B must not appear in the grade filter');
-assert.ok(classSelectHtml.includes('<option value=\\\"pilotb\\\">Pilot B</option>'), 'Pilot B must appear in the class filter');"""
+          new = "const gradeSelectHtml = pageSource.match(/<select id=\\\"grade\\\">([\\s\\S]*?)<\\/select>/)?.[1] || '';\nconst classSelectHtml = pageSource.match(/<select id=\\\"classId\\\">([\\s\\S]*?)<\\/select>/)?.[1] || '';\nassert.equal(gradeSelectHtml.includes('value=\\\"pilotb\\\"'), false, 'Pilot B must not appear in the grade filter');\nassert.ok(classSelectHtml.includes('<option value=\\\"pilotb\\\">Pilot B</option>'), 'Pilot B must appear in the class filter');"
           if old not in s:
               raise SystemExit('old Pilot B dashboard assertion not found')
           s = s.replace(old, new, 1)
-
           anchor = "assert.equal(element('completeOnly').checked,false);"
-          extra = """
-element('grade').value='all';
-element('classId').value='pilotb';
-const pilotParams = context.filterParams();
-assert.equal(pilotParams.get('grade'), null, 'Pilot B must not be encoded as a grade');
-assert.equal(pilotParams.get('classId'),'pilotb');
-assert.ok(context.queryUrl('/api/management/research.dashboard').includes('classId=pilotb'));
-"""
+          extra = "\nelement('grade').value='all';\nelement('classId').value='pilotb';\nconst pilotParams = context.filterParams();\nassert.equal(pilotParams.get('grade'), null, 'Pilot B must not be encoded as a grade');\nassert.equal(pilotParams.get('classId'),'pilotb');\nassert.ok(context.queryUrl('/api/management/research.dashboard').includes('classId=pilotb'));"
           if anchor not in s:
               raise SystemExit('dashboard filter parameter QA insertion point not found')
           p.write_text(s.replace(anchor, anchor + extra, 1))
