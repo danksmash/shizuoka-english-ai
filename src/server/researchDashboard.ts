@@ -321,6 +321,7 @@ function classMatches(row: Row, classId: string): boolean {
   const storedClass = String(row.class_id || '');
   if (classId === 'test') return storedClass === 'テスト';
   if (classId === 'reserve') return storedClass === '予備';
+  if (classId === 'pilotb') return storedClass === '5-PB' || storedClass === '6-PB';
   if (['1','2','3'].includes(classId)) return storedClass.endsWith(`-${classId}`);
   return storedClass === classId;
 }

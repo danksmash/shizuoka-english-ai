@@ -187,7 +187,7 @@ export async function setStudentActive(studentId: string, active: boolean): Prom
 
 export async function updateStudentClass(studentId: string, classId: string, attendanceNumber?: unknown): Promise<void> {
   const cid = normalizeClassId(classId);
-  if (!/^(?:5-[123]|6-[123]|テスト|予備)$/.test(cid)) throw new Error('INVALID_CLASS_ID');
+  if (!/^(?:5-[123]|6-[123]|5-PB|6-PB|テスト|予備)$/.test(cid)) throw new Error('INVALID_CLASS_ID');
   const records = (await listCollection(STUDENT_COLLECTION, 1000)).filter((row) => row.studentId === studentId);
   const attendance = normalizeAttendanceNumber(attendanceNumber);
   if (!records.length) throw new Error('STUDENT_NOT_FOUND');
