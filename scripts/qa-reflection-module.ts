@@ -7,9 +7,10 @@ const forbidText = (source: string, needle: string, label: string) => { if (sour
 
 const main = read('src/main.tsx');
 const reflection = read('src/reflection/ReflectionApp.tsx');
-const css = read('src/reflection/reflection.css');
+const css = read('src/reflection/reflection-b.css');
 const routes = read('src/server/reflectionRoutes.ts');
 const persistence = read('src/server/reflectionPersistence.ts');
+const firestore = read('src/server/firestore.ts');
 const teacher = read('src/reflection/ReflectionTeacherApp.tsx');
 const teacherModel = read('src/server/reflectionTeacherModel.ts');
 const serverEntry = read('server-entry.ts');
@@ -18,48 +19,69 @@ const dataContract = read('src/dataContract.ts');
 const viteConfig = read('vite.config.ts');
 const packageJson = read('package.json');
 
+// Routing and module isolation.
 requireText(main, "endsWith('/reflection')", 'pupil route');
 requireText(main, "endsWith('/reflection/teacher')", 'teacher route');
 requireText(main, 'ReflectionTeacherApp', 'teacher route');
+requireText(main, "./reflection/reflection-b.css", 'B-design styles');
+requireText(serverEntry, "this.use('/api/reflection'", 'server route mount');
+forbidText(app, 'lesson_reflections', 'existing AI App');
+forbidText(app, 'ReflectionApp', 'existing AI App');
+forbidText(dataContract, 'lesson_reflections', 'existing AI data contract');
+
+// Canonical pupil B-design: goal + two fixed 5-point items + one large free reflection + seven hints.
 requireText(reflection, "Today's Goal", 'reflection UI');
 requireText(reflection, "Today's Reflection", 'reflection UI');
-for (const label of ['できたこと','使ったことば','授業中に考えていたこと','困ったこと・工夫','言葉や文化について気づいたこと','次に頑張りたいこと']) requireText(reflection, label, 'six-part reflection UI');
-for (const field of ['achievements','languageUsed','thinking','difficultyStrategy','languageCultureAwareness','nextGoal']) {
-  requireText(routes, field, 'reflection API');
-  requireText(persistence, field, 'reflection persistence');
-}
-requireText(reflection, '6項目 合計', 'own-writing character count');
-requireText(css, 'min-height:145px', 'large writing fields');
-requireText(reflection, '前回の「次に頑張りたいこと」', 'next-lesson bridge');
-forbidText(reflection, 'めあてに向かって学ぶことができましたか？', 'obsolete five-point item');
-forbidText(reflection, '考えたり工夫したりして学ぶことができましたか？', 'obsolete five-point item');
+requireText(reflection, '今日のめあてに向かって学ぶことができましたか？', 'goal rating');
+requireText(reflection, '自分で考えたり、工夫したりしながら学ぶことができましたか？', 'self-regulation rating');
+requireText(reflection, 'goalRating', 'goal rating state');
+requireText(reflection, 'selfRegulationRating', 'self-regulation state');
+requireText(reflection, 'reflectionText', 'single free reflection field');
+requireText(reflection, 'meg-main-reflection', 'large reflection field');
+requireText(css, 'min-height:280px', 'large Chromebook writing area');
+for (const hint of ['できたこと','よかった学び方','授業中に考えていたこと','気づいたこと','友達のよかったところ','疑問に思ったこと','次に頑張りたいこと']) requireText(reflection, hint, 'reflection hint');
+requireText(reflection, '全部を書く必要はありません', 'optional hints guidance');
+requireText(reflection, 'draftKey = (token: string)', 'per-device local draft key');
+requireText(reflection, "timeZone: 'Asia/Tokyo'", 'Tokyo day boundary');
+requireText(reflection, 'local.savedAt > serverUpdatedAt', 'local/server draft freshness comparison');
+requireText(reflection, 'onRecordSaved', 'parent bootstrap refresh');
+requireText(reflection, 'window.clearTimeout(timerRef.current)', 'submit/autosave timer cancellation');
+requireText(reflection, 'もう一度読み込む', 'transient bootstrap retry');
+requireText(reflection, 'REFLECTION_DEVICE_REBIND_REQUIRED', 'stale device rebind');
+forbidText(reflection, 'Unit', 'reflection UI');
 forbidText(reflection, '静岡大学', 'reflection UI');
 forbidText(reflection, '留学生', 'reflection UI');
-forbidText(reflection, 'Unit', 'reflection UI');
 
-requireText(routes, "router.post('/register'", 'reflection register API');
-requireText(routes, "router.post('/bootstrap'", 'reflection bootstrap API');
-requireText(routes, "router.post('/save'", 'reflection save API');
-requireText(routes, "router.post('/history'", 'reflection history API');
-requireText(routes, "router.post('/class'", 'reflection class API');
-requireText(routes, "router.post('/teacher/login'", 'teacher login API');
-requireText(routes, "router.post('/teacher/dashboard'", 'teacher dashboard API');
-requireText(routes, "router.post('/teacher/student'", 'teacher student API');
-requireText(routes, "router.post('/teacher/export.csv'", 'teacher CSV API');
+// APIs and security/linkage.
+for (const route of ["router.post('/register'", "router.post('/bootstrap'", "router.post('/save'", "router.post('/history'", "router.post('/class'", "router.post('/teacher/login'", "router.post('/teacher/dashboard'", "router.post('/teacher/student'", "router.post('/teacher/export.csv'"]) requireText(routes, route, 'reflection route');
 requireText(routes, "requireManagementRole(['teacher'])", 'teacher authorization');
-requireText(routes, 'function publicReflection', 'student response redaction');
-forbidText(routes, 'researchId: record.researchId', 'student API response');
+requireText(routes, 'function publicReflection', 'pupil response redaction');
+forbidText(routes, 'researchId: record.researchId', 'pupil API response');
+requireText(routes, 'resolveStudentByCode(registered.learningId)', 'current student linkage validation');
+requireText(routes, 'REFLECTION_DEVICE_REBIND_REQUIRED', 'stale device rejection');
+requireText(routes, 'TOO_MANY_FAILED_CODE_ATTEMPTS', 'learning-code brute-force protection');
+
+// Persistence: canonical current schema plus non-destructive compatibility with the temporary six-part deployment.
 requireText(persistence, "const REFLECTION_COLLECTION = 'lesson_reflections'", 'separate reflection collection');
 requireText(persistence, "const DEVICE_COLLECTION = 'reflection_devices'", 'separate device collection');
-requireText(persistence, 'reflectionText: string;', 'legacy reflection-text compatibility');
-requireText(persistence, 'goalRating: number | null;', 'legacy goal-rating compatibility');
-requireText(persistence, 'selfRegulationRating: number | null;', 'legacy self-regulation compatibility');
-requireText(persistence, 'normalizeStoredRecord', 'legacy normalization');
-requireText(teacher, '提出済み', 'teacher status');
+for (const field of ['todayGoal','goalRating','selfRegulationRating','reflectionText']) requireText(persistence, `${field}:`, 'canonical reflection persistence');
+for (const legacy of ['achievements','languageUsed','thinking','difficultyStrategy','languageCultureAwareness','nextGoal']) requireText(persistence, `${legacy}:`, 'six-part backward compatibility');
+requireText(persistence, "input.status === 'submitted' || existing?.status === 'submitted'", 'monotonic submitted status');
+requireText(persistence, 'queryCollectionByEqualities', 'exact class/date peer query');
+requireText(firestore, 'export async function queryCollectionByEqualities', 'multi-field Firestore query');
+requireText(firestore, 'compositeFilter', 'AND equality query');
+
+// Teacher UI and export consistency.
+requireText(teacher, '提出済み', 'teacher submitted status');
 requireText(teacher, '未入力', 'teacher missing visibility');
 requireText(teacher, 'CSV', 'teacher CSV button');
-requireText(teacherModel, 'legacy_reflection_text', 'CSV backward compatibility');
-requireText(serverEntry, "this.use('/api/reflection'", 'server route mount');
+requireText(teacher, '自己評価', 'teacher B-design table');
+requireText(teacherModel, "'goal_rating'", 'CSV goal rating');
+requireText(teacherModel, "'self_regulation_rating'", 'CSV self-regulation rating');
+requireText(teacherModel, "'reflection_text'", 'CSV free reflection');
+requireText(teacherModel, "if (/^\\s*[=+\\-@]/.test(text))", 'CSV formula-injection guard');
+forbidText(teacherModel, "'research_id'", 'teacher CSV internal research id');
+forbidText(teacherModel, "'student_id'", 'teacher CSV internal student id');
 
 // Nested routes must load JS/CSS correctly on both GitHub Pages and Cloud Run.
 requireText(viteConfig, "process.env.VITE_DEPLOY_TARGET === 'pages'", 'deployment-specific Vite base');
@@ -70,9 +92,4 @@ requireText(packageJson, 'dist/reflection/teacher', 'teacher static route');
 requireText(packageJson, '"build": "vite build && npm run build:server"', 'Cloud Run build isolation');
 forbidText(packageJson, '"build": "npm run build:pages', 'Cloud Run must not reuse Pages asset base');
 
-// Protect the existing AI dialogue data contract and App from accidental reflection coupling.
-forbidText(app, 'lesson_reflections', 'existing App');
-forbidText(app, 'ReflectionApp', 'existing App');
-forbidText(dataContract, 'lesson_reflections', 'existing AI data contract');
-
-console.log('[qa:reflection] PASS');
+console.log('[qa:reflection] PASS: B-design, button/API linkage, storage integrity, privacy, compatibility, and deployment guards verified.');
