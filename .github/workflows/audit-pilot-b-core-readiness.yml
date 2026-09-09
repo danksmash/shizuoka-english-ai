@@ -1,0 +1,130 @@
+name: Audit Pilot B core-session readiness
+
+on:
+  push:
+    branches:
+      - audit/pilot-b-291-quality
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+      - name: Read-only participant/core-session audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          curl --fail --silent --show-error --max-time 45 \
+            -X POST 'https://firestore.googleapis.com/v1/projects/shizuoka-english-ai/databases/(default)/documents:runQuery' \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            --data '{"structuredQuery":{"from":[{"collectionId":"sessions"}],"where":{"fieldFilter":{"field":{"fieldPath":"classId"},"op":"EQUAL","value":{"stringValue":"6-PB"}}},"limit":1000}}' > /tmp/pb.json
+          python3 - <<'PY'
+          import json, math
+          from collections import Counter, defaultdict
+
+          def dec(v):
+              if not isinstance(v,dict): return None
+              for k in ('stringValue','timestampValue'):
+                  if k in v: return v[k]
+              if 'integerValue' in v:
+                  try:return int(v['integerValue'])
+                  except:return 0
+              if 'doubleValue' in v:
+                  try:return float(v['doubleValue'])
+                  except:return 0
+              if 'booleanValue' in v:return bool(v['booleanValue'])
+              if 'nullValue' in v:return None
+              if 'arrayValue' in v:return [dec(x) for x in (v.get('arrayValue',{}).get('values') or [])]
+              if 'mapValue' in v:return {k:dec(x) for k,x in (v.get('mapValue',{}).get('fields') or {}).items()}
+              return None
+          rows=[]
+          for item in json.load(open('/tmp/pb.json')):
+              f=(item.get('document') or {}).get('fields') or {}
+              r={k:dec(v) for k,v in f.items()}
+              if r.get('localDate')=='2026-09-09': rows.append(r)
+          assert len(rows)==291, len(rows)
+
+          def hist(r): return r.get('history') if isinstance(r.get('history'),list) else []
+          def child(r): return [m for m in hist(r) if isinstance(m,dict) and m.get('sender')=='child' and str(m.get('englishText') or '').strip()]
+          def evs(r): return r.get('systemEvents') if isinstance(r.get('systemEvents'),list) else []
+          def evcount(r,t): return sum(1 for e in evs(r) if isinstance(e,dict) and e.get('type')==t)
+          def hasref(r): return isinstance(r.get('reflection'),dict) and bool(r.get('reflection'))
+          def done(r): return evcount(r,'session_finish')>0 or (bool(r.get('endedAt')) and hasref(r)) or (bool(r.get('endedAt')) and int(r.get('schemaVersion') or 0)<3 and bool(child(r)))
+          def q(r):
+              if not r.get('sessionId') or not r.get('researchId') or not hist(r) or not child(r): return 'missing_core'
+              if not done(r): return 'interrupted'
+              if not hasref(r): return 'missing_reflection'
+              return 'complete'
+          def strong2(r): return q(r)=='complete' and int(r.get('targetDurationMinutes') or 0)==2 and float(r.get('actualDurationSeconds') or 0)>=100 and len(child(r))>=2
+
+          by=defaultdict(list)
+          for r in rows: by[str(r.get('researchId') or '')].append(r)
+          assert len(by)==26, len(by)
+          pstats=[]
+          for rid,rs in by.items():
+              errs=Counter()
+              for r in rs:
+                  for e in evs(r):
+                      if isinstance(e,dict) and e.get('type')=='mic_error': errs[str(e.get('value') or 'unknown')]+=1
+              pstats.append({
+                  'sessions':len(rs),
+                  'complete':sum(q(r)=='complete' for r in rs),
+                  'complete2':sum(q(r)=='complete' and int(r.get('targetDurationMinutes') or 0)==2 for r in rs),
+                  'strong2':sum(strong2(r) for r in rs),
+                  'finished':sum(done(r) for r in rs),
+                  'missing_core':sum(q(r)=='missing_core' for r in rs),
+                  'interrupted':sum(q(r)=='interrupted' for r in rs),
+                  'mic_error_sessions':sum(evcount(r,'mic_error')>0 for r in rs),
+                  'mic_error_events':sum(evcount(r,'mic_error') for r in rs),
+                  'mic_errors':errs,
+                  'ai_failure_sessions':sum(evcount(r,'ai_request_failure')>0 for r in rs),
+              })
+
+          def participants_at_least(key,n): return sum(1 for p in pstats if p[key]>=n)
+          error_participants=Counter()
+          for p in pstats:
+              for typ,n in p['mic_errors'].items():
+                  if n: error_participants[typ]+=1
+
+          cross=Counter()
+          for r in rows: cross[(q(r),'mic_error' if evcount(r,'mic_error') else 'no_mic_error')]+=1
+
+          result={
+            'participants':26,
+            'participants_with_at_least_1_complete':participants_at_least('complete',1),
+            'participants_with_at_least_2_complete':participants_at_least('complete',2),
+            'participants_with_at_least_1_complete_2min':participants_at_least('complete2',1),
+            'participants_with_at_least_2_complete_2min':participants_at_least('complete2',2),
+            'participants_with_at_least_2_strong_2min':participants_at_least('strong2',2),
+            'participants_with_no_complete_2min':sum(1 for p in pstats if p['complete2']==0),
+            'participants_with_mic_error':sum(1 for p in pstats if p['mic_error_events']>0),
+            'participants_by_mic_error_type':dict(error_participants),
+            'mic_error_events_per_affected_participant':sorted([p['mic_error_events'] for p in pstats if p['mic_error_events']>0]),
+            'participants_with_ai_request_failure':sum(1 for p in pstats if p['ai_failure_sessions']>0),
+            'quality_x_mic_error':{f'{k[0]}|{k[1]}':v for k,v in cross.items()},
+            'complete_sessions_total':sum(p['complete'] for p in pstats),
+            'complete_2min_sessions_total':sum(p['complete2'] for p in pstats),
+            'strong_2min_sessions_total':sum(p['strong2'] for p in pstats),
+            'participant_complete_2min_counts':dict(sorted(Counter(p['complete2'] for p in pstats).items())),
+            'participant_strong_2min_counts':dict(sorted(Counter(p['strong2'] for p in pstats).items())),
+            'participant_missing_core_counts':dict(sorted(Counter(p['missing_core'] for p in pstats).items())),
+          }
+          print('=== PILOT_B_CORE_READINESS ===')
+          print(json.dumps(result,ensure_ascii=False,indent=2,sort_keys=True))
+          print('=== END_CORE_READINESS ===')
+          PY
