@@ -57,7 +57,6 @@ export async function issueReflectionDevice(identity: ReflectionIdentity): Promi
       learningId: identity.learningId,
       active: true,
       createdAt: new Date().toISOString(),
-      lastSeenAt: new Date().toISOString(),
     });
     if (created) return token;
   }
@@ -73,10 +72,6 @@ export async function resolveReflectionDevice(token: string): Promise<Reflection
   const classId = typeof record.classId === 'string' ? record.classId : '';
   const learningId = typeof record.learningId === 'string' ? record.learningId : '';
   if (!studentId || !researchId || !classId || !learningId) return null;
-  await setDocument(DEVICE_COLLECTION, tokenKey(token), {
-    ...Object.fromEntries(Object.entries(record).filter(([key]) => key !== '_name')),
-    lastSeenAt: new Date().toISOString(),
-  });
   return { studentId, researchId, classId, learningId };
 }
 
