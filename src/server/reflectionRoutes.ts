@@ -134,6 +134,11 @@ router.post('/register', async (req, res) => {
       const allowed = noteReflectionCodeFailure(ip);
       return res.status(allowed ? 401 : 429).json({ success: false, error: allowed ? 'LEARNING_CODE_NOT_FOUND' : 'TOO_MANY_FAILED_CODE_ATTEMPTS' });
     }
+    // Reflection peer/teacher views require an assigned class. Do not issue a token
+    // that the bootstrap path will immediately reject as an incomplete identity.
+    if (!student.classId) {
+      return res.status(409).json({ success: false, error: 'REFLECTION_CLASS_NOT_ASSIGNED' });
+    }
     const deviceToken = await issueReflectionDevice({
       studentId: student.studentId,
       researchId: student.researchId,

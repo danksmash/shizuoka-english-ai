@@ -119,7 +119,9 @@ function FirstUse({ onRegistered }: { onRegistered: (token: string) => void }) {
     catch (e: any) {
       setError(e?.code === 'TOO_MANY_FAILED_CODE_ATTEMPTS'
         ? '入力の確認回数が多くなっています。少し時間をおいて先生に確認してください。'
-        : '学習者IDを確認できませんでした。先生に確認してください。');
+        : e?.code === 'REFLECTION_CLASS_NOT_ASSIGNED'
+          ? 'この学習者IDには学級が設定されていません。先生に確認してください。'
+          : '学習者IDを確認できませんでした。先生に確認してください。');
     }
     finally { setBusy(false); }
   };
