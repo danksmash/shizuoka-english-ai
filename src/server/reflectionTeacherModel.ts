@@ -8,9 +8,27 @@ export interface TeacherRosterStudent {
   active: boolean;
 }
 
+export type ReflectionTeacherDataScope = 'all' | 'main' | 'pilot_b' | 'test' | 'reserve';
+export type ReflectionTeacherGrade = 'all' | '5' | '6';
+export type ReflectionTeacherClassNumber = 'all' | '1' | '2' | '3';
+type ConcreteDataScope = Exclude<ReflectionTeacherDataScope, 'all'>;
+type ConcreteGrade = Exclude<ReflectionTeacherGrade, 'all'> | '';
+type ConcreteClassNumber = Exclude<ReflectionTeacherClassNumber, 'all'> | '';
+
+export interface TeacherReflectionFilterQuery {
+  dataScope?: unknown;
+  grade?: unknown;
+  classNumber?: unknown;
+  // Backward compatibility for an older cached teacher bundle.
+  classId?: unknown;
+}
+
 export interface TeacherReflectionStudentRow {
   learningId: string;
   classId: string;
+  dataScope: ConcreteDataScope;
+  grade: ConcreteGrade;
+  classNumber: ConcreteClassNumber;
   attendanceNumber: number | '';
   status: 'submitted' | 'draft' | 'missing';
   reflectionCharCount: number;
@@ -23,10 +41,35 @@ export interface TeacherReflectionStudentRow {
 
 export interface TeacherReflectionDashboard {
   localDate: string;
+  dataScope: ReflectionTeacherDataScope;
+  grade: ReflectionTeacherGrade;
+  classNumber: ReflectionTeacherClassNumber;
+  // Retained for compatibility with a previously deployed client.
   classId: string;
   classes: string[];
   counts: { total: number; submitted: number; draft: number; missing: number };
   students: TeacherReflectionStudentRow[];
+}
+
+export function reflectionDataScopeForClassId(value: unknown): ConcreteDataScope {
+  const classId = typeof value === 'string' ? value.trim() : '';
+  if (classId === '5-PB' || classId === '6-PB') return 'pilot_b';
+  if (classId === 'テスト') return 'test';
+  if (classId === '予備') return 'reserve';
+  return 'main';
+}
+
+export function reflectionGradeForClassId(value: unknown): ConcreteGrade {
+  const classId = typeof value === 'string' ? value.trim() : '';
+  if (classId.startsWith('5-')) return '5';
+  if (classId.startsWith('6-')) return '6';
+  return '';
+}
+
+export function reflectionClassNumberForClassId(value: unknown): ConcreteClassNumber {
+  const classId = typeof value === 'string' ? value.trim() : '';
+  const match = classId.match(/^[56]-([123])$/);
+  return match ? match[1] as ConcreteClassNumber : '';
 }
 
 function safeDate(value: unknown, fallback: string): string {
@@ -36,6 +79,28 @@ function safeDate(value: unknown, fallback: string): string {
 
 function safeClass(value: unknown): string {
   return typeof value === 'string' ? value.trim().slice(0, 40) : '';
+}
+
+function normalizeFilters(value: TeacherReflectionFilterQuery | string | undefined) {
+  const query: TeacherReflectionFilterQuery = typeof value === 'string' ? { classId: value } : (value || {});
+  const legacyClassId = safeClass(query.classId);
+  const rawScope = typeof query.dataScope === 'string' ? query.dataScope.trim() : '';
+  const rawGrade = typeof query.grade === 'string' ? query.grade.trim() : '';
+  const rawClassNumber = typeof query.classNumber === 'string' ? query.classNumber.trim() : '';
+  const dataScope: ReflectionTeacherDataScope = ['all','main','pilot_b','test','reserve'].includes(rawScope)
+    ? rawScope as ReflectionTeacherDataScope
+    : legacyClassId ? 'all' : 'main';
+  const grade: ReflectionTeacherGrade = ['5','6'].includes(rawGrade) ? rawGrade as ReflectionTeacherGrade : 'all';
+  const classNumber: ReflectionTeacherClassNumber = ['1','2','3'].includes(rawClassNumber) ? rawClassNumber as ReflectionTeacherClassNumber : 'all';
+  return { dataScope, grade, classNumber, legacyClassId };
+}
+
+function membershipMatches(classId: string, filters: ReturnType<typeof normalizeFilters>): boolean {
+  if (filters.legacyClassId) return classId === filters.legacyClassId;
+  if (filters.dataScope !== 'all' && reflectionDataScopeForClassId(classId) !== filters.dataScope) return false;
+  if (filters.grade !== 'all' && reflectionGradeForClassId(classId) !== filters.grade) return false;
+  if (filters.classNumber !== 'all' && reflectionClassNumberForClassId(classId) !== filters.classNumber) return false;
+  return true;
 }
 
 function legacySixPartText(record: ReflectionRecord): string {
@@ -59,18 +124,18 @@ export function buildTeacherReflectionDashboard(
   roster: TeacherRosterStudent[],
   records: ReflectionRecord[],
   requestedDate: unknown,
-  requestedClass: unknown,
+  requestedFilters: TeacherReflectionFilterQuery | string | undefined,
   today: string,
 ): TeacherReflectionDashboard {
   const localDate = safeDate(requestedDate, today);
-  const classId = safeClass(requestedClass);
+  const filters = normalizeFilters(requestedFilters);
   const activeRoster = roster.filter((student) => student.active && student.learningId && student.classId);
   const classes = Array.from(new Set(activeRoster.map((student) => student.classId))).sort((a, b) => a.localeCompare(b, 'ja'));
-  const selectedRoster = activeRoster.filter((student) => !classId || student.classId === classId);
+  const selectedRoster = activeRoster.filter((student) => membershipMatches(student.classId, filters));
+  const allowedStudentIds = new Set(selectedRoster.map((student) => student.studentId));
   const recordsByStudent = new Map<string, ReflectionRecord>();
   for (const record of records) {
-    if (record.localDate !== localDate) continue;
-    if (classId && record.classId !== classId) continue;
+    if (record.localDate !== localDate || !allowedStudentIds.has(record.studentId)) continue;
     const current = recordsByStudent.get(record.studentId);
     if (!current || record.updatedAt > current.updatedAt) recordsByStudent.set(record.studentId, record);
   }
@@ -80,6 +145,9 @@ export function buildTeacherReflectionDashboard(
     return {
       learningId: student.learningId,
       classId: student.classId,
+      dataScope: reflectionDataScopeForClassId(student.classId),
+      grade: reflectionGradeForClassId(student.classId),
+      classNumber: reflectionClassNumberForClassId(student.classId),
       attendanceNumber: student.attendanceNumber,
       status,
       reflectionCharCount: record?.reflectionCharCount || 0,
@@ -92,7 +160,10 @@ export function buildTeacherReflectionDashboard(
   }).sort((a, b) => a.classId.localeCompare(b.classId, 'ja') || Number(a.attendanceNumber || 999) - Number(b.attendanceNumber || 999) || a.learningId.localeCompare(b.learningId));
   return {
     localDate,
-    classId,
+    dataScope: filters.dataScope,
+    grade: filters.grade,
+    classNumber: filters.classNumber,
+    classId: filters.legacyClassId,
     classes,
     counts: {
       total: students.length,
@@ -106,7 +177,6 @@ export function buildTeacherReflectionDashboard(
 
 function csvCell(value: unknown): string {
   let text = String(value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  // Quoting is not enough to prevent spreadsheet formula execution in imported CSV files.
   if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
   return `"${text.replace(/"/g, '""')}"`;
 }
@@ -115,19 +185,18 @@ export function serializeTeacherReflectionCsv(
   roster: TeacherRosterStudent[],
   records: ReflectionRecord[],
   requestedDate: unknown,
-  requestedClass: unknown,
+  requestedFilters: TeacherReflectionFilterQuery | string | undefined,
 ): string {
-  const classId = safeClass(requestedClass);
+  const filters = normalizeFilters(requestedFilters);
   const dateText = typeof requestedDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : '';
   const rosterByStudent = new Map(roster.map((student) => [student.studentId, student]));
   const rows = records
-    .filter((record) => (!classId || record.classId === classId) && (!dateText || record.localDate === dateText))
+    .filter((record) => membershipMatches(record.classId, filters) && (!dateText || record.localDate === dateText))
     .sort((a, b) => a.localDate.localeCompare(b.localDate) || a.classId.localeCompare(b.classId, 'ja') || (rosterByStudent.get(a.studentId)?.learningId || '').localeCompare(rosterByStudent.get(b.studentId)?.learningId || ''));
   const headers = [
-    'local_date', 'class_id', 'learning_id', 'attendance_number', 'status', 'today_goal',
+    'local_date', 'class_id', 'data_scope', 'grade_level', 'class_number', 'learning_id', 'attendance_number', 'status', 'today_goal',
     'goal_rating', 'self_regulation_rating', 'reflection_text', 'reflection_char_count',
     'revision', 'created_at', 'updated_at', 'submitted_at',
-    // Backward-compatible columns for any records written during the temporary six-part deployment.
     'achievements', 'language_used', 'thinking', 'difficulty_strategy', 'language_culture_awareness', 'next_goal',
   ];
   const lines = [headers.map(csvCell).join(',')];
@@ -136,6 +205,9 @@ export function serializeTeacherReflectionCsv(
     lines.push([
       record.localDate,
       record.classId,
+      reflectionDataScopeForClassId(record.classId),
+      reflectionGradeForClassId(record.classId),
+      reflectionClassNumberForClassId(record.classId),
       rosterStudent?.learningId || record.learningId,
       rosterStudent?.attendanceNumber || '',
       record.status,
@@ -163,7 +235,7 @@ export function buildTeacherStudentHistory(
   roster: TeacherRosterStudent[],
   records: ReflectionRecord[],
   learningId: string,
-): { learningId: string; classId: string; attendanceNumber: number | ''; history: Array<Omit<ReflectionRecord, 'studentId' | 'researchId' | 'classId' | 'learningId'>> } | null {
+): { learningId: string; classId: string; dataScope: ConcreteDataScope; grade: ConcreteGrade; classNumber: ConcreteClassNumber; attendanceNumber: number | ''; history: Array<Omit<ReflectionRecord, 'studentId' | 'researchId' | 'classId' | 'learningId'>> } | null {
   const normalized = learningId.trim().toUpperCase();
   const student = roster.find((row) => row.active && row.learningId === normalized);
   if (!student) return null;
@@ -171,5 +243,13 @@ export function buildTeacherStudentHistory(
     .filter((record) => record.studentId === student.studentId)
     .sort((a, b) => b.localDate.localeCompare(a.localDate))
     .map(({ studentId: _studentId, researchId: _researchId, classId: _classId, learningId: _learningId, ...safe }) => safe);
-  return { learningId: student.learningId, classId: student.classId, attendanceNumber: student.attendanceNumber, history };
+  return {
+    learningId: student.learningId,
+    classId: student.classId,
+    dataScope: reflectionDataScopeForClassId(student.classId),
+    grade: reflectionGradeForClassId(student.classId),
+    classNumber: reflectionClassNumberForClassId(student.classId),
+    attendanceNumber: student.attendanceNumber,
+    history,
+  };
 }
