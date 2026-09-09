@@ -117,7 +117,7 @@ export async function saveLessonReflection(
     updatedAt: now,
     submittedAt: status === 'submitted' ? now : (typeof existing?.submittedAt === 'string' ? existing.submittedAt : ''),
   };
-  await setDocument(REFLECTION_COLLECTION, reflectionId, record);
+  await setDocument(REFLECTION_COLLECTION, reflectionId, { ...record });
   return record;
 }
 
