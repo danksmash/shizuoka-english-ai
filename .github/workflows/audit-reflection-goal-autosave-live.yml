@@ -1,0 +1,110 @@
+name: Audit Reflection goal autosave live
+
+on:
+  push:
+    branches:
+      - audit/reflection-goal-autosave-live-20260910
+    paths:
+      - '.github/workflows/audit-reflection-goal-autosave-live.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify_live:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+      - name: Verify goal save and fresh reload, then restore production data
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_URL='https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app'
+          FS='https://firestore.googleapis.com/v1/projects/shizuoka-english-ai/databases/(default)/documents'
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          START_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          HAD_RECORD=0
+          REF_URL=''
+          cleanup() {
+            set +e
+            if [ -n "$REF_URL" ]; then
+              if [ "$HAD_RECORD" = '1' ] && [ -s /tmp/ref-backup.json ]; then
+                jq '{fields:.fields}' /tmp/ref-backup.json > /tmp/ref-restore.json
+                curl --silent --show-error --max-time 20 -X PATCH "$REF_URL" \
+                  -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json' \
+                  --data-binary @/tmp/ref-restore.json >/dev/null
+              elif [ "$HAD_RECORD" = '0' ]; then
+                curl --silent --show-error --max-time 20 -X DELETE "$REF_URL" \
+                  -H "Authorization: Bearer $ACCESS_TOKEN" >/dev/null
+              fi
+            fi
+            DEV_QUERY="$(jq -nc '{structuredQuery:{from:[{collectionId:"reflection_devices"}],where:{fieldFilter:{field:{fieldPath:"learningId"},op:"EQUAL",value:{stringValue:"6RSX"}}},limit:100}}')"
+            curl --silent --show-error --max-time 20 -X POST \
+              'https://firestore.googleapis.com/v1/projects/shizuoka-english-ai/databases/(default)/documents:runQuery' \
+              -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json' \
+              --data "$DEV_QUERY" > /tmp/devices.json || true
+            jq -r --arg start "$START_ISO" '.[] | select(.document.fields.createdAt.stringValue >= $start) | .document.name' /tmp/devices.json 2>/dev/null | while read -r name; do
+              [ -n "$name" ] || continue
+              curl --silent --show-error --max-time 20 -X DELETE "https://firestore.googleapis.com/v1/$name" \
+                -H "Authorization: Bearer $ACCESS_TOKEN" >/dev/null || true
+            done
+          }
+          trap cleanup EXIT
+
+          STUDENT_QUERY="$(jq -nc '{structuredQuery:{from:[{collectionId:"students"}],where:{fieldFilter:{field:{fieldPath:"learningId"},op:"EQUAL",value:{stringValue:"6RSX"}}},limit:2}}')"
+          curl --fail --silent --show-error --max-time 20 -X POST \
+            'https://firestore.googleapis.com/v1/projects/shizuoka-english-ai/databases/(default)/documents:runQuery' \
+            -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json' \
+            --data "$STUDENT_QUERY" > /tmp/student-query.json
+          test "$(jq '[.[]|select(.document)]|length' /tmp/student-query.json)" = '1'
+          STUDENT_ID="$(jq -r '.[0].document.fields.studentId.stringValue' /tmp/student-query.json)"
+          test -n "$STUDENT_ID"
+          LOCAL_DATE="$(TZ=Asia/Tokyo date +%F)"
+          REF_ID="$(printf '%s|%s' "$STUDENT_ID" "$LOCAL_DATE" | sha256sum | awk '{print $1}')"
+          REF_URL="$FS/lesson_reflections/$REF_ID"
+          REF_STATUS="$(curl --silent --show-error --max-time 20 -o /tmp/ref-backup.json -w '%{http_code}' "$REF_URL" -H "Authorization: Bearer $ACCESS_TOKEN")"
+          if [ "$REF_STATUS" = '200' ]; then HAD_RECORD=1; elif [ "$REF_STATUS" = '404' ]; then HAD_RECORD=0; else exit 1; fi
+
+          REG1="$(curl --fail --silent --show-error --max-time 20 -X POST "$API_URL/api/reflection/register" -H 'Content-Type: application/json' --data '{"learningCode":"6RSX"}')"
+          TOKEN1="$(printf '%s' "$REG1" | jq -r '.deviceToken')"
+          test -n "$TOKEN1"
+          BEFORE="$(curl --fail --silent --show-error --max-time 20 -X POST "$API_URL/api/reflection/bootstrap" -H 'Content-Type: application/json' --data "$(jq -nc --arg t "$TOKEN1" '{deviceToken:$t}')")"
+
+          TEST_GOAL="QA_AUTOSAVE_${GITHUB_RUN_ID}"
+          SAVED="$(curl --fail --silent --show-error --max-time 20 -X POST "$API_URL/api/reflection/save" -H 'Content-Type: application/json' --data "$(jq -nc --arg t "$TOKEN1" --arg g "$TEST_GOAL" '{deviceToken:$t,todayGoal:$g}')")"
+          test "$(printf '%s' "$SAVED" | jq -r '.reflection.todayGoal')" = "$TEST_GOAL"
+
+          REG2="$(curl --fail --silent --show-error --max-time 20 -X POST "$API_URL/api/reflection/register" -H 'Content-Type: application/json' --data '{"learningCode":"6RSX"}')"
+          TOKEN2="$(printf '%s' "$REG2" | jq -r '.deviceToken')"
+          AFTER="$(curl --fail --silent --show-error --max-time 20 -X POST "$API_URL/api/reflection/bootstrap" -H 'Content-Type: application/json' --data "$(jq -nc --arg t "$TOKEN2" '{deviceToken:$t}')")"
+          test "$(printf '%s' "$AFTER" | jq -r '.today.todayGoal')" = "$TEST_GOAL"
+
+          BEFORE_STABLE="$(printf '%s' "$BEFORE" | jq -c '.today // {} | {goalRating,selfRegulationRating,reflectionText,status,achievements,languageUsed,thinking,difficultyStrategy,languageCultureAwareness,nextGoal}')"
+          AFTER_STABLE="$(printf '%s' "$AFTER" | jq -c '.today // {} | {goalRating,selfRegulationRating,reflectionText,status,achievements,languageUsed,thinking,difficultyStrategy,languageCultureAwareness,nextGoal}')"
+          if [ "$(printf '%s' "$BEFORE" | jq -r '.today == null')" = 'false' ]; then test "$BEFORE_STABLE" = "$AFTER_STABLE"; fi
+
+          PUPIL="$(curl --fail --silent --show-error --max-time 20 'https://danksmash.github.io/shizuoka-english-ai/reflection/')"
+          JS="$(printf '%s' "$PUPIL" | grep -oE 'src="[^"]+\.js"' | head -1 | cut -d'"' -f2)"
+          BUNDLE="$(curl --fail --silent --show-error --max-time 30 "https://danksmash.github.io$JS")"
+          echo "$BUNDLE" | grep -q 'pagehide'
+          echo "$BUNDLE" | grep -q 'keepalive'
+          echo "$BUNDLE" | grep -q '今日の振り返りを保存する'
+          echo "$BUNDLE" | grep -q '全部を書く必要はありません'
+          echo 'LIVE_REFLECTION_GOAL_SAVE_RELOAD_PASS'
+          echo 'LIVE_REFLECTION_GOAL_STABLE_FIELDS_PASS'
+          echo 'LIVE_PAGES_AUTOSAVE_BUNDLE_PASS'
