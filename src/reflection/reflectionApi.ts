@@ -37,8 +37,9 @@ async function postJson<T>(path: string, body: Record<string, unknown>): Promise
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.success === false) {
-    const error = new Error(data?.error || `HTTP_${response.status}`) as Error & { code?: string };
+    const error = new Error(data?.error || `HTTP_${response.status}`) as Error & { code?: string; status?: number };
     error.code = data?.error;
+    error.status = response.status;
     throw error;
   }
   return data as T;
