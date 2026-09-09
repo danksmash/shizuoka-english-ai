@@ -1,0 +1,49 @@
+name: Apply Reflection class guard
+
+on:
+  push:
+    branches:
+      - fix/reflection-6rsx-login-20260910
+    paths:
+      - 'scripts/apply-reflection-class-guard.mjs'
+      - '.github/workflows/apply-reflection-class-guard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Apply minimal fix
+        run: node scripts/apply-reflection-class-guard.mjs
+      - name: Reflection QA
+        run: npm run qa:reflection
+      - name: Full QA and builds
+        run: |
+          npm run qa
+          npm run build
+          npm run build:pages
+      - name: Commit verified fix
+        run: |
+          rm -f .github/workflows/audit-reflection-6rsx-temp.yml
+          rm -f .github/workflows/fix-reflection-class-guard-temp.yml
+          rm -f .github/workflows/apply-reflection-class-guard.yml
+          rm -f scripts/apply-reflection-class-guard.mjs
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: prevent unusable Reflection tokens for unassigned classes'
+          git push origin HEAD:fix/reflection-6rsx-login-20260910
