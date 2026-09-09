@@ -1,3 +1,3 @@
 import { build } from 'esbuild';
-await build({ entryPoints: ['server.ts'], bundle: true, platform: 'node', format: 'cjs', packages: 'external', sourcemap: true, outfile: 'dist/server.cjs' });
+await build({ entryPoints: ['server-entry.ts'], bundle: true, platform: 'node', format: 'cjs', packages: 'external', sourcemap: true, outfile: 'dist/server.cjs' });
 console.log('[build] server bundle complete');
