@@ -1,0 +1,171 @@
+name: Verify Reflection goal autosave production
+
+on:
+  push:
+    branches:
+      - verify/reflection-goal-autosave-production-20260910
+    paths:
+      - '.github/workflows/verify-reflection-goal-autosave-production-temp.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+      - name: Verify live goal save, reload restoration, and deployed UI invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          ACCESS_TOKEN="$TOKEN" python3 - <<'PY'
+          import datetime, hashlib, json, os, urllib.parse, urllib.request, urllib.error
+          from zoneinfo import ZoneInfo
+
+          project='shizuoka-english-ai'
+          api='https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app'
+          pages='https://danksmash.github.io/shizuoka-english-ai/reflection/'
+          token=os.environ['ACCESS_TOKEN']
+          base=f'https://firestore.googleapis.com/v1/projects/{project}/databases/(default)/documents'
+          today=datetime.datetime.now(ZoneInfo('Asia/Tokyo')).date().isoformat()
+
+          def auth_fetch(url, method='GET', body=None):
+              data=None if body is None else json.dumps(body).encode()
+              req=urllib.request.Request(url,data=data,method=method,headers={'Authorization':f'Bearer {token}','Content-Type':'application/json'})
+              with urllib.request.urlopen(req,timeout=30) as r:
+                  raw=r.read()
+                  return r.status, (json.loads(raw) if raw else {})
+
+          def public_post(path, payload):
+              req=urllib.request.Request(api+path,data=json.dumps(payload).encode(),method='POST',headers={'Content-Type':'application/json'})
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      return r.status,json.loads(r.read())
+              except urllib.error.HTTPError as e:
+                  raw=e.read()
+                  try: parsed=json.loads(raw)
+                  except: parsed={}
+                  return e.code,parsed
+
+          def val(v):
+              if not isinstance(v,dict): return None
+              for k in ('stringValue','booleanValue','integerValue','doubleValue','timestampValue'):
+                  if k in v:
+                      x=v[k]
+                      if k=='integerValue':
+                          try:return int(x)
+                          except:return x
+                      return x
+              if 'nullValue' in v:return None
+              return None
+
+          def list_collection(name):
+              docs=[]; page=''
+              while True:
+                  url=f'{base}/{name}?pageSize=1000'
+                  if page:url += '&pageToken='+urllib.parse.quote(page)
+                  _,data=auth_fetch(url)
+                  docs += data.get('documents',[])
+                  page=data.get('nextPageToken','')
+                  if not page: return docs
+
+          # Confirm deployed Pages bundle still represents the same approved screen and contains the leave-page autosave wiring.
+          with urllib.request.urlopen(pages,timeout=30) as r:
+              html=r.read().decode()
+          import re
+          match=re.search(r'src="([^"]+\.js)"',html)
+          assert match,'Pages JS bundle not found'
+          js_url=urllib.parse.urljoin(pages,match.group(1))
+          with urllib.request.urlopen(js_url,timeout=30) as r:
+              bundle=r.read().decode(errors='replace')
+          for text in ["Today's Goal","Today's Reflection",'今日のめあてに向かって学ぶことができましたか？','全部を書く必要はありません','今日の振り返りを保存する','pagehide']:
+              assert text in bundle, f'missing deployed UI/autosave invariant: {text}'
+          assert 'めあてを保存' not in bundle, 'manual goal-save UI unexpectedly present'
+
+          # Resolve only the designated teacher test identity.
+          students=[]
+          for d in list_collection('students'):
+              row={k:val(v) for k,v in d.get('fields',{}).items()}
+              row['_name']=d.get('name','')
+              if str(row.get('learningId','')).upper()=='6RSX': students.append(row)
+          assert len(students)==1,'6RSX identity count mismatch'
+          student=students[0]
+          assert student.get('classId')=='テスト','6RSX must remain in test class'
+          student_id=student.get('studentId')
+          assert student_id,'6RSX studentId missing'
+
+          before_devices=set()
+          for d in list_collection('reflection_devices'):
+              f={k:val(v) for k,v in d.get('fields',{}).items()}
+              if str(f.get('learningId','')).upper()=='6RSX': before_devices.add(d.get('name',''))
+
+          status,reg=public_post('/api/reflection/register',{'learningCode':'6RSX'})
+          assert status==200 and reg.get('success') and reg.get('deviceToken'),'register failed'
+          device=reg['deviceToken']
+          status,boot=public_post('/api/reflection/bootstrap',{'deviceToken':device})
+          assert status==200 and boot.get('success') and boot.get('learningId')=='6RSX','initial bootstrap failed'
+          original=boot.get('today')
+
+          marker='AUTOSAVE_QA_'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+          status,saved=public_post('/api/reflection/save',{'deviceToken':device,'todayGoal':marker})
+          assert status==200 and saved.get('success') and saved.get('reflection',{}).get('todayGoal')==marker,'goal-only save failed'
+          status,reloaded=public_post('/api/reflection/bootstrap',{'deviceToken':device})
+          assert status==200 and reloaded.get('today',{}).get('todayGoal')==marker,'saved goal did not survive reload'
+
+          # A goal-only save must not erase existing reflection content.
+          if original:
+              current=reloaded.get('today') or {}
+              for field in ['goalRating','selfRegulationRating','reflectionText','status','achievements','languageUsed','thinking','difficultyStrategy','languageCultureAwareness','nextGoal']:
+                  assert current.get(field)==original.get(field), f'goal-only save changed {field}'
+              restore={
+                  'deviceToken':device,
+                  'todayGoal':original.get('todayGoal',''),
+                  'goalRating':original.get('goalRating'),
+                  'selfRegulationRating':original.get('selfRegulationRating'),
+                  'reflectionText':original.get('reflectionText',''),
+                  'status':original.get('status','draft'),
+                  'achievements':original.get('achievements',''),
+                  'languageUsed':original.get('languageUsed',''),
+                  'thinking':original.get('thinking',''),
+                  'difficultyStrategy':original.get('difficultyStrategy',''),
+                  'languageCultureAwareness':original.get('languageCultureAwareness',''),
+                  'nextGoal':original.get('nextGoal',''),
+              }
+              st,rest=public_post('/api/reflection/save',restore)
+              assert st==200 and rest.get('success'),'restore failed'
+          else:
+              # Delete only the QA-created lesson record for the test identity/date.
+              for d in list_collection('lesson_reflections'):
+                  f={k:val(v) for k,v in d.get('fields',{}).items()}
+                  if f.get('studentId')==student_id and f.get('localDate')==today:
+                      req=urllib.request.Request('https://firestore.googleapis.com/v1/'+d['name'],method='DELETE',headers={'Authorization':f'Bearer {token}'})
+                      with urllib.request.urlopen(req,timeout=30) as r: assert r.status in (200,204)
+
+          # Remove only device documents created by this QA run.
+          after=[]
+          for d in list_collection('reflection_devices'):
+              f={k:val(v) for k,v in d.get('fields',{}).items()}
+              if str(f.get('learningId','')).upper()=='6RSX' and d.get('name','') not in before_devices:
+                  after.append(d.get('name',''))
+          assert len(after)==1,f'expected one QA device doc, got {len(after)}'
+          for name in after:
+              req=urllib.request.Request('https://firestore.googleapis.com/v1/'+name,method='DELETE',headers={'Authorization':f'Bearer {token}'})
+              with urllib.request.urlopen(req,timeout=30) as r: assert r.status in (200,204)
+
+          print('REFLECTION_GOAL_AUTOSAVE_PRODUCTION_PASS')
+          print('UI_LAYOUT_INVARIANTS_PASS')
+          print('GOAL_ONLY_SAVE_PRESERVES_REFLECTION_PASS')
+          print('QA_DEVICE_CLEANED_PASS')
+          PY
