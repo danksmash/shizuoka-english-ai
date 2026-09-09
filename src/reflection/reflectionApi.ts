@@ -16,7 +16,6 @@ export interface ReflectionRecordDto {
 
 export interface BootstrapResponse {
   learningId: string;
-  classId: string;
   today: ReflectionRecordDto | null;
   previous: ReflectionRecordDto | null;
 }
