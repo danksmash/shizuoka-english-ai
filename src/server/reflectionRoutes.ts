@@ -8,6 +8,7 @@ import {
   issueReflectionDevice,
   resolveReflectionDevice,
   saveLessonReflection,
+  type ReflectionRecord,
 } from './reflectionPersistence';
 
 const router = express.Router();
@@ -16,6 +17,24 @@ function tokenFromBody(body: unknown): string {
   if (!body || typeof body !== 'object') return '';
   const token = (body as Record<string, unknown>).deviceToken;
   return typeof token === 'string' ? token.trim() : '';
+}
+
+function publicReflection(record: ReflectionRecord | null) {
+  if (!record) return null;
+  return {
+    reflectionId: record.reflectionId,
+    localDate: record.localDate,
+    todayGoal: record.todayGoal,
+    goalRating: record.goalRating,
+    selfRegulationRating: record.selfRegulationRating,
+    reflectionText: record.reflectionText,
+    reflectionCharCount: record.reflectionCharCount,
+    status: record.status,
+    revision: record.revision,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    submittedAt: record.submittedAt,
+  };
 }
 
 async function requireIdentity(req: express.Request, res: express.Response) {
@@ -57,9 +76,8 @@ router.post('/bootstrap', async (req, res) => {
     return res.json({
       success: true,
       learningId: identity.learningId,
-      classId: identity.classId,
-      today: data.today,
-      previous: data.previous,
+      today: publicReflection(data.today),
+      previous: publicReflection(data.previous),
     });
   } catch (error: any) {
     console.error('Reflection bootstrap failed', { message: error?.message });
@@ -79,7 +97,7 @@ router.post('/save', async (req, res) => {
       status: req.body?.status,
     });
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ success: true, reflection: saved });
+    return res.json({ success: true, reflection: publicReflection(saved) });
   } catch (error: any) {
     console.error('Reflection save failed', { message: error?.message });
     return res.status(503).json({ success: false, error: 'REFLECTION_SAVE_UNAVAILABLE' });
@@ -90,7 +108,7 @@ router.post('/history', async (req, res) => {
   try {
     const identity = await requireIdentity(req, res);
     if (!identity) return;
-    const history = await getReflectionHistory(identity);
+    const history = (await getReflectionHistory(identity)).map((row) => publicReflection(row));
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, history });
   } catch (error: any) {
