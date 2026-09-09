@@ -5,13 +5,19 @@ export interface ReflectionRecordDto {
   reflectionId: string;
   localDate: string;
   todayGoal: string;
-  goalRating: number | null;
-  selfRegulationRating: number | null;
-  reflectionText: string;
+  achievements: string;
+  languageUsed: string;
+  thinking: string;
+  difficultyStrategy: string;
+  languageCultureAwareness: string;
+  nextGoal: string;
   reflectionCharCount: number;
   status: 'draft' | 'submitted';
+  revision: number;
+  createdAt: string;
   updatedAt: string;
   submittedAt: string;
+  legacyReflectionText: string;
 }
 
 export interface BootstrapResponse {
@@ -47,9 +53,12 @@ export async function bootstrapReflection(deviceToken: string): Promise<Bootstra
 
 export async function saveReflection(deviceToken: string, input: {
   todayGoal: string;
-  goalRating: number | null;
-  selfRegulationRating: number | null;
-  reflectionText: string;
+  achievements: string;
+  languageUsed: string;
+  thinking: string;
+  difficultyStrategy: string;
+  languageCultureAwareness: string;
+  nextGoal: string;
   status: 'draft' | 'submitted';
 }): Promise<ReflectionRecordDto> {
   const data = await postJson<{ success: true; reflection: ReflectionRecordDto }>('/api/reflection/save', { deviceToken, ...input });
@@ -61,7 +70,11 @@ export async function loadReflectionHistory(deviceToken: string): Promise<Reflec
   return data.history || [];
 }
 
-export async function loadClassReflections(deviceToken: string): Promise<Array<Pick<ReflectionRecordDto, 'reflectionId' | 'localDate' | 'todayGoal' | 'reflectionText'>>> {
-  const data = await postJson<{ success: true; reflections: Array<Pick<ReflectionRecordDto, 'reflectionId' | 'localDate' | 'todayGoal' | 'reflectionText'>> }>('/api/reflection/class', { deviceToken });
+export type ClassReflectionDto = Pick<ReflectionRecordDto,
+  'reflectionId' | 'localDate' | 'todayGoal' | 'achievements' | 'languageUsed' | 'thinking' | 'difficultyStrategy' | 'languageCultureAwareness' | 'nextGoal' | 'legacyReflectionText'
+>;
+
+export async function loadClassReflections(deviceToken: string): Promise<ClassReflectionDto[]> {
+  const data = await postJson<{ success: true; reflections: ClassReflectionDto[] }>('/api/reflection/class', { deviceToken });
   return data.reflections || [];
 }
