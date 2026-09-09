@@ -1,1 +1,0 @@
-Release gate: Pilot B ASR changes are limited to contextual food/place candidates, optional browser phrase bias, and privacy-safe ASR telemetry. Person names remain excluded from automatic correction and contextual bias. Full branch QA passed before PR creation.
