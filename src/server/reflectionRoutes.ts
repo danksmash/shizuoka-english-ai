@@ -46,6 +46,7 @@ function publicReflection(record: ReflectionRecord | null) {
     difficultyStrategy: record.difficultyStrategy,
     languageCultureAwareness: record.languageCultureAwareness,
     nextGoal: record.nextGoal,
+    legacyReflectionText: record.reflectionText,
   };
 }
 
@@ -61,6 +62,7 @@ function publicClassReflection(record: Awaited<ReturnType<typeof getClassReflect
     difficultyStrategy: record.difficultyStrategy,
     languageCultureAwareness: record.languageCultureAwareness,
     nextGoal: record.nextGoal,
+    legacyReflectionText: record.reflectionText,
   };
 }
 
@@ -176,7 +178,7 @@ router.post('/save', async (req, res) => {
       selfRegulationRating: req.body?.selfRegulationRating,
       reflectionText: req.body?.reflectionText,
       status: req.body?.status,
-      // Backward-compatible request fields from the temporary six-part client.
+      // Canonical six-part request fields. B-design fields remain legacy-compatible.
       achievements: req.body?.achievements,
       languageUsed: req.body?.languageUsed,
       thinking: req.body?.thinking,

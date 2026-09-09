@@ -28,7 +28,7 @@ export interface ReflectionRecord {
   createdAt: string;
   updatedAt: string;
   submittedAt: string;
-  // Compatibility only: records created during the temporary six-part UI are retained.
+  // Canonical six-part pupil reflection fields.
   achievements: string;
   languageUsed: string;
   thinking: string;
@@ -98,7 +98,8 @@ function sixPartCharCount(record: Pick<ReflectionRecord, 'achievements' | 'langu
 }
 
 function canonicalCharCount(record: Pick<ReflectionRecord, 'reflectionText' | 'achievements' | 'languageUsed' | 'thinking' | 'difficultyStrategy' | 'languageCultureAwareness' | 'nextGoal'>): number {
-  return record.reflectionText ? [...record.reflectionText].length : sixPartCharCount(record);
+  const sixPartCount = sixPartCharCount(record);
+  return sixPartCount > 0 ? sixPartCount : [...record.reflectionText].length;
 }
 
 function normalizeStoredRecord(row: Record<string, any> | null): ReflectionRecord | null {
@@ -139,7 +140,8 @@ export async function saveLessonReflection(
     selfRegulationRating?: unknown;
     reflectionText?: unknown;
     status?: unknown;
-    // Accepted only for backward compatibility with the briefly deployed six-part client.
+    // Canonical six-part fields. B-design fields above remain accepted only so
+    // records written during that deployment can be preserved without data loss.
     achievements?: unknown;
     languageUsed?: unknown;
     thinking?: unknown;

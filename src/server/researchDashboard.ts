@@ -17,7 +17,7 @@ export type ResearchFilterQuery = {
 type Row = Record<string, unknown>;
 type ExportDataSets = Record<ResearchExportDatasetName, Row[]>;
 
-export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v3';
+export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v4';
 
 const RESEARCH_PERSONAS = TARGET_20_AI_STUDENT_IDS.map((id) => {
   const persona = AI_STUDENTS_MASTER_LIST.find((item) => item.id === id);
@@ -48,6 +48,7 @@ export const RESEARCH_EXPORT_HEADERS: Record<ResearchExportDatasetName, string[]
     'persona_label_condition','country_label_visible','accent_label_visible','flag_visible',
     'help_open_count','vocab_bank_open_count',
     'speech_rate_change_count','student_selected_speech_rate',
+    'asr_bias_applied_count','asr_bias_unavailable_count','asr_contextual_correction_count',
     'tts_telemetry_version','tts_primary_provider','tts_actual_provider','tts_provider_observed','tts_provider_event_count','tts_fallback_count','tts_fallback_reason','tts_provider_deviation',
     'schema_version','research_schema_version','app_version','build',
     'session_completed','session_status','data_quality_flag',
@@ -122,6 +123,9 @@ const FIELD_DEFINITION: Record<string, string> = {
   vocab_bank_open_count:'語彙バンクを開いた回数',
   speech_rate_change_count:'児童による発話速度変更回数',
   student_selected_speech_rate:'児童が選択したAI音声の再生速度',
+  asr_bias_applied_count:'ブラウザのcontextual ASR phrase biasを適用できた音声認識開始回数',
+  asr_bias_unavailable_count:'候補語はあったがブラウザがcontextual ASR phrase biasに非対応だった音声認識開始回数',
+  asr_contextual_correction_count:'強い会話文脈と高い音韻類似度に基づくアプリ側ASR補正回数',
   tts_telemetry_version:'TTS provider観測方式の版。Pilot B等の旧CORS不具合期間はlegacy_unreliable',
   tts_primary_provider:'本研究で意図したPrimary TTS provider',
   tts_actual_provider:'当該sessionで観測されたTTS provider。複数providerの場合はmixed',
@@ -204,7 +208,7 @@ const NUMERIC_FIELDS = new Set([
   'dialogue_utterance_count','child_repair_count','child_reason_expression_count','target_duration_minutes','actual_duration_seconds',
   'reflection_conveyed_ideas','reflection_understood_partner','reflection_noticed_language_culture','same_class_starts_5min',
   'same_class_starts_10min','country_label_visible','accent_label_visible','flag_visible','help_open_count','vocab_bank_open_count',
-  'speech_rate_change_count','student_selected_speech_rate','tts_provider_observed','tts_provider_event_count','tts_fallback_count','tts_provider_deviation','schema_version','session_completed','turn_sequence','speaker_turn_number',
+  'speech_rate_change_count','student_selected_speech_rate','asr_bias_applied_count','asr_bias_unavailable_count','asr_contextual_correction_count','tts_provider_observed','tts_provider_event_count','tts_fallback_count','tts_provider_deviation','schema_version','session_completed','turn_sequence','speaker_turn_number',
   'is_question','is_reciprocal_question','is_repair','is_reason_expression',
 ]);
 
@@ -251,6 +255,21 @@ function eventCountMap(rows: Row[]): Map<string, Map<string, number>> {
   return out;
 }
 
+function asrBiasStatusMap(rows: Row[]): Map<string, { applied: number; unavailable: number }> {
+  const out = new Map<string, { applied: number; unavailable: number }>();
+  for (const row of rows) {
+    if (String(row.event_type || '') !== 'asr_bias_status') continue;
+    const sessionId = String(row.session_id || '');
+    if (!sessionId) continue;
+    const counts = out.get(sessionId) || { applied: 0, unavailable: 0 };
+    const value = String(row.event_value || '');
+    if (value.startsWith('applied:')) counts.applied += 1;
+    else if (value.startsWith('unavailable:')) counts.unavailable += 1;
+    out.set(sessionId, counts);
+  }
+  return out;
+}
+
 function personaRows(): Row[] {
   return RESEARCH_PERSONAS.map((persona) => ({
     persona_id: persona.id,
@@ -269,6 +288,7 @@ export function buildResearchExportDataSets(rawSessions: Record<string, any>[]):
   const researchSessions = rawSessions.filter(isResearchTargetSession);
   const raw = buildResearchDataSets(researchSessions);
   const eventCounts = eventCountMap(raw.system_events);
+  const asrBiasCounts = asrBiasStatusMap(raw.system_events);
   const turnCounts = new Map<string, { child: number; ai: number }>();
   for (const row of raw.turns) {
     const sessionId = String(row.session_id || '');
@@ -290,6 +310,9 @@ export function buildResearchExportDataSets(rawSessions: Record<string, any>[]):
       help_open_count: events.get('help_open') || 0,
       vocab_bank_open_count: events.get('vocab_bank_open') || 0,
       speech_rate_change_count: events.get('speech_rate_change') || 0,
+      asr_bias_applied_count: asrBiasCounts.get(sessionId)?.applied || 0,
+      asr_bias_unavailable_count: asrBiasCounts.get(sessionId)?.unavailable || 0,
+      asr_contextual_correction_count: events.get('asr_contextual_correction') || 0,
     };
     return Object.fromEntries(RESEARCH_EXPORT_HEADERS.sessions.map((key) => [key, copy[key] ?? '']));
   });

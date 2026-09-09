@@ -9,7 +9,6 @@ import './setup-screen-v2.css';
 import './setup-screen-v2-polish.css';
 import './dialogue-viewport.css';
 import './reflection/reflection.css';
-import './reflection/reflection-b.css';
 
 const normalizedPath = window.location.pathname.replace(/\/+$/, '');
 const isReflectionTeacherPath = normalizedPath.endsWith('/reflection/teacher');
