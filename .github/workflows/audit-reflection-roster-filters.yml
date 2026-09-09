@@ -1,0 +1,107 @@
+name: Audit Reflection roster filters
+
+on:
+  push:
+    branches:
+      - fix/reflection-teacher-filter-alignment-20260910
+    paths:
+      - '.github/workflows/audit-reflection-roster-filters.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+      - name: Aggregate current Reflection roster safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          QUERY='{"structuredQuery":{"from":[{"collectionId":"students"}],"limit":1000}}'
+          curl --fail --silent --show-error --max-time 30 -X POST \
+            'https://firestore.googleapis.com/v1/projects/shizuoka-english-ai/databases/(default)/documents:runQuery' \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            --data "$QUERY" > /tmp/students.json
+          python3 - <<'PY'
+          import json
+          from collections import Counter, defaultdict
+
+          raw=json.load(open('/tmp/students.json'))
+          def value(v):
+              if not isinstance(v,dict): return None
+              for k in ('stringValue','integerValue','doubleValue','booleanValue','timestampValue'):
+                  if k in v:
+                      x=v[k]
+                      if k=='integerValue':
+                          try:return int(x)
+                          except:return x
+                      return x
+              return None
+          docs=[]
+          for item in raw:
+              d=item.get('document')
+              if not d: continue
+              f={k:value(v) for k,v in d.get('fields',{}).items()}
+              docs.append(f)
+          grouped=defaultdict(list)
+          for d in docs:
+              sid=str(d.get('studentId') or '')
+              if sid: grouped[sid].append(d)
+          roster=[]
+          multiple_active=0
+          for sid,rows in grouped.items():
+              rows=sorted(rows,key=lambda r:str(r.get('updatedAt') or ''),reverse=True)
+              active_rows=[r for r in rows if r.get('active') is not False]
+              if len(active_rows)>1: multiple_active+=1
+              chosen=(active_rows[0] if active_rows else rows[0])
+              roster.append({
+                  'learningId':str(chosen.get('learningId') or '').upper(),
+                  'classId':str(chosen.get('classId') or ''),
+                  'active':bool(active_rows),
+              })
+          active=[r for r in roster if r['active'] and r['learningId'] and r['classId']]
+          missing_class=[r for r in roster if r['active'] and r['learningId'] and not r['classId']]
+          class_counts=Counter(r['classId'] for r in active)
+          def scope(cid):
+              if cid in ('5-PB','6-PB'): return 'pilot_b'
+              if cid=='テスト': return 'test'
+              if cid=='予備': return 'reserve'
+              return 'main'
+          def grade(cid):
+              return '5' if cid.startswith('5-') else ('6' if cid.startswith('6-') else 'none')
+          def room(cid):
+              parts=cid.split('-')
+              return parts[1] if len(parts)==2 and parts[1] in ('1','2','3') else 'none'
+          print('ROSTER_DOCUMENTS',len(docs))
+          print('ROSTER_UNIQUE_STUDENTS',len(roster))
+          print('ROSTER_ACTIVE_ASSIGNED',len(active))
+          print('ROSTER_ACTIVE_MISSING_CLASS',len(missing_class))
+          print('ROSTER_MULTI_ACTIVE_GROUPS',multiple_active)
+          print('CLASS_COUNTS',json.dumps(dict(sorted(class_counts.items())),ensure_ascii=False))
+          print('SCOPE_COUNTS',json.dumps(dict(sorted(Counter(scope(r['classId']) for r in active).items())),ensure_ascii=False))
+          print('GRADE_COUNTS',json.dumps(dict(sorted(Counter(grade(r['classId']) for r in active).items())),ensure_ascii=False))
+          print('ROOM_COUNTS',json.dumps(dict(sorted(Counter(room(r['classId']) for r in active).items())),ensure_ascii=False))
+          six=[r for r in roster if r['learningId']=='6RSX']
+          print('6RSX_CURRENT',json.dumps(six,ensure_ascii=False))
+          assert len(six)==1, six
+          assert six[0]['active'] is True, six
+          assert six[0]['classId']=='テスト', six
+          print('REFLECTION_ROSTER_FILTER_AUDIT_PASS')
+          PY
