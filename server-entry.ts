@@ -12,4 +12,4 @@ application.listen = function reflectionAwareListen(this: any, ...args: any[]) {
   return originalListen.apply(this, args);
 };
 
-await import('./server');
+void import('./server');
