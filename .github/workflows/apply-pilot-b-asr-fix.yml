@@ -27,7 +27,14 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: Apply Pilot B ASR patch
-        run: node scripts/apply-pilot-b-asr-fix.mjs
+        run: |
+          python3 - <<'PY'
+          p='scripts/apply-pilot-b-asr-fix.mjs'
+          s=open(p,encoding='utf-8').read()
+          s=s.replace("recordResearchEvent('asr_contextual_correction', \\`${result.category || 'unknown'}:${result.candidate}\\`);", "recordResearchEvent('asr_contextual_correction', (result.category || 'unknown') + ':' + result.candidate);")
+          open(p,'w',encoding='utf-8').write(s)
+          PY
+          node scripts/apply-pilot-b-asr-fix.mjs
       - name: Contextual ASR targeted QA
         run: npm run qa:contextual-asr
       - name: Full QA and production build
