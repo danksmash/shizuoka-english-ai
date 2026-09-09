@@ -251,7 +251,7 @@ router.post('/teacher/me', requireManagementRole(['teacher']), (req: Authenticat
 router.post('/teacher/dashboard', requireManagementRole(['teacher']), async (req, res) => {
   try {
     const [roster, records] = await Promise.all([getStudentRecordsForManagement(), getAllReflectionRecordsForTeacher()]);
-    const dashboard = buildTeacherReflectionDashboard(roster, records, req.body?.localDate, req.body?.classId, todayInTokyo());
+    const dashboard = buildTeacherReflectionDashboard(roster, records, req.body?.localDate, { dataScope: req.body?.dataScope, grade: req.body?.grade, classNumber: req.body?.classNumber, classId: req.body?.classId }, todayInTokyo());
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, ...dashboard });
   } catch (error: any) {
@@ -277,7 +277,7 @@ router.post('/teacher/student', requireManagementRole(['teacher']), async (req, 
 router.post('/teacher/export.csv', requireManagementRole(['teacher']), async (req, res) => {
   try {
     const [roster, records] = await Promise.all([getStudentRecordsForManagement(), getAllReflectionRecordsForTeacher()]);
-    const csv = serializeTeacherReflectionCsv(roster, records, req.body?.localDate, req.body?.classId);
+    const csv = serializeTeacherReflectionCsv(roster, records, req.body?.localDate, { dataScope: req.body?.dataScope, grade: req.body?.grade, classNumber: req.body?.classNumber, classId: req.body?.classId });
     const dateLabel = typeof req.body?.localDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.body.localDate) ? req.body.localDate.replace(/-/g, '') : 'all';
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="my-english-growth-reflections-${dateLabel}.csv"`);

@@ -1,9 +1,19 @@
 const CONFIGURED_API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const apiUrl = (path: string) => `${CONFIGURED_API_BASE}${path}`;
 
+export type TeacherDataScope = 'all' | 'main' | 'pilot_b' | 'test' | 'reserve';
+export type TeacherGrade = 'all' | '5' | '6';
+export type TeacherClassNumber = 'all' | '1' | '2' | '3';
+type ConcreteDataScope = Exclude<TeacherDataScope, 'all'>;
+type ConcreteGrade = Exclude<TeacherGrade, 'all'> | '';
+type ConcreteClassNumber = Exclude<TeacherClassNumber, 'all'> | '';
+
 export interface TeacherDashboardStudent {
   learningId: string;
   classId: string;
+  dataScope: ConcreteDataScope;
+  grade: ConcreteGrade;
+  classNumber: ConcreteClassNumber;
   attendanceNumber: number | '';
   status: 'submitted' | 'draft' | 'missing';
   reflectionCharCount: number;
@@ -16,6 +26,9 @@ export interface TeacherDashboardStudent {
 
 export interface TeacherDashboardResponse {
   localDate: string;
+  dataScope: TeacherDataScope;
+  grade: TeacherGrade;
+  classNumber: TeacherClassNumber;
   classId: string;
   classes: string[];
   counts: { total: number; submitted: number; draft: number; missing: number };
@@ -46,16 +59,16 @@ export interface TeacherHistoryRecord {
 export interface TeacherStudentHistoryResponse {
   learningId: string;
   classId: string;
+  dataScope: ConcreteDataScope;
+  grade: ConcreteGrade;
+  classNumber: ConcreteClassNumber;
   attendanceNumber: number | '';
   history: TeacherHistoryRecord[];
 }
 
 async function post<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
   const response = await fetch(apiUrl(path), {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.success === false) {
@@ -73,25 +86,23 @@ export function teacherShouldRedirectToApiOrigin(): string {
   } catch { return ''; }
 }
 
-export async function teacherLogin(username: string, password: string): Promise<void> {
-  await post('/api/reflection/teacher/login', { username, password });
-}
+export async function teacherLogin(username: string, password: string): Promise<void> { await post('/api/reflection/teacher/login', { username, password }); }
 export async function teacherLogout(): Promise<void> { await post('/api/reflection/teacher/logout'); }
 export async function teacherMe(): Promise<{ username: string; role: string }> {
   const data = await post<{ success: true; user: { username: string; role: string } }>('/api/reflection/teacher/me');
   return data.user;
 }
-export async function teacherDashboard(localDate: string, classId: string): Promise<TeacherDashboardResponse> {
-  const data = await post<{ success: true } & TeacherDashboardResponse>('/api/reflection/teacher/dashboard', { localDate, classId });
+export async function teacherDashboard(localDate: string, dataScope: TeacherDataScope, grade: TeacherGrade, classNumber: TeacherClassNumber): Promise<TeacherDashboardResponse> {
+  const data = await post<{ success: true } & TeacherDashboardResponse>('/api/reflection/teacher/dashboard', { localDate, dataScope, grade, classNumber });
   return data;
 }
 export async function teacherStudentHistory(learningId: string): Promise<TeacherStudentHistoryResponse> {
   const data = await post<{ success: true; student: TeacherStudentHistoryResponse }>('/api/reflection/teacher/student', { learningId });
   return data.student;
 }
-export async function teacherExportCsv(localDate: string, classId: string): Promise<void> {
+export async function teacherExportCsv(localDate: string, dataScope: TeacherDataScope, grade: TeacherGrade, classNumber: TeacherClassNumber): Promise<void> {
   const response = await fetch(apiUrl('/api/reflection/teacher/export.csv'), {
-    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ localDate, classId }),
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ localDate, dataScope, grade, classNumber }),
   });
   if (!response.ok) throw new Error(`HTTP_${response.status}`);
   const blob = await response.blob();
