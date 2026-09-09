@@ -15,8 +15,9 @@ export interface TeacherReflectionStudentRow {
   status: 'submitted' | 'draft' | 'missing';
   reflectionCharCount: number;
   todayGoal: string;
-  achievements: string;
-  nextGoal: string;
+  goalRating: number | null;
+  selfRegulationRating: number | null;
+  reflectionText: string;
   updatedAt: string;
 }
 
@@ -35,6 +36,23 @@ function safeDate(value: unknown, fallback: string): string {
 
 function safeClass(value: unknown): string {
   return typeof value === 'string' ? value.trim().slice(0, 40) : '';
+}
+
+function legacySixPartText(record: ReflectionRecord): string {
+  const parts: Array<[string, string]> = [
+    ['できたこと', record.achievements],
+    ['使ったことば', record.languageUsed],
+    ['授業中に考えていたこと', record.thinking],
+    ['困ったこと・工夫', record.difficultyStrategy],
+    ['言葉や文化について気づいたこと', record.languageCultureAwareness],
+    ['次に頑張りたいこと', record.nextGoal],
+  ];
+  return parts.filter(([, text]) => text).map(([label, text]) => `【${label}】\n${text}`).join('\n\n');
+}
+
+function visibleReflectionText(record: ReflectionRecord | undefined): string {
+  if (!record) return '';
+  return record.reflectionText || legacySixPartText(record);
 }
 
 export function buildTeacherReflectionDashboard(
@@ -66,8 +84,9 @@ export function buildTeacherReflectionDashboard(
       status,
       reflectionCharCount: record?.reflectionCharCount || 0,
       todayGoal: record?.todayGoal || '',
-      achievements: record?.achievements || record?.reflectionText || '',
-      nextGoal: record?.nextGoal || '',
+      goalRating: record?.goalRating ?? null,
+      selfRegulationRating: record?.selfRegulationRating ?? null,
+      reflectionText: visibleReflectionText(record),
       updatedAt: record?.updatedAt || '',
     };
   }).sort((a, b) => a.classId.localeCompare(b.classId, 'ja') || Number(a.attendanceNumber || 999) - Number(b.attendanceNumber || 999) || a.learningId.localeCompare(b.learningId));
@@ -86,7 +105,9 @@ export function buildTeacherReflectionDashboard(
 }
 
 function csvCell(value: unknown): string {
-  const text = String(value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  let text = String(value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  // Quoting is not enough to prevent spreadsheet formula execution in imported CSV files.
+  if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
   return `"${text.replace(/"/g, '""')}"`;
 }
 
@@ -104,8 +125,10 @@ export function serializeTeacherReflectionCsv(
     .sort((a, b) => a.localDate.localeCompare(b.localDate) || a.classId.localeCompare(b.classId, 'ja') || (rosterByStudent.get(a.studentId)?.learningId || '').localeCompare(rosterByStudent.get(b.studentId)?.learningId || ''));
   const headers = [
     'local_date', 'class_id', 'learning_id', 'attendance_number', 'status', 'today_goal',
+    'goal_rating', 'self_regulation_rating', 'reflection_text', 'reflection_char_count',
+    'revision', 'created_at', 'updated_at', 'submitted_at',
+    // Backward-compatible columns for any records written during the temporary six-part deployment.
     'achievements', 'language_used', 'thinking', 'difficulty_strategy', 'language_culture_awareness', 'next_goal',
-    'reflection_char_count', 'revision', 'created_at', 'updated_at', 'submitted_at', 'legacy_reflection_text',
   ];
   const lines = [headers.map(csvCell).join(',')];
   for (const record of rows) {
@@ -117,18 +140,20 @@ export function serializeTeacherReflectionCsv(
       rosterStudent?.attendanceNumber || '',
       record.status,
       record.todayGoal,
+      record.goalRating ?? '',
+      record.selfRegulationRating ?? '',
+      visibleReflectionText(record),
+      record.reflectionCharCount,
+      record.revision,
+      record.createdAt,
+      record.updatedAt,
+      record.submittedAt,
       record.achievements,
       record.languageUsed,
       record.thinking,
       record.difficultyStrategy,
       record.languageCultureAwareness,
       record.nextGoal,
-      record.reflectionCharCount,
-      record.revision,
-      record.createdAt,
-      record.updatedAt,
-      record.submittedAt,
-      record.reflectionText,
     ].map(csvCell).join(','));
   }
   return `\uFEFF${lines.join('\r\n')}\r\n`;
