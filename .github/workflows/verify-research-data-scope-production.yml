@@ -1,0 +1,90 @@
+name: Verify production research data scopes
+
+on:
+  push:
+    branches:
+      - verify/research-data-scope-production
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+      - name: Verify live dashboard and Firestore Pilot B separation
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_URL='https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app'
+          EXPECTED_BUILD='27d4546c0b61'
+
+          for attempt in $(seq 1 36); do
+            HEALTH="$(curl --fail --silent --show-error --max-time 15 "$API_URL/api/health" || true)"
+            if echo "$HEALTH" | grep -q '"status":"ok"' && echo "$HEALTH" | grep -q "\"build\":\"$EXPECTED_BUILD\""; then
+              break
+            fi
+            sleep 5
+          done
+          echo "$HEALTH" | grep -q "\"build\":\"$EXPECTED_BUILD\""
+
+          PAGE="$(curl --fail --silent --show-error --max-time 20 "$API_URL/management")"
+          echo "$PAGE" | grep -q 'データ区分'
+          echo "$PAGE" | grep -q 'value="main" selected>本研究'
+          echo "$PAGE" | grep -q 'value="pilot_b">Pilot B'
+          echo "$PAGE" | grep -q '正式Exportは安全のため'
+
+          TOKEN="$(gcloud auth print-access-token)"
+          query_class() {
+            local CLASS_ID="$1"
+            curl --fail --silent --show-error --max-time 30 \
+              -X POST 'https://firestore.googleapis.com/v1/projects/shizuoka-english-ai/databases/(default)/documents:runQuery' \
+              -H "Authorization: Bearer $TOKEN" \
+              -H 'Content-Type: application/json' \
+              --data "{\"structuredQuery\":{\"from\":[{\"collectionId\":\"sessions\"}],\"where\":{\"fieldFilter\":{\"field\":{\"fieldPath\":\"classId\"},\"op\":\"EQUAL\",\"value\":{\"stringValue\":\"$CLASS_ID\"}}},\"limit\":1000}}"
+          }
+
+          query_class '6-PB' > /tmp/pb6.json
+          query_class '5-PB' > /tmp/pb5.json
+
+          python3 - <<'PY'
+          import json
+
+          def rows(path):
+              data=json.load(open(path))
+              out=[]
+              for item in data:
+                  doc=item.get('document') or {}
+                  f=doc.get('fields') or {}
+                  out.append({
+                      'classId': ((f.get('classId') or {}).get('stringValue') or ''),
+                      'localDate': ((f.get('localDate') or {}).get('stringValue') or ''),
+                      'sessionId': ((f.get('sessionId') or {}).get('stringValue') or ''),
+                  })
+              return out
+
+          all_rows=rows('/tmp/pb6.json')+rows('/tmp/pb5.json')
+          pretest=[r for r in all_rows if r['localDate']=='2026-09-08']
+          pilot=[r for r in all_rows if r['localDate']=='2026-09-09']
+          assert pretest, 'No 2026-09-08 PB teacher-pretest session found'
+          assert pilot, 'No 2026-09-09 PB pupil Pilot B session found'
+          assert {r['sessionId'] for r in pretest}.isdisjoint({r['sessionId'] for r in pilot})
+          print(f'PB_PRETEST_2026_09_08_SESSIONS={len(pretest)}')
+          print(f'PB_PILOT_2026_09_09_SESSIONS={len(pilot)}')
+          print('PRODUCTION_PB_DATE_SEPARATION_OK')
+          PY
+
+          echo PRODUCTION_RESEARCH_DATA_SCOPE_UI_OK
+          echo PRODUCTION_FORMAL_EXPORT_DEFAULT_MAIN_UI_OK
