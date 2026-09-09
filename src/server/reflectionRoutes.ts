@@ -11,6 +11,7 @@ import {
   resolveReflectionDevice,
   saveLessonReflection,
   todayInTokyo,
+  type ReflectionIdentity,
   type ReflectionRecord,
 } from './reflectionPersistence';
 import { buildTeacherReflectionDashboard, buildTeacherStudentHistory, serializeTeacherReflectionCsv } from './reflectionTeacherModel';
@@ -29,29 +30,80 @@ function publicReflection(record: ReflectionRecord | null) {
     reflectionId: record.reflectionId,
     localDate: record.localDate,
     todayGoal: record.todayGoal,
-    achievements: record.achievements,
-    languageUsed: record.languageUsed,
-    thinking: record.thinking,
-    difficultyStrategy: record.difficultyStrategy,
-    languageCultureAwareness: record.languageCultureAwareness,
-    nextGoal: record.nextGoal,
+    goalRating: record.goalRating,
+    selfRegulationRating: record.selfRegulationRating,
+    reflectionText: record.reflectionText,
     reflectionCharCount: record.reflectionCharCount,
     status: record.status,
     revision: record.revision,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     submittedAt: record.submittedAt,
-    legacyReflectionText: record.reflectionText,
+    // Compatibility fields are read-only in the current UI, but retained so no prior data is lost.
+    achievements: record.achievements,
+    languageUsed: record.languageUsed,
+    thinking: record.thinking,
+    difficultyStrategy: record.difficultyStrategy,
+    languageCultureAwareness: record.languageCultureAwareness,
+    nextGoal: record.nextGoal,
   };
 }
 
-async function requireIdentity(req: express.Request, res: express.Response) {
-  const identity = await resolveReflectionDevice(tokenFromBody(req.body));
-  if (!identity) {
+function publicClassReflection(record: Awaited<ReturnType<typeof getClassReflections>>[number]) {
+  return {
+    reflectionId: record.reflectionId,
+    localDate: record.localDate,
+    todayGoal: record.todayGoal,
+    reflectionText: record.reflectionText,
+    achievements: record.achievements,
+    languageUsed: record.languageUsed,
+    thinking: record.thinking,
+    difficultyStrategy: record.difficultyStrategy,
+    languageCultureAwareness: record.languageCultureAwareness,
+    nextGoal: record.nextGoal,
+  };
+}
+
+async function requireIdentity(req: express.Request, res: express.Response): Promise<ReflectionIdentity | null> {
+  const registered = await resolveReflectionDevice(tokenFromBody(req.body));
+  if (!registered) {
     res.status(401).json({ success: false, error: 'INVALID_REFLECTION_DEVICE' });
     return null;
   }
-  return identity;
+  // Re-resolve the current learning code so reissued codes, deactivated pupils, and class changes
+  // cannot leave an old device token attached to stale identity metadata.
+  const current = await resolveStudentByCode(registered.learningId);
+  if (!current || current.studentId !== registered.studentId || current.researchId !== registered.researchId) {
+    res.status(401).json({ success: false, error: 'REFLECTION_DEVICE_REBIND_REQUIRED' });
+    return null;
+  }
+  return {
+    studentId: current.studentId,
+    researchId: current.researchId,
+    classId: current.classId,
+    learningId: current.learningId,
+  };
+}
+
+const reflectionFailedCodeAttempts = new Map<string, { count: number; resetTime: number }>();
+function reflectionCodeBlocked(ip: string): boolean {
+  const now = Date.now();
+  const existing = reflectionFailedCodeAttempts.get(ip);
+  if (!existing || now > existing.resetTime) {
+    if (existing) reflectionFailedCodeAttempts.delete(ip);
+    return false;
+  }
+  return existing.count >= 30;
+}
+function noteReflectionCodeFailure(ip: string): boolean {
+  const now = Date.now();
+  const existing = reflectionFailedCodeAttempts.get(ip);
+  if (!existing || now > existing.resetTime) {
+    reflectionFailedCodeAttempts.set(ip, { count: 1, resetTime: now + 10 * 60_000 });
+    return true;
+  }
+  existing.count += 1;
+  return existing.count < 30;
 }
 
 const teacherLoginAttempts = new Map<string, { count: number; resetTime: number }>();
@@ -68,12 +120,20 @@ function teacherLoginAllowed(ip: string): boolean {
 }
 
 router.post('/register', async (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  if (reflectionCodeBlocked(ip)) return res.status(429).json({ success: false, error: 'TOO_MANY_FAILED_CODE_ATTEMPTS' });
   const rawCode = req.body?.learningCode;
-  if (!isValidLearningCode(rawCode)) return res.status(400).json({ success: false, error: 'INVALID_LEARNING_CODE' });
+  if (!isValidLearningCode(rawCode)) {
+    const allowed = noteReflectionCodeFailure(ip);
+    return res.status(allowed ? 400 : 429).json({ success: false, error: allowed ? 'INVALID_LEARNING_CODE' : 'TOO_MANY_FAILED_CODE_ATTEMPTS' });
+  }
   try {
     const learningCode = normalizeLearningCode(rawCode);
     const student = await resolveStudentByCode(learningCode);
-    if (!student) return res.status(401).json({ success: false, error: 'LEARNING_CODE_NOT_FOUND' });
+    if (!student) {
+      const allowed = noteReflectionCodeFailure(ip);
+      return res.status(allowed ? 401 : 429).json({ success: false, error: allowed ? 'LEARNING_CODE_NOT_FOUND' : 'TOO_MANY_FAILED_CODE_ATTEMPTS' });
+    }
     const deviceToken = await issueReflectionDevice({
       studentId: student.studentId,
       researchId: student.researchId,
@@ -112,13 +172,17 @@ router.post('/save', async (req, res) => {
     if (!identity) return;
     const saved = await saveLessonReflection(identity, {
       todayGoal: req.body?.todayGoal,
+      goalRating: req.body?.goalRating,
+      selfRegulationRating: req.body?.selfRegulationRating,
+      reflectionText: req.body?.reflectionText,
+      status: req.body?.status,
+      // Backward-compatible request fields from the temporary six-part client.
       achievements: req.body?.achievements,
       languageUsed: req.body?.languageUsed,
       thinking: req.body?.thinking,
       difficultyStrategy: req.body?.difficultyStrategy,
       languageCultureAwareness: req.body?.languageCultureAwareness,
       nextGoal: req.body?.nextGoal,
-      status: req.body?.status,
     });
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, reflection: publicReflection(saved) });
@@ -145,7 +209,7 @@ router.post('/class', async (req, res) => {
   try {
     const identity = await requireIdentity(req, res);
     if (!identity) return;
-    const reflections = await getClassReflections(identity);
+    const reflections = (await getClassReflections(identity)).map(publicClassReflection);
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, reflections });
   } catch (error: any) {
