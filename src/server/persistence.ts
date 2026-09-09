@@ -253,6 +253,13 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
   const sumEvent = (type: string) => eventValues(type).reduce((sum, value) => sum + value, 0);
   const latestEvent = (type: string) => [...events].reverse().find((event) => event.type === type)?.value || '';
   const ttsRuntime = resolveTtsRuntimeMetadata(args.aiStudentId, latestEvent('tts_provider'));
+  const ttsProviderEvents = events.filter((event) => event.type === 'tts_provider').map((event) => String(event.value || '')).filter(Boolean);
+  const distinctTtsProviders = Array.from(new Set(ttsProviderEvents));
+  const ttsActualProvider = distinctTtsProviders.length === 0 ? 'not_observed' : distinctTtsProviders.length === 1 ? distinctTtsProviders[0] : 'mixed';
+  const ttsFallbackCount = events.filter((event) => event.type === 'tts_fallback_from' && event.value === 'azure-speech').length;
+  const ttsLatencyRaw = Number(latestEvent('tts_latency_ms'));
+  const ttsProviderObserved = ttsActualProvider === 'not_observed' ? 0 : 1;
+  const ttsProviderDeviation: number | '' = ttsActualProvider === 'not_observed' ? '' : ttsActualProvider === 'azure-speech' ? 0 : 1;
   const document = {
     schemaVersion: 4, researchSchemaVersion: 'research-2026-v1', sessionId: args.sessionId, studentId: args.studentId, researchId: args.researchId,
     classId: currentClassId, academicYear: academicYearForLocalDate(localDate), gradeLevel: gradeLevelForClassId(currentClassId), aiStudentId: args.aiStudentId, topic: args.topic,
@@ -260,7 +267,11 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
     aiInputTokens: sumEvent('ai_input_tokens'), aiOutputTokens: sumEvent('ai_output_tokens'), aiCacheReadTokens: sumEvent('ai_cache_read_tokens'), aiCacheCreationTokens: sumEvent('ai_cache_creation_tokens'),
     personaId: personaMeta.personaId, personaCountry: personaMeta.country, personaGender: personaMeta.gender, personaAccentName: personaMeta.accentName, worldEnglishesCircle: personaMeta.worldEnglishesCircle,
     personaLabelCondition: args.personaLabelCondition === 'hidden' ? 'hidden' : 'shown', countryLabelVisible: args.countryLabelVisible !== false, accentLabelVisible: args.accentLabelVisible !== false, flagVisible: args.flagVisible !== false,
-    ttsProvider: ttsRuntime.provider, ttsVoiceName: ttsRuntime.voiceName, ttsLanguageCode: ttsRuntime.languageCode, personaVoiceGender: personaMeta.voiceGender, personaVoicePitch: personaMeta.voicePitch, personaDefaultVoiceRate: personaMeta.defaultVoiceRate,
+    ttsProvider: ttsRuntime.provider, ttsVoiceName: ttsRuntime.voiceName, ttsLanguageCode: ttsRuntime.languageCode,
+    ttsTelemetryVersion: 'cors-visible-v1', ttsPrimaryProvider: 'azure-speech', ttsActualProvider, ttsProviderObserved, ttsProviderEventCount: ttsProviderEvents.length,
+    ttsFallbackCount, ttsFallbackFrom: latestEvent('tts_fallback_from'), ttsFallbackReason: latestEvent('tts_fallback_reason'),
+    ttsLatencyMs: Number.isFinite(ttsLatencyRaw) && ttsLatencyRaw >= 0 ? Math.round(ttsLatencyRaw) : 0, ttsProviderDeviation,
+    personaVoiceGender: personaMeta.voiceGender, personaVoicePitch: personaMeta.voicePitch, personaDefaultVoiceRate: personaMeta.defaultVoiceRate,
     studentSelectedSpeechRate: Number(args.studentSelectedSpeechRate || 1), effectiveTtsSpeechRate: Number(latestEvent('tts_effective_rate') || args.effectiveTtsSpeechRate || args.studentSelectedSpeechRate || 1), personaDictionaryVersion: personaMeta.personaDictionaryVersion,
     targetDurationMinutes: args.targetDurationMinutes, actualDurationSeconds: stats.actualDurationSeconds,
     startedAt: new Date(args.startedAt).toISOString(), endedAt: new Date(args.endedAt).toISOString(), localDate,

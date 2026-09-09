@@ -318,7 +318,7 @@ export function speakStudentVoice(
   onStart?: () => void,
   onEnd?: () => void,
   onError?: (e: unknown) => void,
-  onProvider?: (provider: 'azure-speech' | 'google-chirp3-hd' | 'device-fallback', effectiveRate: number) => void
+  onProvider?: (provider: 'azure-speech' | 'google-chirp3-hd' | 'device-fallback' | 'not_observed', effectiveRate: number, telemetry?: { fallbackFrom?: string; fallbackReason?: string; latencyMs?: number; cache?: string }) => void
 ): SpeechSynthesisUtterance | null {
   if (typeof window === 'undefined') return null;
 
@@ -345,7 +345,7 @@ export function speakStudentVoice(
       localFallbackStarted = true;
       console.warn('Cloud TTS unavailable; using device TTS fallback:', error);
       cleanupCloudAudio();
-      onProvider?.('device-fallback', Math.max(0.75, Math.min(1.25, customRate || student.voiceRate || 1.0)));
+      onProvider?.('device-fallback', Math.max(0.75, Math.min(1.25, customRate || student.voiceRate || 1.0)), { fallbackReason: 'cloud_unavailable' });
       speakStudentVoiceLocal(text, student, customRate, onStart, onEnd, onError);
     };
 
@@ -365,8 +365,19 @@ export function speakStudentVoice(
       }
 
       if (!response.ok) throw new Error(`Cloud TTS HTTP ${response.status}`);
-      const cloudProvider = response.headers.get('X-TTS-Provider') === 'azure-speech' ? 'azure-speech' : 'google-chirp3-hd';
-      onProvider?.(cloudProvider, Number(response.headers.get('X-TTS-Effective-Rate') || rate));
+      const rawProvider = response.headers.get('X-TTS-Provider');
+      const cloudProvider = rawProvider === 'azure-speech'
+        ? 'azure-speech'
+        : rawProvider === 'google-chirp3-hd'
+          ? 'google-chirp3-hd'
+          : 'not_observed';
+      const latencyHeader = Number(response.headers.get('X-TTS-Latency-Ms'));
+      onProvider?.(cloudProvider, Number(response.headers.get('X-TTS-Effective-Rate') || rate), {
+        fallbackFrom: response.headers.get('X-TTS-Fallback-From') || undefined,
+        fallbackReason: response.headers.get('X-TTS-Fallback-Reason') || undefined,
+        latencyMs: Number.isFinite(latencyHeader) ? latencyHeader : undefined,
+        cache: response.headers.get('X-TTS-Cache') || undefined,
+      });
       const blob = await response.blob();
       if (!blob.size) throw new Error('Cloud TTS returned empty audio');
       if (requestId !== activeCloudRequestId) return;

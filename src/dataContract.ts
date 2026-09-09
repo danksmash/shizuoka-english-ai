@@ -24,6 +24,7 @@ export const RESEARCH_SYSTEM_EVENT_TYPES = [
   'text_input_open','text_message_send','help_open','help_phrase_select','ai_replay','vocab_bank_open',
   'vocab_audio_play','speech_rate_change','ai_response_latency_ms','ai_request_failure',
   'ai_model','ai_input_tokens','ai_output_tokens','ai_cache_read_tokens','ai_cache_creation_tokens','tts_provider','tts_effective_rate',
+  'tts_fallback_from','tts_fallback_reason','tts_latency_ms','tts_cache',
 ] as const;
 export type ResearchSystemEventType = typeof RESEARCH_SYSTEM_EVENT_TYPES[number];
 export interface ResearchSystemEvent {

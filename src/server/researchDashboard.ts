@@ -17,7 +17,7 @@ export type ResearchFilterQuery = {
 type Row = Record<string, unknown>;
 type ExportDataSets = Record<ResearchExportDatasetName, Row[]>;
 
-export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v2';
+export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v3';
 
 const RESEARCH_PERSONAS = TARGET_20_AI_STUDENT_IDS.map((id) => {
   const persona = AI_STUDENTS_MASTER_LIST.find((item) => item.id === id);
@@ -48,6 +48,7 @@ export const RESEARCH_EXPORT_HEADERS: Record<ResearchExportDatasetName, string[]
     'persona_label_condition','country_label_visible','accent_label_visible','flag_visible',
     'help_open_count','vocab_bank_open_count',
     'speech_rate_change_count','student_selected_speech_rate',
+    'tts_telemetry_version','tts_primary_provider','tts_actual_provider','tts_provider_observed','tts_provider_event_count','tts_fallback_count','tts_fallback_reason','tts_provider_deviation',
     'schema_version','research_schema_version','app_version','build',
     'session_completed','session_status','data_quality_flag',
   ],
@@ -121,6 +122,14 @@ const FIELD_DEFINITION: Record<string, string> = {
   vocab_bank_open_count:'語彙バンクを開いた回数',
   speech_rate_change_count:'児童による発話速度変更回数',
   student_selected_speech_rate:'児童が選択したAI音声の再生速度',
+  tts_telemetry_version:'TTS provider観測方式の版。Pilot B等の旧CORS不具合期間はlegacy_unreliable',
+  tts_primary_provider:'本研究で意図したPrimary TTS provider',
+  tts_actual_provider:'当該sessionで観測されたTTS provider。複数providerの場合はmixed',
+  tts_provider_observed:'TTS providerを少なくとも1回観測できた場合1',
+  tts_provider_event_count:'当該sessionで記録されたTTS providerイベント数',
+  tts_fallback_count:'Azure Speechから別providerへfallbackした回数',
+  tts_fallback_reason:'最後に観測されたAzure Speech fallback理由',
+  tts_provider_deviation:'PrimaryのAzureのみなら0、fallback・device・mixedなら1、観測不能は空欄',
   schema_version:'Firestore保存データ構造の版',
   research_schema_version:'正式研究Export構造の版',
   app_version:'アプリのバージョン',
@@ -175,6 +184,11 @@ const ALLOWED_VALUES: Record<string, string> = {
   persona_label_condition:'shown | hidden',
   country_label_visible:'0 | 1', accent_label_visible:'0 | 1', flag_visible:'0 | 1', session_completed:'0 | 1',
   student_selected_speech_rate:'0.75–1.25',
+  tts_telemetry_version:'cors-visible-v1 | legacy_unreliable',
+  tts_primary_provider:'azure-speech',
+  tts_actual_provider:'azure-speech | google-chirp3-hd | device-fallback | mixed | not_observed',
+  tts_provider_observed:'0 | 1', tts_provider_deviation:'0 | 1 | blank',
+  tts_fallback_reason:'timeout | http_429 | auth | azure_5xx | configuration | invalid_audio | network | unknown | cloud_unavailable | blank',
   research_schema_version:RESEARCH_EXPORT_SCHEMA_VERSION,
   speaker:'child | ai',
   dictionary_source:'curriculum | persona',
@@ -190,7 +204,7 @@ const NUMERIC_FIELDS = new Set([
   'dialogue_utterance_count','child_repair_count','child_reason_expression_count','target_duration_minutes','actual_duration_seconds',
   'reflection_conveyed_ideas','reflection_understood_partner','reflection_noticed_language_culture','same_class_starts_5min',
   'same_class_starts_10min','country_label_visible','accent_label_visible','flag_visible','help_open_count','vocab_bank_open_count',
-  'speech_rate_change_count','student_selected_speech_rate','schema_version','session_completed','turn_sequence','speaker_turn_number',
+  'speech_rate_change_count','student_selected_speech_rate','tts_provider_observed','tts_provider_event_count','tts_fallback_count','tts_provider_deviation','schema_version','session_completed','turn_sequence','speaker_turn_number',
   'is_question','is_reciprocal_question','is_repair','is_reason_expression',
 ]);
 
