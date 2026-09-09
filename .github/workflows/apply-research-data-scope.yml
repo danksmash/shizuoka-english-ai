@@ -22,7 +22,9 @@ jobs:
           node-version: '20'
           cache: npm
       - name: Apply migration
-        run: python3 scripts/apply-research-data-scope.py
+        run: |
+          python3 scripts/apply-research-data-scope.py
+          python3 scripts/apply-research-data-scope-qa.py
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: Targeted QA
@@ -37,6 +39,6 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/server/researchDashboard.ts src/server/managementPage.ts server.ts scripts/qa-pilot-b-isolation.ts
+          git add src/server/researchDashboard.ts src/server/managementPage.ts server.ts scripts/qa-pilot-b-isolation.ts scripts/qa-dashboard-data-sync.ts
           git commit -m 'feat: separate research data scopes [scope-migration-applied]'
           git push origin HEAD:feat/research-data-scope
