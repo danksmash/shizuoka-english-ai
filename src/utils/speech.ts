@@ -572,10 +572,36 @@ export function rebuildSpeechRecognitionSnapshot(
   };
 }
 
+export interface SpeechRecognitionBiasPhrase {
+  phrase: string;
+  boost: number;
+}
+
+export function applySpeechRecognitionBiasPhrases(
+  recognition: any,
+  phrases: readonly SpeechRecognitionBiasPhrase[],
+  scope: any = typeof window !== 'undefined' ? window : undefined,
+): boolean {
+  if (!recognition || !scope || !phrases.length) return false;
+  const PhraseCtor = scope.SpeechRecognitionPhrase;
+  if (typeof PhraseCtor !== 'function' || !('phrases' in recognition)) return false;
+  try {
+    recognition.phrases = phrases.map((item) =>
+      new PhraseCtor(item.phrase, Math.max(0, Math.min(10, Number(item.boost) || 0))),
+    );
+    return true;
+  } catch (error) {
+    console.warn('Speech recognition contextual bias unavailable:', error);
+    return false;
+  }
+}
+
 export function createSpeechRecognitionInstance(
   onResult: (text: string, isFinal: boolean) => void,
   onError: (error: string) => void,
-  onEnd: () => void
+  onEnd: () => void,
+  biasPhrases: readonly SpeechRecognitionBiasPhrase[] = [],
+  onBiasStatus?: (applied: boolean, phraseCount: number) => void
 ) {
   if (!isSpeechRecognitionSupported()) {
     return null;
@@ -590,6 +616,8 @@ export function createSpeechRecognitionInstance(
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US'; // Broadest accuracy for elementary English speech
+    const biasApplied = applySpeechRecognitionBiasPhrases(recognition, biasPhrases);
+    onBiasStatus?.(biasApplied, biasPhrases.length);
 
     const isAndroidDevice = /Android/i.test(window.navigator?.userAgent || '');
     let stopRequested = false;

@@ -19,7 +19,7 @@ import {
 } from './types';
 import { getAIStudentById } from './data/curriculum';
 import { detectVocabularyInText } from './data/vocabulary56';
-import { interpretContextualAsr } from './utils/contextualAsr';
+import { getContextualAsrBiasPhrases, interpretContextualAsr } from './utils/contextualAsr';
 import { generateFallbackFeedback } from './utils/feedbackFallback';
 import {
   speakStudentVoice,
@@ -214,13 +214,17 @@ export default function App() {
 
   const interpretSpokenText = useCallback((text: string) => {
     const previousAiText = [...messagesRef.current].reverse().find((message) => message.sender === 'ai')?.englishText || '';
-    return interpretContextualAsr({
+    const result = interpretContextualAsr({
       text,
       previousAiText,
       topic: profileRef.current.selectedTopic,
       enabled: CONTEXTUAL_ASR_ENABLED,
-    }).text;
-  }, []);
+    });
+    if (result.applied && result.candidate) {
+      recordResearchEvent('asr_contextual_correction', (result.category || 'unknown') + ':' + result.candidate);
+    }
+    return result.text;
+  }, [recordResearchEvent]);
 
   const handleSendMessage = async (text: string) => {
     if (!dialogueActiveRef.current || phase !== 'dialogue' || remainingSeconds <= 0 || !text.trim() || isAiResponding) return;
@@ -319,10 +323,14 @@ export default function App() {
     recordResearchEvent('mic_start');
     liveTranscriptRef.current=''; setSpeechTranscript(''); setIsRecording(true); setIsListening(true);
     await new Promise((resolve) => setTimeout(resolve, 180));
+    const previousAiText = [...messagesRef.current].reverse().find((message) => message.sender === 'ai')?.englishText || '';
+    const asrBiasPhrases = getContextualAsrBiasPhrases({ previousAiText, topic: profileRef.current.selectedTopic });
     const recognition = createSpeechRecognitionInstance(
       (text) => { liveTranscriptRef.current=text; setSpeechTranscript(text); },
       (err) => { recordResearchEvent('mic_error', String(err).slice(0, 40)); console.warn('Speech Rec Error:', err); setMicHintMessage(mapSpeechError(err)); setIsRecording(false); setIsListening(false); setTimeout(() => setMicHintMessage(''), 6000); },
-      () => { setIsRecording(false); setIsListening(false); }
+      () => { setIsRecording(false); setIsListening(false); },
+      asrBiasPhrases,
+      (applied, phraseCount) => { if (phraseCount > 0) recordResearchEvent('asr_bias_status', `${applied ? 'applied' : 'unavailable'}:${phraseCount}`); }
     );
     if (recognition) {
       recognitionRef.current = recognition;
