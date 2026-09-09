@@ -7,6 +7,7 @@ export type ResearchFilterQuery = {
   end?: unknown;
   classId?: unknown;
   grade?: unknown;
+  dataScope?: unknown;
   personaId?: unknown;
   labelCondition?: unknown;
   topic?: unknown;
@@ -309,19 +310,31 @@ export function buildResearchExportDataSets(rawSessions: Record<string, any>[]):
 }
 
 function textQuery(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
+export type ResearchDataScope = 'main' | 'pilot_b' | 'test' | 'reserve';
+const PILOT_B_OFFICIAL_DATES = new Set(['2026-09-09']);
+export function researchDataScopeForRow(row: Record<string, unknown>): ResearchDataScope {
+  const storedClass = String(row.class_id || '');
+  const localDate = String(row.local_date || '');
+  if (storedClass === 'テスト') return 'test';
+  if (storedClass === '予備') return 'reserve';
+  if (storedClass === '5-PB' || storedClass === '6-PB') return PILOT_B_OFFICIAL_DATES.has(localDate) ? 'pilot_b' : 'test';
+  return 'main';
+}
+function dataScopeMatches(row: Row, scope: string): boolean {
+  if (!scope || scope === 'all') return true;
+  return researchDataScopeForRow(row) === scope;
+}
+export function normalizeFormalResearchExportQuery(query: ResearchFilterQuery): ResearchFilterQuery {
+  const scope = textQuery(query.dataScope);
+  return { ...query, dataScope: (!scope || scope === 'all') ? 'main' : scope };
+}
 function gradeMatches(row: Row, grade: string): boolean {
   if (!grade || grade === 'all') return true;
-  const storedClass = String(row.class_id || '');
-  if (grade === 'test') return storedClass === 'テスト';
-  if (grade === 'reserve') return storedClass === '予備';
-  return String(row.grade_level || '') === grade;
+  return (grade === '5' || grade === '6') && String(row.grade_level || '') === grade;
 }
 function classMatches(row: Row, classId: string): boolean {
   if (!classId || classId === 'all') return true;
   const storedClass = String(row.class_id || '');
-  if (classId === 'test') return storedClass === 'テスト';
-  if (classId === 'reserve') return storedClass === '予備';
-  if (classId === 'pilotb') return storedClass === '5-PB' || storedClass === '6-PB';
   if (['1','2','3'].includes(classId)) return storedClass.endsWith(`-${classId}`);
   return storedClass === classId;
 }
@@ -330,6 +343,7 @@ function filterSessions(rows: Row[], query: ResearchFilterQuery): Row[] {
   const end = textQuery(query.end);
   const classId = textQuery(query.classId);
   const grade = textQuery(query.grade);
+  const dataScope = textQuery(query.dataScope);
   const personaId = textQuery(query.personaId);
   const label = textQuery(query.labelCondition);
   const topic = textQuery(query.topic);
@@ -337,7 +351,7 @@ function filterSessions(rows: Row[], query: ResearchFilterQuery): Row[] {
   return rows.filter((row) => {
     const date = String(row.local_date || '');
     return (!start || date >= start) && (!end || date <= end)
-      && classMatches(row, classId) && gradeMatches(row, grade)
+      && dataScopeMatches(row, dataScope) && classMatches(row, classId) && gradeMatches(row, grade)
       && (!personaId || personaId === 'all' || String(row.persona_id || '') === personaId)
       && (!label || label === 'all' || String(row.persona_label_condition || '') === label)
       && (!topic || topic === 'all' || String(row.topic || '') === topic)
@@ -572,8 +586,9 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
       groupLikeUseCount:groupLikeSessions.length,
     },
     filters:{
-      classes:['1','2','3','test','reserve'],
-      grades:['5','6','test','reserve'],
+      dataScopes:['main','pilot_b','test','reserve'],
+      classes:['1','2','3'],
+      grades:['5','6'],
       personas:RESEARCH_PERSONAS.map((persona) => persona.id),
       labelConditions:['shown','hidden'],
       topics:['intro','favorites','shizuoka_culture','talents','daily_routine','free'],
