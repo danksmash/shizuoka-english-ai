@@ -27,7 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: Apply patch
-        run: node scripts/apply-tts-observability-fix.mjs
+        run: |
+          sed -i "s/workflow.includes('Access-Control-Expose-Headers')/workflow.includes('access-control-expose-headers')/" scripts/apply-tts-observability-fix.mjs
+          node scripts/apply-tts-observability-fix.mjs
       - name: Full QA and build
         run: |
           npm run qa
