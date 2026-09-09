@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
   BookOpen,
-  CheckCircle2,
   Flag,
   HelpCircle,
   Lightbulb,
