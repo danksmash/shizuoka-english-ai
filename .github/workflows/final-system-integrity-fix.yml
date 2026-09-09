@@ -26,6 +26,24 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+      - name: Sanitize helper nested template literal
+        run: |
+          python3 - <<'PY'
+          p='scripts/apply-final-system-integrity.mjs'
+          s=open(p,encoding='utf-8').read()
+          start='assert.ok(research.includes("utterance_id: `u_'
+          i=s.find(start)
+          if i < 0:
+              raise SystemExit('helper target start not found')
+          end=",'stable utterance join key');"
+          j=s.find(end,i)
+          if j < 0:
+              raise SystemExit('helper target end not found')
+          j += len(end)
+          replacement="assert.ok(research.includes(\"utterance_id:\")&&research.includes(\"turn_sequence\"),'stable utterance join key');"
+          open(p,'w',encoding='utf-8').write(s[:i]+replacement+s[j:])
+          PY
+          node --check scripts/apply-final-system-integrity.mjs
       - name: Apply final integrity patch
         run: node scripts/apply-final-system-integrity.mjs
       - name: Targeted integrity QA
