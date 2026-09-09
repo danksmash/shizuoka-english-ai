@@ -1,0 +1,133 @@
+name: Verify production reflection final
+
+on:
+  push:
+    branches:
+      - verify/reflection-production-final
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+
+      - name: Verify deployed revision, roles, pages, routes and guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_URL='https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app'
+          PAGES_ORIGIN='https://danksmash.github.io'
+          PAGES_BASE='https://danksmash.github.io/shizuoka-english-ai'
+          EXPECTED_BUILD='521b0e24a80b'
+
+          SERVICE_JSON="$(gcloud run services describe shizuoka-english-ai --project=shizuoka-english-ai --region=asia-northeast1 --format=json)"
+          REVISION="$(printf '%s' "$SERVICE_JSON" | jq -r '.status.latestReadyRevisionName')"
+          BUILD="$(printf '%s' "$SERVICE_JSON" | jq -r '.spec.template.spec.containers[0].env[] | select(.name=="APP_BUILD") | .value')"
+          ACCOUNTS="$(printf '%s' "$SERVICE_JSON" | jq -r '.spec.template.spec.containers[0].env[] | select(.name=="MANAGEMENT_ACCOUNTS_JSON") | .value')"
+          test -n "$REVISION"
+          test "$BUILD" = "$EXPECTED_BUILD"
+          test -n "$ACCOUNTS"
+          TOTAL_ACCOUNTS="$(printf '%s' "$ACCOUNTS" | jq 'length')"
+          TEACHER_ACCOUNTS="$(printf '%s' "$ACCOUNTS" | jq '[.[] | select(.role=="teacher")] | length')"
+          RESEARCHER_ACCOUNTS="$(printf '%s' "$ACCOUNTS" | jq '[.[] | select(.role=="researcher")] | length')"
+          test "$TEACHER_ACCOUNTS" -ge 1
+          test "$RESEARCHER_ACCOUNTS" -ge 1
+          echo "PRODUCTION_REVISION=$REVISION"
+          echo "PRODUCTION_BUILD=$BUILD"
+          echo "MANAGEMENT_TOTAL_ACCOUNTS=$TOTAL_ACCOUNTS"
+          echo "MANAGEMENT_TEACHER_ACCOUNTS=$TEACHER_ACCOUNTS"
+          echo "MANAGEMENT_RESEARCHER_ACCOUNTS=$RESEARCHER_ACCOUNTS"
+
+          HEALTH="$(curl --fail --silent --show-error --max-time 20 "$API_URL/api/health")"
+          echo "$HEALTH" | grep -q '"status":"ok"'
+          echo "$HEALTH" | grep -q '"learningDataConfigured":true'
+          echo "$HEALTH" | grep -q '"managementConfigured":true'
+
+          PUPIL_PAGE="$(curl --fail --silent --show-error --max-time 20 "$PAGES_BASE/reflection/")"
+          TEACHER_PAGE="$(curl --fail --silent --show-error --max-time 20 "$PAGES_BASE/reflection/teacher/")"
+          echo "$PUPIL_PAGE" | grep -q '<div id="root"></div>'
+          echo "$TEACHER_PAGE" | grep -q '<div id="root"></div>'
+          PAGES_JS="$(printf '%s' "$PUPIL_PAGE" | grep -oE 'src="[^"]+\.js"' | head -1 | cut -d'"' -f2)"
+          test -n "$PAGES_JS"
+          PAGES_BUNDLE="$(curl --fail --silent --show-error --max-time 30 "$PAGES_ORIGIN$PAGES_JS")"
+          echo "$PAGES_BUNDLE" | grep -q '今日のめあてに向かって学ぶことができましたか？'
+          echo "$PAGES_BUNDLE" | grep -q '全部を書く必要はありません'
+          echo "$PAGES_BUNDLE" | grep -q 'わたしの成長'
+          echo "$PAGES_BUNDLE" | grep -q 'みんなのふりかえり'
+
+          CLOUD_PUPIL="$(curl --fail --silent --show-error --max-time 20 "$API_URL/reflection/")"
+          CLOUD_TEACHER="$(curl --fail --silent --show-error --max-time 20 "$API_URL/reflection/teacher/")"
+          echo "$CLOUD_PUPIL" | grep -q '<div id="root"></div>'
+          echo "$CLOUD_TEACHER" | grep -q '<div id="root"></div>'
+          CLOUD_JS="$(printf '%s' "$CLOUD_PUPIL" | grep -oE 'src="[^"]+\.js"' | head -1 | cut -d'"' -f2)"
+          test -n "$CLOUD_JS"
+          CLOUD_BUNDLE="$(curl --fail --silent --show-error --max-time 30 "$API_URL$CLOUD_JS")"
+          echo "$CLOUD_BUNDLE" | grep -q '今日のめあてに向かって学ぶことができましたか？'
+          echo "$CLOUD_BUNDLE" | grep -q '全部を書く必要はありません'
+
+          CORS_HEADERS="$(mktemp)"
+          curl --silent --show-error --max-time 20 -D "$CORS_HEADERS" -o /dev/null -X OPTIONS "$API_URL/api/reflection/bootstrap" \
+            -H 'Origin: https://danksmash.github.io' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: Content-Type'
+          grep -qi '^access-control-allow-origin: https://danksmash.github.io' "$CORS_HEADERS"
+          grep -qi '^access-control-allow-methods: GET,POST,OPTIONS' "$CORS_HEADERS"
+          rm -f "$CORS_HEADERS"
+
+          BODY="$(mktemp)"
+          STATUS="$(curl --silent --show-error --max-time 20 -o "$BODY" -w '%{http_code}' \
+            -X POST "$API_URL/api/reflection/bootstrap" \
+            -H 'Content-Type: application/json' \
+            --data '{"deviceToken":"invalid"}')"
+          test "$STATUS" = '401'
+          grep -q 'INVALID_REFLECTION_DEVICE' "$BODY"
+
+          STATUS="$(curl --silent --show-error --max-time 20 -o "$BODY" -w '%{http_code}' \
+            -X POST "$API_URL/api/reflection/register" \
+            -H 'Content-Type: application/json' \
+            --data '{"learningCode":"BAD"}')"
+          test "$STATUS" = '400'
+          grep -q 'INVALID_LEARNING_CODE' "$BODY"
+
+          STATUS="$(curl --silent --show-error --max-time 20 -o "$BODY" -w '%{http_code}' \
+            -X POST "$API_URL/api/reflection/teacher/me" \
+            -H 'Content-Type: application/json' \
+            --data '{}')"
+          test "$STATUS" = '401'
+          grep -q 'UNAUTHORIZED' "$BODY"
+
+          STATUS="$(curl --silent --show-error --max-time 20 -o "$BODY" -w '%{http_code}' \
+            -X POST "$API_URL/api/reflection/teacher/dashboard" \
+            -H 'Content-Type: application/json' \
+            --data '{}')"
+          test "$STATUS" = '401'
+          grep -q 'UNAUTHORIZED' "$BODY"
+          rm -f "$BODY"
+
+          echo PRODUCTION_REFLECTION_PAGES_OK
+          echo PRODUCTION_REFLECTION_CLOUD_RUN_ROUTES_OK
+          echo PRODUCTION_REFLECTION_B_DESIGN_BUNDLE_OK
+          echo PRODUCTION_REFLECTION_CORS_OK
+          echo PRODUCTION_REFLECTION_INVALID_DEVICE_GUARD_OK
+          echo PRODUCTION_REFLECTION_INVALID_CODE_GUARD_OK
+          echo PRODUCTION_REFLECTION_TEACHER_AUTH_GUARD_OK
+          echo PRODUCTION_REFLECTION_ROLE_CONFIGURATION_OK
