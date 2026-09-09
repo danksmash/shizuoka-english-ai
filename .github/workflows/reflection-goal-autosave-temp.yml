@@ -1,6 +1,11 @@
 name: Reflection goal autosave hardening
 
 on:
+  push:
+    branches:
+      - fix/reflection-6rsx-login-20260910
+    paths:
+      - '.github/workflows/reflection-goal-autosave-temp.yml'
   workflow_dispatch:
 
 permissions:
