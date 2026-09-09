@@ -1,0 +1,37 @@
+name: Verify Reflection teacher filter production
+
+on:
+  push:
+    branches:
+      - verify/reflection-teacher-filter-production-20260910
+    paths:
+      - '.github/workflows/verify-reflection-teacher-filter-production.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify deployed teacher bundles expose three-axis filters
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_bundle() {
+            PAGE="$1"
+            ORIGIN="$2"
+            html="$(curl --fail --silent --show-error --max-time 20 "$PAGE")"
+            js="$(printf '%s' "$html" | grep -oE 'src="[^"]+\.js"' | head -1 | cut -d'"' -f2)"
+            test -n "$js"
+            if [[ "$js" = http* ]]; then url="$js"; else url="$ORIGIN$js"; fi
+            bundle="$(curl --fail --silent --show-error --max-time 30 "$url")"
+            for text in 'データ区分' 'Pilot B' '学年' '1組' '本研究' 'テスト' '予備'; do
+              printf '%s' "$bundle" | grep -q "$text"
+            done
+            printf '%s' "$bundle" | grep -q 'classNumber'
+          }
+          check_bundle 'https://danksmash.github.io/shizuoka-english-ai/reflection/teacher/' 'https://danksmash.github.io'
+          check_bundle 'https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app/reflection/teacher/' 'https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app'
+          echo 'REFLECTION_TEACHER_FILTER_PRODUCTION_PASS'
