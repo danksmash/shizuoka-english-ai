@@ -1,0 +1,157 @@
+name: Reflection production smoke
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy production to Cloud Run
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+jobs:
+  verify:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout deployed main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+
+      - name: Verify live Reflection routes, roles and guards
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOYED_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_URL='https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app'
+          PAGES_ORIGIN='https://danksmash.github.io'
+          PAGES_BASE='https://danksmash.github.io/shizuoka-english-ai'
+
+          HEAD_SHA="$DEPLOYED_HEAD_SHA"
+          if [ -z "$HEAD_SHA" ]; then
+            HEAD_SHA="$(git rev-parse HEAD)"
+          fi
+          EXPECTED_BUILD="${HEAD_SHA:0:12}"
+
+          SERVICE_JSON="$(gcloud run services describe shizuoka-english-ai --project=shizuoka-english-ai --region=asia-northeast1 --format=json)"
+          BUILD="$(printf '%s' "$SERVICE_JSON" | jq -r '.spec.template.spec.containers[0].env[] | select(.name=="APP_BUILD") | .value')"
+          ACCOUNTS="$(printf '%s' "$SERVICE_JSON" | jq -r '.spec.template.spec.containers[0].env[] | select(.name=="MANAGEMENT_ACCOUNTS_JSON") | .value')"
+          test "$BUILD" = "$EXPECTED_BUILD"
+          test -n "$ACCOUNTS"
+          test "$(printf '%s' "$ACCOUNTS" | jq '[.[] | select(.role=="teacher")] | length')" -ge 1
+          test "$(printf '%s' "$ACCOUNTS" | jq '[.[] | select(.role=="researcher")] | length')" -ge 1
+
+          HEALTH="$(curl --fail --silent --show-error --max-time 20 "$API_URL/api/health")"
+          echo "$HEALTH" | grep -q '"status":"ok"'
+          echo "$HEALTH" | grep -q '"learningDataConfigured":true'
+          echo "$HEALTH" | grep -q '"managementConfigured":true'
+
+          # Wait until GitHub Pages has successfully deployed the same main commit.
+          PAGES_CONCLUSION=''
+          for attempt in $(seq 1 30); do
+            RUNS="$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$HEAD_SHA&per_page=20")"
+            PAGES_CONCLUSION="$(printf '%s' "$RUNS" | jq -r '[.workflow_runs[] | select(.name=="Deploy to GitHub Pages")][0].conclusion // empty')"
+            if [ "$PAGES_CONCLUSION" = 'success' ]; then
+              break
+            fi
+            if [ "$PAGES_CONCLUSION" = 'failure' ] || [ "$PAGES_CONCLUSION" = 'cancelled' ]; then
+              echo "Pages deployment failed for $HEAD_SHA"
+              exit 1
+            fi
+            sleep 5
+          done
+          test "$PAGES_CONCLUSION" = 'success'
+
+          PUPIL_PAGE=''
+          TEACHER_PAGE=''
+          PAGES_BUNDLE=''
+          for attempt in $(seq 1 18); do
+            PUPIL_PAGE="$(curl --fail --silent --show-error --max-time 20 "$PAGES_BASE/reflection/" || true)"
+            TEACHER_PAGE="$(curl --fail --silent --show-error --max-time 20 "$PAGES_BASE/reflection/teacher/" || true)"
+            PAGES_JS="$(printf '%s' "$PUPIL_PAGE" | grep -oE 'src="[^"]+\.js"' | head -1 | cut -d'"' -f2 || true)"
+            if [ -n "$PAGES_JS" ]; then
+              PAGES_BUNDLE="$(curl --fail --silent --show-error --max-time 30 "$PAGES_ORIGIN$PAGES_JS" || true)"
+            fi
+            if echo "$PUPIL_PAGE" | grep -q '<div id="root"></div>' && \
+               echo "$TEACHER_PAGE" | grep -q '<div id="root"></div>' && \
+               echo "$PAGES_BUNDLE" | grep -q '今日のめあてに向かって学ぶことができましたか？' && \
+               echo "$PAGES_BUNDLE" | grep -q '全部を書く必要はありません'; then
+              break
+            fi
+            sleep 5
+          done
+          echo "$PUPIL_PAGE" | grep -q '<div id="root"></div>'
+          echo "$TEACHER_PAGE" | grep -q '<div id="root"></div>'
+          echo "$PAGES_BUNDLE" | grep -q '今日のめあてに向かって学ぶことができましたか？'
+          echo "$PAGES_BUNDLE" | grep -q '全部を書く必要はありません'
+          echo "$PAGES_BUNDLE" | grep -q 'わたしの成長'
+          echo "$PAGES_BUNDLE" | grep -q 'みんなのふりかえり'
+
+          CLOUD_PUPIL="$(curl --fail --silent --show-error --max-time 20 "$API_URL/reflection/")"
+          CLOUD_TEACHER="$(curl --fail --silent --show-error --max-time 20 "$API_URL/reflection/teacher/")"
+          echo "$CLOUD_PUPIL" | grep -q '<div id="root"></div>'
+          echo "$CLOUD_TEACHER" | grep -q '<div id="root"></div>'
+          CLOUD_JS="$(printf '%s' "$CLOUD_PUPIL" | grep -oE 'src="[^"]+\.js"' | head -1 | cut -d'"' -f2)"
+          test -n "$CLOUD_JS"
+          CLOUD_BUNDLE="$(curl --fail --silent --show-error --max-time 30 "$API_URL$CLOUD_JS")"
+          echo "$CLOUD_BUNDLE" | grep -q '今日のめあてに向かって学ぶことができましたか？'
+          echo "$CLOUD_BUNDLE" | grep -q '全部を書く必要はありません'
+
+          CORS_HEADERS="$(mktemp)"
+          curl --silent --show-error --max-time 20 -D "$CORS_HEADERS" -o /dev/null -X OPTIONS "$API_URL/api/reflection/bootstrap" \
+            -H 'Origin: https://danksmash.github.io' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: Content-Type'
+          grep -qi '^access-control-allow-origin: https://danksmash.github.io' "$CORS_HEADERS"
+          grep -qi '^access-control-allow-methods: GET,POST,OPTIONS' "$CORS_HEADERS"
+          rm -f "$CORS_HEADERS"
+
+          BODY="$(mktemp)"
+          STATUS="$(curl --silent --show-error --max-time 20 -o "$BODY" -w '%{http_code}' \
+            -X POST "$API_URL/api/reflection/bootstrap" \
+            -H 'Content-Type: application/json' \
+            --data '{"deviceToken":"invalid"}')"
+          test "$STATUS" = '401'
+          grep -q 'INVALID_REFLECTION_DEVICE' "$BODY"
+
+          STATUS="$(curl --silent --show-error --max-time 20 -o "$BODY" -w '%{http_code}' \
+            -X POST "$API_URL/api/reflection/register" \
+            -H 'Content-Type: application/json' \
+            --data '{"learningCode":"BAD"}')"
+          test "$STATUS" = '400'
+          grep -q 'INVALID_LEARNING_CODE' "$BODY"
+
+          for endpoint in me dashboard; do
+            STATUS="$(curl --silent --show-error --max-time 20 -o "$BODY" -w '%{http_code}' \
+              -X POST "$API_URL/api/reflection/teacher/$endpoint" \
+              -H 'Content-Type: application/json' \
+              --data '{}')"
+            test "$STATUS" = '401'
+            grep -q 'UNAUTHORIZED' "$BODY"
+          done
+          rm -f "$BODY"
+
+          echo 'PRODUCTION_REFLECTION_SMOKE_PASS'
