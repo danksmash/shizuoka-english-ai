@@ -1,0 +1,626 @@
+name: Implement Reflection teacher filter alignment
+
+on:
+  push:
+    branches:
+      - fix/reflection-teacher-filter-alignment-20260910
+    paths:
+      - '.github/workflows/implement-reflection-teacher-filter-alignment.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/reflection-teacher-filter-alignment-20260910
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Apply filter alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > src/server/reflectionTeacherModel.ts <<'EOF'
+          import type { ReflectionRecord } from './reflectionPersistence';
+
+          export interface TeacherRosterStudent {
+            studentId: string;
+            learningId: string;
+            classId: string;
+            attendanceNumber: number | '';
+            active: boolean;
+          }
+
+          export type ReflectionTeacherDataScope = 'all' | 'main' | 'pilot_b' | 'test' | 'reserve';
+          export type ReflectionTeacherGrade = 'all' | '5' | '6';
+          export type ReflectionTeacherClassNumber = 'all' | '1' | '2' | '3';
+          type ConcreteDataScope = Exclude<ReflectionTeacherDataScope, 'all'>;
+          type ConcreteGrade = Exclude<ReflectionTeacherGrade, 'all'> | '';
+          type ConcreteClassNumber = Exclude<ReflectionTeacherClassNumber, 'all'> | '';
+
+          export interface TeacherReflectionFilterQuery {
+            dataScope?: unknown;
+            grade?: unknown;
+            classNumber?: unknown;
+            // Backward compatibility for an older cached teacher bundle.
+            classId?: unknown;
+          }
+
+          export interface TeacherReflectionStudentRow {
+            learningId: string;
+            classId: string;
+            dataScope: ConcreteDataScope;
+            grade: ConcreteGrade;
+            classNumber: ConcreteClassNumber;
+            attendanceNumber: number | '';
+            status: 'submitted' | 'draft' | 'missing';
+            reflectionCharCount: number;
+            todayGoal: string;
+            goalRating: number | null;
+            selfRegulationRating: number | null;
+            reflectionText: string;
+            updatedAt: string;
+          }
+
+          export interface TeacherReflectionDashboard {
+            localDate: string;
+            dataScope: ReflectionTeacherDataScope;
+            grade: ReflectionTeacherGrade;
+            classNumber: ReflectionTeacherClassNumber;
+            // Retained for compatibility with a previously deployed client.
+            classId: string;
+            classes: string[];
+            counts: { total: number; submitted: number; draft: number; missing: number };
+            students: TeacherReflectionStudentRow[];
+          }
+
+          export function reflectionDataScopeForClassId(value: unknown): ConcreteDataScope {
+            const classId = typeof value === 'string' ? value.trim() : '';
+            if (classId === '5-PB' || classId === '6-PB') return 'pilot_b';
+            if (classId === 'テスト') return 'test';
+            if (classId === '予備') return 'reserve';
+            return 'main';
+          }
+
+          export function reflectionGradeForClassId(value: unknown): ConcreteGrade {
+            const classId = typeof value === 'string' ? value.trim() : '';
+            if (classId.startsWith('5-')) return '5';
+            if (classId.startsWith('6-')) return '6';
+            return '';
+          }
+
+          export function reflectionClassNumberForClassId(value: unknown): ConcreteClassNumber {
+            const classId = typeof value === 'string' ? value.trim() : '';
+            const match = classId.match(/^[56]-([123])$/);
+            return match ? match[1] as ConcreteClassNumber : '';
+          }
+
+          function safeDate(value: unknown, fallback: string): string {
+            const text = typeof value === 'string' ? value.trim() : '';
+            return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : fallback;
+          }
+
+          function safeClass(value: unknown): string {
+            return typeof value === 'string' ? value.trim().slice(0, 40) : '';
+          }
+
+          function normalizeFilters(value: TeacherReflectionFilterQuery | string | undefined) {
+            const query: TeacherReflectionFilterQuery = typeof value === 'string' ? { classId: value } : (value || {});
+            const legacyClassId = safeClass(query.classId);
+            const rawScope = typeof query.dataScope === 'string' ? query.dataScope.trim() : '';
+            const rawGrade = typeof query.grade === 'string' ? query.grade.trim() : '';
+            const rawClassNumber = typeof query.classNumber === 'string' ? query.classNumber.trim() : '';
+            const dataScope: ReflectionTeacherDataScope = ['all','main','pilot_b','test','reserve'].includes(rawScope)
+              ? rawScope as ReflectionTeacherDataScope
+              : legacyClassId ? 'all' : 'main';
+            const grade: ReflectionTeacherGrade = ['5','6'].includes(rawGrade) ? rawGrade as ReflectionTeacherGrade : 'all';
+            const classNumber: ReflectionTeacherClassNumber = ['1','2','3'].includes(rawClassNumber) ? rawClassNumber as ReflectionTeacherClassNumber : 'all';
+            return { dataScope, grade, classNumber, legacyClassId };
+          }
+
+          function membershipMatches(classId: string, filters: ReturnType<typeof normalizeFilters>): boolean {
+            if (filters.legacyClassId) return classId === filters.legacyClassId;
+            if (filters.dataScope !== 'all' && reflectionDataScopeForClassId(classId) !== filters.dataScope) return false;
+            if (filters.grade !== 'all' && reflectionGradeForClassId(classId) !== filters.grade) return false;
+            if (filters.classNumber !== 'all' && reflectionClassNumberForClassId(classId) !== filters.classNumber) return false;
+            return true;
+          }
+
+          function legacySixPartText(record: ReflectionRecord): string {
+            const parts: Array<[string, string]> = [
+              ['できたこと', record.achievements],
+              ['使ったことば', record.languageUsed],
+              ['授業中に考えていたこと', record.thinking],
+              ['困ったこと・工夫', record.difficultyStrategy],
+              ['言葉や文化について気づいたこと', record.languageCultureAwareness],
+              ['次に頑張りたいこと', record.nextGoal],
+            ];
+            return parts.filter(([, text]) => text).map(([label, text]) => `【${label}】\n${text}`).join('\n\n');
+          }
+
+          function visibleReflectionText(record: ReflectionRecord | undefined): string {
+            if (!record) return '';
+            return record.reflectionText || legacySixPartText(record);
+          }
+
+          export function buildTeacherReflectionDashboard(
+            roster: TeacherRosterStudent[],
+            records: ReflectionRecord[],
+            requestedDate: unknown,
+            requestedFilters: TeacherReflectionFilterQuery | string | undefined,
+            today: string,
+          ): TeacherReflectionDashboard {
+            const localDate = safeDate(requestedDate, today);
+            const filters = normalizeFilters(requestedFilters);
+            const activeRoster = roster.filter((student) => student.active && student.learningId && student.classId);
+            const classes = Array.from(new Set(activeRoster.map((student) => student.classId))).sort((a, b) => a.localeCompare(b, 'ja'));
+            const selectedRoster = activeRoster.filter((student) => membershipMatches(student.classId, filters));
+            const allowedStudentIds = new Set(selectedRoster.map((student) => student.studentId));
+            const recordsByStudent = new Map<string, ReflectionRecord>();
+            for (const record of records) {
+              if (record.localDate !== localDate || !allowedStudentIds.has(record.studentId)) continue;
+              const current = recordsByStudent.get(record.studentId);
+              if (!current || record.updatedAt > current.updatedAt) recordsByStudent.set(record.studentId, record);
+            }
+            const students: TeacherReflectionStudentRow[] = selectedRoster.map((student): TeacherReflectionStudentRow => {
+              const record = recordsByStudent.get(student.studentId);
+              const status: TeacherReflectionStudentRow['status'] = record?.status === 'submitted' ? 'submitted' : record ? 'draft' : 'missing';
+              return {
+                learningId: student.learningId,
+                classId: student.classId,
+                dataScope: reflectionDataScopeForClassId(student.classId),
+                grade: reflectionGradeForClassId(student.classId),
+                classNumber: reflectionClassNumberForClassId(student.classId),
+                attendanceNumber: student.attendanceNumber,
+                status,
+                reflectionCharCount: record?.reflectionCharCount || 0,
+                todayGoal: record?.todayGoal || '',
+                goalRating: record?.goalRating ?? null,
+                selfRegulationRating: record?.selfRegulationRating ?? null,
+                reflectionText: visibleReflectionText(record),
+                updatedAt: record?.updatedAt || '',
+              };
+            }).sort((a, b) => a.classId.localeCompare(b.classId, 'ja') || Number(a.attendanceNumber || 999) - Number(b.attendanceNumber || 999) || a.learningId.localeCompare(b.learningId));
+            return {
+              localDate,
+              dataScope: filters.dataScope,
+              grade: filters.grade,
+              classNumber: filters.classNumber,
+              classId: filters.legacyClassId,
+              classes,
+              counts: {
+                total: students.length,
+                submitted: students.filter((row) => row.status === 'submitted').length,
+                draft: students.filter((row) => row.status === 'draft').length,
+                missing: students.filter((row) => row.status === 'missing').length,
+              },
+              students,
+            };
+          }
+
+          function csvCell(value: unknown): string {
+            let text = String(value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
+            return `"${text.replace(/"/g, '""')}"`;
+          }
+
+          export function serializeTeacherReflectionCsv(
+            roster: TeacherRosterStudent[],
+            records: ReflectionRecord[],
+            requestedDate: unknown,
+            requestedFilters: TeacherReflectionFilterQuery | string | undefined,
+          ): string {
+            const filters = normalizeFilters(requestedFilters);
+            const dateText = typeof requestedDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : '';
+            const rosterByStudent = new Map(roster.map((student) => [student.studentId, student]));
+            const rows = records
+              .filter((record) => membershipMatches(record.classId, filters) && (!dateText || record.localDate === dateText))
+              .sort((a, b) => a.localDate.localeCompare(b.localDate) || a.classId.localeCompare(b.classId, 'ja') || (rosterByStudent.get(a.studentId)?.learningId || '').localeCompare(rosterByStudent.get(b.studentId)?.learningId || ''));
+            const headers = [
+              'local_date', 'class_id', 'data_scope', 'grade_level', 'class_number', 'learning_id', 'attendance_number', 'status', 'today_goal',
+              'goal_rating', 'self_regulation_rating', 'reflection_text', 'reflection_char_count',
+              'revision', 'created_at', 'updated_at', 'submitted_at',
+              'achievements', 'language_used', 'thinking', 'difficulty_strategy', 'language_culture_awareness', 'next_goal',
+            ];
+            const lines = [headers.map(csvCell).join(',')];
+            for (const record of rows) {
+              const rosterStudent = rosterByStudent.get(record.studentId);
+              lines.push([
+                record.localDate,
+                record.classId,
+                reflectionDataScopeForClassId(record.classId),
+                reflectionGradeForClassId(record.classId),
+                reflectionClassNumberForClassId(record.classId),
+                rosterStudent?.learningId || record.learningId,
+                rosterStudent?.attendanceNumber || '',
+                record.status,
+                record.todayGoal,
+                record.goalRating ?? '',
+                record.selfRegulationRating ?? '',
+                visibleReflectionText(record),
+                record.reflectionCharCount,
+                record.revision,
+                record.createdAt,
+                record.updatedAt,
+                record.submittedAt,
+                record.achievements,
+                record.languageUsed,
+                record.thinking,
+                record.difficultyStrategy,
+                record.languageCultureAwareness,
+                record.nextGoal,
+              ].map(csvCell).join(','));
+            }
+            return `\uFEFF${lines.join('\r\n')}\r\n`;
+          }
+
+          export function buildTeacherStudentHistory(
+            roster: TeacherRosterStudent[],
+            records: ReflectionRecord[],
+            learningId: string,
+          ): { learningId: string; classId: string; dataScope: ConcreteDataScope; grade: ConcreteGrade; classNumber: ConcreteClassNumber; attendanceNumber: number | ''; history: Array<Omit<ReflectionRecord, 'studentId' | 'researchId' | 'classId' | 'learningId'>> } | null {
+            const normalized = learningId.trim().toUpperCase();
+            const student = roster.find((row) => row.active && row.learningId === normalized);
+            if (!student) return null;
+            const history = records
+              .filter((record) => record.studentId === student.studentId)
+              .sort((a, b) => b.localDate.localeCompare(a.localDate))
+              .map(({ studentId: _studentId, researchId: _researchId, classId: _classId, learningId: _learningId, ...safe }) => safe);
+            return {
+              learningId: student.learningId,
+              classId: student.classId,
+              dataScope: reflectionDataScopeForClassId(student.classId),
+              grade: reflectionGradeForClassId(student.classId),
+              classNumber: reflectionClassNumberForClassId(student.classId),
+              attendanceNumber: student.attendanceNumber,
+              history,
+            };
+          }
+          EOF
+
+          cat > src/reflection/reflectionTeacherApi.ts <<'EOF'
+          const CONFIGURED_API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+          const apiUrl = (path: string) => `${CONFIGURED_API_BASE}${path}`;
+
+          export type TeacherDataScope = 'all' | 'main' | 'pilot_b' | 'test' | 'reserve';
+          export type TeacherGrade = 'all' | '5' | '6';
+          export type TeacherClassNumber = 'all' | '1' | '2' | '3';
+          type ConcreteDataScope = Exclude<TeacherDataScope, 'all'>;
+          type ConcreteGrade = Exclude<TeacherGrade, 'all'> | '';
+          type ConcreteClassNumber = Exclude<TeacherClassNumber, 'all'> | '';
+
+          export interface TeacherDashboardStudent {
+            learningId: string;
+            classId: string;
+            dataScope: ConcreteDataScope;
+            grade: ConcreteGrade;
+            classNumber: ConcreteClassNumber;
+            attendanceNumber: number | '';
+            status: 'submitted' | 'draft' | 'missing';
+            reflectionCharCount: number;
+            todayGoal: string;
+            goalRating: number | null;
+            selfRegulationRating: number | null;
+            reflectionText: string;
+            updatedAt: string;
+          }
+
+          export interface TeacherDashboardResponse {
+            localDate: string;
+            dataScope: TeacherDataScope;
+            grade: TeacherGrade;
+            classNumber: TeacherClassNumber;
+            classId: string;
+            classes: string[];
+            counts: { total: number; submitted: number; draft: number; missing: number };
+            students: TeacherDashboardStudent[];
+          }
+
+          export interface TeacherHistoryRecord {
+            reflectionId: string;
+            localDate: string;
+            todayGoal: string;
+            goalRating: number | null;
+            selfRegulationRating: number | null;
+            reflectionText: string;
+            reflectionCharCount: number;
+            status: 'draft' | 'submitted';
+            revision: number;
+            createdAt: string;
+            updatedAt: string;
+            submittedAt: string;
+            achievements: string;
+            languageUsed: string;
+            thinking: string;
+            difficultyStrategy: string;
+            languageCultureAwareness: string;
+            nextGoal: string;
+          }
+
+          export interface TeacherStudentHistoryResponse {
+            learningId: string;
+            classId: string;
+            dataScope: ConcreteDataScope;
+            grade: ConcreteGrade;
+            classNumber: ConcreteClassNumber;
+            attendanceNumber: number | '';
+            history: TeacherHistoryRecord[];
+          }
+
+          async function post<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
+            const response = await fetch(apiUrl(path), {
+              method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data?.success === false) {
+              const error = new Error(data?.error || `HTTP_${response.status}`) as Error & { code?: string; status?: number };
+              error.code = data?.error; error.status = response.status; throw error;
+            }
+            return data as T;
+          }
+
+          export function teacherShouldRedirectToApiOrigin(): string {
+            if (!CONFIGURED_API_BASE) return '';
+            try {
+              const target = new URL(CONFIGURED_API_BASE);
+              return target.origin !== window.location.origin ? `${target.origin}/reflection/teacher` : '';
+            } catch { return ''; }
+          }
+
+          export async function teacherLogin(username: string, password: string): Promise<void> { await post('/api/reflection/teacher/login', { username, password }); }
+          export async function teacherLogout(): Promise<void> { await post('/api/reflection/teacher/logout'); }
+          export async function teacherMe(): Promise<{ username: string; role: string }> {
+            const data = await post<{ success: true; user: { username: string; role: string } }>('/api/reflection/teacher/me');
+            return data.user;
+          }
+          export async function teacherDashboard(localDate: string, dataScope: TeacherDataScope, grade: TeacherGrade, classNumber: TeacherClassNumber): Promise<TeacherDashboardResponse> {
+            const data = await post<{ success: true } & TeacherDashboardResponse>('/api/reflection/teacher/dashboard', { localDate, dataScope, grade, classNumber });
+            return data;
+          }
+          export async function teacherStudentHistory(learningId: string): Promise<TeacherStudentHistoryResponse> {
+            const data = await post<{ success: true; student: TeacherStudentHistoryResponse }>('/api/reflection/teacher/student', { learningId });
+            return data.student;
+          }
+          export async function teacherExportCsv(localDate: string, dataScope: TeacherDataScope, grade: TeacherGrade, classNumber: TeacherClassNumber): Promise<void> {
+            const response = await fetch(apiUrl('/api/reflection/teacher/export.csv'), {
+              method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ localDate, dataScope, grade, classNumber }),
+            });
+            if (!response.ok) throw new Error(`HTTP_${response.status}`);
+            const blob = await response.blob();
+            const href = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = href;
+            anchor.download = `my-english-growth-reflections-${localDate || 'all'}.csv`;
+            document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(href);
+          }
+          EOF
+
+          cat > src/reflection/ReflectionTeacherApp.tsx <<'EOF'
+          import React, { useEffect, useState } from 'react';
+          import { BarChart3, CalendarDays, CheckCircle2, Clock3, Download, FileText, LogOut, RefreshCw, Search, Users, XCircle } from 'lucide-react';
+          import {
+            teacherDashboard, teacherExportCsv, teacherLogin, teacherLogout, teacherMe, teacherShouldRedirectToApiOrigin, teacherStudentHistory,
+            type TeacherClassNumber, type TeacherDashboardResponse, type TeacherDataScope, type TeacherGrade, type TeacherStudentHistoryResponse,
+          } from './reflectionTeacherApi';
+
+          const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+          const scopeLabel = (scope: string) => ({ main:'本研究', pilot_b:'Pilot B', test:'テスト', reserve:'予備' } as Record<string,string>)[scope] || scope;
+          const membershipLabel = (value: { dataScope: string; grade: string; classNumber: string }) => {
+            const scope = scopeLabel(value.dataScope);
+            const school = value.grade ? `${value.grade}年${value.classNumber ? `${value.classNumber}組` : ''}` : '';
+            return school ? `${scope}・${school}` : scope;
+          };
+
+          function legacySixPartText(record: TeacherStudentHistoryResponse['history'][number]): string {
+            const parts: Array<[string, string]> = [
+              ['できたこと', record.achievements], ['使ったことば', record.languageUsed], ['授業中に考えていたこと', record.thinking],
+              ['困ったこと・工夫', record.difficultyStrategy], ['言葉や文化について気づいたこと', record.languageCultureAwareness], ['次に頑張りたいこと', record.nextGoal],
+            ];
+            return parts.filter(([, value]) => value).map(([label, value]) => `【${label}】\n${value}`).join('\n\n');
+          }
+
+          function Login({ onDone }: { onDone: () => void }) {
+            const [username, setUsername] = useState(''); const [password, setPassword] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+            const submit = async (event: React.FormEvent) => {
+              event.preventDefault(); setBusy(true); setError('');
+              try { await teacherLogin(username, password); onDone(); }
+              catch (e: any) { setError(e?.code === 'TEACHER_ONLY' ? '教師用アカウントでログインしてください。' : e?.code === 'TOO_MANY_LOGIN_ATTEMPTS' ? 'ログイン試行回数が多すぎます。時間をおいてください。' : 'ユーザー名またはパスワードを確認してください。'); }
+              finally { setBusy(false); }
+            };
+            return <div className="megt-login-page"><form className="megt-login-card" onSubmit={submit}><div className="megt-logo"><BarChart3 /></div><h1>My English Growth</h1><h2>教師用 振り返り一覧</h2><p>児童の振り返り状況と学びの記録を確認します。</p><label>ユーザー名<input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus /></label><label>パスワード<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></label>{error && <div className="megt-error">{error}</div>}<button className="megt-primary" disabled={busy}>{busy ? '確認しています…' : 'ログイン'}</button></form></div>;
+          }
+
+          function StatusChip({ status }: { status: 'submitted' | 'draft' | 'missing' }) {
+            if (status === 'submitted') return <span className="megt-chip submitted"><CheckCircle2 />提出済み</span>;
+            if (status === 'draft') return <span className="megt-chip draft"><Clock3 />下書き</span>;
+            return <span className="megt-chip missing"><XCircle />未入力</span>;
+          }
+
+          function StudentPanel({ student, onClose }: { student: TeacherStudentHistoryResponse; onClose: () => void }) {
+            return <div className="megt-panel-backdrop" onClick={onClose}><aside className="megt-panel" onClick={(e) => e.stopPropagation()}><button className="megt-close" onClick={onClose} aria-label="閉じる">×</button><div className="megt-panel-head"><div><span>{membershipLabel(student)}</span><h2>{student.learningId}</h2><p>{student.attendanceNumber ? `出席番号 ${student.attendanceNumber}` : '出席番号未設定'}</p></div><BarChart3 /></div>{student.history.length === 0 ? <p className="megt-muted">振り返りはまだありません。</p> : <div className="megt-history">{student.history.map((record) => { const text = record.reflectionText || legacySixPartText(record); return <article key={record.reflectionId}><div className="megt-history-date"><b>{record.localDate}</b><StatusChip status={record.status === 'submitted' ? 'submitted' : 'draft'} /><span>{record.reflectionCharCount}文字</span></div><h3>今日のめあて</h3><p>{record.todayGoal || '—'}</p><div className="megt-rating-summary"><span>めあて {record.goalRating ?? '—'}/5</span><span>考え・工夫 {record.selfRegulationRating ?? '—'}/5</span></div><h3>今日の振り返り</h3><p>{text || '—'}</p></article>; })}</div>}</aside></div>;
+          }
+
+          export default function ReflectionTeacherApp() {
+            const [mode, setMode] = useState<'checking' | 'login' | 'ready'>('checking');
+            const [user, setUser] = useState(''); const [localDate, setLocalDate] = useState(today);
+            const [dataScope, setDataScope] = useState<TeacherDataScope>('main'); const [grade, setGrade] = useState<TeacherGrade>('all'); const [classNumber, setClassNumber] = useState<TeacherClassNumber>('all');
+            const [data, setData] = useState<TeacherDashboardResponse | null>(null); const [loading, setLoading] = useState(false); const [error, setError] = useState('');
+            const [selected, setSelected] = useState<TeacherStudentHistoryResponse | null>(null); const [search, setSearch] = useState('');
+
+            const checkAuth = async () => { try { const me = await teacherMe(); setUser(me.username); setMode('ready'); } catch { setMode('login'); } };
+            const load = async (date = localDate, scope = dataScope, g = grade, room = classNumber) => {
+              setLoading(true); setError('');
+              try { setData(await teacherDashboard(date, scope, g, room)); }
+              catch (e: any) { if (e?.status === 401) setMode('login'); else setError('振り返り一覧を読み込めませんでした。'); }
+              finally { setLoading(false); }
+            };
+            useEffect(() => { const redirect = teacherShouldRedirectToApiOrigin(); if (redirect) { window.location.replace(redirect); return; } void checkAuth(); }, []);
+            useEffect(() => { if (mode === 'ready') void load(); }, [mode, localDate, dataScope, grade, classNumber]);
+
+            if (mode === 'checking') return <div className="megt-loading"><BarChart3 /><p>教師画面を読み込んでいます…</p></div>;
+            if (mode === 'login') return <Login onDone={() => void checkAuth()} />;
+
+            const filtered = (data?.students || []).filter((row) => !search.trim() || row.learningId.includes(search.trim().toUpperCase()));
+            const openStudent = async (learningId: string) => { try { setSelected(await teacherStudentHistory(learningId)); } catch { setError('児童の履歴を読み込めませんでした。'); } };
+            const logout = async () => { try { await teacherLogout(); } finally { setUser(''); setData(null); setMode('login'); } };
+            const exportCsv = async () => { try { await teacherExportCsv(localDate, dataScope, grade, classNumber); } catch { setError('CSVを書き出せませんでした。'); } };
+
+            return <div className="megt-app"><header className="megt-header"><div className="megt-brand"><div className="megt-logo"><BarChart3 /></div><div><h1>My English Growth</h1><p>教師用 振り返りダッシュボード</p></div></div><div className="megt-user"><span>{user}</span><button onClick={logout}><LogOut />ログアウト</button></div></header>
+              <main className="megt-main"><section className="megt-toolbar">
+                <label><CalendarDays />日付<input type="date" value={localDate} onChange={(e) => setLocalDate(e.target.value)} /></label>
+                <label><FileText />データ区分<select value={dataScope} onChange={(e) => setDataScope(e.target.value as TeacherDataScope)}><option value="main">本研究</option><option value="pilot_b">Pilot B</option><option value="test">テスト</option><option value="reserve">予備</option><option value="all">すべて</option></select></label>
+                <label><Users />学年<select value={grade} onChange={(e) => setGrade(e.target.value as TeacherGrade)}><option value="all">すべて</option><option value="5">5年</option><option value="6">6年</option></select></label>
+                <label><Users />学級<select value={classNumber} onChange={(e) => setClassNumber(e.target.value as TeacherClassNumber)}><option value="all">すべて</option><option value="1">1組</option><option value="2">2組</option><option value="3">3組</option></select></label>
+                <label className="megt-search"><Search />ID検索<input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="例：6RSX" maxLength={8} /></label><button className="megt-secondary" onClick={() => void load()} disabled={loading}><RefreshCw />更新</button><button className="megt-export" onClick={exportCsv}><Download />CSV</button></section>
+                {error && <div className="megt-error-banner">{error}</div>}
+                <section className="megt-counts"><div><Users /><span>対象</span><b>{data?.counts.total ?? 0}</b></div><div className="submitted"><CheckCircle2 /><span>提出済み</span><b>{data?.counts.submitted ?? 0}</b></div><div className="draft"><Clock3 /><span>下書き</span><b>{data?.counts.draft ?? 0}</b></div><div className="missing"><XCircle /><span>未入力</span><b>{data?.counts.missing ?? 0}</b></div></section>
+                <section className="megt-table-card"><div className="megt-table-head"><div><FileText /><h2>{data?.localDate || localDate} の振り返り</h2></div><p>文字数と自己評価は、児童の学びを振り返るための補助情報です。</p></div><div className="megt-table-scroll"><table><thead><tr><th>所属</th><th>出席</th><th>ID</th><th>状況</th><th>文字数</th><th>今日のめあて</th><th>自己評価</th><th>今日の振り返り</th></tr></thead><tbody>{filtered.map((row) => <tr key={`${row.classId}-${row.learningId}`} onClick={() => void openStudent(row.learningId)} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') void openStudent(row.learningId); }}><td>{membershipLabel(row)}</td><td>{row.attendanceNumber || '—'}</td><td><b>{row.learningId}</b></td><td><StatusChip status={row.status} /></td><td>{row.reflectionCharCount || '—'}</td><td>{row.todayGoal || '—'}</td><td>{row.goalRating ?? '—'} / {row.selfRegulationRating ?? '—'}</td><td>{row.reflectionText || '—'}</td></tr>)}</tbody></table>{!loading && filtered.length === 0 && <div className="megt-empty">該当する児童はいません。</div>}</div></section>
+              </main>{selected && <StudentPanel student={selected} onClose={() => setSelected(null)} />}</div>;
+          }
+          EOF
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/server/reflectionRoutes.ts')
+          s=p.read_text()
+          old="buildTeacherReflectionDashboard(roster, records, req.body?.localDate, req.body?.classId, todayInTokyo())"
+          new="buildTeacherReflectionDashboard(roster, records, req.body?.localDate, { dataScope: req.body?.dataScope, grade: req.body?.grade, classNumber: req.body?.classNumber, classId: req.body?.classId }, todayInTokyo())"
+          assert old in s
+          s=s.replace(old,new)
+          old="serializeTeacherReflectionCsv(roster, records, req.body?.localDate, req.body?.classId)"
+          new="serializeTeacherReflectionCsv(roster, records, req.body?.localDate, { dataScope: req.body?.dataScope, grade: req.body?.grade, classNumber: req.body?.classNumber, classId: req.body?.classId })"
+          assert old in s
+          s=s.replace(old,new)
+          p.write_text(s)
+
+          p=Path('src/reflection/reflection.css')
+          s=p.read_text()
+          old='grid-template-columns:auto auto minmax(180px,1fr) auto auto'
+          assert old in s
+          s=s.replace(old,'grid-template-columns:130px 130px 95px 95px minmax(180px,1fr) auto auto',1)
+          old='.megt-table-card th:nth-child(1),.megt-table-card td:nth-child(1){width:54px}'
+          if old in s: s=s.replace(old,'.megt-table-card th:nth-child(1),.megt-table-card td:nth-child(1){width:110px}',1)
+          p.write_text(s)
+          PY
+
+          cat > scripts/qa-reflection-teacher.ts <<'EOF'
+          import { buildTeacherReflectionDashboard, buildTeacherStudentHistory, reflectionDataScopeForClassId, reflectionGradeForClassId, reflectionClassNumberForClassId, serializeTeacherReflectionCsv, type TeacherRosterStudent } from '../src/server/reflectionTeacherModel';
+          import { researchDataScopeForRow } from '../src/server/researchDashboard';
+          import type { ReflectionRecord } from '../src/server/reflectionPersistence';
+
+          const fail = (message: string): never => { throw new Error(`[qa:reflection-teacher] ${message}`); };
+          const assert = (condition: unknown, message: string) => { if (!condition) fail(message); };
+
+          const roster: TeacherRosterStudent[] = [
+            { studentId: 's1', learningId: 'T5A2', classId: '5-1', attendanceNumber: 1, active: true },
+            { studentId: 's2', learningId: 'T5B3', classId: '5-1', attendanceNumber: 2, active: true },
+            { studentId: 's3', learningId: 'T5C4', classId: '5-1', attendanceNumber: 3, active: true },
+            { studentId: 's4', learningId: 'T6D5', classId: '6-1', attendanceNumber: 1, active: true },
+            { studentId: 'pb1', learningId: 'P6A2', classId: '6-PB', attendanceNumber: 1, active: true },
+            { studentId: 'pb2', learningId: 'P6B3', classId: '6-PB', attendanceNumber: 2, active: true },
+            { studentId: 'test1', learningId: '6RSX', classId: 'テスト', attendanceNumber: '', active: true },
+            { studentId: 'reserve1', learningId: 'R5A2', classId: '予備', attendanceNumber: '', active: true },
+          ];
+
+          const base = {
+            researchId: 'R-SYNTHETIC-ONLY', localDate: '2026-09-09', todayGoal: '相手の話をよく聞きながら、自分から話す。', goalRating: 4,
+            selfRegulationRating: 3, reflectionText: '今日は相手の話を聞きながら、次に何を言うか考えることができた。友達の話し方も参考になった。',
+            reflectionCharCount: 48, revision: 2, createdAt: '2026-09-09T01:00:00.000Z', updatedAt: '2026-09-09T01:10:00.000Z', submittedAt: '2026-09-09T01:10:00.000Z',
+            achievements: '', languageUsed: '', thinking: '', difficultyStrategy: '', languageCultureAwareness: '', nextGoal: '',
+          } satisfies Omit<ReflectionRecord, 'reflectionId' | 'studentId' | 'classId' | 'learningId' | 'status'>;
+
+          const legacySix = { ...base, localDate: '2026-09-02', goalRating: null, selfRegulationRating: null, reflectionText: '', reflectionCharCount: 60, achievements: '相手に質問できた。', languageUsed: 'Really?', thinking: '次に何を聞くか考えた。', difficultyStrategy: '聞き返した。', languageCultureAwareness: '食文化の違いに気づいた。', nextGoal: '理由まで聞きたい。' };
+          const records: ReflectionRecord[] = [
+            { ...base, reflectionId: 'r1', studentId: 's1', classId: '5-1', learningId: 'T5A2', status: 'submitted' },
+            { ...base, reflectionId: 'r2', studentId: 's2', classId: '5-1', learningId: 'T5B3', status: 'draft', submittedAt: '', reflectionText: '=HYPERLINK("https://example.invalid","x")' },
+            { ...base, reflectionId: 'r4', studentId: 's4', classId: '6-1', learningId: 'T6D5', status: 'submitted', reflectionText: '英語で好きなものを伝えて質問した。' },
+            { ...base, reflectionId: 'pb-r1', studentId: 'pb1', classId: '6-PB', learningId: 'P6A2', status: 'submitted', reflectionText: 'Pilot Bの振り返り。' },
+            { ...base, reflectionId: 'test-r1', studentId: 'test1', classId: 'テスト', learningId: '6RSX', status: 'submitted', reflectionText: '教師テスト。' },
+            { ...legacySix, reflectionId: 'legacy', studentId: 's1', classId: '5-1', learningId: 'T5A2', status: 'submitted' },
+          ];
+
+          for (const [classId, scope] of [['5-1','main'],['6-PB','pilot_b'],['テスト','test'],['予備','reserve']] as const) {
+            assert(reflectionDataScopeForClassId(classId) === scope, `Reflection scope mismatch for ${classId}`);
+            assert(researchDataScopeForRow({ class_id: classId, local_date: '2026-09-09' }) === scope, `Research dashboard scope mismatch for ${classId}`);
+          }
+          assert(reflectionGradeForClassId('6-PB') === '6', 'Pilot B grade should be derived as 6');
+          assert(reflectionClassNumberForClassId('6-PB') === '', 'Pilot B must not masquerade as class 1/2/3');
+          assert(reflectionClassNumberForClassId('5-2') === '2', 'ordinary room number should be derived');
+
+          const main5 = buildTeacherReflectionDashboard(roster, records, '2026-09-09', { dataScope:'main', grade:'5', classNumber:'1' }, '2026-09-09');
+          assert(main5.counts.total === 3, 'main / grade 5 / class 1 total should be 3');
+          assert(main5.counts.submitted === 1 && main5.counts.draft === 1 && main5.counts.missing === 1, 'main status counts should remain correct');
+          assert(main5.students[0]?.dataScope === 'main' && main5.students[0]?.grade === '5' && main5.students[0]?.classNumber === '1', 'derived membership should be returned');
+
+          const pilot = buildTeacherReflectionDashboard(roster, records, '2026-09-09', { dataScope:'pilot_b', grade:'6', classNumber:'all' }, '2026-09-09');
+          assert(pilot.counts.total === 2, 'Pilot B grade-6 roster should be isolated');
+          assert(pilot.students.every((row) => row.classId === '6-PB' && row.dataScope === 'pilot_b'), 'Pilot B rows must be isolated');
+
+          const test = buildTeacherReflectionDashboard(roster, records, '2026-09-09', { dataScope:'test', grade:'all', classNumber:'all' }, '2026-09-09');
+          assert(test.counts.total === 1 && test.students[0]?.learningId === '6RSX', 'test scope should isolate 6RSX');
+
+          const all = buildTeacherReflectionDashboard(roster, records, '2026-09-09', { dataScope:'all', grade:'all', classNumber:'all' }, '2026-09-09');
+          assert(all.counts.total === 8, 'all scope should include all assigned active roster students');
+
+          const legacyExact = buildTeacherReflectionDashboard(roster, records, '2026-09-09', '5-1', '2026-09-09');
+          assert(legacyExact.counts.total === 3, 'legacy cached classId filter should remain compatible');
+
+          const history = buildTeacherStudentHistory(roster, records, 't5a2');
+          assert(history?.history.length === 2, 'student history should contain canonical and six-part legacy records');
+          assert(history?.dataScope === 'main' && history.grade === '5' && history.classNumber === '1', 'history should expose derived membership only');
+          const serializedHistory = JSON.stringify(history);
+          assert(!serializedHistory.includes('R-SYNTHETIC-ONLY'), 'teacher history must not expose researchId');
+          assert(!serializedHistory.includes('"studentId"'), 'teacher history must not expose internal studentId');
+
+          const csv = serializeTeacherReflectionCsv(roster, records, '2026-09-09', { dataScope:'main', grade:'5', classNumber:'1' });
+          assert(csv.startsWith('\uFEFF'), 'CSV should include UTF-8 BOM');
+          for (const header of ['data_scope','grade_level','class_number','goal_rating','self_regulation_rating','reflection_text']) assert(csv.includes(`"${header}"`), `CSV missing ${header}`);
+          assert(csv.includes('"T5A2"') && !csv.includes('"P6A2"') && !csv.includes('"6RSX"'), 'main CSV must match dashboard filters');
+          assert(csv.includes("\"'=HYPERLINK("), 'CSV formula-like text must be apostrophe-prefixed');
+          assert(!csv.includes('research_id') && !csv.includes('student_id'), 'teacher CSV must not expose internal IDs');
+
+          const pilotCsv = serializeTeacherReflectionCsv(roster, records, '2026-09-09', { dataScope:'pilot_b', grade:'6', classNumber:'all' });
+          assert(pilotCsv.includes('"P6A2"') && !pilotCsv.includes('"T5A2"') && !pilotCsv.includes('"6RSX"'), 'Pilot B CSV must match Pilot B filter');
+          const testCsv = serializeTeacherReflectionCsv(roster, records, '2026-09-09', { dataScope:'test', grade:'all', classNumber:'all' });
+          assert(testCsv.includes('"6RSX"') && !testCsv.includes('"P6A2"'), 'test CSV must isolate test data');
+
+          const legacyCsv = serializeTeacherReflectionCsv(roster, records, '2026-09-02', '5-1');
+          assert(legacyCsv.includes('【できたこと】') && legacyCsv.includes('理由まで聞きたい。'), 'legacy six-part data must remain readable');
+
+          console.log('[qa:reflection-teacher] PASS: data-scope/grade/class filters align with research dashboard, CSV follows filters, 6RSX test isolation, privacy, and legacy compatibility verified.');
+          EOF
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/qa-reflection-module.ts')
+          s=p.read_text()
+          needle="requireText(teacher, '自己評価', 'teacher B-design table');"
+          assert needle in s
+          s=s.replace(needle, needle+"\nrequireText(teacher, 'データ区分', 'teacher data-scope filter');\nrequireText(teacher, 'Pilot B', 'teacher Pilot B filter');\nrequireText(teacher, '学年', 'teacher grade filter');\nrequireText(teacher, 'classNumber', 'teacher class-number filter');\nrequireText(read('src/reflection/reflectionTeacherApi.ts'), 'dataScope, grade, classNumber', 'teacher API filter linkage');\nrequireText(teacherModel, 'reflectionDataScopeForClassId', 'teacher cohort classification');")
+          p.write_text(s)
+          PY
+
+          npm ci --no-audit --no-fund
+          npm run qa:reflection
+          npm run qa:pilot-b
+          npm run qa:dashboard
+          npm run qa
+          npm run build
+          npm run build:pages
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/server/reflectionTeacherModel.ts src/server/reflectionRoutes.ts src/reflection/reflectionTeacherApi.ts src/reflection/ReflectionTeacherApp.tsx src/reflection/reflection.css scripts/qa-reflection-teacher.ts scripts/qa-reflection-module.ts
+          git commit -m "fix: align Reflection teacher filters with research dashboard"
+          git push origin HEAD:fix/reflection-teacher-filter-alignment-20260910
