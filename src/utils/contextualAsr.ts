@@ -6,6 +6,7 @@ export type ContextualAsrConfidence = 'none' | 'medium' | 'high';
 type LexiconEntry = {
   term: string;
   category: Exclude<ContextualAsrCategory, 'person'>;
+  boost?: number;
 };
 
 export interface ContextualAsrInput {
@@ -29,6 +30,11 @@ export interface ContextualAsrResult {
 // hypothesis that is phonetically close enough in a strong conversation context.
 export const CONTEXTUAL_ASR_LEXICON: readonly LexiconEntry[] = [
   { term: 'natto', category: 'food' },
+  { term: 'karaage', category: 'food', boost: 4.5 },
+  { term: 'ramen', category: 'food', boost: 3.5 },
+  { term: 'curry rice', category: 'food', boost: 3.5 },
+  { term: 'hamburger steak', category: 'food', boost: 3.0 },
+  { term: 'omurice', category: 'food', boost: 3.5 },
   { term: 'onigiri', category: 'food' },
   { term: 'takoyaki', category: 'food' },
   { term: 'okonomiyaki', category: 'food' },
@@ -44,14 +50,16 @@ export const CONTEXTUAL_ASR_LEXICON: readonly LexiconEntry[] = [
   { term: 'mikan', category: 'food' },
   { term: 'sakura shrimp', category: 'food' },
   { term: 'black hanpen', category: 'food' },
-  { term: 'Hamamatsu', category: 'place' },
-  { term: 'Shizuoka', category: 'place' },
+  { term: 'Hamamatsu', category: 'place', boost: 4.0 },
+  { term: 'Shizuoka', category: 'place', boost: 4.0 },
   { term: 'Fujinomiya', category: 'place' },
   { term: 'Yaizu', category: 'place' },
   { term: 'Kakegawa', category: 'place' },
   { term: 'Iwata', category: 'place' },
-  { term: 'Mt. Fuji', category: 'place' },
-  { term: 'Lake Hamana', category: 'place' },
+  { term: 'Mt. Fuji', category: 'place', boost: 4.0 },
+  { term: 'Lake Hamana', category: 'place', boost: 4.0 },
+  { term: 'Tenryu River', category: 'place', boost: 4.0 },
+  { term: 'Lake Sanaru', category: 'place', boost: 4.0 },
   { term: 'matsuri', category: 'culture' },
   { term: 'origami', category: 'culture' },
   { term: 'kendama', category: 'culture' },
@@ -69,6 +77,7 @@ const PROTECTED_PHRASES = new Set([
   'not to',
   'know too',
   'no two',
+  'karaoke',
 ]);
 
 function normalize(value: string): string {
@@ -134,11 +143,24 @@ function inferCategory(previousAiText: string, topic: DialogueTopic): Contextual
   const previous = normalize(previousAiText);
   if (!previous) return null;
   if (/\b(food|eat|eating|drink|breakfast|lunch|dinner|snack|dish|meal)\b/.test(previous)) return 'food';
-  if (/\b(where|place|city|town|live|from|visit|visited|go to|went to)\b/.test(previous)) return 'place';
+  if (/\b(where|place|city|town|lake|river|mountain|mount|park|station|sea|beach|live|from|visit|visited|go to|went to)\b/.test(previous)) return 'place';
   if (/\b(culture|festival|tradition|custom|japanese|japan|shizuoka)\b/.test(previous)) return 'culture';
   if (/\b(name|who|person|friend)\b/.test(previous)) return 'person';
   if (topic === 'shizuoka_culture' && /\b(what do you like|tell me about)\b/.test(previous)) return 'culture';
   return null;
+}
+
+export interface ContextualAsrBiasPhrase {
+  phrase: string;
+  boost: number;
+}
+
+export function getContextualAsrBiasPhrases(input: Pick<ContextualAsrInput, 'previousAiText' | 'topic'>): ContextualAsrBiasPhrase[] {
+  const category = inferCategory(input.previousAiText || '', input.topic);
+  if (!category || category === 'person') return [];
+  return CONTEXTUAL_ASR_LEXICON
+    .filter((entry) => entry.category === category)
+    .map((entry) => ({ phrase: entry.term, boost: Math.max(0, Math.min(10, entry.boost ?? 2.5)) }));
 }
 
 type Slot = { prefix: string; value: string; suffix: string };
