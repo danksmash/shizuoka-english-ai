@@ -38,6 +38,7 @@ app.use((req, res, next) => {
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Expose-Headers', 'X-TTS-Provider, X-TTS-Fallback-From, X-TTS-Fallback-Reason, X-TTS-Effective-Rate, X-TTS-Latency-Ms, X-TTS-Cache');
   }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
@@ -336,6 +337,18 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+function classifyAzureTtsFallbackReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (/abort|aborted|timeout/i.test(message)) return 'timeout';
+  if (/AZURE_TTS_HTTP_429/i.test(message)) return 'http_429';
+  if (/AZURE_TTS_HTTP_(401|403)/i.test(message)) return 'auth';
+  if (/AZURE_TTS_HTTP_5\d\d/i.test(message)) return 'azure_5xx';
+  if (/AZURE_SPEECH_(NOT_CONFIGURED|REGION_MISMATCH)|UNKNOWN_AZURE_TTS_PERSONA/i.test(message)) return 'configuration';
+  if (/UNEXPECTED_CONTENT_TYPE|AUDIO_TOO_SMALL/i.test(message)) return 'invalid_audio';
+  if (/fetch failed|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN/i.test(message)) return 'network';
+  return 'unknown';
+}
+
 app.post('/api/tts', async (req, res) => {
   const requestStart = Date.now();
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
@@ -369,12 +382,14 @@ app.post('/api/tts', async (req, res) => {
       res.setHeader('X-TTS-Latency-Ms', String(Date.now() - requestStart));
       return res.send(azure.audio);
     } catch (azureError: any) {
-      console.error('Azure TTS failed; trying Google Chirp fallback', { message: azureError?.message, aiStudentId });
+      const fallbackReason = classifyAzureTtsFallbackReason(azureError);
+      console.error('Azure TTS failed; trying Google Chirp fallback', { reason: fallbackReason, message: azureError?.message, aiStudentId });
       const { audio, cache } = await cachedGoogleTts(text, aiStudentId, speakingRate);
       res.setHeader('Content-Type', 'audio/mpeg');
       res.setHeader('Cache-Control', 'private, max-age=900');
       res.setHeader('X-TTS-Provider', 'google-chirp3-hd');
       res.setHeader('X-TTS-Fallback-From', 'azure-speech');
+      res.setHeader('X-TTS-Fallback-Reason', fallbackReason);
       res.setHeader('X-TTS-Cache', cache);
       res.setHeader('X-TTS-Effective-Rate', speakingRate.toFixed(2));
       res.setHeader('X-TTS-Latency-Ms', String(Date.now() - requestStart));

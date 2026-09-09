@@ -131,7 +131,7 @@ export default function App() {
       () => { setIsSpeaking(true); setMood('speaking'); },
       () => { setIsSpeaking(false); setMood('greeting'); },
       () => { setIsSpeaking(false); setMood('greeting'); },
-      (provider, effectiveRate) => { effectiveTtsRateRef.current = effectiveRate; recordResearchEvent('tts_provider', provider); recordResearchEvent('tts_effective_rate', effectiveRate.toFixed(2)); });
+      (provider, effectiveRate, telemetry) => { effectiveTtsRateRef.current = effectiveRate; recordResearchEvent('tts_provider', provider); recordResearchEvent('tts_effective_rate', effectiveRate.toFixed(2)); if (telemetry?.fallbackFrom) recordResearchEvent('tts_fallback_from', telemetry.fallbackFrom); if (telemetry?.fallbackReason) recordResearchEvent('tts_fallback_reason', telemetry.fallbackReason); if (Number.isFinite(telemetry?.latencyMs)) recordResearchEvent('tts_latency_ms', String(Math.round(telemetry!.latencyMs!))); if (telemetry?.cache) recordResearchEvent('tts_cache', telemetry.cache); });
   }, []);
 
   const extractAndAddVocab = useCallback((text: string) => {
@@ -189,7 +189,7 @@ export default function App() {
           () => setIsSpeaking(true),
           () => { setIsSpeaking(false); setMood('greeting'); },
           () => { setIsSpeaking(false); setMood('greeting'); },
-          (provider, effectiveRate) => { effectiveTtsRateRef.current = effectiveRate; recordResearchEvent('tts_provider', provider); recordResearchEvent('tts_effective_rate', effectiveRate.toFixed(2)); });
+          (provider, effectiveRate, telemetry) => { effectiveTtsRateRef.current = effectiveRate; recordResearchEvent('tts_provider', provider); recordResearchEvent('tts_effective_rate', effectiveRate.toFixed(2)); if (telemetry?.fallbackFrom) recordResearchEvent('tts_fallback_from', telemetry.fallbackFrom); if (telemetry?.fallbackReason) recordResearchEvent('tts_fallback_reason', telemetry.fallbackReason); if (Number.isFinite(telemetry?.latencyMs)) recordResearchEvent('tts_latency_ms', String(Math.round(telemetry!.latencyMs!))); if (telemetry?.cache) recordResearchEvent('tts_cache', telemetry.cache); });
       }
     }, 600);
   };
@@ -371,7 +371,7 @@ export default function App() {
     let hasTransitioned=false; const executeTransition=()=>{if(hasTransitioned)return;hasTransitioned=true;stopSpeaking();if(farewellSafetyTimerRef.current){clearTimeout(farewellSafetyTimerRef.current);farewellSafetyTimerRef.current=null;}farewellTransitionRef.current=null;setFarewellBanner(null);setPhase('reflection');};
     farewellTransitionRef.current=executeTransition;
     // Do not advance on a fixed timer: long farewell audio must finish before the reflection screen opens.
-    speakStudentVoice(farewell.english,studentObj,speechRateRef.current,()=>{setIsSpeaking(true);setMood('happy');},()=>{setIsSpeaking(false);executeTransition();},()=>{setIsSpeaking(false);executeTransition();},(provider, effectiveRate) => { effectiveTtsRateRef.current = effectiveRate; recordResearchEvent('tts_provider', provider); recordResearchEvent('tts_effective_rate', effectiveRate.toFixed(2)); });
+    speakStudentVoice(farewell.english,studentObj,speechRateRef.current,()=>{setIsSpeaking(true);setMood('happy');},()=>{setIsSpeaking(false);executeTransition();},()=>{setIsSpeaking(false);executeTransition();},(provider, effectiveRate, telemetry) => { effectiveTtsRateRef.current = effectiveRate; recordResearchEvent('tts_provider', provider); recordResearchEvent('tts_effective_rate', effectiveRate.toFixed(2)); if (telemetry?.fallbackFrom) recordResearchEvent('tts_fallback_from', telemetry.fallbackFrom); if (telemetry?.fallbackReason) recordResearchEvent('tts_fallback_reason', telemetry.fallbackReason); if (Number.isFinite(telemetry?.latencyMs)) recordResearchEvent('tts_latency_ms', String(Math.round(telemetry!.latencyMs!))); if (telemetry?.cache) recordResearchEvent('tts_cache', telemetry.cache); });
   };
 
   const handleSubmitReflection = async (answers: ReflectionAnswers) => {
