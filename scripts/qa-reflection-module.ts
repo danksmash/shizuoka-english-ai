@@ -60,6 +60,10 @@ forbidText(routes, 'researchId: record.researchId', 'pupil API response');
 requireText(routes, 'resolveStudentByCode(registered.learningId)', 'current student linkage validation');
 requireText(routes, 'REFLECTION_DEVICE_REBIND_REQUIRED', 'stale device rejection');
 requireText(routes, 'TOO_MANY_FAILED_CODE_ATTEMPTS', 'learning-code brute-force protection');
+requireText(routes, 'REFLECTION_CLASS_NOT_ASSIGNED', 'class-assignment registration guard');
+requireText(reflection, '学級が設定されていません', 'class-assignment pupil guidance');
+forbidText(reflection, 'ReflectionTextarea', 'six-part textarea regression');
+forbidText(reflection, 'meg-fields-stack', 'six-part textarea regression');
 
 // Persistence: canonical current schema plus non-destructive compatibility with the temporary six-part deployment.
 requireText(persistence, "const REFLECTION_COLLECTION = 'lesson_reflections'", 'separate reflection collection');
