@@ -1,0 +1,225 @@
+name: Audit Pilot B dialogue quality
+
+on:
+  push:
+    branches:
+      - audit/pilot-b-291-quality
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+      - name: Read-only complete two-minute dialogue audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          curl --fail --silent --show-error --max-time 45 \
+            -X POST 'https://firestore.googleapis.com/v1/projects/shizuoka-english-ai/databases/(default)/documents:runQuery' \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            --data '{"structuredQuery":{"from":[{"collectionId":"sessions"}],"where":{"fieldFilter":{"field":{"fieldPath":"classId"},"op":"EQUAL","value":{"stringValue":"6-PB"}}},"limit":1000}}' > /tmp/pb.json
+          python3 - <<'PY'
+          import json, math, re
+          from collections import Counter, defaultdict
+          from difflib import SequenceMatcher
+
+          TARGET_DATE='2026-09-09'
+          WORD_RE=re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)?")
+          REPAIR_RE=re.compile(r"\b(pardon|sorry|one more time|say that again|please repeat|repeat please|i don't understand|i do not understand)\b", re.I)
+          QUESTION_START=re.compile(r"^(what|where|when|who|why|how|which|do|does|did|can|could|are|is|am|have|has|would|will)\b", re.I)
+
+          TERM_PATTERNS={
+            'hamamatsu': re.compile(r'\bhamamatsu\b',re.I),
+            'shizuoka': re.compile(r'\bshizuoka\b',re.I),
+            'hamana_lake': re.compile(r'\b(?:lake\s+hamana|hamana\s+lake|hamana)\b',re.I),
+            'tenryu_river': re.compile(r'\b(?:tenryu(?:\s+river)?|tenryuu(?:\s+river)?)\b',re.I),
+            'mt_fuji': re.compile(r'\b(?:mt\.?\s+fuji|mount\s+fuji|fuji)\b',re.I),
+            'karaage': re.compile(r'\b(?:karaage|kara-age|fried\s+chicken)\b',re.I),
+            'curry': re.compile(r'\b(?:curry|curry\s+rice)\b',re.I),
+            'ramen': re.compile(r'\bramen\b',re.I),
+            'sushi': re.compile(r'\bsushi\b',re.I),
+            'onigiri': re.compile(r'\b(?:onigiri|rice\s+ball)\b',re.I),
+            'yakisoba': re.compile(r'\byakisoba\b',re.I),
+            'omurice': re.compile(r'\bomurice\b',re.I),
+            'natto': re.compile(r'\bnatto\b',re.I),
+            'green_tea': re.compile(r'\bgreen\s+tea\b',re.I),
+          }
+
+          def dec(v):
+              if not isinstance(v,dict): return None
+              for k in ('stringValue','timestampValue'):
+                  if k in v: return v[k]
+              if 'integerValue' in v:
+                  try:return int(v['integerValue'])
+                  except:return 0
+              if 'doubleValue' in v:
+                  try:return float(v['doubleValue'])
+                  except:return 0
+              if 'booleanValue' in v:return bool(v['booleanValue'])
+              if 'nullValue' in v:return None
+              if 'arrayValue' in v:return [dec(x) for x in (v.get('arrayValue',{}).get('values') or [])]
+              if 'mapValue' in v:return {k:dec(x) for k,x in (v.get('mapValue',{}).get('fields') or {}).items()}
+              return None
+
+          rows=[]
+          for item in json.load(open('/tmp/pb.json')):
+              f=(item.get('document') or {}).get('fields') or {}
+              r={k:dec(v) for k,v in f.items()}
+              if r.get('localDate')==TARGET_DATE: rows.append(r)
+          assert len(rows)==291, len(rows)
+
+          def hist(r): return r.get('history') if isinstance(r.get('history'),list) else []
+          def child(r): return [m for m in hist(r) if isinstance(m,dict) and m.get('sender')=='child' and str(m.get('englishText') or '').strip()]
+          def ai(r): return [m for m in hist(r) if isinstance(m,dict) and m.get('sender')=='ai' and str(m.get('englishText') or '').strip()]
+          def evs(r): return r.get('systemEvents') if isinstance(r.get('systemEvents'),list) else []
+          def evcount(r,t): return sum(1 for e in evs(r) if isinstance(e,dict) and e.get('type')==t)
+          def hasref(r): return isinstance(r.get('reflection'),dict) and bool(r.get('reflection'))
+          def done(r): return evcount(r,'session_finish')>0 or (bool(r.get('endedAt')) and hasref(r)) or (bool(r.get('endedAt')) and int(r.get('schemaVersion') or 0)<3 and bool(child(r)))
+          def quality(r):
+              if not r.get('sessionId') or not r.get('researchId') or not hist(r) or not child(r): return 'missing_core'
+              if not done(r): return 'interrupted'
+              if not hasref(r): return 'missing_reflection'
+              return 'complete'
+          def startval(r):
+              x=r.get('startedAt')
+              if isinstance(x,(int,float)): return float(x)
+              if isinstance(x,str):
+                  try:
+                      from datetime import datetime
+                      return datetime.fromisoformat(x.replace('Z','+00:00')).timestamp()*1000
+                  except:return 0
+              return 0
+          def wc(text): return len(WORD_RE.findall(str(text or '')))
+          def norm(text): return re.sub(r'[^a-z0-9 ]+',' ',str(text or '').lower()).strip()
+          def is_question(text):
+              s=str(text or '').strip()
+              return '?' in s or bool(QUESTION_START.search(s))
+          def is_question_only(text):
+              s=str(text or '').strip()
+              # Approximation: a single short interrogative sentence with no declarative lead-in.
+              return is_question(s) and s.count('?')==1 and not re.search(r'[.!]\s+.*\?',s) and wc(s)<=12
+          def pct(n,d): return round(100*n/d,1) if d else 0.0
+          def describe(values):
+              vals=sorted(float(x) for x in values if isinstance(x,(int,float)) and math.isfinite(float(x)))
+              if not vals:return {'n':0}
+              def q(p):
+                  if len(vals)==1:return vals[0]
+                  pos=(len(vals)-1)*p; lo=int(math.floor(pos)); hi=int(math.ceil(pos))
+                  return vals[lo] if lo==hi else vals[lo]*(hi-pos)+vals[hi]*(pos-lo)
+              return {'n':len(vals),'min':round(vals[0],2),'p25':round(q(.25),2),'median':round(q(.5),2),'p75':round(q(.75),2),'p95':round(q(.95),2),'max':round(vals[-1],2),'mean':round(sum(vals)/len(vals),2)}
+
+          complete2=[r for r in rows if quality(r)=='complete' and int(r.get('targetDurationMinutes') or 0)==2]
+          assert len(complete2)==186, len(complete2)
+
+          by=defaultdict(list)
+          for r in complete2: by[str(r.get('researchId') or '')].append(r)
+          for rs in by.values(): rs.sort(key=startval)
+          core52=[]
+          for rid,rs in by.items():
+              assert len(rs)>=2, 'participant without two complete 2-min sessions'
+              core52.extend(rs[:2])
+          assert len(core52)==52, len(core52)
+
+          def analyze(scope):
+              topic=Counter(str(r.get('topic') or '') for r in scope)
+              persona=Counter(str(r.get('aiStudentId') or r.get('personaId') or '') for r in scope)
+              child_turns=[]; ai_turns=[]; child_words=[]; ai_words=[]
+              ai_question=0; ai_question_only=0; ai_multi_question=0; ai_gt14=0; ai_gt16=0
+              max_q_streaks=[]; sessions_all_ai_q=0; sessions_q_streak3=0
+              exact_repeat=0; near_repeat=0; repair=0; term_counts=Counter(); term_sessions=Counter()
+              replay_sessions=0; replay_events=0; mic_error_sessions=0; mic_error_events=0
+              latency=[]
+              for r in scope:
+                  cm=child(r); am=ai(r)
+                  child_turns.append(len(cm)); ai_turns.append(len(am))
+                  found_terms=set(); prev=''
+                  for m in cm:
+                      text=str(m.get('englishText') or '').strip(); child_words.append(wc(text))
+                      if REPAIR_RE.search(text) or re.fullmatch(r'(?i)(what\??|sorry\??)',text): repair+=1
+                      n=norm(text)
+                      if prev and n:
+                          if n==prev: exact_repeat+=1
+                          elif len(n)>=4 and len(prev)>=4 and SequenceMatcher(None,n,prev).ratio()>=.85: near_repeat+=1
+                      prev=n
+                      for key,pat in TERM_PATTERNS.items():
+                          if pat.search(text): term_counts[key]+=1; found_terms.add(key)
+                  for key in found_terms: term_sessions[key]+=1
+                  streak=0; best=0; qcount=0
+                  for m in am:
+                      text=str(m.get('englishText') or '').strip(); words=wc(text); ai_words.append(words)
+                      q=is_question(text)
+                      if q:
+                          ai_question+=1; qcount+=1; streak+=1; best=max(best,streak)
+                      else: streak=0
+                      if is_question_only(text): ai_question_only+=1
+                      if text.count('?')>=2: ai_multi_question+=1
+                      if words>14: ai_gt14+=1
+                      if words>16: ai_gt16+=1
+                  max_q_streaks.append(best)
+                  if am and qcount==len(am): sessions_all_ai_q+=1
+                  if best>=3:sessions_q_streak3+=1
+                  er=evcount(r,'ai_replay'); replay_events+=er; replay_sessions+=1 if er else 0
+                  me=evcount(r,'mic_error'); mic_error_events+=me; mic_error_sessions+=1 if me else 0
+                  for e in evs(r):
+                      if isinstance(e,dict) and e.get('type')=='ai_response_latency_ms':
+                          try:latency.append(float(e.get('value')))
+                          except:pass
+              total_ai=sum(ai_turns)
+              total_child=sum(child_turns)
+              return {
+                  'sessions':len(scope),
+                  'participants':len({str(r.get('researchId') or '') for r in scope}),
+                  'topic_counts':dict(topic),
+                  'persona_counts':dict(persona.most_common()),
+                  'child_turns':describe(child_turns),
+                  'ai_turns':describe(ai_turns),
+                  'child_words_per_utterance':describe(child_words),
+                  'ai_words_per_utterance':describe(ai_words),
+                  'ai_question_utterances':ai_question,
+                  'ai_question_rate_percent':pct(ai_question,total_ai),
+                  'ai_question_only_utterances':ai_question_only,
+                  'ai_question_only_rate_percent':pct(ai_question_only,total_ai),
+                  'ai_multi_question_utterances':ai_multi_question,
+                  'ai_over_14_words':ai_gt14,
+                  'ai_over_14_rate_percent':pct(ai_gt14,total_ai),
+                  'ai_over_16_words':ai_gt16,
+                  'sessions_all_ai_turns_are_questions':sessions_all_ai_q,
+                  'sessions_question_streak_at_least_3':sessions_q_streak3,
+                  'max_ai_question_streak':describe(max_q_streaks),
+                  'child_repair_utterances':repair,
+                  'adjacent_exact_child_repeats':exact_repeat,
+                  'adjacent_near_duplicate_child_repeats_proxy':near_repeat,
+                  'recognized_local_food_terms_utterances':dict(term_counts),
+                  'recognized_local_food_terms_sessions':dict(term_sessions),
+                  'ai_replay_sessions':replay_sessions,
+                  'ai_replay_events':replay_events,
+                  'mic_error_sessions':mic_error_sessions,
+                  'mic_error_events':mic_error_events,
+                  'ai_response_latency_ms':describe(latency),
+              }
+
+          out={
+              'complete_2min_all':analyze(complete2),
+              'candidate_core_first_two_complete_2min_per_participant':analyze(core52),
+          }
+          print('=== PILOT_B_DIALOGUE_QUALITY ===')
+          print(json.dumps(out,ensure_ascii=False,indent=2,sort_keys=True))
+          print('NOTE: local/food term counts are recognized transcript mentions only; absence does not prove the child did not attempt the word.')
+          print('NOTE: near-duplicate repeats are a proxy, not a direct ASR misrecognition measure.')
+          print('=== END_DIALOGUE_QUALITY ===')
+          PY
