@@ -1,0 +1,75 @@
+name: Audit Pilot B TTS provider safely
+
+on:
+  push:
+    branches:
+      - audit/azure-pilotb-20260909
+    paths:
+      - '.github/workflows/audit-pilotb-tts-provider-safe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
+      - name: Read-only Pilot B provider count
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          curl --fail --silent --show-error --max-time 45 \
+            -X POST 'https://firestore.googleapis.com/v1/projects/shizuoka-english-ai/databases/(default)/documents:runQuery' \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            --data '{"structuredQuery":{"from":[{"collectionId":"sessions"}],"where":{"fieldFilter":{"field":{"fieldPath":"classId"},"op":"EQUAL","value":{"stringValue":"6-PB"}}},"limit":1000}}' > /tmp/pb.json
+          python3 - <<'PY'
+          import json,collections,datetime
+          TARGET='2026-09-09'
+          def dec(v):
+            if not isinstance(v,dict): return None
+            if 'stringValue' in v:return v['stringValue']
+            if 'timestampValue' in v:return v['timestampValue']
+            if 'integerValue' in v:return int(v['integerValue'])
+            if 'doubleValue' in v:return float(v['doubleValue'])
+            if 'booleanValue' in v:return bool(v['booleanValue'])
+            if 'arrayValue' in v:return [dec(x) for x in (v.get('arrayValue',{}).get('values') or [])]
+            if 'mapValue' in v:return {k:dec(x) for k,x in (v.get('mapValue',{}).get('fields') or {}).items()}
+            return None
+          rows=[]
+          for item in json.load(open('/tmp/pb.json')):
+            f=(item.get('document') or {}).get('fields') or {}
+            r={k:dec(v) for k,v in f.items()}
+            if r.get('localDate')==TARGET: rows.append(r)
+          assert len(rows)==291, len(rows)
+          providers=collections.Counter(); session_provider_sets=collections.Counter(); buckets=collections.defaultdict(collections.Counter)
+          provider_sessions=collections.defaultdict(set)
+          for r in rows:
+            ps=[]
+            for e in (r.get('systemEvents') or []):
+              if isinstance(e,dict) and e.get('type')=='tts_provider':
+                p=str(e.get('value') or 'unknown'); providers[p]+=1; ps.append(p); provider_sessions[p].add(str(r.get('sessionId') or ''))
+                ts=e.get('timestamp')
+                if isinstance(ts,(int,float)):
+                  d=datetime.datetime.fromtimestamp(ts/1000,datetime.timezone(datetime.timedelta(hours=9)))
+                  bucket=d.strftime('%H:%M')[:4]+'0'
+                  buckets[bucket][p]+=1
+            session_provider_sets[tuple(sorted(set(ps)))]+=1
+          print('sessions=291')
+          print('provider_events='+json.dumps(dict(providers),sort_keys=True))
+          print('provider_session_counts='+json.dumps({k:len(v) for k,v in provider_sessions.items()},sort_keys=True))
+          print('session_provider_sets='+json.dumps({'+'.join(k) if k else 'none':v for k,v in session_provider_sets.items()},sort_keys=True))
+          print('time_buckets='+json.dumps({k:dict(v) for k,v in sorted(buckets.items())},sort_keys=True))
+          PY
