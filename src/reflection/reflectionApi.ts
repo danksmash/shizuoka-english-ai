@@ -29,11 +29,12 @@ export interface BootstrapResponse {
   previous: ReflectionRecordDto | null;
 }
 
-async function postJson<T>(path: string, body: Record<string, unknown>): Promise<T> {
+async function postJson<T>(path: string, body: Record<string, unknown>, options?: { keepalive?: boolean }): Promise<T> {
   const response = await fetch(apiUrl(path), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    keepalive: options?.keepalive === true,
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.success === false) {
@@ -61,8 +62,17 @@ export async function saveReflection(deviceToken: string, input: {
   selfRegulationRating: number | null;
   reflectionText: string;
   status: 'draft' | 'submitted';
-}): Promise<ReflectionRecordDto> {
-  const data = await postJson<{ success: true; reflection: ReflectionRecordDto }>('/api/reflection/save', { deviceToken, ...input });
+}, options?: { keepalive?: boolean }): Promise<ReflectionRecordDto> {
+  const data = await postJson<{ success: true; reflection: ReflectionRecordDto }>('/api/reflection/save', { deviceToken, ...input }, options);
+  return data.reflection;
+}
+
+export async function saveReflectionGoal(deviceToken: string, todayGoal: string): Promise<ReflectionRecordDto> {
+  const data = await postJson<{ success: true; reflection: ReflectionRecordDto }>(
+    '/api/reflection/save',
+    { deviceToken, todayGoal },
+    { keepalive: true },
+  );
   return data.reflection;
 }
 

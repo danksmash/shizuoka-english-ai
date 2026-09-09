@@ -17,6 +17,7 @@ import {
   loadReflectionHistory,
   registerReflectionDevice,
   saveReflection,
+  saveReflectionGoal,
   type BootstrapResponse,
   type ClassReflectionDto,
   type ReflectionRecordDto,
@@ -156,7 +157,36 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
   const [status, setStatus] = useState<'draft' | 'submitted'>(bootstrap.today?.status === 'submitted' ? 'submitted' : 'draft');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle'); const [message, setMessage] = useState('');
   const firstRender = useRef(true); const timerRef = useRef<number | null>(null); const skipAutosaveOnce = useRef(false);
+  const latestGoalRef = useRef(draft.todayGoal);
+  const lastGoalSavedRef = useRef(bootstrap.today?.todayGoal || '');
   const reflectionChars = useMemo(() => [...draft.reflectionText].length, [draft.reflectionText]);
+
+  useEffect(() => { latestGoalRef.current = draft.todayGoal; }, [draft.todayGoal]);
+
+  const flushGoalAutosave = useCallback(async () => {
+    const goal = latestGoalRef.current;
+    if (goal === lastGoalSavedRef.current) return;
+    if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
+    setSaveState('saving');
+    try {
+      const saved = await saveReflectionGoal(token, goal);
+      lastGoalSavedRef.current = saved.todayGoal;
+      onRecordSaved(saved);
+      setSaveState('saved');
+    } catch { setSaveState('error'); }
+  }, [token, onRecordSaved]);
+
+  useEffect(() => {
+    const flushBeforeLeave = () => {
+      const goal = latestGoalRef.current;
+      if (goal === lastGoalSavedRef.current) return;
+      void saveReflectionGoal(token, goal).then((saved) => {
+        lastGoalSavedRef.current = saved.todayGoal;
+      }).catch(() => undefined);
+    };
+    window.addEventListener('pagehide', flushBeforeLeave);
+    return () => window.removeEventListener('pagehide', flushBeforeLeave);
+  }, [token]);
 
   useEffect(() => { onSubmittedChange(status === 'submitted'); }, [status, onSubmittedChange]);
   useEffect(() => {
@@ -172,7 +202,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
         setSaveState('saved');
       } catch { setSaveState('error'); }
       finally { timerRef.current = null; }
-    }, 1500);
+    }, 1000);
     return () => { if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; } };
   }, [draft, status, token, onRecordSaved]);
 
@@ -198,7 +228,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
     <div className="meg-previous-card"><div className="meg-section-title"><MessageCircle /><h2>前回のふりかえり</h2>{previous && <span>{formatDate(previous.localDate)}</span>}</div>
       {previous ? <>{previous.todayGoal && <p className="meg-previous-goal"><b>前回のめあて：</b>{previous.todayGoal}</p>}{previousSummary && <p className="meg-previous-summary">{previousSummary}</p>}</> : <p className="meg-muted">前回の振り返りはまだありません。</p>}
     </div>
-    <div className="meg-card meg-goal-card"><div className="meg-section-title"><Flag /><h2>Today's Goal</h2><strong>今日のめあて</strong></div><textarea value={draft.todayGoal} onChange={(e) => setDraft((current) => ({ ...current, todayGoal: e.target.value.slice(0, 1000) }))} placeholder="前回の振り返りも思い出して、今日のめあてを自分の言葉で書きましょう。" /></div>
+    <div className="meg-card meg-goal-card"><div className="meg-section-title"><Flag /><h2>Today's Goal</h2><strong>今日のめあて</strong></div><textarea value={draft.todayGoal} onChange={(e) => setDraft((current) => ({ ...current, todayGoal: e.target.value.slice(0, 1000) }))} onBlur={() => void flushGoalAutosave()} placeholder="前回の振り返りも思い出して、今日のめあてを自分の言葉で書きましょう。" /></div>
     <div className="meg-card meg-reflection-card"><div className="meg-section-title"><Pencil /><h2>Today's Reflection</h2><strong>今日の振り返り</strong></div>
       <div className="meg-ratings-grid"><RatingScale title="今日のめあてに向かって学ぶことができましたか？" value={draft.goalRating} onChange={(value) => setDraft((current) => ({ ...current, goalRating: value }))} /><RatingScale title="自分で考えたり、工夫したりしながら学ぶことができましたか？" value={draft.selfRegulationRating} onChange={(value) => setDraft((current) => ({ ...current, selfRegulationRating: value }))} /></div>
       <div className="meg-main-reflection"><h3>今日の学習を振り返って、考えたことを詳しく書こう。</h3><textarea value={draft.reflectionText} onChange={(e) => setDraft((current) => ({ ...current, reflectionText: e.target.value.slice(0, 12000) }))} placeholder="できたこと、学び方、考えていたこと、気づいたこと、友達から学んだこと、疑問、次に頑張りたいことなどから、自分が大切だと思うことを書きましょう。" /><div className="meg-field-count">{reflectionChars}文字</div></div>
