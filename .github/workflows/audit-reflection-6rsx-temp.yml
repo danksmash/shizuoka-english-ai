@@ -1,0 +1,86 @@
+name: Audit Reflection 6RSX identity
+
+on:
+  push:
+    branches:
+      - fix/reflection-6rsx-login-20260910
+    paths:
+      - '.github/workflows/audit-reflection-6rsx-temp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
+      - name: Read-only inspect 6RSX student identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          ACCESS_TOKEN="$TOKEN" python3 - <<'PY'
+          import json, os, urllib.request, urllib.parse
+          project='shizuoka-english-ai'
+          token=os.environ['ACCESS_TOKEN']
+          base=f'https://firestore.googleapis.com/v1/projects/{project}/databases/(default)/documents'
+          def fetch(url):
+              req=urllib.request.Request(url,headers={'Authorization':f'Bearer {token}'})
+              with urllib.request.urlopen(req,timeout=30) as r:
+                  return json.load(r)
+          def val(v):
+              if not isinstance(v,dict): return None
+              for k in ('stringValue','booleanValue','integerValue','doubleValue','timestampValue'):
+                  if k in v:
+                      x=v[k]
+                      if k=='integerValue':
+                          try:return int(x)
+                          except:return x
+                      return x
+              if 'nullValue' in v:return None
+              return None
+          docs=[]; page=''
+          while True:
+              url=f'{base}/students?pageSize=1000'
+              if page:url += '&pageToken='+urllib.parse.quote(page)
+              data=fetch(url)
+              docs += data.get('documents',[])
+              page=data.get('nextPageToken','')
+              if not page: break
+          rows=[]
+          for d in docs:
+              f=d.get('fields',{})
+              row={k:val(v) for k,v in f.items()}
+              row['_doc_id']=d.get('name','').split('/')[-1]
+              rows.append(row)
+          exact=[r for r in rows if str(r.get('learningId','')).upper()=='6RSX']
+          teacher=[r for r in rows if str(r.get('teacherStudentId','')).upper()=='6RSX']
+          print(json.dumps({
+            'student_doc_count':len(rows),
+            'learningId_6RSX_matches':len(exact),
+            'teacherStudentId_6RSX_matches':len(teacher),
+            'matches':[{
+              'active':r.get('active') is not False,
+              'has_studentId':bool(r.get('studentId')),
+              'has_researchId':bool(r.get('researchId')),
+              'has_learningId':bool(r.get('learningId')),
+              'classId':r.get('classId',''),
+              'attendanceNumber':r.get('attendanceNumber',''),
+              'has_teacherStudentId':bool(r.get('teacherStudentId')),
+              'createdAt':r.get('createdAt',''),
+              'updatedAt':r.get('updatedAt','')
+            } for r in exact]
+          },ensure_ascii=False,indent=2))
+          PY
