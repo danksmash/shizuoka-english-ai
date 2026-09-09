@@ -4,8 +4,11 @@ import path from 'path';
 import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
+  const isPagesBuild = process.env.VITE_DEPLOY_TARGET === 'pages';
   return {
-    base: './',
+    // GitHub Pages is hosted under /shizuoka-english-ai/, while Cloud Run is served from /.
+    // Use absolute deployment-specific bases so nested routes such as /reflection/teacher load assets correctly.
+    base: isPagesBuild ? '/shizuoka-english-ai/' : '/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
