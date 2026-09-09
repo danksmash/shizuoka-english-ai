@@ -1,0 +1,1 @@
+Release gate: TTS provider observability and research provenance are verified for merge. Current Azure synthesis timeout remains 3.5 s based on a 105-request, 35-concurrent-client canary with 100% Azure success and p99 server latency 2693 ms.
