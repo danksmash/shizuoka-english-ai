@@ -242,6 +242,8 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
       : !dialogueCompleted ? 'interrupted' : !hasReflection ? 'missing_reflection' : 'complete';
     const sessionStatus = dialogueCompleted ? (hasReflection ? 'complete' : 'dialogue_complete') : 'in_progress_or_interrupted';
     const persona = getPersonaResearchMetadata(String(session.personaId || session.aiStudentId || ''));
+    const ttsTelemetryVersion = String(session.ttsTelemetryVersion || '');
+    const ttsTelemetryReliable = ttsTelemetryVersion === 'cors-visible-v1';
 
     sessionRows.push({
       research_id: session.researchId || '', class_id: session.classId || '', session_id: sessionId,
@@ -261,10 +263,14 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
       accent_label_visible: session.accentLabelVisible === false ? 0 : 1, flag_visible: session.flagVisible === false ? 0 : 1,
       assigned_partner_id: session.assignedPartnerId || '', assigned_partner_country: session.assignedPartnerCountry || '', assignment_announced_at: session.assignmentAnnouncedAt || '',
       tts_provider: session.ttsProvider || '', tts_voice_name: session.ttsVoiceName || persona.voiceName, tts_language_code: session.ttsLanguageCode || persona.voiceLanguageCode,
-      tts_primary_provider: session.ttsPrimaryProvider || 'azure-speech', tts_actual_provider: session.ttsActualProvider || session.ttsProvider || 'not_observed',
-      tts_provider_observed: session.ttsProviderObserved ?? (session.ttsProvider && session.ttsProvider !== 'not_observed' ? 1 : 0),
-      tts_provider_event_count: session.ttsProviderEventCount ?? 0, tts_fallback_count: session.ttsFallbackCount ?? 0,
-      tts_fallback_reason: session.ttsFallbackReason || '', tts_provider_deviation: session.ttsProviderDeviation ?? '',
+      tts_telemetry_version: ttsTelemetryReliable ? ttsTelemetryVersion : 'legacy_unreliable',
+      tts_primary_provider: session.ttsPrimaryProvider || 'azure-speech',
+      tts_actual_provider: ttsTelemetryReliable ? (session.ttsActualProvider || 'not_observed') : 'not_observed',
+      tts_provider_observed: ttsTelemetryReliable ? (session.ttsProviderObserved ?? 0) : 0,
+      tts_provider_event_count: ttsTelemetryReliable ? (session.ttsProviderEventCount ?? 0) : 0,
+      tts_fallback_count: ttsTelemetryReliable ? (session.ttsFallbackCount ?? 0) : 0,
+      tts_fallback_reason: ttsTelemetryReliable ? (session.ttsFallbackReason || '') : '',
+      tts_provider_deviation: ttsTelemetryReliable ? (session.ttsProviderDeviation ?? '') : '',
       persona_voice_gender: session.personaVoiceGender || persona.voiceGender, persona_voice_pitch: session.personaVoicePitch ?? persona.voicePitch,
       persona_default_voice_rate: session.personaDefaultVoiceRate ?? persona.defaultVoiceRate, student_selected_speech_rate: session.studentSelectedSpeechRate ?? 1,
       effective_tts_speech_rate: session.effectiveTtsSpeechRate ?? 1, persona_dictionary_version: session.personaDictionaryVersion || PERSONA_DICTIONARY_VERSION,

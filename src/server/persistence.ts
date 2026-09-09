@@ -268,7 +268,7 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
     personaId: personaMeta.personaId, personaCountry: personaMeta.country, personaGender: personaMeta.gender, personaAccentName: personaMeta.accentName, worldEnglishesCircle: personaMeta.worldEnglishesCircle,
     personaLabelCondition: args.personaLabelCondition === 'hidden' ? 'hidden' : 'shown', countryLabelVisible: args.countryLabelVisible !== false, accentLabelVisible: args.accentLabelVisible !== false, flagVisible: args.flagVisible !== false,
     ttsProvider: ttsRuntime.provider, ttsVoiceName: ttsRuntime.voiceName, ttsLanguageCode: ttsRuntime.languageCode,
-    ttsPrimaryProvider: 'azure-speech', ttsActualProvider, ttsProviderObserved, ttsProviderEventCount: ttsProviderEvents.length,
+    ttsTelemetryVersion: 'cors-visible-v1', ttsPrimaryProvider: 'azure-speech', ttsActualProvider, ttsProviderObserved, ttsProviderEventCount: ttsProviderEvents.length,
     ttsFallbackCount, ttsFallbackFrom: latestEvent('tts_fallback_from'), ttsFallbackReason: latestEvent('tts_fallback_reason'),
     ttsLatencyMs: Number.isFinite(ttsLatencyRaw) && ttsLatencyRaw >= 0 ? Math.round(ttsLatencyRaw) : 0, ttsProviderDeviation,
     personaVoiceGender: personaMeta.voiceGender, personaVoicePitch: personaMeta.voicePitch, personaDefaultVoiceRate: personaMeta.defaultVoiceRate,
