@@ -1,0 +1,99 @@
+name: Apply Reflection class guard and QA
+
+on:
+  push:
+    branches:
+      - fix/reflection-6rsx-login-20260910
+    paths:
+      - '.github/workflows/fix-reflection-class-guard-temp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix_verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Apply minimal Reflection fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p=Path(path); s=p.read_text()
+              n=s.count(old)
+              if n!=1: raise SystemExit(f'{path}: expected one match, got {n}')
+              p.write_text(s.replace(old,new))
+
+          replace_once('src/server/reflectionRoutes.ts',
+          """    if (!student) {
+      const allowed = noteReflectionCodeFailure(ip);
+      return res.status(allowed ? 401 : 429).json({ success: false, error: allowed ? 'LEARNING_CODE_NOT_FOUND' : 'TOO_MANY_FAILED_CODE_ATTEMPTS' });
+    }
+    const deviceToken = await issueReflectionDevice({""",
+          """    if (!student) {
+      const allowed = noteReflectionCodeFailure(ip);
+      return res.status(allowed ? 401 : 429).json({ success: false, error: allowed ? 'LEARNING_CODE_NOT_FOUND' : 'TOO_MANY_FAILED_CODE_ATTEMPTS' });
+    }
+    // Reflection peer/teacher views require an assigned class. Do not issue a token
+    // that the bootstrap path will immediately reject as an incomplete identity.
+    if (!student.classId) {
+      return res.status(409).json({ success: false, error: 'REFLECTION_CLASS_NOT_ASSIGNED' });
+    }
+    const deviceToken = await issueReflectionDevice({""")
+
+          replace_once('src/reflection/ReflectionApp.tsx',
+          """    catch (e: any) {
+      setError(e?.code === 'TOO_MANY_FAILED_CODE_ATTEMPTS'
+        ? '入力の確認回数が多くなっています。少し時間をおいて先生に確認してください。'
+        : '学習者IDを確認できませんでした。先生に確認してください。');
+    }""",
+          """    catch (e: any) {
+      setError(e?.code === 'TOO_MANY_FAILED_CODE_ATTEMPTS'
+        ? '入力の確認回数が多くなっています。少し時間をおいて先生に確認してください。'
+        : e?.code === 'REFLECTION_CLASS_NOT_ASSIGNED'
+          ? 'この学習者IDには学級が設定されていません。先生に確認してください。'
+          : '学習者IDを確認できませんでした。先生に確認してください。');
+    }""")
+
+          replace_once('scripts/qa-reflection-module.ts',
+          """requireText(routes, 'TOO_MANY_FAILED_CODE_ATTEMPTS', 'learning-code brute-force protection');
+
+// Persistence:""",
+          """requireText(routes, 'TOO_MANY_FAILED_CODE_ATTEMPTS', 'learning-code brute-force protection');
+requireText(routes, 'REFLECTION_CLASS_NOT_ASSIGNED', 'class-assignment registration guard');
+requireText(reflection, '学級が設定されていません', 'class-assignment pupil guidance');
+forbidText(reflection, 'ReflectionTextarea', 'six-part textarea regression');
+forbidText(reflection, 'meg-fields-stack', 'six-part textarea regression');
+
+// Persistence:""")
+          PY
+      - name: Targeted Reflection QA
+        run: npm run qa:reflection
+      - name: Full regression QA and builds
+        run: |
+          npm run qa
+          npm run build
+          npm run build:pages
+      - name: Remove temporary audit workflows and commit verified fix
+        shell: bash
+        run: |
+          rm -f .github/workflows/audit-reflection-6rsx-temp.yml
+          rm -f .github/workflows/fix-reflection-class-guard-temp.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/server/reflectionRoutes.ts src/reflection/ReflectionApp.tsx scripts/qa-reflection-module.ts .github/workflows
+          git diff --cached --check
+          git commit -m 'fix: prevent unusable Reflection tokens for unassigned classes'
+          git push origin HEAD:fix/reflection-6rsx-login-20260910
