@@ -15,19 +15,16 @@ function replaceAllExact(path, from, to, expectedCount) {
   write(path, source.split(from).join(to));
 }
 
-// 1) Expose the server-selected provider metadata to the GitHub Pages origin.
 replaceOnce(
   'server.ts',
   "    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');\n",
   "    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');\n    res.setHeader('Access-Control-Expose-Headers', 'X-TTS-Provider, X-TTS-Fallback-From, X-TTS-Fallback-Reason, X-TTS-Effective-Rate, X-TTS-Latency-Ms, X-TTS-Cache');\n"
 );
-
 replaceOnce(
   'server.ts',
   "app.post('/api/tts', async (req, res) => {\n",
   `function classifyAzureTtsFallbackReason(error: unknown): string {\n  const message = error instanceof Error ? error.message : String(error || '');\n  if (/abort|aborted|timeout/i.test(message)) return 'timeout';\n  if (/AZURE_TTS_HTTP_429/i.test(message)) return 'http_429';\n  if (/AZURE_TTS_HTTP_(401|403)/i.test(message)) return 'auth';\n  if (/AZURE_TTS_HTTP_5\\d\\d/i.test(message)) return 'azure_5xx';\n  if (/AZURE_SPEECH_(NOT_CONFIGURED|REGION_MISMATCH)|UNKNOWN_AZURE_TTS_PERSONA/i.test(message)) return 'configuration';\n  if (/UNEXPECTED_CONTENT_TYPE|AUDIO_TOO_SMALL/i.test(message)) return 'invalid_audio';\n  if (/fetch failed|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN/i.test(message)) return 'network';\n  return 'unknown';\n}\n\napp.post('/api/tts', async (req, res) => {\n`
 );
-
 replaceOnce(
   'server.ts',
   "    } catch (azureError: any) {\n      console.error('Azure TTS failed; trying Google Chirp fallback', { message: azureError?.message, aiStudentId });\n      const { audio, cache } = await cachedGoogleTts(text, aiStudentId, speakingRate);\n",
@@ -39,7 +36,6 @@ replaceOnce(
   "      res.setHeader('X-TTS-Fallback-From', 'azure-speech');\n      res.setHeader('X-TTS-Fallback-Reason', fallbackReason);\n      res.setHeader('X-TTS-Cache', cache);\n"
 );
 
-// 2) Never infer Chirp merely because a custom response header is unreadable.
 replaceOnce(
   'src/utils/speech.ts',
   "  onProvider?: (provider: 'azure-speech' | 'google-chirp3-hd' | 'device-fallback', effectiveRate: number) => void\n",
@@ -56,7 +52,6 @@ replaceOnce(
   `      const rawProvider = response.headers.get('X-TTS-Provider');\n      const cloudProvider = rawProvider === 'azure-speech'\n        ? 'azure-speech'\n        : rawProvider === 'google-chirp3-hd'\n          ? 'google-chirp3-hd'\n          : 'not_observed';\n      const latencyHeader = Number(response.headers.get('X-TTS-Latency-Ms'));\n      onProvider?.(cloudProvider, Number(response.headers.get('X-TTS-Effective-Rate') || rate), {\n        fallbackFrom: response.headers.get('X-TTS-Fallback-From') || undefined,\n        fallbackReason: response.headers.get('X-TTS-Fallback-Reason') || undefined,\n        latencyMs: Number.isFinite(latencyHeader) ? latencyHeader : undefined,\n        cache: response.headers.get('X-TTS-Cache') || undefined,\n      });\n`
 );
 
-// 3) Persist provider/fallback telemetry in the existing research system-event stream.
 replaceOnce(
   'src/dataContract.ts',
   "  'ai_model','ai_input_tokens','ai_output_tokens','ai_cache_read_tokens','ai_cache_creation_tokens','tts_provider','tts_effective_rate',\n",
@@ -65,9 +60,8 @@ replaceOnce(
 
 const oldCallback = "(provider, effectiveRate) => { effectiveTtsRateRef.current = effectiveRate; recordResearchEvent('tts_provider', provider); recordResearchEvent('tts_effective_rate', effectiveRate.toFixed(2)); }";
 const newCallback = "(provider, effectiveRate, telemetry) => { effectiveTtsRateRef.current = effectiveRate; recordResearchEvent('tts_provider', provider); recordResearchEvent('tts_effective_rate', effectiveRate.toFixed(2)); if (telemetry?.fallbackFrom) recordResearchEvent('tts_fallback_from', telemetry.fallbackFrom); if (telemetry?.fallbackReason) recordResearchEvent('tts_fallback_reason', telemetry.fallbackReason); if (Number.isFinite(telemetry?.latencyMs)) recordResearchEvent('tts_latency_ms', String(Math.round(telemetry!.latencyMs!))); if (telemetry?.cache) recordResearchEvent('tts_cache', telemetry.cache); }";
-replaceAllExact('src/App.tsx', oldCallback, newCallback, 2);
+replaceAllExact('src/App.tsx', oldCallback, newCallback, 3);
 
-// 4) Derive session-level TTS condition fields from observed runtime events.
 replaceOnce(
   'src/server/persistence.ts',
   "  const ttsRuntime = resolveTtsRuntimeMetadata(args.aiStudentId, latestEvent('tts_provider'));\n  const document = {\n",
@@ -79,14 +73,12 @@ replaceOnce(
   `    ttsProvider: ttsRuntime.provider, ttsVoiceName: ttsRuntime.voiceName, ttsLanguageCode: ttsRuntime.languageCode,\n    ttsPrimaryProvider: 'azure-speech', ttsActualProvider, ttsProviderObserved, ttsProviderEventCount: ttsProviderEvents.length,\n    ttsFallbackCount, ttsFallbackFrom: latestEvent('tts_fallback_from'), ttsFallbackReason: latestEvent('tts_fallback_reason'),\n    ttsLatencyMs: Number.isFinite(ttsLatencyRaw) && ttsLatencyRaw >= 0 ? Math.round(ttsLatencyRaw) : 0, ttsProviderDeviation,\n    personaVoiceGender: personaMeta.voiceGender, personaVoicePitch: personaMeta.voicePitch, personaDefaultVoiceRate: personaMeta.defaultVoiceRate,\n`
 );
 
-// 5) Carry the reproducibility-critical audio condition into the raw research row.
 replaceOnce(
   'src/server/researchExport.ts',
   "      tts_provider: session.ttsProvider || '', tts_voice_name: session.ttsVoiceName || persona.voiceName, tts_language_code: session.ttsLanguageCode || persona.voiceLanguageCode,\n",
   `      tts_provider: session.ttsProvider || '', tts_voice_name: session.ttsVoiceName || persona.voiceName, tts_language_code: session.ttsLanguageCode || persona.voiceLanguageCode,\n      tts_primary_provider: session.ttsPrimaryProvider || 'azure-speech', tts_actual_provider: session.ttsActualProvider || session.ttsProvider || 'not_observed',\n      tts_provider_observed: session.ttsProviderObserved ?? (session.ttsProvider && session.ttsProvider !== 'not_observed' ? 1 : 0),\n      tts_provider_event_count: session.ttsProviderEventCount ?? 0, tts_fallback_count: session.ttsFallbackCount ?? 0,\n      tts_fallback_reason: session.ttsFallbackReason || '', tts_provider_deviation: session.ttsProviderDeviation ?? '',\n`
 );
 
-// 6) Add only analysis-critical TTS condition fields to the formal five-file export.
 replaceOnce('src/server/researchDashboard.ts', "export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v2';", "export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v3';");
 replaceOnce(
   'src/server/researchDashboard.ts',
@@ -109,7 +101,6 @@ replaceOnce(
   "  'speech_rate_change_count','student_selected_speech_rate','tts_provider_observed','tts_provider_event_count','tts_fallback_count','tts_provider_deviation','schema_version','session_completed','turn_sequence','speaker_turn_number',\n"
 );
 
-// 7) Make the existing Azure-primary QA current, mandatory, and regression-focused.
 write('scripts/qa-azure-primary.ts', `import fs from 'node:fs';\n\nconst server = fs.readFileSync('server.ts', 'utf8');\nconst speech = fs.readFileSync('src/utils/speech.ts', 'utf8');\nconst dataContract = fs.readFileSync('src/dataContract.ts', 'utf8');\nconst app = fs.readFileSync('src/App.tsx', 'utf8');\nconst workflow = fs.readFileSync('.github/workflows/cloud-run-deploy.yml', 'utf8');\n\nfor (const required of [\n  \"ttsProvider: 'azure-speech'\",\n  \"ttsFallback: 'google-chirp3-hd'\",\n  \"synthesizeAzureTts(text, aiStudentId, speakingRate, 3_500)\",\n  'Access-Control-Expose-Headers',\n  'X-TTS-Provider',\n  'X-TTS-Fallback-From',\n  'X-TTS-Fallback-Reason',\n  'X-TTS-Effective-Rate',\n  'X-TTS-Latency-Ms',\n]) if (!server.includes(required)) throw new Error('server TTS observability missing: ' + required);\n\nif (!speech.includes(\"'device-fallback' | 'not_observed'\")) throw new Error('client not_observed provider state missing');\nif (!speech.includes(\"rawProvider === 'google-chirp3-hd'\")) throw new Error('client must explicitly recognize Chirp');\nif (!speech.includes(\": 'not_observed'\")) throw new Error('unreadable provider header must become not_observed');\nif (speech.includes(\"response.headers.get('X-TTS-Provider') === 'azure-speech' ? 'azure-speech' : 'google-chirp3-hd'\")) throw new Error('silent Azure-to-Chirp misclassification regression');\n\nfor (const eventType of ['tts_fallback_from','tts_fallback_reason','tts_latency_ms','tts_cache']) if (!dataContract.includes(eventType)) throw new Error('research event missing: ' + eventType);\nfor (const marker of ['telemetry?.fallbackFrom','telemetry?.fallbackReason','telemetry?.latencyMs']) if (!app.includes(marker)) throw new Error('App TTS telemetry persistence missing: ' + marker);\nif (!workflow.includes('Access-Control-Expose-Headers')) throw new Error('production CORS smoke is missing');\nconsole.log('Azure primary + CORS provider observability QA: PASS');\n`);
 
 replaceOnce(
@@ -123,14 +114,12 @@ replaceOnce(
   'npm run qa:azure-voice-profile && npm run qa:azure-primary && npm run qa:tts-runtime-metadata && npm run qa:reflection'
 );
 
-// 8) Production deployment must test browser-visible CORS metadata, not only server-side headers.
 replaceOnce(
   '.github/workflows/cloud-run-deploy.yml',
   '          API_URL="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app"\n          # Voice Profile v3 keeps 1.00 as the reviewed baseline while the\n',
   `          API_URL="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app"\n          cors_headers=$(mktemp)\n          cors_status=$(curl --silent --show-error --max-time 20 -D "$cors_headers" -o /dev/null -w '%{http_code}' \\\n            -X OPTIONS "$API_URL/api/tts" \\\n            -H 'Origin: https://danksmash.github.io' \\\n            -H 'Access-Control-Request-Method: POST')\n          test "$cors_status" = "204"\n          grep -qi 'access-control-allow-origin: https://danksmash.github.io' "$cors_headers"\n          grep -qi 'access-control-expose-headers:.*x-tts-provider' "$cors_headers"\n          grep -qi 'access-control-expose-headers:.*x-tts-fallback-reason' "$cors_headers"\n          rm -f "$cors_headers"\n          # Voice Profile v3 keeps 1.00 as the reviewed baseline while the\n`
 );
 
-// 9) Formal export QA: TTS reproducibility fields are now intentional, while provider-specific voice names remain excluded.
 replaceOnce(
   'scripts/qa-research-export-complete.ts',
   " assignedPartnerId:'P1',assignedPartnerCountry:'United States',assignmentAnnouncedAt:announced,studentSelectedSpeechRate:1,\n",
