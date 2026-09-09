@@ -14,7 +14,7 @@ import { generateFallbackFeedback } from './src/utils/feedbackFallback';
 import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } from './src/utils/security';
 import { validateAiResponse, inspectAiResponse, buildAlignedReply } from './src/utils/responseValidation';
 import { getAllSessionsForManagement, getStudentHistory, persistenceConfigured, resolveStudentByCode, saveCanonicalSession } from './src/server/persistence';
-import { buildResearchDashboardData, buildResearchExportDataSets, filterResearchExportDataSets, serializeResearchCsv, type ResearchExportDatasetName } from './src/server/researchDashboard';
+import { buildResearchDashboardData, buildResearchExportDataSets, filterResearchExportDataSets, normalizeFormalResearchExportQuery, serializeResearchCsv, type ResearchExportDatasetName } from './src/server/researchDashboard';
 import { authenticateManagement, clearManagementCookie, managementAuthConfigured, requireManagementRole, setManagementCookie, type AuthenticatedRequest } from './src/server/auth';
 import { managementPageHtml } from './src/server/managementPage';
 
@@ -774,10 +774,11 @@ function buildStoredZip(files:Array<{name:string;content:string}>):Buffer{
 
 app.get('/api/management/research.bundle.zip',requireManagementRole(['researcher']),async(req,res)=>{
   try{
-    const datasets=filterResearchExportDataSets(buildResearchExportDataSets(await getAllSessionsForManagement()),req.query);
+    const exportQuery=normalizeFormalResearchExportQuery(req.query);
+    const datasets=filterResearchExportDataSets(buildResearchExportDataSets(await getAllSessionsForManagement()),exportQuery);
     const exportedAt=new Date().toISOString();
     const names=['sessions','utterances','expressions','personas','codebook'] as const;
-    const manifest={export_id:`export_${Date.now()}`,exported_at:exportedAt,schema_version:4,filters:req.query,row_counts:Object.fromEntries(names.map((name)=>[name,datasets[name].length]))};
+    const manifest={export_id:`export_${Date.now()}`,exported_at:exportedAt,schema_version:4,filters:exportQuery,row_counts:Object.fromEntries(names.map((name)=>[name,datasets[name].length]))};
     const files=names.map((name)=>({name:`${name}.csv`,content:serializeResearchCsv(datasets[name],name)}));
     const zip=buildStoredZip([...files,{name:'manifest.json',content:JSON.stringify(manifest,null,2)}]);
     res.setHeader('Content-Type','application/zip');res.setHeader('Content-Disposition',`attachment; filename="research-bundle-${exportedAt.slice(0,10).replace(/-/g,'')}.zip"`);res.setHeader('Cache-Control','no-store');return res.send(zip);
@@ -791,7 +792,7 @@ app.get('/api/management/research.csv',requireManagementRole(['researcher']),asy
     if(!(allowed as readonly string[]).includes(requested)) return res.status(400).json({success:false,error:'INVALID_RESEARCH_DATASET'});
     const dataset=requested as ResearchExportDatasetName;
     const sourceSessions=(dataset==='personas'||dataset==='codebook')?[]:await getAllSessionsForManagement();
-    const datasets=filterResearchExportDataSets(buildResearchExportDataSets(sourceSessions),req.query);
+    const datasets=filterResearchExportDataSets(buildResearchExportDataSets(sourceSessions),normalizeFormalResearchExportQuery(req.query));
     const csv=serializeResearchCsv(datasets[dataset],dataset);
     res.setHeader('Content-Type','text/csv; charset=utf-8');res.setHeader('Content-Disposition',`attachment; filename="${dataset}.csv"`);res.setHeader('Cache-Control','no-store');return res.send(csv);
   }catch(error:any){console.error('Research export failed',{message:error?.message});return res.status(503).json({success:false,error:'RESEARCH_EXPORT_UNAVAILABLE'});}
