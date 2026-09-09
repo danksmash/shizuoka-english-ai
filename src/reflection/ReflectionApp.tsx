@@ -118,7 +118,7 @@ function Header({ learningId, view, setView }: { learningId: string; view: View;
     <div className="meg-id-pill">{learningId}</div></header>;
 }
 
-function ReflectionTextarea({ field, draft, setDraft }: { field: (typeof REFLECTION_FIELDS)[number]; draft: Draft; setDraft: React.Dispatch<React.SetStateAction<Draft>> }) {
+function ReflectionTextarea({ field, draft, setDraft }: { key?: React.Key; field: (typeof REFLECTION_FIELDS)[number]; draft: Draft; setDraft: React.Dispatch<React.SetStateAction<Draft>> }) {
   const Icon = field.icon;
   return <div className={`meg-reflection-field ${field.large ? 'meg-reflection-field-large' : ''}`}><div className="meg-field-heading"><Icon /><div><h3>{field.title}</h3><p>{field.prompt}</p></div></div>
     <textarea value={draft[field.key]} onChange={(e) => setDraft((current) => ({ ...current, [field.key]: e.target.value.slice(0, 5000) }))} placeholder={field.placeholder} />
@@ -172,7 +172,7 @@ function HistoryView({ token }: { token: string }) {
   </div></main>;
 }
 
-function ClassCard({ row, index }: { row: ClassReflectionDto; index: number }) {
+function ClassCard({ row, index }: { key?: React.Key; row: ClassReflectionDto; index: number }) {
   return <article className="meg-class-card"><span>クラスメイト {index + 1}</span>{row.todayGoal && <><h3>今日のめあて</h3><p>{row.todayGoal}</p></>}{HISTORY_LABELS.map(([key, label]) => row[key] ? <div key={key}><h3>{label}</h3><p>{row[key]}</p></div> : null)}{row.legacyReflectionText && !row.achievements && <><h3>振り返り</h3><p>{row.legacyReflectionText}</p></>}</article>;
 }
 
