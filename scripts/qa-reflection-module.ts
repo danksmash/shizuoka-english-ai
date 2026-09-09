@@ -15,6 +15,8 @@ const teacherModel = read('src/server/reflectionTeacherModel.ts');
 const serverEntry = read('server-entry.ts');
 const app = read('src/App.tsx');
 const dataContract = read('src/dataContract.ts');
+const viteConfig = read('vite.config.ts');
+const packageJson = read('package.json');
 
 requireText(main, "endsWith('/reflection')", 'pupil route');
 requireText(main, "endsWith('/reflection/teacher')", 'teacher route');
@@ -58,6 +60,15 @@ requireText(teacher, '未入力', 'teacher missing visibility');
 requireText(teacher, 'CSV', 'teacher CSV button');
 requireText(teacherModel, 'legacy_reflection_text', 'CSV backward compatibility');
 requireText(serverEntry, "this.use('/api/reflection'", 'server route mount');
+
+// Nested routes must load JS/CSS correctly on both GitHub Pages and Cloud Run.
+requireText(viteConfig, "process.env.VITE_DEPLOY_TARGET === 'pages'", 'deployment-specific Vite base');
+requireText(viteConfig, "'/shizuoka-english-ai/'", 'GitHub Pages base');
+requireText(viteConfig, " : '/'", 'Cloud Run root base');
+requireText(packageJson, 'VITE_DEPLOY_TARGET=pages vite build', 'Pages build target');
+requireText(packageJson, 'dist/reflection/teacher', 'teacher static route');
+requireText(packageJson, '"build": "vite build && npm run build:server"', 'Cloud Run build isolation');
+forbidText(packageJson, '"build": "npm run build:pages', 'Cloud Run must not reuse Pages asset base');
 
 // Protect the existing AI dialogue data contract and App from accidental reflection coupling.
 forbidText(app, 'lesson_reflections', 'existing App');
