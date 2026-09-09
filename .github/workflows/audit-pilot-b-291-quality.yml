@@ -1,0 +1,255 @@
+name: Audit Pilot B 291-session quality
+
+on:
+  push:
+    branches:
+      - audit/pilot-b-291-quality
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+      - name: Read-only aggregate audit of 2026-09-09 Pilot B
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(gcloud auth print-access-token)"
+          query_class() {
+            local CLASS_ID="$1"
+            curl --fail --silent --show-error --max-time 45 \
+              -X POST 'https://firestore.googleapis.com/v1/projects/shizuoka-english-ai/databases/(default)/documents:runQuery' \
+              -H "Authorization: Bearer $TOKEN" \
+              -H 'Content-Type: application/json' \
+              --data "{\"structuredQuery\":{\"from\":[{\"collectionId\":\"sessions\"}],\"where\":{\"fieldFilter\":{\"field\":{\"fieldPath\":\"classId\"},\"op\":\"EQUAL\",\"value\":{\"stringValue\":\"$CLASS_ID\"}}},\"limit\":1000}}"
+          }
+          query_class '6-PB' > /tmp/pb6.json
+          query_class '5-PB' > /tmp/pb5.json
+
+          python3 - <<'PY'
+          import json, math, re, statistics
+          from collections import Counter, defaultdict
+          from datetime import datetime, timezone, timedelta
+
+          TARGET_DATE='2026-09-09'
+          JST=timezone(timedelta(hours=9))
+          word_re=re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)?")
+          repair_re=re.compile(r"\b(pardon|sorry|one more time|say that again|please repeat|repeat please|i don't understand|i do not understand)\b", re.I)
+          japanese_re=re.compile(r"[ぁ-んァ-ヶ一-龯々ー]")
+
+          def decode(v):
+              if not isinstance(v, dict): return None
+              if 'stringValue' in v: return v['stringValue']
+              if 'integerValue' in v:
+                  try: return int(v['integerValue'])
+                  except: return 0
+              if 'doubleValue' in v:
+                  try: return float(v['doubleValue'])
+                  except: return 0.0
+              if 'booleanValue' in v: return bool(v['booleanValue'])
+              if 'timestampValue' in v: return v['timestampValue']
+              if 'nullValue' in v: return None
+              if 'arrayValue' in v: return [decode(x) for x in (v.get('arrayValue',{}).get('values') or [])]
+              if 'mapValue' in v: return {k:decode(x) for k,x in (v.get('mapValue',{}).get('fields') or {}).items()}
+              return None
+
+          def read(path):
+              data=json.load(open(path))
+              out=[]
+              for item in data:
+                  doc=item.get('document') or {}
+                  f=doc.get('fields') or {}
+                  out.append({k:decode(v) for k,v in f.items()})
+              return out
+
+          rows=[r for r in read('/tmp/pb6.json')+read('/tmp/pb5.json') if r.get('localDate')==TARGET_DATE]
+          assert len(rows)==291, f'Expected 291 Pilot B sessions, got {len(rows)}'
+
+          def pct(n,d): return round(100*n/d,1) if d else 0.0
+          def quant(values, q):
+              vals=sorted(float(x) for x in values if isinstance(x,(int,float)) and math.isfinite(float(x)))
+              if not vals: return None
+              if len(vals)==1: return round(vals[0],2)
+              pos=(len(vals)-1)*q
+              lo=math.floor(pos); hi=math.ceil(pos)
+              val=vals[lo] if lo==hi else vals[lo]*(hi-pos)+vals[hi]*(pos-lo)
+              return round(val,2)
+          def describe(values):
+              vals=[float(x) for x in values if isinstance(x,(int,float)) and math.isfinite(float(x))]
+              return {'n':len(vals),'min':round(min(vals),2) if vals else None,'p25':quant(vals,.25),'median':quant(vals,.5),'p75':quant(vals,.75),'p95':quant(vals,.95),'max':round(max(vals),2) if vals else None,'mean':round(sum(vals)/len(vals),2) if vals else None}
+          def event_list(r): return r.get('systemEvents') if isinstance(r.get('systemEvents'),list) else []
+          def history(r): return r.get('history') if isinstance(r.get('history'),list) else []
+          def child_msgs(r): return [m for m in history(r) if isinstance(m,dict) and m.get('sender')=='child' and str(m.get('englishText') or '').strip()]
+          def ai_msgs(r): return [m for m in history(r) if isinstance(m,dict) and m.get('sender')=='ai' and str(m.get('englishText') or '').strip()]
+          def event_count(r,t): return sum(1 for e in event_list(r) if isinstance(e,dict) and e.get('type')==t)
+          def has_reflection(r): return isinstance(r.get('reflection'),dict) and bool(r.get('reflection'))
+          def completed(r):
+              ev=event_list(r); hist=history(r); children=child_msgs(r)
+              finish=any(isinstance(e,dict) and e.get('type')=='session_finish' for e in ev)
+              return finish or (bool(r.get('endedAt')) and has_reflection(r)) or (bool(r.get('endedAt')) and int(r.get('schemaVersion') or 0)<3 and bool(children))
+          def quality(r):
+              if not r.get('sessionId') or not r.get('researchId') or not history(r) or not child_msgs(r): return 'missing_core'
+              if not completed(r): return 'interrupted'
+              if not has_reflection(r): return 'missing_reflection'
+              return 'complete'
+          def start_ms(r):
+              x=r.get('startedAt')
+              if isinstance(x,(int,float)): return float(x)
+              if isinstance(x,str):
+                  try: return datetime.fromisoformat(x.replace('Z','+00:00')).timestamp()*1000
+                  except: return 0
+              return 0
+          def local_dt(r):
+              ms=start_ms(r)
+              return datetime.fromtimestamp(ms/1000,JST) if ms else None
+
+          participants=Counter(str(r.get('researchId') or '') for r in rows if r.get('researchId'))
+          class_counts=Counter(str(r.get('classId') or '') for r in rows)
+          target_counts=Counter(int(r.get('targetDurationMinutes') or 0) for r in rows)
+          quality_counts=Counter(quality(r) for r in rows)
+
+          actual=[float(r.get('actualDurationSeconds') or 0) for r in rows]
+          ratios=[]
+          for r in rows:
+              target=float(r.get('targetDurationMinutes') or 0)*60
+              a=float(r.get('actualDurationSeconds') or 0)
+              if target>0: ratios.append(a/target)
+          child_turns=[len(child_msgs(r)) for r in rows]
+          ai_turns=[len(ai_msgs(r)) for r in rows]
+          child_words=[]; ai_words=[]
+          long_child_12=0; long_child_20=0; japanese_child=0; repair_utterances=0; repeated_adjacent=0
+          ai_questions=0; ai_total=0; ai_over14=0; ai_over20=0
+          total_child_utterances=0
+          for r in rows:
+              prev=None
+              for m in child_msgs(r):
+                  text=str(m.get('englishText') or '').strip()
+                  wc=len(word_re.findall(text)); child_words.append(wc); total_child_utterances+=1
+                  if wc>12: long_child_12+=1
+                  if wc>20: long_child_20+=1
+                  if japanese_re.search(text): japanese_child+=1
+                  if repair_re.search(text) or re.fullmatch(r'(?i)(what\??|sorry\??)',text): repair_utterances+=1
+                  norm=re.sub(r'\s+',' ',text.lower()).strip()
+                  if prev is not None and norm==prev: repeated_adjacent+=1
+                  prev=norm
+              for m in ai_msgs(r):
+                  text=str(m.get('englishText') or '').strip(); wc=len(word_re.findall(text)); ai_words.append(wc); ai_total+=1
+                  if '?' in text: ai_questions+=1
+                  if wc>14: ai_over14+=1
+                  if wc>20: ai_over20+=1
+
+          event_types=Counter()
+          event_values=defaultdict(Counter)
+          sessions_with=Counter()
+          latency=[]
+          for r in rows:
+              present=set()
+              for e in event_list(r):
+                  if not isinstance(e,dict): continue
+                  t=str(e.get('type') or '')
+                  if not t: continue
+                  event_types[t]+=1; present.add(t)
+                  v=e.get('value')
+                  if v not in (None,''): event_values[t][str(v)]+=1
+                  if t=='ai_response_latency_ms':
+                      try: latency.append(float(v))
+                      except: pass
+              for t in present: sessions_with[t]+=1
+
+          # Start-time clustering: 5-minute bins, plus classroom-like concurrency window.
+          bins=defaultdict(lambda:{'sessions':0,'participants':set()})
+          for r in rows:
+              dt=local_dt(r)
+              if not dt: continue
+              minute=(dt.minute//5)*5
+              key=dt.replace(minute=minute,second=0,microsecond=0)
+              bins[key]['sessions']+=1
+              if r.get('researchId'): bins[key]['participants'].add(str(r.get('researchId')))
+          top_bins=sorted(bins.items(), key=lambda kv:(len(kv[1]['participants']),kv[1]['sessions']), reverse=True)[:12]
+          peak=top_bins[0][0] if top_bins else None
+          classroom=[]; outside=[]
+          if peak:
+              for r in rows:
+                  dt=local_dt(r)
+                  if dt and abs((dt-peak).total_seconds()) <= 45*60: classroom.append(r)
+                  else: outside.append(r)
+
+          def scope_summary(scope):
+              return {
+                  'sessions':len(scope),
+                  'participants':len({str(r.get('researchId')) for r in scope if r.get('researchId')}),
+                  'quality':dict(Counter(quality(r) for r in scope)),
+                  'target_duration':dict(Counter(int(r.get('targetDurationMinutes') or 0) for r in scope)),
+                  'actual_duration':describe([float(r.get('actualDurationSeconds') or 0) for r in scope]),
+                  'child_turns':describe([len(child_msgs(r)) for r in scope]),
+              }
+
+          audit={
+            'pilot_date':TARGET_DATE,
+            'sessions':len(rows),
+            'unique_participants':len(participants),
+            'class_counts':dict(class_counts),
+            'sessions_per_participant':describe(list(participants.values())),
+            'session_count_frequency':dict(sorted(Counter(participants.values()).items())),
+            'target_duration_counts':dict(sorted(target_counts.items())),
+            'actual_duration_seconds':describe(actual),
+            'actual_to_target_ratio':describe(ratios),
+            'short_sessions':{
+              'under_30_seconds':sum(1 for x in actual if x<30),
+              'under_half_target':sum(1 for x in ratios if x<.5),
+              'at_least_80pct_target':sum(1 for x in ratios if x>=.8),
+            },
+            'data_quality':dict(quality_counts),
+            'child_turns_per_session':describe(child_turns),
+            'ai_turns_per_session':describe(ai_turns),
+            'child_words_per_utterance':describe(child_words),
+            'ai_words_per_utterance':describe(ai_words),
+            'utterance_flags':{
+              'child_utterances_total':total_child_utterances,
+              'child_over_12_words':long_child_12,
+              'child_over_20_words':long_child_20,
+              'child_with_japanese_chars':japanese_child,
+              'child_repair_utterances':repair_utterances,
+              'adjacent_identical_child_repeats':repeated_adjacent,
+              'ai_utterances_total':ai_total,
+              'ai_question_utterances':ai_questions,
+              'ai_question_rate_percent':pct(ai_questions,ai_total),
+              'ai_over_14_words':ai_over14,
+              'ai_over_20_words':ai_over20,
+            },
+            'system_events':dict(event_types),
+            'sessions_with_event':dict(sessions_with),
+            'mic_error_values':dict(event_values.get('mic_error',{})),
+            'ai_request_failure_values':dict(event_values.get('ai_request_failure',{})),
+            'tts_provider_values':dict(event_values.get('tts_provider',{})),
+            'ai_response_latency_ms':describe(latency),
+            'top_5min_bins':[{
+                'time':k.strftime('%H:%M'),
+                'sessions':v['sessions'],
+                'participants':len(v['participants'])
+            } for k,v in top_bins],
+            'peak_plus_minus_45min':scope_summary(classroom),
+            'outside_peak_plus_minus_45min':scope_summary(outside),
+          }
+
+          print('=== PILOT_B_291_AGGREGATE_AUDIT ===')
+          print(json.dumps(audit, ensure_ascii=False, indent=2, sort_keys=True))
+          print('=== TEACHER_FORM_REFERENCE ===')
+          print('enrollment=28 app_users=26 teacher_help=4 unable_to_start=0 unable_to_continue=0 device_or_network_trouble=1 planned_dialogue_completed=26')
+          print('reported_focus=ASR_misrecognition|Japanese_or_names|AI_listening_difficulty|long_utterance_recognition|redo_difficulty|question_load')
+          print('=== END_AUDIT ===')
+          PY
