@@ -7,8 +7,6 @@ import {
   MessageCircle,
   Pencil,
   Save,
-  Sparkles,
-  Star,
   TrendingUp,
   Users,
 } from 'lucide-react';
