@@ -1,4 +1,4 @@
-name: Audit Reflection 6RSX identity
+name: Repair and verify Reflection 6RSX
 
 on:
   push:
@@ -13,8 +13,9 @@ permissions:
   id-token: write
 
 jobs:
-  audit:
+  repair_verify:
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - uses: actions/checkout@v4
       - uses: google-github-actions/auth@v3
@@ -26,20 +27,37 @@ jobs:
         with:
           project_id: shizuoka-english-ai
           version: '>= 416.0.0'
-      - name: Read-only inspect 6RSX student identity
+      - name: Repair only 6RSX class and verify live register/bootstrap
         shell: bash
         run: |
           set -euo pipefail
           TOKEN="$(gcloud auth print-access-token)"
           ACCESS_TOKEN="$TOKEN" python3 - <<'PY'
-          import json, os, urllib.request, urllib.parse
+          import datetime, json, os, urllib.request, urllib.parse, urllib.error
+
           project='shizuoka-english-ai'
+          api='https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app'
           token=os.environ['ACCESS_TOKEN']
           base=f'https://firestore.googleapis.com/v1/projects/{project}/databases/(default)/documents'
-          def fetch(url):
-              req=urllib.request.Request(url,headers={'Authorization':f'Bearer {token}'})
+
+          def auth_fetch(url, method='GET', body=None):
+              data=None if body is None else json.dumps(body).encode()
+              req=urllib.request.Request(url,data=data,method=method,headers={'Authorization':f'Bearer {token}','Content-Type':'application/json'})
               with urllib.request.urlopen(req,timeout=30) as r:
-                  return json.load(r)
+                  raw=r.read()
+                  return json.loads(raw) if raw else {}
+
+          def public_post(path, payload):
+              req=urllib.request.Request(api+path,data=json.dumps(payload).encode(),method='POST',headers={'Content-Type':'application/json'})
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      return r.status, json.loads(r.read())
+              except urllib.error.HTTPError as e:
+                  raw=e.read()
+                  try: data=json.loads(raw)
+                  except: data={'raw':raw.decode(errors='replace')[:300]}
+                  return e.code, data
+
           def val(v):
               if not isinstance(v,dict): return None
               for k in ('stringValue','booleanValue','integerValue','doubleValue','timestampValue'):
@@ -51,36 +69,64 @@ jobs:
                       return x
               if 'nullValue' in v:return None
               return None
-          docs=[]; page=''
-          while True:
-              url=f'{base}/students?pageSize=1000'
-              if page:url += '&pageToken='+urllib.parse.quote(page)
-              data=fetch(url)
-              docs += data.get('documents',[])
-              page=data.get('nextPageToken','')
-              if not page: break
-          rows=[]
-          for d in docs:
-              f=d.get('fields',{})
-              row={k:val(v) for k,v in f.items()}
-              row['_doc_id']=d.get('name','').split('/')[-1]
-              rows.append(row)
-          exact=[r for r in rows if str(r.get('learningId','')).upper()=='6RSX']
-          teacher=[r for r in rows if str(r.get('teacherStudentId','')).upper()=='6RSX']
-          print(json.dumps({
-            'student_doc_count':len(rows),
-            'learningId_6RSX_matches':len(exact),
-            'teacherStudentId_6RSX_matches':len(teacher),
-            'matches':[{
-              'active':r.get('active') is not False,
-              'has_studentId':bool(r.get('studentId')),
-              'has_researchId':bool(r.get('researchId')),
-              'has_learningId':bool(r.get('learningId')),
-              'classId':r.get('classId',''),
-              'attendanceNumber':r.get('attendanceNumber',''),
-              'has_teacherStudentId':bool(r.get('teacherStudentId')),
-              'createdAt':r.get('createdAt',''),
-              'updatedAt':r.get('updatedAt','')
-            } for r in exact]
-          },ensure_ascii=False,indent=2))
+
+          def list_collection(name):
+              docs=[]; page=''
+              while True:
+                  url=f'{base}/{name}?pageSize=1000'
+                  if page:url += '&pageToken='+urllib.parse.quote(page)
+                  data=auth_fetch(url)
+                  docs += data.get('documents',[])
+                  page=data.get('nextPageToken','')
+                  if not page: break
+              return docs
+
+          students=[]
+          for d in list_collection('students'):
+              row={k:val(v) for k,v in d.get('fields',{}).items()}
+              row['_name']=d.get('name','')
+              students.append(row)
+          exact=[r for r in students if str(r.get('learningId','')).upper()=='6RSX']
+          assert len(exact)==1, f'expected exactly one 6RSX record, got {len(exact)}'
+          row=exact[0]
+          assert row.get('active') is not False, '6RSX is inactive'
+          assert row.get('studentId') and row.get('researchId'), '6RSX core identity incomplete'
+          current_class=str(row.get('classId') or '')
+          assert current_class in ('','テスト'), f'unexpected existing classId={current_class!r}'
+
+          if current_class=='':
+              now=datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00','Z')
+              url='https://firestore.googleapis.com/v1/'+row['_name']+'?updateMask.fieldPaths=classId&updateMask.fieldPaths=updatedAt'
+              auth_fetch(url,'PATCH',{'fields':{'classId':{'stringValue':'テスト'},'updatedAt':{'stringValue':now}}})
+              print('6RSX_CLASS_REPAIRED_TO_TEST')
+          else:
+              print('6RSX_CLASS_ALREADY_TEST')
+
+          # Snapshot valid 6RSX test-device docs before live smoke, so only the QA-created token can be removed.
+          before=set()
+          for d in list_collection('reflection_devices'):
+              f={k:val(v) for k,v in d.get('fields',{}).items()}
+              if str(f.get('learningId','')).upper()=='6RSX' and f.get('classId')=='テスト':
+                  before.add(d.get('name',''))
+
+          status, reg=public_post('/api/reflection/register',{'learningCode':'6RSX'})
+          assert status==200 and reg.get('success') is True and reg.get('deviceToken'), f'register failed: {status} {reg}'
+          device=reg['deviceToken']
+          status, boot=public_post('/api/reflection/bootstrap',{'deviceToken':device})
+          assert status==200 and boot.get('success') is True and boot.get('learningId')=='6RSX', f'bootstrap failed: {status} {boot}'
+          print('6RSX_LIVE_REGISTER_BOOTSTRAP_PASS')
+
+          # Remove only device docs created by this smoke run; do not touch user devices.
+          after=[]
+          for d in list_collection('reflection_devices'):
+              f={k:val(v) for k,v in d.get('fields',{}).items()}
+              if str(f.get('learningId','')).upper()=='6RSX' and f.get('classId')=='テスト' and d.get('name','') not in before:
+                  after.append(d.get('name',''))
+          assert len(after)==1, f'expected one QA device doc, got {len(after)}'
+          for name in after:
+              url='https://firestore.googleapis.com/v1/'+name
+              req=urllib.request.Request(url,method='DELETE',headers={'Authorization':f'Bearer {token}'})
+              with urllib.request.urlopen(req,timeout=30) as r:
+                  assert r.status in (200,204)
+          print('6RSX_QA_DEVICE_CLEANED')
           PY
