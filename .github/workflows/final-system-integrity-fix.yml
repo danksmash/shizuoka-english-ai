@@ -1,0 +1,48 @@
+name: Apply final system integrity fix
+
+on:
+  push:
+    branches:
+      - audit/final-system-integrity-20260909
+    paths:
+      - 'scripts/apply-final-system-integrity.mjs'
+      - '.github/workflows/final-system-integrity-fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Apply final integrity patch
+        run: node scripts/apply-final-system-integrity.mjs
+      - name: Targeted integrity QA
+        run: |
+          npm run qa:reflection
+          npm run qa:research-export
+          npm run qa:contextual-asr
+          npm run qa:final-integrity
+      - name: Full regression QA and production build
+        run: |
+          npm run qa
+          npm run build
+          npm run build:pages
+      - name: Commit verified production changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json src/main.tsx src/reflection src/server/reflectionPersistence.ts src/server/reflectionRoutes.ts src/server/reflectionTeacherModel.ts src/server/researchDashboard.ts scripts/qa-reflection-module.ts scripts/qa-reflection-teacher.ts scripts/qa-research-export-complete.ts scripts/qa-final-system-integrity.ts
+          git commit -m 'fix: restore six-part reflection and finalize system integrity'
+          git push origin HEAD:audit/final-system-integrity-20260909
