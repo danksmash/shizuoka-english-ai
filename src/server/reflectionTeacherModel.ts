@@ -56,13 +56,14 @@ export function buildTeacherReflectionDashboard(
     const current = recordsByStudent.get(record.studentId);
     if (!current || record.updatedAt > current.updatedAt) recordsByStudent.set(record.studentId, record);
   }
-  const students: TeacherReflectionStudentRow[] = selectedRoster.map((student) => {
+  const students: TeacherReflectionStudentRow[] = selectedRoster.map((student): TeacherReflectionStudentRow => {
     const record = recordsByStudent.get(student.studentId);
+    const status: TeacherReflectionStudentRow['status'] = record?.status === 'submitted' ? 'submitted' : record ? 'draft' : 'missing';
     return {
       learningId: student.learningId,
       classId: student.classId,
       attendanceNumber: student.attendanceNumber,
-      status: record?.status === 'submitted' ? 'submitted' : record ? 'draft' : 'missing',
+      status,
       reflectionCharCount: record?.reflectionCharCount || 0,
       todayGoal: record?.todayGoal || '',
       achievements: record?.achievements || record?.reflectionText || '',
