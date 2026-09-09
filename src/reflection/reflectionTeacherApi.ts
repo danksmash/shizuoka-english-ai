@@ -8,8 +8,9 @@ export interface TeacherDashboardStudent {
   status: 'submitted' | 'draft' | 'missing';
   reflectionCharCount: number;
   todayGoal: string;
-  achievements: string;
-  nextGoal: string;
+  goalRating: number | null;
+  selfRegulationRating: number | null;
+  reflectionText: string;
   updatedAt: string;
 }
 
@@ -25,21 +26,21 @@ export interface TeacherHistoryRecord {
   reflectionId: string;
   localDate: string;
   todayGoal: string;
-  achievements: string;
-  languageUsed: string;
-  thinking: string;
-  difficultyStrategy: string;
-  languageCultureAwareness: string;
-  nextGoal: string;
+  goalRating: number | null;
+  selfRegulationRating: number | null;
+  reflectionText: string;
   reflectionCharCount: number;
   status: 'draft' | 'submitted';
   revision: number;
   createdAt: string;
   updatedAt: string;
   submittedAt: string;
-  reflectionText: string;
-  goalRating: number | null;
-  selfRegulationRating: number | null;
+  achievements: string;
+  languageUsed: string;
+  thinking: string;
+  difficultyStrategy: string;
+  languageCultureAwareness: string;
+  nextGoal: string;
 }
 
 export interface TeacherStudentHistoryResponse {

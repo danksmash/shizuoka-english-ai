@@ -126,6 +126,35 @@ export async function queryCollection(collection: string, field: string, value: 
   return rows.filter((row) => row.document).map((row) => ({ ...fromFirestoreFields(row.document!.fields || {}), _name: row.document!.name }));
 }
 
+export async function queryCollectionByEqualities(
+  collection: string,
+  filters: Array<{ field: string; value: string }>,
+  limit = 200,
+): Promise<Record<string, any>[]> {
+  if (!filters.length) return [];
+  const token = await getAccessToken();
+  const fieldFilters = filters.map(({ field, value }) => ({
+    fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: value } },
+  }));
+  const where = fieldFilters.length === 1
+    ? fieldFilters[0]
+    : { compositeFilter: { op: 'AND', filters: fieldFilters } };
+  const response = await fetch(`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(PROJECT_ID)}/databases/${encodeURIComponent(DATABASE_ID)}/documents:runQuery`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: collection }],
+        where,
+        limit: Math.max(1, Math.min(1000, limit)),
+      },
+    }),
+  });
+  if (!response.ok) throw new Error(`FIRESTORE_MULTI_QUERY_${response.status}:${(await response.text()).slice(0, 500)}`);
+  const rows = await response.json() as Array<{ document?: { fields?: Record<string, any>; name?: string } }>;
+  return rows.filter((row) => row.document).map((row) => ({ ...fromFirestoreFields(row.document!.fields || {}), _name: row.document!.name }));
+}
+
 export async function listCollection(collection: string, pageSize = 200): Promise<Record<string, any>[]> {
   const safePageSize = Math.max(1, Math.min(1000, pageSize));
   const rows: Record<string, any>[] = [];
