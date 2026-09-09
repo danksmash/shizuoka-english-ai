@@ -1,0 +1,58 @@
+name: Verify production TTS observability
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy production to Cloud Run
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify browser-visible CORS headers and Azure provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_URL='https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app'
+          ORIGIN='https://danksmash.github.io'
+
+          cors_headers=$(mktemp)
+          cors_status=$(curl --silent --show-error --max-time 20 \
+            -D "$cors_headers" -o /dev/null -w '%{http_code}' \
+            -X OPTIONS "$API_URL/api/tts" \
+            -H "Origin: $ORIGIN" \
+            -H 'Access-Control-Request-Method: POST')
+          test "$cors_status" = '204'
+          grep -qi "access-control-allow-origin: $ORIGIN" "$cors_headers"
+          grep -qi 'access-control-expose-headers:.*x-tts-provider' "$cors_headers"
+          grep -qi 'access-control-expose-headers:.*x-tts-fallback-from' "$cors_headers"
+          grep -qi 'access-control-expose-headers:.*x-tts-fallback-reason' "$cors_headers"
+          grep -qi 'access-control-expose-headers:.*x-tts-latency-ms' "$cors_headers"
+          rm -f "$cors_headers"
+
+          for student in emma_usa minji_korea amara_nigeria; do
+            headers=$(mktemp)
+            audio=$(mktemp)
+            status=$(curl --silent --show-error --max-time 20 \
+              -D "$headers" -o "$audio" -w '%{http_code}' \
+              -X POST "$API_URL/api/tts" \
+              -H "Origin: $ORIGIN" \
+              -H 'Content-Type: application/json' \
+              --data "{\"text\":\"Hello. Nice to meet you.\",\"aiStudentId\":\"$student\",\"speakingRate\":1.0}")
+            test "$status" = '200'
+            grep -qi 'content-type: audio/mpeg' "$headers"
+            grep -qi "access-control-allow-origin: $ORIGIN" "$headers"
+            grep -qi 'access-control-expose-headers:.*x-tts-provider' "$headers"
+            grep -qi 'x-tts-provider: azure-speech' "$headers"
+            test "$(wc -c < "$audio")" -gt 500
+            rm -f "$headers" "$audio"
+          done
+
+          echo 'Production TTS browser observability: PASS'
