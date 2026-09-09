@@ -1,0 +1,37 @@
+name: Final production data integrity audit
+
+on:
+  push:
+    branches:
+      - audit/final-system-integrity-20260909
+    paths:
+      - 'scripts/audit-production-data-integrity.mjs'
+      - '.github/workflows/final-production-data-audit-temp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
+      - name: Read-only Firestore integrity audit
+        run: |
+          TOKEN="$(gcloud auth print-access-token)"
+          FIRESTORE_ACCESS_TOKEN="$TOKEN" GCP_PROJECT=shizuoka-english-ai node scripts/audit-production-data-integrity.mjs
