@@ -5,19 +5,22 @@ export interface ReflectionRecordDto {
   reflectionId: string;
   localDate: string;
   todayGoal: string;
-  achievements: string;
-  languageUsed: string;
-  thinking: string;
-  difficultyStrategy: string;
-  languageCultureAwareness: string;
-  nextGoal: string;
+  goalRating: number | null;
+  selfRegulationRating: number | null;
+  reflectionText: string;
   reflectionCharCount: number;
   status: 'draft' | 'submitted';
   revision: number;
   createdAt: string;
   updatedAt: string;
   submittedAt: string;
-  legacyReflectionText: string;
+  // Read-only compatibility fields for records written by the temporary six-part UI.
+  achievements: string;
+  languageUsed: string;
+  thinking: string;
+  difficultyStrategy: string;
+  languageCultureAwareness: string;
+  nextGoal: string;
 }
 
 export interface BootstrapResponse {
@@ -53,12 +56,9 @@ export async function bootstrapReflection(deviceToken: string): Promise<Bootstra
 
 export async function saveReflection(deviceToken: string, input: {
   todayGoal: string;
-  achievements: string;
-  languageUsed: string;
-  thinking: string;
-  difficultyStrategy: string;
-  languageCultureAwareness: string;
-  nextGoal: string;
+  goalRating: number | null;
+  selfRegulationRating: number | null;
+  reflectionText: string;
   status: 'draft' | 'submitted';
 }): Promise<ReflectionRecordDto> {
   const data = await postJson<{ success: true; reflection: ReflectionRecordDto }>('/api/reflection/save', { deviceToken, ...input });
@@ -71,7 +71,7 @@ export async function loadReflectionHistory(deviceToken: string): Promise<Reflec
 }
 
 export type ClassReflectionDto = Pick<ReflectionRecordDto,
-  'reflectionId' | 'localDate' | 'todayGoal' | 'achievements' | 'languageUsed' | 'thinking' | 'difficultyStrategy' | 'languageCultureAwareness' | 'nextGoal' | 'legacyReflectionText'
+  'reflectionId' | 'localDate' | 'todayGoal' | 'reflectionText' | 'achievements' | 'languageUsed' | 'thinking' | 'difficultyStrategy' | 'languageCultureAwareness' | 'nextGoal'
 >;
 
 export async function loadClassReflections(deviceToken: string): Promise<ClassReflectionDto[]> {
