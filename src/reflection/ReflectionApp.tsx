@@ -31,20 +31,19 @@ import {
 } from './reflectionApi';
 
 const TOKEN_KEY = 'my-english-growth-device-token';
-const RATING_SCHEMA_VERSION = 'v2' as const;
 const tokyoDate = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
-const draftKey = (token: string) => `my-english-growth-draft-${tokyoDate()}-${token.slice(0, 16)}`;
+const draftKey = (token: string) => `my-english-growth-draft-four-point-${tokyoDate()}-${token.slice(0, 16)}`;
 
 type View = 'entry' | 'history' | 'class';
 type Draft = {
   todayGoal: string;
   goalRating: number | null;
-  selfRegulationRating: number | null;
+  communicationRating: number | null;
   reflectionText: string;
 };
 type LocalDraftPayload = { draft: Draft; savedAt: number };
 
-const emptyDraft: Draft = { todayGoal: '', goalRating: null, selfRegulationRating: null, reflectionText: '' };
+const emptyDraft: Draft = { todayGoal: '', goalRating: null, communicationRating: null, reflectionText: '' };
 const HINTS = [
   { label: 'できたこと', icon: Star, tone: 'mint' },
   { label: 'わかったこと', icon: BookOpen, tone: 'blue' },
@@ -64,11 +63,11 @@ function clearToken() { try { window.localStorage.removeItem(TOKEN_KEY); } catch
 function normalizeDraft(value: unknown): Draft | null {
   if (!value || typeof value !== 'object') return null;
   const row = value as Record<string, unknown>;
-  const rating = (candidate: unknown) => Number.isInteger(candidate) && Number(candidate) >= 1 && Number(candidate) <= 5 ? Number(candidate) : null;
+  const rating = (candidate: unknown) => Number.isInteger(candidate) && Number(candidate) >= 1 && Number(candidate) <= 4 ? Number(candidate) : null;
   return {
     todayGoal: typeof row.todayGoal === 'string' ? row.todayGoal : '',
     goalRating: rating(row.goalRating),
-    selfRegulationRating: rating(row.selfRegulationRating),
+    communicationRating: rating(row.communicationRating),
     reflectionText: typeof row.reflectionText === 'string' ? row.reflectionText : '',
   };
 }
@@ -88,21 +87,8 @@ function persistLocalDraft(token: string, draft: Draft) {
   try { window.localStorage.setItem(draftKey(token), JSON.stringify({ draft, savedAt: Date.now() })); } catch {}
 }
 
-function legacySixPartText(record: Pick<ReflectionRecordDto, 'achievements' | 'languageUsed' | 'thinking' | 'difficultyStrategy' | 'languageCultureAwareness' | 'nextGoal'> | ClassReflectionDto): string {
-  const parts: Array<[string, string]> = [
-    ['できたこと', record.achievements || ''],
-    ['使ったことば', record.languageUsed || ''],
-    ['授業中に考えていたこと', record.thinking || ''],
-    ['困ったこと・工夫', record.difficultyStrategy || ''],
-    ['言葉や文化について気づいたこと', record.languageCultureAwareness || ''],
-    ['次に頑張りたいこと', record.nextGoal || ''],
-  ];
-  return parts.filter(([, value]) => value.trim()).map(([label, value]) => `【${label}】\n${value}`).join('\n\n');
-}
-
 function displayReflectionText(record: ReflectionRecordDto | ClassReflectionDto | null): string {
-  if (!record) return '';
-  return record.reflectionText || legacySixPartText(record);
+  return record?.reflectionText || '';
 }
 
 function recordToDraft(record: ReflectionRecordDto | null): Draft {
@@ -110,15 +96,9 @@ function recordToDraft(record: ReflectionRecordDto | null): Draft {
   return {
     todayGoal: record.todayGoal || '',
     goalRating: record.goalRating,
-    selfRegulationRating: record.selfRegulationRating,
-    reflectionText: displayReflectionText(record),
+    communicationRating: record.communicationRating,
+    reflectionText: record.reflectionText || '',
   };
-}
-
-function ratingHistoryLabels(record: Pick<ReflectionRecordDto, 'ratingSchemaVersion'>) {
-  return record.ratingSchemaVersion === 'v2'
-    ? { first: 'めあてへの取組', second: '聞く・伝える' }
-    : { first: '自分の考え', second: '聞いて分かろう' };
 }
 
 const formatDate = (value: string) => {
@@ -174,7 +154,7 @@ function RatingScale({ title, value, onChange }: { title: string; value: number 
   return <div className="meg-rating-block">
     <h3>{title}</h3>
     <div className="meg-rating-row" role="group" aria-label={title}>
-      {[1, 2, 3, 4, 5].map((number) => <button key={number} type="button" aria-pressed={value === number} className={value === number ? 'selected' : ''} onClick={() => onChange(number)}>
+      {[1, 2, 3, 4].map((number) => <button key={number} type="button" aria-pressed={value === number} className={value === number ? 'selected' : ''} onClick={() => onChange(number)}>
         <span className="meg-rating-dot" aria-hidden="true" /><span className="meg-rating-number">{number}</span>
       </button>)}
     </div>
@@ -208,7 +188,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
     if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
     setSaveState('saving');
     try {
-      const saved = await saveReflectionGoal(token, goal, RATING_SCHEMA_VERSION);
+      const saved = await saveReflectionGoal(token, goal);
       lastGoalSavedRef.current = saved.todayGoal;
       onRecordSaved(saved);
       setSaveState('saved');
@@ -219,7 +199,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
     const flushBeforeLeave = () => {
       const goal = latestGoalRef.current;
       if (goal === lastGoalSavedRef.current) return;
-      void saveReflectionGoal(token, goal, RATING_SCHEMA_VERSION).then((saved) => {
+      void saveReflectionGoal(token, goal).then((saved) => {
         lastGoalSavedRef.current = saved.todayGoal;
       }).catch(() => undefined);
     };
@@ -236,7 +216,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
     timerRef.current = window.setTimeout(async () => {
       setSaveState('saving');
       try {
-        const saved = await saveReflection(token, { ...draft, status, ratingSchemaVersion: RATING_SCHEMA_VERSION });
+        const saved = await saveReflection(token, { ...draft, status });
         onRecordSaved(saved);
         setSaveState('saved');
       } catch { setSaveState('error'); }
@@ -248,12 +228,12 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
   const submit = async () => {
     if (!draft.todayGoal.trim()) { setMessage('今日のめあてを書いてください。'); return; }
     if (draft.goalRating === null) { setMessage('「めあてに向かって取り組めた」を選んでください。'); return; }
-    if (draft.selfRegulationRating === null) { setMessage('「相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした」を選んでください。'); return; }
+    if (draft.communicationRating === null) { setMessage('「相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした」を選んでください。'); return; }
     if (!draft.reflectionText.trim()) { setMessage('今日の振り返りを書いてください。'); return; }
     if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
     setSaveState('saving'); setMessage('');
     try {
-      const saved = await saveReflection(token, { ...draft, status: 'submitted', ratingSchemaVersion: RATING_SCHEMA_VERSION });
+      const saved = await saveReflection(token, { ...draft, status: 'submitted' });
       skipAutosaveOnce.current = true;
       setStatus('submitted'); onRecordSaved(saved); setSaveState('saved');
       setMessage('今日の学びを記録しました。あとから書き足すこともできます。');
@@ -302,13 +282,13 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
         <div className="meg-card meg-entry-ratings">
           <div className="meg-rating-title-row">
             <div className="meg-section-title"><BarChart3 /><h2>ふりかえりポイント</h2></div>
-            <div className="meg-rating-scale-labels" aria-label="1はできなかった、5はよくできた">
-              <span className="meg-scale-one">できなかった</span><span aria-hidden="true" /><span aria-hidden="true" /><span aria-hidden="true" /><span className="meg-scale-five">よくできた</span>
+            <div className="meg-rating-scale-labels" aria-label="1はできなかった、4はよくできた">
+              <span className="meg-scale-one">できなかった</span><span aria-hidden="true" /><span aria-hidden="true" /><span className="meg-scale-four">よくできた</span>
             </div>
           </div>
           <div className="meg-ratings-grid">
             <RatingScale title="めあてに向かって取り組めた" value={draft.goalRating} onChange={(value) => setDraft((current) => ({ ...current, goalRating: value }))} />
-            <RatingScale title="相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした" value={draft.selfRegulationRating} onChange={(value) => setDraft((current) => ({ ...current, selfRegulationRating: value }))} />
+            <RatingScale title="相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした" value={draft.communicationRating} onChange={(value) => setDraft((current) => ({ ...current, communicationRating: value }))} />
           </div>
         </div>
 
@@ -332,12 +312,12 @@ function HistoryView({ token }: { token: string }) {
   const [error, setError] = useState('');
   useEffect(() => { setLoading(true); setError(''); loadReflectionHistory(token).then(setRows).catch(() => setError('学習履歴を読み込めませんでした。')).finally(() => setLoading(false)); }, [token]);
   return <main className="meg-wide-page"><div className="meg-card"><div className="meg-page-heading"><BarChart3 /><div><h2>わたしの成長</h2><p>前の自分が考えていたことと、今の自分を比べてみよう。</p></div></div>
-    {loading ? <p>読み込んでいます…</p> : error ? <p className="meg-error">{error}</p> : rows.length === 0 ? <p className="meg-muted">保存された振り返りはまだありません。</p> : <div className="meg-history-list">{rows.map((row) => { const labels = ratingHistoryLabels(row); return <article key={row.reflectionId} className="meg-history-item"><div className="meg-history-meta"><b>{formatDate(row.localDate)}</b><span>{row.reflectionCharCount}文字</span></div><h3>今日のめあて</h3><p>{row.todayGoal || '—'}</p><div className="meg-history-ratings"><span>{labels.first} {row.goalRating ?? '—'}/5</span><span>{labels.second} {row.selfRegulationRating ?? '—'}/5</span></div><h3>今日の振り返り</h3><p>{displayReflectionText(row) || '—'}</p></article>; })}</div>}
+    {loading ? <p>読み込んでいます…</p> : error ? <p className="meg-error">{error}</p> : rows.length === 0 ? <p className="meg-muted">保存された振り返りはまだありません。</p> : <div className="meg-history-list">{rows.map((row) => <article key={row.reflectionId} className="meg-history-item"><div className="meg-history-meta"><b>{formatDate(row.localDate)}</b><span>{row.reflectionCharCount}文字</span></div><h3>今日のめあて</h3><p>{row.todayGoal || '—'}</p><div className="meg-history-ratings"><span>めあてへの取組 {row.goalRating ?? '—'}/4</span><span>聞く・伝える {row.communicationRating ?? '—'}/4</span></div><h3>今日の振り返り</h3><p>{row.reflectionText || '—'}</p></article>)}</div>}
   </div></main>;
 }
 
 function ClassCard({ row, index }: { key?: React.Key; row: ClassReflectionDto; index: number }) {
-  return <article className="meg-class-card"><span>クラスメイト {index + 1}</span>{row.todayGoal && <><h3>今日のめあて</h3><p>{row.todayGoal}</p></>}<h3>今日の振り返り</h3><p>{displayReflectionText(row) || '—'}</p></article>;
+  return <article className="meg-class-card"><span>クラスメイト {index + 1}</span>{row.todayGoal && <><h3>今日のめあて</h3><p>{row.todayGoal}</p></>}<h3>今日の振り返り</h3><p>{row.reflectionText || '—'}</p></article>;
 }
 
 function ClassView({ token, submitted }: { token: string; submitted: boolean }) {
