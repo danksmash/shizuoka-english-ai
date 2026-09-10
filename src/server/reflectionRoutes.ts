@@ -31,8 +31,7 @@ function publicReflection(record: ReflectionRecord | null) {
     localDate: record.localDate,
     todayGoal: record.todayGoal,
     goalRating: record.goalRating,
-    selfRegulationRating: record.selfRegulationRating,
-    ratingSchemaVersion: record.ratingSchemaVersion,
+    communicationRating: record.communicationRating,
     reflectionText: record.reflectionText,
     reflectionCharCount: record.reflectionCharCount,
     status: record.status,
@@ -40,13 +39,6 @@ function publicReflection(record: ReflectionRecord | null) {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     submittedAt: record.submittedAt,
-    // Compatibility fields are read-only in the current UI, but retained so no prior data is lost.
-    achievements: record.achievements,
-    languageUsed: record.languageUsed,
-    thinking: record.thinking,
-    difficultyStrategy: record.difficultyStrategy,
-    languageCultureAwareness: record.languageCultureAwareness,
-    nextGoal: record.nextGoal,
   };
 }
 
@@ -56,12 +48,6 @@ function publicClassReflection(record: Awaited<ReturnType<typeof getClassReflect
     localDate: record.localDate,
     todayGoal: record.todayGoal,
     reflectionText: record.reflectionText,
-    achievements: record.achievements,
-    languageUsed: record.languageUsed,
-    thinking: record.thinking,
-    difficultyStrategy: record.difficultyStrategy,
-    languageCultureAwareness: record.languageCultureAwareness,
-    nextGoal: record.nextGoal,
   };
 }
 
@@ -175,16 +161,9 @@ router.post('/save', async (req, res) => {
     const saved = await saveLessonReflection(identity, {
       todayGoal: req.body?.todayGoal,
       goalRating: req.body?.goalRating,
-      selfRegulationRating: req.body?.selfRegulationRating,
-      ratingSchemaVersion: req.body?.ratingSchemaVersion,
+      communicationRating: req.body?.communicationRating,
       reflectionText: req.body?.reflectionText,
       status: req.body?.status,
-      achievements: req.body?.achievements,
-      languageUsed: req.body?.languageUsed,
-      thinking: req.body?.thinking,
-      difficultyStrategy: req.body?.difficultyStrategy,
-      languageCultureAwareness: req.body?.languageCultureAwareness,
-      nextGoal: req.body?.nextGoal,
     });
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, reflection: publicReflection(saved) });
