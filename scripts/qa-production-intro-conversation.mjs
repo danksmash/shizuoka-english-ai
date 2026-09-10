@@ -5,11 +5,11 @@ assert.ok(apiUrl, 'API_URL is required');
 
 const starter = "Hi! I'm Emma from California. What's your name?";
 
-async function introChat(message) {
+async function introChat(message, customHistory = null) {
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      const history = [
+      const history = customHistory || [
         { id: 'ai-start', sender: 'ai', englishText: starter, timestamp: 1 },
         { id: 'child-latest', sender: 'child', englishText: message, timestamp: 2 },
       ];
@@ -51,5 +51,16 @@ const localInfo = await introChat('I live in Hamamatsu. I like Hamamatsu gyoza.'
 assert.match(localInfo, /hamamatsu|gyoza/, 'Case D: AI should respond to the child local information');
 assert.doesNotMatch(localInfo, /what(?:'s| is) your name|how old are you/, 'Case D: AI must not ignore local information and jump to a fixed self-introduction question');
 assert.doesNotMatch(localInfo, /hamamatsu gyoza (?:is|are|has|have|comes|means)/, 'Case D: AI should not lead with an encyclopedia-style explanation of the child local item');
+
+const floorYieldHistory = [
+  { id: 'ai-start', sender: 'ai', englishText: starter, timestamp: 1 },
+  { id: 'child-1', sender: 'child', englishText: 'My name is Haru.', timestamp: 2 },
+  { id: 'ai-2', sender: 'ai', englishText: 'Nice to meet you. What do you like?', timestamp: 3 },
+  { id: 'child-2', sender: 'child', englishText: 'I like soccer.', timestamp: 4 },
+  { id: 'ai-3', sender: 'ai', englishText: 'Soccer is fun. Do you play soccer?', timestamp: 5 },
+  { id: 'child-latest', sender: 'child', englishText: 'Yes. I play with my friends.', timestamp: 6 },
+];
+const floorYield = await introChat('Yes. I play with my friends.', floorYieldHistory);
+assert.doesNotMatch(floorYield, /\?/, 'Case E: after two consecutive AI question turns, the next ordinary response should yield the conversational floor');
 
 console.log('PRODUCTION CORE 1 NATURAL INTRO CONVERSATION QA PASS');

@@ -50,10 +50,33 @@ const requiredCore1Rules = [
   'Do not sound like a textbook, quiz, or scripted lesson.',
   "Answer the student's actual message first.",
   'If the student shares information, react to that information first.',
-  'After responding, usually ask one short, natural question when it helps the conversation continue. Do not force a question when it would be unnatural.',
+  'Do not automatically ask a question after every response.',
+  'Let some turns end with a short reaction or self-disclosure so the student can choose what to say next.',
+  'If the previous two AI turns both included questions, normally reply without a question this turn unless clarification, repair, or a genuine information gap makes a question necessary.',
+  'buildAlignedReply(parsed, persona.name, { recentHistory })',
 ];
 for (const rule of requiredCore1Rules) {
-  if (!serverSource.includes(rule)) failures.push(`Core 1 natural-conversation rule missing from system instruction: ${rule}`);
+  if (!serverSource.includes(rule)) failures.push(`Core 1 turn-taking rule missing from system instruction/runtime: ${rule}`);
+}
+
+const forbiddenQuestionPressureRules = [
+  'Usually use one short statement and one short question.',
+  'After responding, usually ask one short, natural question when it helps the conversation continue. Do not force a question when it would be unnatural.',
+  'End normal turns with exactly one easy, natural question.',
+];
+for (const oldRule of forbiddenQuestionPressureRules) {
+  if (serverSource.includes(oldRule)) failures.push(`Old question-pressure rule must be removed: ${oldRule}`);
+}
+
+const responseValidationSource = readFileSync('src/utils/responseValidation.ts', 'utf8');
+if (!responseValidationSource.includes('countTrailingAiQuestionTurns(options.recentHistory) >= 2')) {
+  failures.push('Aligned reply selection must detect two trailing AI question turns');
+}
+if (!responseValidationSource.includes('nonQuestions.length > 0 ? nonQuestions : validSegments')) {
+  failures.push('Aligned reply selection must yield the floor by preferring a non-question segment when available');
+}
+if (responseValidationSource.includes('const finalQuestion = [...validSegments].reverse().find')) {
+  failures.push('Aligned reply selection must not privilege the final question segment');
 }
 
 const dailyRoutineContext = getDialogueTopicContext('daily_routine');
@@ -62,4 +85,4 @@ for (const fixedTime of ['7:00', '7:30', '9:00', '11:00']) {
 }
 if (TARGET_20_AI_STUDENT_IDS.length !== 20) failures.push(`Expected 20 target personas, found ${TARGET_20_AI_STUDENT_IDS.length}`);
 if (failures.length) { console.error('Dialogue QA FAILED'); failures.forEach((failure) => console.error(`- ${failure}`)); process.exit(1); }
-console.log(`Dialogue QA PASS: ${TARGET_20_AI_STUDENT_IDS.length} students × ${topics.length} topics × ${durations.length} durations = ${checked} combinations checked; Core 1 natural-conversation contract protected.`);
+console.log(`Dialogue QA PASS: ${TARGET_20_AI_STUDENT_IDS.length} students × ${topics.length} topics × ${durations.length} durations = ${checked} combinations checked; Study 1 conversational-floor contract protected.`);
