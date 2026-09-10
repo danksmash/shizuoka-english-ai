@@ -1,0 +1,138 @@
+name: Codex fix research start-date scope
+
+on:
+  push:
+    branches:
+      - codex/fix-research-start-date-scope
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/fix-research-start-date-scope
+          fetch-depth: 0
+      - name: Apply research start-date classification fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p=Path('src/server/researchDashboard.ts')
+          text=p.read_text()
+          old="""export type ResearchDataScope = 'main' | 'pilot_b' | 'test' | 'reserve';
+const PILOT_B_OFFICIAL_DATES = new Set(['2026-09-09']);
+export function researchDataScopeForRow(row: Record<string, unknown>): ResearchDataScope {
+  const storedClass = String(row.class_id || '');
+  const localDate = String(row.local_date || '');
+  if (storedClass === 'テスト') return 'test';
+  if (storedClass === '予備') return 'reserve';
+  if (storedClass === '5-PB' || storedClass === '6-PB') return PILOT_B_OFFICIAL_DATES.has(localDate) ? 'pilot_b' : 'test';
+  return 'main';
+}
+"""
+          new="""export type ResearchDataScope = 'main' | 'pilot_b' | 'test' | 'reserve';
+export const MAIN_RESEARCH_START_DATE = '2026-09-17';
+const PILOT_B_OFFICIAL_DATES = new Set(['2026-09-09']);
+export function researchDataScopeForRow(row: Record<string, unknown>): ResearchDataScope {
+  const storedClass = String(row.class_id || '');
+  const localDate = String(row.local_date || '');
+  if (storedClass === 'テスト') return 'test';
+  if (storedClass === '予備') return 'reserve';
+  if (storedClass === '5-PB' || storedClass === '6-PB') return PILOT_B_OFFICIAL_DATES.has(localDate) ? 'pilot_b' : 'test';
+  if (/^[56]-[123]$/.test(storedClass)) return localDate >= MAIN_RESEARCH_START_DATE ? 'main' : 'test';
+  return 'test';
+}
+"""
+          if text.count(old)!=1:
+              raise SystemExit('researchDashboard scope block mismatch')
+          p.write_text(text.replace(old,new,1))
+
+          Path('scripts/qa-pilot-b-isolation.ts').write_text("""import assert from 'node:assert/strict';
+import { filterResearchExportDataSets, MAIN_RESEARCH_START_DATE, normalizeFormalResearchExportQuery, researchDataScopeForRow } from '../src/server/researchDashboard';
+
+const ids = ['teacher-pretest','pb5','pb6','pre-main5','pre-main6','main5','main6','explicit-test','reserve','unknown'];
+const data: any = {
+  sessions: [
+    { session_id:'teacher-pretest', class_id:'6-PB', grade_level:6, local_date:'2026-09-08', data_quality_flag:'complete' },
+    { session_id:'pb5', class_id:'5-PB', grade_level:5, local_date:'2026-09-09', data_quality_flag:'complete' },
+    { session_id:'pb6', class_id:'6-PB', grade_level:6, local_date:'2026-09-09', data_quality_flag:'complete' },
+    { session_id:'pre-main5', class_id:'5-1', grade_level:5, local_date:'2026-09-08', data_quality_flag:'complete' },
+    { session_id:'pre-main6', class_id:'6-1', grade_level:6, local_date:'2026-09-10', data_quality_flag:'complete' },
+    { session_id:'main5', class_id:'5-1', grade_level:5, local_date:'2026-09-17', data_quality_flag:'complete' },
+    { session_id:'main6', class_id:'6-1', grade_level:6, local_date:'2026-09-18', data_quality_flag:'complete' },
+    { session_id:'explicit-test', class_id:'テスト', grade_level:'', local_date:'2026-09-18', data_quality_flag:'complete' },
+    { session_id:'reserve', class_id:'予備', grade_level:'', local_date:'2026-09-18', data_quality_flag:'complete' },
+    { session_id:'unknown', class_id:'', grade_level:'', local_date:'2026-09-18', data_quality_flag:'complete' },
+  ],
+  utterances: ids.map((session_id) => ({ session_id, utterance_id:session_id+'-1' })),
+  expressions: ids.map((session_id) => ({ session_id, utterance_id:session_id+'-1' })),
+  personas: [{ persona_id:'emma_usa' }],
+  codebook: [{ file_name:'sessions.csv' }],
+};
+
+assert.equal(MAIN_RESEARCH_START_DATE, '2026-09-17');
+assert.equal(researchDataScopeForRow(data.sessions[0]), 'test');
+assert.equal(researchDataScopeForRow(data.sessions[1]), 'pilot_b');
+assert.equal(researchDataScopeForRow(data.sessions[2]), 'pilot_b');
+assert.equal(researchDataScopeForRow(data.sessions[3]), 'test');
+assert.equal(researchDataScopeForRow(data.sessions[4]), 'test');
+assert.equal(researchDataScopeForRow(data.sessions[5]), 'main');
+assert.equal(researchDataScopeForRow(data.sessions[6]), 'main');
+assert.equal(researchDataScopeForRow(data.sessions[7]), 'test');
+assert.equal(researchDataScopeForRow(data.sessions[8]), 'reserve');
+assert.equal(researchDataScopeForRow(data.sessions[9]), 'test');
+
+const pilot = filterResearchExportDataSets(data, { dataScope:'pilot_b' });
+assert.deepEqual(pilot.sessions.map((row:any) => row.session_id), ['pb5','pb6']);
+assert.deepEqual(pilot.utterances.map((row:any) => row.session_id), ['pb5','pb6']);
+assert.deepEqual(pilot.expressions.map((row:any) => row.session_id), ['pb5','pb6']);
+assert.deepEqual(filterResearchExportDataSets(data, { dataScope:'pilot_b', grade:'6' }).sessions.map((row:any) => row.session_id), ['pb6']);
+
+assert.deepEqual(filterResearchExportDataSets(data, { dataScope:'test' }).sessions.map((row:any) => row.session_id), ['teacher-pretest','pre-main5','pre-main6','explicit-test','unknown']);
+assert.deepEqual(filterResearchExportDataSets(data, { dataScope:'main' }).sessions.map((row:any) => row.session_id), ['main5','main6']);
+assert.deepEqual(filterResearchExportDataSets(data, { dataScope:'main', grade:'6' }).sessions.map((row:any) => row.session_id), ['main6']);
+assert.deepEqual(filterResearchExportDataSets(data, { dataScope:'reserve' }).sessions.map((row:any) => row.session_id), ['reserve']);
+
+assert.equal(normalizeFormalResearchExportQuery({}).dataScope, 'main');
+assert.equal(normalizeFormalResearchExportQuery({ dataScope:'all' }).dataScope, 'main');
+assert.equal(normalizeFormalResearchExportQuery({ dataScope:'pilot_b' }).dataScope, 'pilot_b');
+assert.equal(normalizeFormalResearchExportQuery({ dataScope:'test' }).dataScope, 'test');
+
+console.log('Pilot B / main-start-date / test / reserve data-scope isolation QA: PASS');
+""")
+
+          q=Path('scripts/qa-research-lesson-reflection-bundle.ts')
+          qt=q.read_text()
+          replacements={
+            "make('R-MAIN-5-1', '5-1', '2026-09-08')":"make('R-MAIN-5-1', '5-1', '2026-09-18')",
+            "make('R-MAIN-6-2', '6-2', '2026-09-10'":"make('R-MAIN-6-2', '6-2', '2026-09-20'",
+            "{ dataScope: 'main', grade: '5', classId: '1', start: '2026-09-08', end: '2026-09-08' }":"{ dataScope: 'main', grade: '5', classId: '1', start: '2026-09-18', end: '2026-09-18' }",
+          }
+          for old,new in replacements.items():
+              if qt.count(old)!=1:
+                  raise SystemExit(f'lesson reflection QA fixture mismatch: {old}')
+              qt=qt.replace(old,new,1)
+          q.write_text(qt)
+
+          Path('.github/workflows/codex-fix-research-start-date-scope.yml').unlink()
+          PY
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Full QA
+        run: npm run qa
+      - name: Production build
+        run: npm run build
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: keep pre-study sessions out of main research data"
+          git push origin HEAD:codex/fix-research-start-date-scope
