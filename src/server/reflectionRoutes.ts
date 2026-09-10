@@ -32,6 +32,7 @@ function publicReflection(record: ReflectionRecord | null) {
     todayGoal: record.todayGoal,
     goalRating: record.goalRating,
     selfRegulationRating: record.selfRegulationRating,
+    ratingSchemaVersion: record.ratingSchemaVersion,
     reflectionText: record.reflectionText,
     reflectionCharCount: record.reflectionCharCount,
     status: record.status,
@@ -70,8 +71,6 @@ async function requireIdentity(req: express.Request, res: express.Response): Pro
     res.status(401).json({ success: false, error: 'INVALID_REFLECTION_DEVICE' });
     return null;
   }
-  // Re-resolve the current learning code so reissued codes, deactivated pupils, and class changes
-  // cannot leave an old device token attached to stale identity metadata.
   const current = await resolveStudentByCode(registered.learningId);
   if (!current || current.studentId !== registered.studentId || current.researchId !== registered.researchId) {
     res.status(401).json({ success: false, error: 'REFLECTION_DEVICE_REBIND_REQUIRED' });
@@ -134,8 +133,6 @@ router.post('/register', async (req, res) => {
       const allowed = noteReflectionCodeFailure(ip);
       return res.status(allowed ? 401 : 429).json({ success: false, error: allowed ? 'LEARNING_CODE_NOT_FOUND' : 'TOO_MANY_FAILED_CODE_ATTEMPTS' });
     }
-    // Reflection peer/teacher views require an assigned class. Do not issue a token
-    // that the bootstrap path will immediately reject as an incomplete identity.
     if (!student.classId) {
       return res.status(409).json({ success: false, error: 'REFLECTION_CLASS_NOT_ASSIGNED' });
     }
@@ -179,9 +176,9 @@ router.post('/save', async (req, res) => {
       todayGoal: req.body?.todayGoal,
       goalRating: req.body?.goalRating,
       selfRegulationRating: req.body?.selfRegulationRating,
+      ratingSchemaVersion: req.body?.ratingSchemaVersion,
       reflectionText: req.body?.reflectionText,
       status: req.body?.status,
-      // Backward-compatible request fields from the temporary six-part client.
       achievements: req.body?.achievements,
       languageUsed: req.body?.languageUsed,
       thinking: req.body?.thinking,
