@@ -83,7 +83,7 @@ forbidText(css, '.meg-rating-row{display:grid;grid-template-columns:repeat(5,min
 requireText(css, '.meg-rating-scale-labels .meg-scale-one,.meg-rating-scale-labels .meg-scale-four', 'scale alignment selectors');
 requireText(css, '.meg-entry-left,.meg-entry-right{display:grid', 'paired equal-height columns');
 requireText(css, 'grid-template-rows:minmax(0,1.3fr) auto auto', 'left vertical balance');
-requireText(css, 'grid-template-rows:minmax(130px,.8fr) auto minmax(190px,1fr)', 'right vertical balance');
+requireText(css, 'grid-template-rows:minmax(100px,.4fr) auto minmax(235px,1.4fr)', 'right goal/reflection height rebalance');
 requireText(css, '.meg-app:has(.meg-entry-grid){height:100dvh;min-height:0;overflow:hidden}', 'desktop viewport containment');
 requireText(css, '@media (max-height:700px)', 'short Chromebook viewport compaction');
 requireText(css, '.meg-entry-previous .meg-previous-summary{font-size:16px!important', 'short-height previous text floor');
