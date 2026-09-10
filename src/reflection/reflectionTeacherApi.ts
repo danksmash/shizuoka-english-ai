@@ -4,7 +4,6 @@ const apiUrl = (path: string) => `${CONFIGURED_API_BASE}${path}`;
 export type TeacherDataScope = 'all' | 'main' | 'pilot_b' | 'test' | 'reserve';
 export type TeacherGrade = 'all' | '5' | '6';
 export type TeacherClassNumber = 'all' | '1' | '2' | '3';
-export type RatingSchemaVersion = 'v1' | 'v2';
 type ConcreteDataScope = Exclude<TeacherDataScope, 'all'>;
 type ConcreteGrade = Exclude<TeacherGrade, 'all'> | '';
 type ConcreteClassNumber = Exclude<TeacherClassNumber, 'all'> | '';
@@ -20,8 +19,7 @@ export interface TeacherDashboardStudent {
   reflectionCharCount: number;
   todayGoal: string;
   goalRating: number | null;
-  selfRegulationRating: number | null;
-  ratingSchemaVersion?: RatingSchemaVersion;
+  communicationRating: number | null;
   reflectionText: string;
   updatedAt: string;
 }
@@ -42,8 +40,7 @@ export interface TeacherHistoryRecord {
   localDate: string;
   todayGoal: string;
   goalRating: number | null;
-  selfRegulationRating: number | null;
-  ratingSchemaVersion?: RatingSchemaVersion;
+  communicationRating: number | null;
   reflectionText: string;
   reflectionCharCount: number;
   status: 'draft' | 'submitted';
@@ -51,12 +48,6 @@ export interface TeacherHistoryRecord {
   createdAt: string;
   updatedAt: string;
   submittedAt: string;
-  achievements: string;
-  languageUsed: string;
-  thinking: string;
-  difficultyStrategy: string;
-  languageCultureAwareness: string;
-  nextGoal: string;
 }
 
 export interface TeacherStudentHistoryResponse {
