@@ -70,13 +70,13 @@
 .meg-rating-title-row{display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,360px);align-items:end;gap:18px;padding:0 15px 9px}
 .meg-rating-title-row>.meg-section-title{padding:0;margin-left:-12px}
 .meg-rating-title-row>.meg-section-title svg{color:#1681ee}
-.meg-rating-scale-labels{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:end;color:#5d6c82;font-size:12.5px;font-weight:850;line-height:1.05;white-space:nowrap;padding:0 2px 2px}
+.meg-rating-scale-labels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:end;color:#5d6c82;font-size:12.5px;font-weight:850;line-height:1.05;white-space:nowrap;padding:0 2px 2px}
 .meg-rating-scale-labels>span{text-align:center;min-width:0}
-.meg-rating-scale-labels .meg-scale-one,.meg-rating-scale-labels .meg-scale-five{transform:translateX(14px)}
+.meg-rating-scale-labels .meg-scale-one,.meg-rating-scale-labels .meg-scale-four{transform:translateX(14px)}
 .meg-entry-ratings .meg-ratings-grid{display:grid;grid-template-columns:1fr;gap:8px;margin:0}
 .meg-entry-ratings .meg-rating-block{display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,360px);align-items:center;gap:18px;border:1px solid #d6e2ec;background:#fff;border-radius:10px;padding:8px 15px}
 .meg-entry-ratings .meg-rating-block h3{margin:0;color:#17233d;font-size:clamp(15px,1vw,17px);line-height:1.35;font-weight:600}
-.meg-rating-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:center;width:100%}
+.meg-rating-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:center;width:100%}
 .meg-rating-row button{width:100%;min-width:0;min-height:34px;border:0;background:transparent;display:grid;grid-template-columns:22px 16px;align-items:center;justify-content:center;gap:6px;padding:2px;color:#17233d;font:inherit;font-size:16px;font-weight:600;cursor:pointer}
 .meg-rating-dot{width:22px;height:22px;border-radius:50%;border:2px solid #9aa7ba;background:#fff;display:block;box-sizing:border-box;position:relative}
 .meg-rating-row button.selected .meg-rating-dot{border-color:#1686ee}
@@ -137,7 +137,7 @@
   .meg-entry-goal{padding:8px 10px 6px;background:linear-gradient(180deg,#e9fae8 0 49px,#fff 49px)}.meg-entry-goal .meg-section-title{padding-bottom:6px}.meg-entry-goal textarea{font-size:16px;padding:8px 10px}
   .meg-entry-ratings{padding:8px 10px 7px;background:linear-gradient(180deg,#e8f7ff 0 49px,#fff 49px)}
   .meg-rating-title-row{grid-template-columns:minmax(270px,1fr) minmax(260px,310px);gap:8px;padding:0 10px 5px}.meg-rating-title-row>.meg-section-title{margin-left:-7px}.meg-rating-scale-labels{font-size:11.5px;padding-bottom:1px}
-  .meg-entry-ratings .meg-ratings-grid{gap:4px}.meg-entry-ratings .meg-rating-block{grid-template-columns:minmax(270px,1fr) minmax(260px,310px);padding:4px 10px;gap:8px}.meg-entry-ratings .meg-rating-block h3{font-size:14.5px}.meg-rating-row button{min-height:29px;font-size:15px;grid-template-columns:20px 15px;gap:5px}.meg-rating-dot{width:20px;height:20px}.meg-rating-number{width:15px}.meg-rating-scale-labels .meg-scale-one,.meg-rating-scale-labels .meg-scale-five{transform:translateX(12.5px)}
+  .meg-entry-ratings .meg-ratings-grid{gap:4px}.meg-entry-ratings .meg-rating-block{grid-template-columns:minmax(270px,1fr) minmax(260px,310px);padding:4px 10px;gap:8px}.meg-entry-ratings .meg-rating-block h3{font-size:14.5px}.meg-rating-row button{min-height:29px;font-size:15px;grid-template-columns:20px 15px;gap:5px}.meg-rating-dot{width:20px;height:20px}.meg-rating-number{width:15px}.meg-rating-scale-labels .meg-scale-one,.meg-rating-scale-labels .meg-scale-four{transform:translateX(12.5px)}
   .meg-entry-reflection{padding:8px 10px 6px;background:linear-gradient(180deg,#e8f7ff 0 49px,#fff 49px)}.meg-entry-reflection>.meg-section-title{padding-bottom:6px}.meg-main-reflection textarea{font-size:16px;line-height:1.55;padding:8px 10px}.meg-entry-reflection .meg-save-meta{font-size:10px;margin-top:3px}
   .meg-entry-footer{min-height:23px;padding-top:2px;font-size:12px}.meg-entry-footer svg{width:21px;height:21px}
 }
