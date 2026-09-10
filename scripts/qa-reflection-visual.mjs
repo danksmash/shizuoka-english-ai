@@ -5,7 +5,8 @@ const fail = (message) => { throw new Error(`[qa:reflection-visual] ${message}`)
 const assert = (condition, message) => { if (!condition) fail(message); };
 const near = (a, b, tolerance, label) => assert(Math.abs(a - b) <= tolerance, `${label}: ${a} vs ${b}`);
 
-const previousText = '前回は、相手の話を聞いてから、自分の考えをつけたして話すことができました。次は、もっと質問をして会話を続けたいです。\n\n特に、相手が言ったことについて「それはどうして？」とたずねることで、話が広がることがわかりました。これからも、相手の話に興味をもって、もっといろいろ質問してみたいです。';
+const previousSeed = '前回は相手の話をよく聞き、自分の考えを伝え、質問を続けながら学び方も工夫しました。次はもっと相手に合わせて話したいです。';
+const previousText = previousSeed.repeat(20).slice(0, 600);
 const goalText = '今日は、クラスの友だちに自分の好きなことをくわしく伝えることをめあてにします。\nそのために、相手が返事しやすいように、質問もして会話を続けたいです。';
 const reflectionText = '今日は、はじめは少し緊張したけれど、相手の好きなことを聞いてから、自分の好きなことをくわしく話すことができました。相手が「それはどうして？」と質問してくれて、うれしかったです。\n次は、もっと自分から質問をして、会話を続けたいです。\n\nたとえば、相手が言ったことに対して「いつから好きなの？」や「ほかにもある？」などの質問をして、もっと話を広げていきたいです。';
 
@@ -43,7 +44,7 @@ async function inspect(width, height, screenshotPath) {
       if (!el) throw new Error(`missing ${selector}`);
       const r = el.getBoundingClientRect();
       const s = getComputedStyle(el);
-      return { x:r.x, y:r.y, width:r.width, height:r.height, bottom:r.bottom, right:r.right, centerX:r.x + r.width / 2, centerY:r.y + r.height / 2, fontSize:parseFloat(s.fontSize), background:s.backgroundImage, borderRadius:s.borderRadius };
+      return { x:r.x, y:r.y, width:r.width, height:r.height, bottom:r.bottom, right:r.right, centerX:r.x + r.width / 2, centerY:r.y + r.height / 2, fontSize:parseFloat(s.fontSize), lineHeight:parseFloat(s.lineHeight), paddingTop:parseFloat(s.paddingTop), paddingBottom:parseFloat(s.paddingBottom), overflowY:s.overflowY, scrollHeight:el.scrollHeight, clientHeight:el.clientHeight, text:(el.textContent || '').trim(), background:s.backgroundImage, borderRadius:s.borderRadius };
     };
     const rects = (selector) => [...document.querySelectorAll(selector)].map((el) => {
       const r = el.getBoundingClientRect();
@@ -65,11 +66,14 @@ async function inspect(width, height, screenshotPath) {
       hintText: rect('.meg-hint-chip b'),
       submit: rect('.meg-submit'),
       goal: rect('.meg-entry-goal'),
+      goalInput: rect('.meg-goal-input'),
+      goalCount: rect('.meg-goal-input .meg-field-count'),
       ratings: rect('.meg-entry-ratings'),
       reflection: rect('.meg-entry-reflection'),
       previousText: rect('.meg-previous-summary'),
       goalText: rect('.meg-entry-goal textarea'),
       reflectionText: rect('.meg-main-reflection textarea'),
+      reflectionCount: rect('.meg-main-reflection .meg-field-count'),
       sectionHeading: rect('.meg-entry-goal .meg-section-title h2'),
       ratingLabel: rect('.meg-entry-ratings .meg-rating-block h3'),
       ratingDot: rect('.meg-rating-dot'),
@@ -92,7 +96,15 @@ async function inspect(width, height, screenshotPath) {
   assert(leftRatio >= .35 && leftRatio <= .40, `${width}x${height} left column ratio ${leftRatio}`);
   assert(metrics.previous.height > metrics.hints.height, `${width}x${height} previous reflection must be taller than hints`);
   assert(metrics.submit.y >= metrics.hints.bottom - 1, `${width}x${height} submit is not below hints`);
-  assert(metrics.reflection.height >= 180, `${width}x${height} reflection writing card too short`);
+  assert(metrics.reflection.height >= 145, `${width}x${height} reflection writing card too short after transferring two lines to goal`);
+  assert(metrics.previousText.text.length === 600, `${width}x${height} previous reflection must render all 600 characters`);
+  assert(metrics.previousText.scrollHeight <= metrics.previousText.clientHeight + 1, `${width}x${height} previous reflection internally scrolls`);
+  assert(metrics.previousText.overflowY === 'hidden', `${width}x${height} previous reflection overflow must be hidden`);
+  const goalContentHeight = metrics.goalText.clientHeight - metrics.goalText.paddingTop - metrics.goalText.paddingBottom;
+  assert(goalContentHeight + 1 >= metrics.goalText.lineHeight * 3, `${width}x${height} goal does not expose three full writing lines`);
+  near(metrics.goalText.fontSize, metrics.reflectionText.fontSize, .2, `${width}x${height} goal/reflection writing font size`);
+  assert(metrics.goalCount.text.endsWith('/ 150'), `${width}x${height} goal counter is not / 150: ${metrics.goalCount.text}`);
+  assert(metrics.reflectionCount.text.endsWith('/ 600'), `${width}x${height} reflection counter is not / 600: ${metrics.reflectionCount.text}`);
 
   const compact = height <= 700;
   const bodyFloor = compact ? 16 : 16.5;
@@ -101,7 +113,8 @@ async function inspect(width, height, screenshotPath) {
   const brandFloor = compact ? 22 : 23;
   const hintFloor = compact ? 12.5 : 13;
   const submitFloor = 19;
-  assert(metrics.previousText.fontSize >= bodyFloor, `${width}x${height} previous text too small: ${metrics.previousText.fontSize}`);
+  assert(metrics.previousText.fontSize >= 9, `${width}x${height} auto-fit previous text fell below 9px: ${metrics.previousText.fontSize}`);
+  assert(metrics.previousText.fontSize <= bodyFloor + .5, `${width}x${height} previous auto-fit exceeded base size: ${metrics.previousText.fontSize}`);
   assert(metrics.goalText.fontSize >= bodyFloor, `${width}x${height} goal text too small: ${metrics.goalText.fontSize}`);
   assert(metrics.reflectionText.fontSize >= bodyFloor, `${width}x${height} reflection text too small: ${metrics.reflectionText.fontSize}`);
   assert(metrics.sectionHeading.fontSize >= headingFloor, `${width}x${height} heading too small: ${metrics.sectionHeading.fontSize}`);
@@ -140,6 +153,8 @@ async function inspect(width, height, screenshotPath) {
     leftHeight: Math.round(metrics.left.height), previousHeight: Math.round(metrics.previous.height), hintsHeight: Math.round(metrics.hints.height),
     goalHeight: Math.round(metrics.goal.height), ratingsHeight: Math.round(metrics.ratings.height), reflectionHeight: Math.round(metrics.reflection.height),
     scaleAlignment: { low: Number((metrics.scaleLow.centerX - metrics.ratingNumbers[0].centerX).toFixed(2)), high: Number((metrics.scaleHigh.centerX - metrics.ratingNumbers[3].centerX).toFixed(2)) },
+    goalRows: Number(((metrics.goalText.clientHeight - metrics.goalText.paddingTop - metrics.goalText.paddingBottom) / metrics.goalText.lineHeight).toFixed(2)),
+    previousFit: { chars: metrics.previousText.text.length, fontSize: Number(metrics.previousText.fontSize.toFixed(2)), scrollHeight: metrics.previousText.scrollHeight, clientHeight: metrics.previousText.clientHeight },
     fonts: { brand: metrics.brand.fontSize, previous: metrics.previousText.fontSize, goal: metrics.goalText.fontSize, reflection: metrics.reflectionText.fontSize, heading: metrics.sectionHeading.fontSize, rating: metrics.ratingLabel.fontSize, hint: metrics.hintText.fontSize, submit: metrics.submit.fontSize },
   }));
 }
@@ -150,4 +165,4 @@ await inspect(1366, 680, 'artifacts/reflection-1366x680.png');
 await inspect(1366, 600, 'artifacts/reflection-1366x600.png');
 await inspect(1280, 600, 'artifacts/reflection-1280x600.png');
 await browser.close();
-console.log('[qa:reflection-visual] PASS: rendered Chromebook layout preserves the approved B design, nine hints, and four-point scale labels aligned above rating numbers 1 and 4.');
+console.log('[qa:reflection-visual] PASS: goal shows three lines at the approved writing size, reflection absorbs the two-line transfer, and the full 600-character previous reflection auto-fits with no scroll.');

@@ -3,6 +3,8 @@ import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, q
 
 const DEVICE_COLLECTION = 'reflection_devices';
 const REFLECTION_COLLECTION = 'lesson_reflections';
+const GOAL_MAX_CHARS = 150;
+const REFLECTION_MAX_CHARS = 600;
 
 export interface ReflectionIdentity {
   studentId: string;
@@ -77,7 +79,7 @@ export async function resolveReflectionDevice(token: string): Promise<Reflection
 }
 
 function cleanText(value: unknown, maxLength: number): string {
-  return typeof value === 'string' ? value.replace(/\r\n/g, '\n').trim().slice(0, maxLength) : '';
+  return typeof value === 'string' ? [...value.replace(/\r\n/g, '\n').trim()].slice(0, maxLength).join('') : '';
 }
 
 function rating(value: unknown): number | null {
@@ -87,7 +89,7 @@ function rating(value: unknown): number | null {
 
 function normalizeStoredRecord(row: Record<string, any> | null): ReflectionRecord | null {
   if (!row) return null;
-  const reflectionText = cleanText(row.reflectionText, 12000);
+  const reflectionText = cleanText(row.reflectionText, REFLECTION_MAX_CHARS);
   return {
     reflectionId: cleanText(row.reflectionId, 200),
     studentId: cleanText(row.studentId, 200),
@@ -95,7 +97,7 @@ function normalizeStoredRecord(row: Record<string, any> | null): ReflectionRecor
     classId: cleanText(row.classId, 40),
     learningId: cleanText(row.learningId, 20).toUpperCase(),
     localDate: cleanText(row.localDate, 20),
-    todayGoal: cleanText(row.todayGoal, 1000),
+    todayGoal: cleanText(row.todayGoal, GOAL_MAX_CHARS),
     goalRating: rating(row.goalRating),
     communicationRating: rating(row.communicationRating),
     reflectionText,
@@ -124,7 +126,7 @@ export async function saveLessonReflection(
   const now = new Date().toISOString();
   // Submission is monotonic. A delayed autosave can never downgrade a submitted record to draft.
   const status: 'draft' | 'submitted' = input.status === 'submitted' || existing?.status === 'submitted' ? 'submitted' : 'draft';
-  const reflectionText = input.reflectionText === undefined ? (existing?.reflectionText || '') : cleanText(input.reflectionText, 12000);
+  const reflectionText = input.reflectionText === undefined ? (existing?.reflectionText || '') : cleanText(input.reflectionText, REFLECTION_MAX_CHARS);
   const record: ReflectionRecord = {
     reflectionId,
     studentId: identity.studentId,
@@ -132,7 +134,7 @@ export async function saveLessonReflection(
     classId: identity.classId,
     learningId: identity.learningId,
     localDate,
-    todayGoal: input.todayGoal === undefined ? (existing?.todayGoal || '') : cleanText(input.todayGoal, 1000),
+    todayGoal: input.todayGoal === undefined ? (existing?.todayGoal || '') : cleanText(input.todayGoal, GOAL_MAX_CHARS),
     goalRating: input.goalRating === undefined ? (existing?.goalRating ?? null) : rating(input.goalRating),
     communicationRating: input.communicationRating === undefined ? (existing?.communicationRating ?? null) : rating(input.communicationRating),
     reflectionText,
