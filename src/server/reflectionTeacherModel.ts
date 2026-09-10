@@ -21,7 +21,7 @@ export const REFLECTION_RATING_ITEM_1 = 'めあてに向かって取り組めた
 export const REFLECTION_RATING_ITEM_2 = '相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした';
 
 export const RESEARCH_LESSON_REFLECTION_HEADERS = [
-  'research_id', 'class_id', 'data_scope', 'grade_level', 'class_number', 'local_date', 'status', 'today_goal',
+  "research_id", 'class_id', 'data_scope', 'grade_level', 'class_number', 'local_date', 'status', 'today_goal',
   'goal_rating', 'communication_rating', 'rating_scale_min', 'rating_scale_max', 'rating_item_1', 'rating_item_2',
   'reflection_text', 'reflection_char_count', 'revision', 'created_at', 'updated_at', 'submitted_at',
 ] as const;
