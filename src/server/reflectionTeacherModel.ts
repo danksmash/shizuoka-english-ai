@@ -1,4 +1,4 @@
-import type { RatingSchemaVersion, ReflectionRecord } from './reflectionPersistence';
+import type { ReflectionRecord } from './reflectionPersistence';
 
 export interface TeacherRosterStudent {
   studentId: string;
@@ -15,11 +15,16 @@ type ConcreteDataScope = Exclude<ReflectionTeacherDataScope, 'all'>;
 type ConcreteGrade = Exclude<ReflectionTeacherGrade, 'all'> | '';
 type ConcreteClassNumber = Exclude<ReflectionTeacherClassNumber, 'all'> | '';
 
+export const REFLECTION_RATING_SCALE_MIN = 1;
+export const REFLECTION_RATING_SCALE_MAX = 4;
+export const REFLECTION_RATING_ITEM_1 = 'めあてに向かって取り組めた';
+export const REFLECTION_RATING_ITEM_2 = '相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした';
+
 export interface TeacherReflectionFilterQuery {
   dataScope?: unknown;
   grade?: unknown;
   classNumber?: unknown;
-  // Backward compatibility for an older cached teacher bundle.
+  // Backward compatibility for an older cached teacher bundle's filter request only.
   classId?: unknown;
 }
 
@@ -34,8 +39,7 @@ export interface TeacherReflectionStudentRow {
   reflectionCharCount: number;
   todayGoal: string;
   goalRating: number | null;
-  selfRegulationRating: number | null;
-  ratingSchemaVersion: RatingSchemaVersion | '';
+  communicationRating: number | null;
   reflectionText: string;
   updatedAt: string;
 }
@@ -45,7 +49,7 @@ export interface TeacherReflectionDashboard {
   dataScope: ReflectionTeacherDataScope;
   grade: ReflectionTeacherGrade;
   classNumber: ReflectionTeacherClassNumber;
-  // Retained for compatibility with a previously deployed client.
+  // Retained for compatibility with a previously deployed teacher filter client.
   classId: string;
   classes: string[];
   counts: { total: number; submitted: number; draft: number; missing: number };
@@ -71,18 +75,6 @@ export function reflectionClassNumberForClassId(value: unknown): ConcreteClassNu
   const classId = typeof value === 'string' ? value.trim() : '';
   const match = classId.match(/^[56]-([123])$/);
   return match ? match[1] as ConcreteClassNumber : '';
-}
-
-export function reflectionRatingLabels(version: RatingSchemaVersion | '' | undefined) {
-  return version === 'v2'
-    ? {
-      item1: 'めあてに向かって取り組めた',
-      item2: '相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした',
-    }
-    : {
-      item1: '自分の考えをつたえることができた',
-      item2: '相手の話を聞いてわかろうとした',
-    };
 }
 
 function safeDate(value: unknown, fallback: string): string {
@@ -114,23 +106,6 @@ function membershipMatches(classId: string, filters: ReturnType<typeof normalize
   if (filters.grade !== 'all' && reflectionGradeForClassId(classId) !== filters.grade) return false;
   if (filters.classNumber !== 'all' && reflectionClassNumberForClassId(classId) !== filters.classNumber) return false;
   return true;
-}
-
-function legacySixPartText(record: ReflectionRecord): string {
-  const parts: Array<[string, string]> = [
-    ['できたこと', record.achievements],
-    ['使ったことば', record.languageUsed],
-    ['授業中に考えていたこと', record.thinking],
-    ['困ったこと・工夫', record.difficultyStrategy],
-    ['言葉や文化について気づいたこと', record.languageCultureAwareness],
-    ['次に頑張りたいこと', record.nextGoal],
-  ];
-  return parts.filter(([, text]) => text).map(([label, text]) => `【${label}】\n${text}`).join('\n\n');
-}
-
-function visibleReflectionText(record: ReflectionRecord | undefined): string {
-  if (!record) return '';
-  return record.reflectionText || legacySixPartText(record);
 }
 
 export function buildTeacherReflectionDashboard(
@@ -166,9 +141,8 @@ export function buildTeacherReflectionDashboard(
       reflectionCharCount: record?.reflectionCharCount || 0,
       todayGoal: record?.todayGoal || '',
       goalRating: record?.goalRating ?? null,
-      selfRegulationRating: record?.selfRegulationRating ?? null,
-      ratingSchemaVersion: record?.ratingSchemaVersion || '',
-      reflectionText: visibleReflectionText(record),
+      communicationRating: record?.communicationRating ?? null,
+      reflectionText: record?.reflectionText || '',
       updatedAt: record?.updatedAt || '',
     };
   }).sort((a, b) => a.classId.localeCompare(b.classId, 'ja') || Number(a.attendanceNumber || 999) - Number(b.attendanceNumber || 999) || a.learningId.localeCompare(b.learningId));
@@ -209,14 +183,12 @@ export function serializeTeacherReflectionCsv(
     .sort((a, b) => a.localDate.localeCompare(b.localDate) || a.classId.localeCompare(b.classId, 'ja') || (rosterByStudent.get(a.studentId)?.learningId || '').localeCompare(rosterByStudent.get(b.studentId)?.learningId || ''));
   const headers = [
     'local_date', 'class_id', 'data_scope', 'grade_level', 'class_number', 'learning_id', 'attendance_number', 'status', 'today_goal',
-    'goal_rating', 'self_regulation_rating', 'rating_schema_version', 'rating_item_1', 'rating_item_2', 'reflection_text', 'reflection_char_count',
+    'goal_rating', 'communication_rating', 'rating_scale_min', 'rating_scale_max', 'rating_item_1', 'rating_item_2', 'reflection_text', 'reflection_char_count',
     'revision', 'created_at', 'updated_at', 'submitted_at',
-    'achievements', 'language_used', 'thinking', 'difficulty_strategy', 'language_culture_awareness', 'next_goal',
   ];
   const lines = [headers.map(csvCell).join(',')];
   for (const record of rows) {
     const rosterStudent = rosterByStudent.get(record.studentId);
-    const labels = reflectionRatingLabels(record.ratingSchemaVersion);
     lines.push([
       record.localDate,
       record.classId,
@@ -228,22 +200,17 @@ export function serializeTeacherReflectionCsv(
       record.status,
       record.todayGoal,
       record.goalRating ?? '',
-      record.selfRegulationRating ?? '',
-      record.ratingSchemaVersion,
-      labels.item1,
-      labels.item2,
-      visibleReflectionText(record),
+      record.communicationRating ?? '',
+      REFLECTION_RATING_SCALE_MIN,
+      REFLECTION_RATING_SCALE_MAX,
+      REFLECTION_RATING_ITEM_1,
+      REFLECTION_RATING_ITEM_2,
+      record.reflectionText,
       record.reflectionCharCount,
       record.revision,
       record.createdAt,
       record.updatedAt,
       record.submittedAt,
-      record.achievements,
-      record.languageUsed,
-      record.thinking,
-      record.difficultyStrategy,
-      record.languageCultureAwareness,
-      record.nextGoal,
     ].map(csvCell).join(','));
   }
   return `\uFEFF${lines.join('\r\n')}\r\n`;
