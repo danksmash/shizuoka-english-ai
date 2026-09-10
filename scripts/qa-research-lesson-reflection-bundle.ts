@@ -80,6 +80,8 @@ const server = fs.readFileSync('server.ts', 'utf8');
 const page = fs.readFileSync('src/server/managementPage.ts', 'utf8');
 assert.ok(server.includes("name:'lesson_reflections.csv'"), 'research bundle must contain lesson_reflections.csv');
 assert.ok(server.includes('buildResearchLessonReflectionCodebookRows()'), 'bundle codebook must include lesson Reflection definitions');
+assert.ok(server.includes("requested==='codebook'"), 'individual codebook.csv must include sixth-file definitions too');
+assert.ok(server.includes("file.dataset==='codebook'"), 'dashboard codebook row count must include sixth-file definitions');
 assert.ok(server.includes('schema_version:5'), 'bundle manifest schema version must advance for the sixth formal CSV');
 assert.ok(server.includes("requested==='lesson_reflections'"), 'individual formal research CSV route must support lesson_reflections');
 assert.ok(server.includes('getAllReflectionRecordsForTeacher()'), 'formal bundle must read canonical Reflection records');

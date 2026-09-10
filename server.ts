@@ -769,7 +769,9 @@ app.get('/api/management/research.dashboard',requireManagementRole(['researcher'
     const [sessions,lessonReflections]=await Promise.all([getAllSessionsForManagement(),getAllReflectionRecordsForTeacher()]);
     const dashboard=buildResearchDashboardData(sessions,req.query);
     const lessonReflectionRowCount=buildResearchLessonReflectionRows(lessonReflections,normalizeFormalResearchExportQuery(req.query)).length;
-    res.setHeader('Cache-Control','no-store');return res.json({...dashboard,lessonReflectionRowCount});
+    const lessonCodebookCount=buildResearchLessonReflectionCodebookRows().length;
+    const exportFiles=dashboard.exportFiles.map((file:any)=>file.dataset==='codebook'?{...file,rowCount:Number(file.rowCount||0)+lessonCodebookCount}:file);
+    res.setHeader('Cache-Control','no-store');return res.json({...dashboard,exportFiles,lessonReflectionRowCount});
   }catch(error:any){console.error('Research dashboard failed',{message:error?.message});return res.status(503).json({success:false,error:'RESEARCH_DASHBOARD_UNAVAILABLE'});}
 });
 
@@ -814,6 +816,12 @@ app.get('/api/management/research.csv',requireManagementRole(['researcher']),asy
       const rows=buildResearchLessonReflectionRows(await getAllReflectionRecordsForTeacher(),normalizeFormalResearchExportQuery(req.query));
       const csv=serializeResearchLessonReflectionCsv(rows);
       res.setHeader('Content-Type','text/csv; charset=utf-8');res.setHeader('Content-Disposition','attachment; filename="lesson_reflections.csv"');res.setHeader('Cache-Control','no-store');return res.send(csv);
+    }
+    if(requested==='codebook'){
+      const datasets=buildResearchExportDataSets([]);
+      const rows=[...datasets.codebook,...buildResearchLessonReflectionCodebookRows()];
+      const csv=serializeResearchCsv(rows,'codebook');
+      res.setHeader('Content-Type','text/csv; charset=utf-8');res.setHeader('Content-Disposition','attachment; filename="codebook.csv"');res.setHeader('Cache-Control','no-store');return res.send(csv);
     }
     const allowed=['sessions','utterances','expressions','personas','codebook'] as const;
     if(!(allowed as readonly string[]).includes(requested)) return res.status(400).json({success:false,error:'INVALID_RESEARCH_DATASET'});
