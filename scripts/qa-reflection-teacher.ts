@@ -18,12 +18,13 @@ const roster: TeacherRosterStudent[] = [
 
 const base = {
   researchId: 'R-SYNTHETIC-ONLY', localDate: '2026-09-09', todayGoal: '相手の話をよく聞きながら、自分から話す。', goalRating: 4,
-  selfRegulationRating: 3, reflectionText: '今日は相手の話を聞きながら、次に何を言うか考えることができた。友達の話し方も参考になった。',
+  selfRegulationRating: 3, ratingSchemaVersion: 'v2' as const,
+  reflectionText: '今日は相手の話を聞きながら、次に何を言うか考えることができた。友達の話し方も参考になった。',
   reflectionCharCount: 48, revision: 2, createdAt: '2026-09-09T01:00:00.000Z', updatedAt: '2026-09-09T01:10:00.000Z', submittedAt: '2026-09-09T01:10:00.000Z',
   achievements: '', languageUsed: '', thinking: '', difficultyStrategy: '', languageCultureAwareness: '', nextGoal: '',
 } satisfies Omit<ReflectionRecord, 'reflectionId' | 'studentId' | 'classId' | 'learningId' | 'status'>;
 
-const legacySix = { ...base, localDate: '2026-09-02', goalRating: null, selfRegulationRating: null, reflectionText: '', reflectionCharCount: 60, achievements: '相手に質問できた。', languageUsed: 'Really?', thinking: '次に何を聞くか考えた。', difficultyStrategy: '聞き返した。', languageCultureAwareness: '食文化の違いに気づいた。', nextGoal: '理由まで聞きたい。' };
+const legacySix = { ...base, localDate: '2026-09-02', ratingSchemaVersion: 'v1' as const, goalRating: null, selfRegulationRating: null, reflectionText: '', reflectionCharCount: 60, achievements: '相手に質問できた。', languageUsed: 'Really?', thinking: '次に何を聞くか考えた。', difficultyStrategy: '聞き返した。', languageCultureAwareness: '食文化の違いに気づいた。', nextGoal: '理由まで聞きたい。' };
 const records: ReflectionRecord[] = [
   { ...base, reflectionId: 'r1', studentId: 's1', classId: '5-1', learningId: 'T5A2', status: 'submitted' },
   { ...base, reflectionId: 'r2', studentId: 's2', classId: '5-1', learningId: 'T5B3', status: 'draft', submittedAt: '', reflectionText: '=HYPERLINK("https://example.invalid","x")' },
@@ -45,6 +46,7 @@ const main5 = buildTeacherReflectionDashboard(roster, records, '2026-09-09', { d
 assert(main5.counts.total === 3, 'main / grade 5 / class 1 total should be 3');
 assert(main5.counts.submitted === 1 && main5.counts.draft === 1 && main5.counts.missing === 1, 'main status counts should remain correct');
 assert(main5.students[0]?.dataScope === 'main' && main5.students[0]?.grade === '5' && main5.students[0]?.classNumber === '1', 'derived membership should be returned');
+assert(main5.students[0]?.ratingSchemaVersion === 'v2', 'current teacher row should expose v2 rating semantics');
 
 const pilot = buildTeacherReflectionDashboard(roster, records, '2026-09-09', { dataScope:'pilot_b', grade:'6', classNumber:'all' }, '2026-09-09');
 assert(pilot.counts.total === 2, 'Pilot B grade-6 roster should be isolated');
@@ -62,13 +64,17 @@ assert(legacyExact.counts.total === 3, 'legacy cached classId filter should rema
 const history = buildTeacherStudentHistory(roster, records, 't5a2');
 assert(history?.history.length === 2, 'student history should contain canonical and six-part legacy records');
 assert(history?.dataScope === 'main' && history.grade === '5' && history.classNumber === '1', 'history should expose derived membership only');
+assert(history?.history.some((row) => row.ratingSchemaVersion === 'v2') && history.history.some((row) => row.ratingSchemaVersion === 'v1'), 'history should retain both v1 and v2 rating semantics');
 const serializedHistory = JSON.stringify(history);
 assert(!serializedHistory.includes('R-SYNTHETIC-ONLY'), 'teacher history must not expose researchId');
 assert(!serializedHistory.includes('"studentId"'), 'teacher history must not expose internal studentId');
 
 const csv = serializeTeacherReflectionCsv(roster, records, '2026-09-09', { dataScope:'main', grade:'5', classNumber:'1' });
 assert(csv.startsWith('\uFEFF'), 'CSV should include UTF-8 BOM');
-for (const header of ['data_scope','grade_level','class_number','goal_rating','self_regulation_rating','reflection_text']) assert(csv.includes(`"${header}"`), `CSV missing ${header}`);
+for (const header of ['data_scope','grade_level','class_number','goal_rating','self_regulation_rating','rating_schema_version','rating_item_1','rating_item_2','reflection_text']) assert(csv.includes(`"${header}"`), `CSV missing ${header}`);
+assert(csv.includes('"v2"'), 'current CSV should mark v2 rating semantics');
+assert(csv.includes('"めあてに向かって取り組めた"'), 'current CSV should include v2 item 1 label');
+assert(csv.includes('"相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした"'), 'current CSV should include v2 item 2 label');
 assert(csv.includes('"T5A2"') && !csv.includes('"P6A2"') && !csv.includes('"6RSX"'), 'main CSV must match dashboard filters');
 assert(csv.includes("\"'=HYPERLINK("), 'CSV formula-like text must be apostrophe-prefixed');
 assert(!csv.includes('research_id') && !csv.includes('student_id'), 'teacher CSV must not expose internal IDs');
@@ -80,5 +86,7 @@ assert(testCsv.includes('"6RSX"') && !testCsv.includes('"P6A2"'), 'test CSV must
 
 const legacyCsv = serializeTeacherReflectionCsv(roster, records, '2026-09-02', '5-1');
 assert(legacyCsv.includes('【できたこと】') && legacyCsv.includes('理由まで聞きたい。'), 'legacy six-part data must remain readable');
+assert(legacyCsv.includes('"v1"'), 'legacy CSV should retain v1 rating semantics');
+assert(legacyCsv.includes('"自分の考えをつたえることができた"') && legacyCsv.includes('"相手の話を聞いてわかろうとした"'), 'legacy CSV should preserve v1 item labels');
 
-console.log('[qa:reflection-teacher] PASS: data-scope/grade/class filters align with research dashboard, CSV follows filters, 6RSX test isolation, privacy, and legacy compatibility verified.');
+console.log('[qa:reflection-teacher] PASS: data-scope/grade/class filters align with research dashboard, v1/v2 rating semantics remain explicit, CSV follows filters, 6RSX test isolation, privacy, and legacy compatibility verified.');
