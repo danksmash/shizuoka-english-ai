@@ -69,8 +69,9 @@ forbidText(reflection, 'スクロールなし', 'implementation-only viewport ba
 requireText(css, 'grid-template-columns:minmax(410px,.61fr) minmax(0,1fr)', 'reference column ratio');
 requireText(css, 'background:linear-gradient(180deg,#e8f7ff 0 58px,#fff 58px)', 'blue section header band');
 requireText(css, 'background:linear-gradient(180deg,#e9fae8 0 58px,#fff 58px)', 'green goal header band');
-requireText(css, 'font-size:clamp(15.5px,1.02vw,18px)', 'approved pupil writing size');
-requireText(css, 'font-size:clamp(20px,1.38vw,24px)', 'approved section heading size');
+requireText(css, 'font-size:clamp(16.5px,1.08vw,18.5px)', 'approved pupil writing size');
+requireText(css, 'font-size:clamp(21px,1.38vw,24px)', 'approved section heading size');
+requireText(css, 'font-size:clamp(15px,1vw,17px)', 'approved rating statement size');
 requireText(css, 'border-radius:50%', 'round five-point control');
 requireText(css, '.meg-hint-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))', 'three-column hint chips');
 requireText(css, '.meg-entry-left,.meg-entry-right{display:grid', 'paired equal-height columns');
@@ -79,6 +80,11 @@ requireText(css, 'grid-template-rows:minmax(0,1.3fr) auto auto', 'left vertical 
 requireText(css, 'grid-template-rows:minmax(130px,.8fr) auto minmax(190px,1fr)', 'right vertical balance');
 requireText(css, '.meg-app:has(.meg-entry-grid){height:100dvh;min-height:0;overflow:hidden}', 'desktop viewport containment');
 requireText(css, '@media (max-height:700px)', 'short Chromebook viewport compaction');
+requireText(css, '.meg-entry-previous .meg-previous-summary{font-size:16px!important', 'short-height previous text floor');
+requireText(css, '.meg-entry-goal textarea{font-size:16px', 'short-height goal text floor');
+requireText(css, '.meg-main-reflection textarea{font-size:16px', 'short-height reflection text floor');
+requireText(css, '.meg-section-title h2,.meg-entry-hints .meg-hints-head h2{font-size:21px}', 'short-height section heading floor');
+requireText(css, '.meg-entry-ratings .meg-rating-block h3{font-size:14.5px}', 'short-height rating text floor');
 requireText(css, '@media (max-width:1099px)', 'narrow-screen scrolling fallback');
 
 // Canonical B data + autosave behavior.
