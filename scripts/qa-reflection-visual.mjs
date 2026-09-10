@@ -54,11 +54,13 @@ async function inspect(width, height, screenshotPath) {
       scrollHeight: document.documentElement.scrollHeight,
       scrollWidth: document.documentElement.scrollWidth,
       header: rect('.meg-reference-header'),
+      brand: rect('.meg-reference-brand h1'),
       grid: rect('.meg-entry-grid'),
       left: rect('.meg-entry-left'),
       right: rect('.meg-entry-right'),
       previous: rect('.meg-entry-previous'),
       hints: rect('.meg-entry-hints'),
+      hintText: rect('.meg-hint-chip b'),
       submit: rect('.meg-submit'),
       goal: rect('.meg-entry-goal'),
       ratings: rect('.meg-entry-ratings'),
@@ -86,18 +88,31 @@ async function inspect(width, height, screenshotPath) {
   assert(metrics.previous.height > metrics.hints.height, `${width}x${height} previous reflection must be taller than hints`);
   assert(metrics.submit.y >= metrics.hints.bottom - 1, `${width}x${height} submit is not below hints`);
   assert(metrics.reflection.height >= 190, `${width}x${height} reflection writing card too short`);
-  assert(metrics.previousText.fontSize >= 15, `${width}x${height} previous text too small: ${metrics.previousText.fontSize}`);
-  assert(metrics.goalText.fontSize >= 15, `${width}x${height} goal text too small: ${metrics.goalText.fontSize}`);
-  assert(metrics.reflectionText.fontSize >= 15, `${width}x${height} reflection text too small: ${metrics.reflectionText.fontSize}`);
-  assert(metrics.sectionHeading.fontSize >= 19, `${width}x${height} heading too small: ${metrics.sectionHeading.fontSize}`);
-  assert(metrics.ratingLabel.fontSize >= 13.5, `${width}x${height} rating text too small: ${metrics.ratingLabel.fontSize}`);
-  assert(metrics.ratingDot.width >= 19 && metrics.ratingDot.width <= 23, `${width}x${height} rating dot wrong size: ${metrics.ratingDot.width}`);
+
+  const compact = height <= 700;
+  const bodyFloor = compact ? 16 : 16.5;
+  const headingFloor = 21;
+  const ratingFloor = compact ? 14.5 : 15;
+  const brandFloor = compact ? 22 : 23;
+  const hintFloor = compact ? 12.5 : 13;
+  const submitFloor = 19;
+  assert(metrics.previousText.fontSize >= bodyFloor, `${width}x${height} previous text too small: ${metrics.previousText.fontSize}`);
+  assert(metrics.goalText.fontSize >= bodyFloor, `${width}x${height} goal text too small: ${metrics.goalText.fontSize}`);
+  assert(metrics.reflectionText.fontSize >= bodyFloor, `${width}x${height} reflection text too small: ${metrics.reflectionText.fontSize}`);
+  assert(metrics.sectionHeading.fontSize >= headingFloor, `${width}x${height} heading too small: ${metrics.sectionHeading.fontSize}`);
+  assert(metrics.ratingLabel.fontSize >= ratingFloor, `${width}x${height} rating text too small: ${metrics.ratingLabel.fontSize}`);
+  assert(metrics.brand.fontSize >= brandFloor, `${width}x${height} brand title too small: ${metrics.brand.fontSize}`);
+  assert(metrics.hintText.fontSize >= hintFloor, `${width}x${height} hint text too small: ${metrics.hintText.fontSize}`);
+  assert(metrics.submit.fontSize >= submitFloor, `${width}x${height} submit text too small: ${metrics.submit.fontSize}`);
+  assert(metrics.ratingDot.width >= 20 && metrics.ratingDot.width <= 23, `${width}x${height} rating dot wrong size: ${metrics.ratingDot.width}`);
   assert(metrics.ratingDot.borderRadius === '50%', `${width}x${height} rating control is not circular`);
   assert(metrics.labels.join('|') === '振り返り|私の成長|みんなの振り返り', `${width}x${height} nav labels differ: ${metrics.labels.join('|')}`);
   assert(!metrics.bodyText.includes('Chromebook想定') && !metrics.bodyText.includes('スクロールなし'), `${width}x${height} implementation-only badge is visible`);
   assert(metrics.bodyText.includes('My English Growth — わたしの英語の学び'), `${width}x${height} full brand title missing`);
   assert(metrics.bodyText.includes('ID: 6RSX'), `${width}x${height} ID label missing`);
   assert(metrics.bodyText.includes('小さなふりかえりが、大きな成長につながります。'), `${width}x${height} footer message missing`);
+  assert(metrics.bodyText.includes('自分の考えをつたえることができた'), `${width}x${height} first rating wording missing`);
+  assert(metrics.bodyText.includes('相手の話を聞いてわかろうとした'), `${width}x${height} second rating wording missing`);
   assert(metrics.hintRects.length === 7, `${width}x${height} expected seven hint chips`);
   near(metrics.hintRects[0].y, metrics.hintRects[1].y, 2, `${width}x${height} hint row 1`);
   near(metrics.hintRects[1].y, metrics.hintRects[2].y, 2, `${width}x${height} hint row 1`);
@@ -107,7 +122,7 @@ async function inspect(width, height, screenshotPath) {
     scrollHeight: metrics.scrollHeight, leftRatio: Number(leftRatio.toFixed(3)),
     leftHeight: Math.round(metrics.left.height), previousHeight: Math.round(metrics.previous.height), hintsHeight: Math.round(metrics.hints.height),
     goalHeight: Math.round(metrics.goal.height), ratingsHeight: Math.round(metrics.ratings.height), reflectionHeight: Math.round(metrics.reflection.height),
-    fonts: { previous: metrics.previousText.fontSize, goal: metrics.goalText.fontSize, reflection: metrics.reflectionText.fontSize, heading: metrics.sectionHeading.fontSize, rating: metrics.ratingLabel.fontSize },
+    fonts: { brand: metrics.brand.fontSize, previous: metrics.previousText.fontSize, goal: metrics.goalText.fontSize, reflection: metrics.reflectionText.fontSize, heading: metrics.sectionHeading.fontSize, rating: metrics.ratingLabel.fontSize, hint: metrics.hintText.fontSize, submit: metrics.submit.fontSize },
   }));
 }
 
