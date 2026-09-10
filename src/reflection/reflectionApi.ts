@@ -6,7 +6,7 @@ export interface ReflectionRecordDto {
   localDate: string;
   todayGoal: string;
   goalRating: number | null;
-  selfRegulationRating: number | null;
+  communicationRating: number | null;
   reflectionText: string;
   reflectionCharCount: number;
   status: 'draft' | 'submitted';
@@ -14,13 +14,6 @@ export interface ReflectionRecordDto {
   createdAt: string;
   updatedAt: string;
   submittedAt: string;
-  // Read-only compatibility fields for records written by the temporary six-part UI.
-  achievements: string;
-  languageUsed: string;
-  thinking: string;
-  difficultyStrategy: string;
-  languageCultureAwareness: string;
-  nextGoal: string;
 }
 
 export interface BootstrapResponse {
@@ -59,7 +52,7 @@ export async function bootstrapReflection(deviceToken: string): Promise<Bootstra
 export async function saveReflection(deviceToken: string, input: {
   todayGoal: string;
   goalRating: number | null;
-  selfRegulationRating: number | null;
+  communicationRating: number | null;
   reflectionText: string;
   status: 'draft' | 'submitted';
 }, options?: { keepalive?: boolean }): Promise<ReflectionRecordDto> {
@@ -81,9 +74,7 @@ export async function loadReflectionHistory(deviceToken: string): Promise<Reflec
   return data.history || [];
 }
 
-export type ClassReflectionDto = Pick<ReflectionRecordDto,
-  'reflectionId' | 'localDate' | 'todayGoal' | 'reflectionText' | 'achievements' | 'languageUsed' | 'thinking' | 'difficultyStrategy' | 'languageCultureAwareness' | 'nextGoal'
->;
+export type ClassReflectionDto = Pick<ReflectionRecordDto, 'reflectionId' | 'localDate' | 'todayGoal' | 'reflectionText'>;
 
 export async function loadClassReflections(deviceToken: string): Promise<ClassReflectionDto[]> {
   const data = await postJson<{ success: true; reflections: ClassReflectionDto[] }>('/api/reflection/class', { deviceToken });

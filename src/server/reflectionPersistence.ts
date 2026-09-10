@@ -20,7 +20,7 @@ export interface ReflectionRecord {
   localDate: string;
   todayGoal: string;
   goalRating: number | null;
-  selfRegulationRating: number | null;
+  communicationRating: number | null;
   reflectionText: string;
   reflectionCharCount: number;
   status: 'draft' | 'submitted';
@@ -28,13 +28,6 @@ export interface ReflectionRecord {
   createdAt: string;
   updatedAt: string;
   submittedAt: string;
-  // Compatibility only: records created during the temporary six-part UI are retained.
-  achievements: string;
-  languageUsed: string;
-  thinking: string;
-  difficultyStrategy: string;
-  languageCultureAwareness: string;
-  nextGoal: string;
 }
 
 function tokenPepper(): string {
@@ -89,21 +82,13 @@ function cleanText(value: unknown, maxLength: number): string {
 
 function rating(value: unknown): number | null {
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 5 ? parsed : null;
-}
-
-function sixPartCharCount(record: Pick<ReflectionRecord, 'achievements' | 'languageUsed' | 'thinking' | 'difficultyStrategy' | 'languageCultureAwareness' | 'nextGoal'>): number {
-  return [record.achievements, record.languageUsed, record.thinking, record.difficultyStrategy, record.languageCultureAwareness, record.nextGoal]
-    .reduce((sum, value) => sum + [...value].length, 0);
-}
-
-function canonicalCharCount(record: Pick<ReflectionRecord, 'reflectionText' | 'achievements' | 'languageUsed' | 'thinking' | 'difficultyStrategy' | 'languageCultureAwareness' | 'nextGoal'>): number {
-  return record.reflectionText ? [...record.reflectionText].length : sixPartCharCount(record);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 4 ? parsed : null;
 }
 
 function normalizeStoredRecord(row: Record<string, any> | null): ReflectionRecord | null {
   if (!row) return null;
-  const normalized: ReflectionRecord = {
+  const reflectionText = cleanText(row.reflectionText, 12000);
+  return {
     reflectionId: cleanText(row.reflectionId, 200),
     studentId: cleanText(row.studentId, 200),
     researchId: cleanText(row.researchId, 200),
@@ -112,23 +97,15 @@ function normalizeStoredRecord(row: Record<string, any> | null): ReflectionRecor
     localDate: cleanText(row.localDate, 20),
     todayGoal: cleanText(row.todayGoal, 1000),
     goalRating: rating(row.goalRating),
-    selfRegulationRating: rating(row.selfRegulationRating),
-    reflectionText: cleanText(row.reflectionText, 12000),
-    reflectionCharCount: Number(row.reflectionCharCount || 0),
+    communicationRating: rating(row.communicationRating),
+    reflectionText,
+    reflectionCharCount: [...reflectionText].length,
     status: row.status === 'submitted' ? 'submitted' : 'draft',
     revision: Math.max(1, Number(row.revision || 1)),
     createdAt: cleanText(row.createdAt, 100),
     updatedAt: cleanText(row.updatedAt, 100),
     submittedAt: cleanText(row.submittedAt, 100),
-    achievements: cleanText(row.achievements, 5000),
-    languageUsed: cleanText(row.languageUsed, 5000),
-    thinking: cleanText(row.thinking, 5000),
-    difficultyStrategy: cleanText(row.difficultyStrategy, 5000),
-    languageCultureAwareness: cleanText(row.languageCultureAwareness, 5000),
-    nextGoal: cleanText(row.nextGoal, 5000),
   };
-  normalized.reflectionCharCount = canonicalCharCount(normalized);
-  return normalized;
 }
 
 export async function saveLessonReflection(
@@ -136,25 +113,18 @@ export async function saveLessonReflection(
   input: {
     todayGoal?: unknown;
     goalRating?: unknown;
-    selfRegulationRating?: unknown;
+    communicationRating?: unknown;
     reflectionText?: unknown;
     status?: unknown;
-    // Accepted only for backward compatibility with the briefly deployed six-part client.
-    achievements?: unknown;
-    languageUsed?: unknown;
-    thinking?: unknown;
-    difficultyStrategy?: unknown;
-    languageCultureAwareness?: unknown;
-    nextGoal?: unknown;
   },
 ): Promise<ReflectionRecord> {
   const localDate = todayInTokyo();
   const reflectionId = reflectionDocumentId(identity.studentId, localDate);
-  const existingRaw = await getDocument(REFLECTION_COLLECTION, reflectionId);
-  const existing = normalizeStoredRecord(existingRaw);
+  const existing = normalizeStoredRecord(await getDocument(REFLECTION_COLLECTION, reflectionId));
   const now = new Date().toISOString();
   // Submission is monotonic. A delayed autosave can never downgrade a submitted record to draft.
   const status: 'draft' | 'submitted' = input.status === 'submitted' || existing?.status === 'submitted' ? 'submitted' : 'draft';
+  const reflectionText = input.reflectionText === undefined ? (existing?.reflectionText || '') : cleanText(input.reflectionText, 12000);
   const record: ReflectionRecord = {
     reflectionId,
     studentId: identity.studentId,
@@ -164,22 +134,15 @@ export async function saveLessonReflection(
     localDate,
     todayGoal: input.todayGoal === undefined ? (existing?.todayGoal || '') : cleanText(input.todayGoal, 1000),
     goalRating: input.goalRating === undefined ? (existing?.goalRating ?? null) : rating(input.goalRating),
-    selfRegulationRating: input.selfRegulationRating === undefined ? (existing?.selfRegulationRating ?? null) : rating(input.selfRegulationRating),
-    reflectionText: input.reflectionText === undefined ? (existing?.reflectionText || '') : cleanText(input.reflectionText, 12000),
-    reflectionCharCount: 0,
+    communicationRating: input.communicationRating === undefined ? (existing?.communicationRating ?? null) : rating(input.communicationRating),
+    reflectionText,
+    reflectionCharCount: [...reflectionText].length,
     status,
     revision: Math.max(1, Number(existing?.revision || 0) + 1),
     createdAt: existing?.createdAt || now,
     updatedAt: now,
     submittedAt: status === 'submitted' ? (existing?.submittedAt || now) : '',
-    achievements: input.achievements === undefined ? (existing?.achievements || '') : cleanText(input.achievements, 5000),
-    languageUsed: input.languageUsed === undefined ? (existing?.languageUsed || '') : cleanText(input.languageUsed, 5000),
-    thinking: input.thinking === undefined ? (existing?.thinking || '') : cleanText(input.thinking, 5000),
-    difficultyStrategy: input.difficultyStrategy === undefined ? (existing?.difficultyStrategy || '') : cleanText(input.difficultyStrategy, 5000),
-    languageCultureAwareness: input.languageCultureAwareness === undefined ? (existing?.languageCultureAwareness || '') : cleanText(input.languageCultureAwareness, 5000),
-    nextGoal: input.nextGoal === undefined ? (existing?.nextGoal || '') : cleanText(input.nextGoal, 5000),
   };
-  record.reflectionCharCount = canonicalCharCount(record);
   await setDocument(REFLECTION_COLLECTION, reflectionId, { ...record });
   return record;
 }
@@ -207,9 +170,7 @@ export async function getReflectionHistory(identity: ReflectionIdentity): Promis
     .sort((a, b) => b.localDate.localeCompare(a.localDate));
 }
 
-export async function getClassReflections(identity: ReflectionIdentity): Promise<Array<Pick<ReflectionRecord,
-  'reflectionId' | 'localDate' | 'todayGoal' | 'goalRating' | 'selfRegulationRating' | 'reflectionText' | 'achievements' | 'languageUsed' | 'thinking' | 'difficultyStrategy' | 'languageCultureAwareness' | 'nextGoal'
->>> {
+export async function getClassReflections(identity: ReflectionIdentity): Promise<Array<Pick<ReflectionRecord, 'reflectionId' | 'localDate' | 'todayGoal' | 'reflectionText'>>> {
   const todayDate = todayInTokyo();
   const { today } = await getTodayAndPrevious(identity);
   if (!today || today.status !== 'submitted') throw new Error('SUBMIT_FIRST');
@@ -226,15 +187,7 @@ export async function getClassReflections(identity: ReflectionIdentity): Promise
       reflectionId: row.reflectionId,
       localDate: row.localDate,
       todayGoal: row.todayGoal,
-      goalRating: row.goalRating,
-      selfRegulationRating: row.selfRegulationRating,
       reflectionText: row.reflectionText,
-      achievements: row.achievements,
-      languageUsed: row.languageUsed,
-      thinking: row.thinking,
-      difficultyStrategy: row.difficultyStrategy,
-      languageCultureAwareness: row.languageCultureAwareness,
-      nextGoal: row.nextGoal,
     }));
 }
 

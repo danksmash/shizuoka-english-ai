@@ -19,7 +19,7 @@ export interface TeacherDashboardStudent {
   reflectionCharCount: number;
   todayGoal: string;
   goalRating: number | null;
-  selfRegulationRating: number | null;
+  communicationRating: number | null;
   reflectionText: string;
   updatedAt: string;
 }
@@ -40,7 +40,7 @@ export interface TeacherHistoryRecord {
   localDate: string;
   todayGoal: string;
   goalRating: number | null;
-  selfRegulationRating: number | null;
+  communicationRating: number | null;
   reflectionText: string;
   reflectionCharCount: number;
   status: 'draft' | 'submitted';
@@ -48,12 +48,6 @@ export interface TeacherHistoryRecord {
   createdAt: string;
   updatedAt: string;
   submittedAt: string;
-  achievements: string;
-  languageUsed: string;
-  thinking: string;
-  difficultyStrategy: string;
-  languageCultureAwareness: string;
-  nextGoal: string;
 }
 
 export interface TeacherStudentHistoryResponse {
