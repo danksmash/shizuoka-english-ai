@@ -37,41 +37,61 @@ forbidText(app, 'lesson_reflections', 'existing AI App');
 forbidText(app, 'ReflectionApp', 'existing AI App');
 forbidText(dataContract, 'lesson_reflections', 'existing AI data contract');
 
-// Canonical pupil B-design: previous reflection + hints + submit on left; goal + two fixed 5-point items + one large free reflection on right.
+// Approved B visual specification.
+requireText(reflection, 'My English Growth <span>— わたしの英語の学び</span>', 'approved brand title');
+requireText(reflection, '<CalendarDays />{dateLabel}', 'header date');
+requireText(reflection, '<UserRound />ID: {learningId}', 'header learner id');
 for (const label of ['振り返り','私の成長','みんなの振り返り']) requireText(reflection, label, 'top navigation');
 requireText(reflection, 'meg-entry-grid', 'fixed B two-column layout');
 requireText(reflection, 'meg-entry-left', 'left column');
 requireText(reflection, 'meg-entry-right', 'right column');
 requireOrder(reflection, ['meg-entry-left','meg-entry-previous','meg-entry-hints','meg-submit-panel','meg-entry-right','meg-entry-goal','meg-entry-ratings','meg-entry-reflection'], 'B-layout source');
+requireText(reflection, '前回のふりかえり', 'previous reflection');
 requireText(reflection, '今日のめあて', 'goal field');
 requireText(reflection, '5件法のふりかえり', 'five-point reflection section');
 requireText(reflection, '今日のふりかえり', 'free reflection field');
-requireText(reflection, '今日のめあてに向かって学ぶことができましたか？', 'goal rating');
-requireText(reflection, '自分で考えたり、工夫したりしながら学ぶことができましたか？', 'self-regulation rating');
-requireText(reflection, 'goalRating', 'goal rating state');
-requireText(reflection, 'selfRegulationRating', 'self-regulation state');
-requireText(reflection, 'reflectionText', 'single free reflection field');
-requireText(reflection, 'meg-main-reflection', 'large reflection field');
+requireText(reflection, '自分の考えをつたえることができた', 'approved goal rating wording');
+requireText(reflection, '相手の話を聞いてわかろうとした', 'approved listening rating wording');
+forbidText(reflection, '今日のめあてに向かって学ぶことができましたか？', 'superseded rating wording');
+forbidText(reflection, '自分で考えたり、工夫したりしながら学ぶことができましたか？', 'superseded rating wording');
+requireText(reflection, 'meg-rating-dot', 'circular rating control');
 requireText(reflection, '<Send />', 'submit icon');
 requireText(reflection, "'送信する'", 'left-column submit action');
-for (const hint of ['できたこと','よかった学び方','授業中に考えていたこと','気づいたこと','友達のよかったところ','疑問に思ったこと','次に頑張りたいこと']) requireText(reflection, hint, 'reflection hint');
-requireText(reflection, '全部を書く必要はありません', 'optional hints guidance');
+for (const hint of ['できたこと','わかったこと','つたえられたこと','聞けたこと','くふうしたこと','気づいたこと','次にがんばりたいこと']) requireText(reflection, hint, 'approved reflection hint');
+requireText(reflection, '全部を書く必要はありません。', 'optional hints guidance');
+requireText(reflection, '小さなふりかえりが、大きな成長につながります。', 'approved footer message');
+requireText(reflection, 'Better English. A Brighter You!', 'approved footer motto');
 forbidText(reflection, 'meg-side-note', 'removed next-lesson side card');
 forbidText(reflection, 'Chromebook想定', 'implementation-only viewport badge');
 forbidText(reflection, 'スクロールなし', 'implementation-only viewport badge');
 
-// Chromebook viewport guards: equal-height columns, compact no-page-scroll entry mode, and flexible writing space.
-requireText(css, '.meg-entry-left,.meg-entry-right', 'paired equal-height columns');
+// Visual/typography guards derived from the approved reference.
+requireText(css, 'grid-template-columns:minmax(410px,.61fr) minmax(0,1fr)', 'reference column ratio');
+requireText(css, 'background:linear-gradient(180deg,#e8f7ff 0 58px,#fff 58px)', 'blue section header band');
+requireText(css, 'background:linear-gradient(180deg,#e9fae8 0 58px,#fff 58px)', 'green goal header band');
+requireText(css, 'font-size:clamp(16.5px,1.08vw,18.5px)', 'approved pupil writing size');
+requireText(css, 'font-size:clamp(21px,1.38vw,24px)', 'approved section heading size');
+requireText(css, 'font-size:clamp(15px,1vw,17px)', 'approved rating statement size');
+requireText(css, 'border-radius:50%', 'round five-point control');
+requireText(css, '.meg-hint-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))', 'three-column hint chips');
+requireText(css, '.meg-entry-left,.meg-entry-right{display:grid', 'paired equal-height columns');
 requireText(css, 'height:100%', 'equal-height column rule');
-requireText(css, 'grid-template-rows:minmax(0,1fr) auto auto', 'left column vertical distribution');
-requireText(css, 'grid-template-rows:auto auto minmax(0,1fr)', 'right column vertical distribution');
-requireText(css, '.meg-app:has(.meg-entry-grid){height:100dvh;min-height:0;overflow:hidden}', 'desktop entry viewport containment');
-requireText(css, '.meg-main-reflection textarea', 'large reflection textarea styling');
-requireText(css, 'flex:1', 'flexible writing-area growth');
-requireText(css, '@media (max-height:680px)', 'short Chromebook viewport compaction');
+requireText(css, 'grid-template-rows:minmax(0,1.3fr) auto auto', 'left vertical balance');
+requireText(css, 'grid-template-rows:minmax(130px,.8fr) auto minmax(190px,1fr)', 'right vertical balance');
+requireText(css, '.meg-app:has(.meg-entry-grid){height:100dvh;min-height:0;overflow:hidden}', 'desktop viewport containment');
+requireText(css, '@media (max-height:700px)', 'short Chromebook viewport compaction');
+requireText(css, '.meg-entry-previous .meg-previous-summary{font-size:16px!important', 'short-height previous text floor');
+requireText(css, '.meg-entry-goal textarea{font-size:16px', 'short-height goal text floor');
+requireText(css, '.meg-main-reflection textarea{font-size:16px', 'short-height reflection text floor');
+requireText(css, '.meg-section-title h2,.meg-entry-hints .meg-hints-head h2{font-size:21px}', 'short-height section heading floor');
+requireText(css, '.meg-entry-ratings .meg-rating-block h3{font-size:14.5px}', 'short-height rating text floor');
 requireText(css, '@media (max-width:1099px)', 'narrow-screen scrolling fallback');
 
-// Autosave, draft isolation, and current B-data contract must remain intact.
+// Canonical B data + autosave behavior.
+requireText(reflection, 'goalRating', 'goal rating state');
+requireText(reflection, 'selfRegulationRating', 'self-regulation state');
+requireText(reflection, 'reflectionText', 'single free reflection field');
+requireText(reflection, 'meg-main-reflection', 'large reflection field');
 requireText(reflection, 'draftKey = (token: string)', 'per-device local draft key');
 requireText(reflection, "timeZone: 'Asia/Tokyo'", 'Tokyo day boundary');
 requireText(reflection, 'local.savedAt > serverUpdatedAt', 'local/server draft freshness comparison');
@@ -102,7 +122,7 @@ requireText(reflection, '学級が設定されていません', 'class-assignmen
 forbidText(reflection, 'ReflectionTextarea', 'six-part textarea regression');
 forbidText(reflection, 'meg-fields-stack', 'six-part textarea regression');
 
-// Persistence: canonical current schema plus non-destructive compatibility with the temporary six-part deployment.
+// Persistence: current schema plus legacy six-part compatibility.
 requireText(persistence, "const REFLECTION_COLLECTION = 'lesson_reflections'", 'separate reflection collection');
 requireText(persistence, "const DEVICE_COLLECTION = 'reflection_devices'", 'separate device collection');
 for (const field of ['todayGoal','goalRating','selfRegulationRating','reflectionText']) requireText(persistence, `${field}:`, 'canonical reflection persistence');
@@ -139,4 +159,4 @@ requireText(packageJson, 'dist/reflection/teacher', 'teacher static route');
 requireText(packageJson, '"build": "vite build && npm run build:server"', 'Cloud Run build isolation');
 forbidText(packageJson, '"build": "npm run build:pages', 'Cloud Run must not reuse Pages asset base');
 
-console.log('[qa:reflection] PASS: fixed B layout, Chromebook viewport, storage integrity, privacy, compatibility, and deployment guards verified.');
+console.log('[qa:reflection] PASS: approved visual design, typography, layout, storage integrity, privacy, compatibility, and deployment guards verified.');
