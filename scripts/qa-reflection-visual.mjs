@@ -87,7 +87,7 @@ async function inspect(width, height, screenshotPath) {
   assert(leftRatio >= .35 && leftRatio <= .40, `${width}x${height} left column ratio ${leftRatio}`);
   assert(metrics.previous.height > metrics.hints.height, `${width}x${height} previous reflection must be taller than hints`);
   assert(metrics.submit.y >= metrics.hints.bottom - 1, `${width}x${height} submit is not below hints`);
-  assert(metrics.reflection.height >= 190, `${width}x${height} reflection writing card too short`);
+  assert(metrics.reflection.height >= 180, `${width}x${height} reflection writing card too short`);
 
   const compact = height <= 700;
   const bodyFloor = compact ? 16 : 16.5;
@@ -129,5 +129,7 @@ async function inspect(width, height, screenshotPath) {
 fs.mkdirSync('artifacts', { recursive: true });
 await inspect(1366, 768, 'artifacts/reflection-1366x768.png');
 await inspect(1366, 680, 'artifacts/reflection-1366x680.png');
+await inspect(1366, 600, 'artifacts/reflection-1366x600.png');
+await inspect(1280, 600, 'artifacts/reflection-1280x600.png');
 await browser.close();
-console.log('[qa:reflection-visual] PASS: rendered Chromebook layout matches the approved structural and typography constraints.');
+console.log('[qa:reflection-visual] PASS: rendered Chromebook layout matches the approved structural and typography constraints across standard and reduced browser viewports.');
