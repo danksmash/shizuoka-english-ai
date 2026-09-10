@@ -14,7 +14,7 @@ import {
   type ReflectionIdentity,
   type ReflectionRecord,
 } from './reflectionPersistence';
-import { buildTeacherReflectionDashboard, buildTeacherStudentHistory, serializeTeacherReflectionCsv } from './reflectionTeacherModel';
+import { buildTeacherReflectionDashboard, buildTeacherStudentHistory, serializeResearchLessonReflectionCsv, serializeTeacherReflectionCsv } from './reflectionTeacherModel';
 
 const router = express.Router();
 
@@ -119,15 +119,8 @@ router.post('/register', async (req, res) => {
       const allowed = noteReflectionCodeFailure(ip);
       return res.status(allowed ? 401 : 429).json({ success: false, error: allowed ? 'LEARNING_CODE_NOT_FOUND' : 'TOO_MANY_FAILED_CODE_ATTEMPTS' });
     }
-    if (!student.classId) {
-      return res.status(409).json({ success: false, error: 'REFLECTION_CLASS_NOT_ASSIGNED' });
-    }
-    const deviceToken = await issueReflectionDevice({
-      studentId: student.studentId,
-      researchId: student.researchId,
-      classId: student.classId,
-      learningId: student.learningId,
-    });
+    if (!student.classId) return res.status(409).json({ success: false, error: 'REFLECTION_CLASS_NOT_ASSIGNED' });
+    const deviceToken = await issueReflectionDevice({ studentId: student.studentId, researchId: student.researchId, classId: student.classId, learningId: student.learningId });
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, deviceToken });
   } catch (error: any) {
@@ -142,12 +135,7 @@ router.post('/bootstrap', async (req, res) => {
     if (!identity) return;
     const data = await getTodayAndPrevious(identity);
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({
-      success: true,
-      learningId: identity.learningId,
-      today: publicReflection(data.today),
-      previous: publicReflection(data.previous),
-    });
+    return res.json({ success: true, learningId: identity.learningId, today: publicReflection(data.today), previous: publicReflection(data.previous) });
   } catch (error: any) {
     console.error('Reflection bootstrap failed', { message: error?.message });
     return res.status(503).json({ success: false, error: 'REFLECTION_BOOTSTRAP_UNAVAILABLE' });
@@ -262,6 +250,22 @@ router.post('/teacher/export.csv', requireManagementRole(['teacher']), async (re
   } catch (error: any) {
     console.error('Reflection teacher CSV export failed', { message: error?.message });
     return res.status(503).json({ success: false, error: 'REFLECTION_CSV_EXPORT_UNAVAILABLE' });
+  }
+});
+
+router.get('/research/lesson-reflections.csv', requireManagementRole(['researcher']), async (req, res) => {
+  try {
+    const records = await getAllReflectionRecordsForTeacher();
+    const localDate = typeof req.query?.localDate === 'string' ? req.query.localDate : '';
+    const csv = serializeResearchLessonReflectionCsv(records, localDate);
+    const dateLabel = /^\d{4}-\d{2}-\d{2}$/.test(localDate) ? localDate.replace(/-/g, '') : 'all';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="lesson_reflections-${dateLabel}.csv"`);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(csv);
+  } catch (error: any) {
+    console.error('Reflection research CSV export failed', { message: error?.message });
+    return res.status(503).json({ success: false, error: 'REFLECTION_RESEARCH_CSV_EXPORT_UNAVAILABLE' });
   }
 });
 
