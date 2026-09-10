@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { phaseForLocalDate, validateStudyScheduleOrder, normalizeStudyDate, STUDY_CLASS_IDS } from '../src/server/studySchedulePersistence';
+
+assert.deepEqual(STUDY_CLASS_IDS, ['5-1','5-2','5-3','6-1','6-2','6-3']);
+assert.equal(normalizeStudyDate('2026-09-17'), '2026-09-17');
+assert.equal(normalizeStudyDate(''), '');
+assert.throws(() => normalizeStudyDate('2026-02-30'), /INVALID_STUDY_DATE/);
+assert.throws(() => validateStudyScheduleOrder({ appStartDate:'2026-09-17', nationalityRevealDate:'2026-09-16', videoViewDate:'', exchangeDate:'' }), /INVALID_STUDY_DATE_ORDER/);
+validateStudyScheduleOrder({ appStartDate:'2026-09-17', nationalityRevealDate:'2026-10-01', videoViewDate:'2026-10-08', exchangeDate:'2026-10-15' });
+const schedule={appStartDate:'2026-09-17',nationalityRevealDate:'2026-10-01',videoViewDate:'2026-10-08',exchangeDate:'2026-10-15'};
+assert.equal(phaseForLocalDate('2026-09-16',schedule),'pre_start');
+assert.equal(phaseForLocalDate('2026-09-17',schedule),'unknown_virtual_other');
+assert.equal(phaseForLocalDate('2026-10-01',schedule),'anticipated_other');
+assert.equal(phaseForLocalDate('2026-10-08',schedule),'identified_real_other');
+assert.equal(phaseForLocalDate('2026-10-15',schedule),'exchange_or_after');
+assert.equal(phaseForLocalDate('2026-09-17',{...schedule,appStartDate:''}),'unconfigured');
+
+const entry=fs.readFileSync('server-entry.ts','utf8');
+const auth=fs.readFileSync('src/server/auth.ts','utf8');
+const routes=fs.readFileSync('src/server/studyScheduleRoutes.ts','utf8');
+const page=fs.readFileSync('public/study-schedule.html','utf8');
+const persistence=fs.readFileSync('src/server/studySchedulePersistence.ts','utf8');
+
+assert.ok(entry.includes("this.use('/api/management', createStudyScheduleRouter())"));
+assert.ok(auth.includes("path.startsWith('/study-schedules')"));
+assert.ok(routes.includes("router.post('/study-schedules/query'"));
+assert.ok(routes.includes("router.put('/study-schedules'"));
+assert.ok(routes.includes("router.post('/study-schedules/audit'"));
+assert.ok(routes.includes("router.post('/study-schedules/linkage.csv'"));
+assert.ok(routes.includes("dialogueToReflection: ['research_id', 'local_date']"));
+assert.ok(routes.includes("scheduleToDialogue: ['class_id', 'local_date']"));
+assert.ok(routes.includes("scheduleToReflection: ['class_id', 'local_date']"));
+assert.ok(persistence.includes("STUDY_SCHEDULE_COLLECTION = 'study_schedules'"));
+assert.ok(persistence.includes('expectedRevision !== current.revision'));
+assert.ok(persistence.includes('history: [...current.history, snapshot].slice(-100)'));
+assert.ok(page.includes('アプリ使用開始日'));
+assert.ok(page.includes('来校留学生国籍告知日'));
+assert.ok(page.includes('自己紹介ビデオ視聴日'));
+assert.ok(page.includes('留学生交流会実施日'));
+assert.ok(page.includes('research_id + local_date'));
+assert.ok(page.includes('class_id + local_date'));
+assert.ok(!page.includes('student_id'));
+console.log('Study 1 class schedule QA: PASS');
