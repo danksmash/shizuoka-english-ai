@@ -1,12 +1,15 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const apiUrl = (path: string) => `${API_BASE_URL}${path}`;
 
+export type RatingSchemaVersion = 'v1' | 'v2';
+
 export interface ReflectionRecordDto {
   reflectionId: string;
   localDate: string;
   todayGoal: string;
   goalRating: number | null;
   selfRegulationRating: number | null;
+  ratingSchemaVersion?: RatingSchemaVersion;
   reflectionText: string;
   reflectionCharCount: number;
   status: 'draft' | 'submitted';
@@ -60,6 +63,7 @@ export async function saveReflection(deviceToken: string, input: {
   todayGoal: string;
   goalRating: number | null;
   selfRegulationRating: number | null;
+  ratingSchemaVersion: RatingSchemaVersion;
   reflectionText: string;
   status: 'draft' | 'submitted';
 }, options?: { keepalive?: boolean }): Promise<ReflectionRecordDto> {
@@ -67,10 +71,10 @@ export async function saveReflection(deviceToken: string, input: {
   return data.reflection;
 }
 
-export async function saveReflectionGoal(deviceToken: string, todayGoal: string): Promise<ReflectionRecordDto> {
+export async function saveReflectionGoal(deviceToken: string, todayGoal: string, ratingSchemaVersion: RatingSchemaVersion): Promise<ReflectionRecordDto> {
   const data = await postJson<{ success: true; reflection: ReflectionRecordDto }>(
     '/api/reflection/save',
-    { deviceToken, todayGoal },
+    { deviceToken, todayGoal, ratingSchemaVersion },
     { keepalive: true },
   );
   return data.reflection;
