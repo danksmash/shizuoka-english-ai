@@ -1,4 +1,4 @@
-import type { ReflectionRecord } from './reflectionPersistence';
+import type { RatingSchemaVersion, ReflectionRecord } from './reflectionPersistence';
 
 export interface TeacherRosterStudent {
   studentId: string;
@@ -35,6 +35,7 @@ export interface TeacherReflectionStudentRow {
   todayGoal: string;
   goalRating: number | null;
   selfRegulationRating: number | null;
+  ratingSchemaVersion: RatingSchemaVersion | '';
   reflectionText: string;
   updatedAt: string;
 }
@@ -70,6 +71,18 @@ export function reflectionClassNumberForClassId(value: unknown): ConcreteClassNu
   const classId = typeof value === 'string' ? value.trim() : '';
   const match = classId.match(/^[56]-([123])$/);
   return match ? match[1] as ConcreteClassNumber : '';
+}
+
+export function reflectionRatingLabels(version: RatingSchemaVersion | '' | undefined) {
+  return version === 'v2'
+    ? {
+      item1: 'めあてに向かって取り組めた',
+      item2: '相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした',
+    }
+    : {
+      item1: '自分の考えをつたえることができた',
+      item2: '相手の話を聞いてわかろうとした',
+    };
 }
 
 function safeDate(value: unknown, fallback: string): string {
@@ -154,6 +167,7 @@ export function buildTeacherReflectionDashboard(
       todayGoal: record?.todayGoal || '',
       goalRating: record?.goalRating ?? null,
       selfRegulationRating: record?.selfRegulationRating ?? null,
+      ratingSchemaVersion: record?.ratingSchemaVersion || '',
       reflectionText: visibleReflectionText(record),
       updatedAt: record?.updatedAt || '',
     };
@@ -195,13 +209,14 @@ export function serializeTeacherReflectionCsv(
     .sort((a, b) => a.localDate.localeCompare(b.localDate) || a.classId.localeCompare(b.classId, 'ja') || (rosterByStudent.get(a.studentId)?.learningId || '').localeCompare(rosterByStudent.get(b.studentId)?.learningId || ''));
   const headers = [
     'local_date', 'class_id', 'data_scope', 'grade_level', 'class_number', 'learning_id', 'attendance_number', 'status', 'today_goal',
-    'goal_rating', 'self_regulation_rating', 'reflection_text', 'reflection_char_count',
+    'goal_rating', 'self_regulation_rating', 'rating_schema_version', 'rating_item_1', 'rating_item_2', 'reflection_text', 'reflection_char_count',
     'revision', 'created_at', 'updated_at', 'submitted_at',
     'achievements', 'language_used', 'thinking', 'difficulty_strategy', 'language_culture_awareness', 'next_goal',
   ];
   const lines = [headers.map(csvCell).join(',')];
   for (const record of rows) {
     const rosterStudent = rosterByStudent.get(record.studentId);
+    const labels = reflectionRatingLabels(record.ratingSchemaVersion);
     lines.push([
       record.localDate,
       record.classId,
@@ -214,6 +229,9 @@ export function serializeTeacherReflectionCsv(
       record.todayGoal,
       record.goalRating ?? '',
       record.selfRegulationRating ?? '',
+      record.ratingSchemaVersion,
+      labels.item1,
+      labels.item2,
       visibleReflectionText(record),
       record.reflectionCharCount,
       record.revision,
