@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Study 1 学級スケジュール管理</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f7faff;color:#10224a;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}.wrap{max-width:1280px;margin:0 auto;padding:18px}.card{background:#fff;border:1px solid #d7e2f1;border-radius:14px;padding:16px;box-shadow:0 4px 14px rgba(32,73,128,.05);margin-bottom:14px}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.title{margin:0;font-size:24px}.muted{color:#64748b;font-size:13px}.note{background:#eef4ff;border:1px solid #bfd0f5;border-radius:10px;padding:10px;font-size:12px;line-height:1.6}.login{max-width:440px;margin:12vh auto}.field{margin:12px 0}.field label{display:block;font-size:12px;font-weight:800;margin-bottom:5px}input,button{font:inherit}input[type=text],input[type=password],input[type=date]{width:100%;padding:9px 10px;border:1px solid #b8c7df;border-radius:8px;background:#fff;font-size:15px}button{padding:9px 12px;border-radius:8px;font-weight:800;cursor:pointer}.primary{border:1px solid #1767ed;background:#1767ed;color:#fff}.secondary{border:1px solid #9ab4df;background:#fff;color:#174aa8}.danger{border:1px solid #d4dbe7;background:#fff;color:#526581}.table-wrap{overflow:auto}.schedule{width:100%;border-collapse:collapse;min-width:980px}.schedule th,.schedule td{border-bottom:1px solid #e5edf7;padding:9px 7px;text-align:left;vertical-align:middle}.schedule th{background:#f3f7fc;font-size:12px}.schedule td:first-child{font-weight:900;white-space:nowrap}.schedule input{min-width:145px}.status{font-size:12px;font-weight:800;color:#174aa8;margin-top:7px}.error{color:#b91c1c}.ok{color:#138547}.audit-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.audit-item{border:1px solid #e0e8f4;border-radius:10px;padding:10px}.audit-item h3{margin:0 0 7px;font-size:15px}.audit-item p{margin:4px 0;font-size:12px}.phase{font-size:11px;color:#526581;line-height:1.55}.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}@media(max-width:800px){.audit-grid{grid-template-columns:1fr}.wrap{padding:10px}.title{font-size:20px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div id="login" class="login card">
+  <h1 class="title" style="text-align:center">Study 1 学級スケジュール</h1>
+  <p class="muted" style="text-align:center">研究者専用</p>
+  <div class="field"><label>研究者ID</label><input id="username" type="text" autocomplete="username"></div>
+  <div class="field"><label>パスワード</label><input id="password" type="password" autocomplete="current-password"></div>
+  <button id="loginBtn" class="primary" style="width:100%">ログイン</button>
+  <p id="loginStatus" class="status"></p>
+</div>
+
+<div id="panel" style="display:none">
+  <div class="card top">
+    <div><h1 class="title">Study 1 学級スケジュール管理</h1><div class="muted">各学級の4つのtrigger日を変更できます</div></div>
+    <div class="actions"><button id="reloadBtn" class="secondary">↻ 再読込</button><button id="csvBtn" class="secondary">紐付け監査CSV</button><a href="/management"><button class="secondary">研究ダッシュボード</button></a><button id="logoutBtn" class="danger">ログアウト</button></div>
+  </div>
+
+  <div class="note card">
+    日付変更は既存のAI対話・Reflectionデータを書き換えません。各学級の現在値と最大100件のrevision履歴をFirestoreに保存します。Phaseは <b>class_id + local_date</b> から導出し、AI対話とReflectionは <b>research_id + local_date</b> で相互照合します。同一日内の時刻差は扱わず、日付単位です。
+  </div>
+
+  <div class="card">
+    <div class="table-wrap"><table class="schedule">
+      <thead><tr><th>学級</th><th>アプリ使用開始日</th><th>来校留学生国籍告知日</th><th>自己紹介ビデオ視聴日</th><th>留学生交流会実施日</th><th>revision</th><th></th></tr></thead>
+      <tbody id="scheduleRows"></tbody>
+    </table></div>
+    <p id="scheduleStatus" class="status"></p>
+  </div>
+
+  <div class="card">
+    <div class="top"><div><h2 style="margin:0;font-size:19px">データ紐付け監査</h2><div class="muted">現在の正式日程でPhaseを再計算</div></div><button id="auditBtn" class="secondary">監査を更新</button></div>
+    <div id="auditGrid" class="audit-grid" style="margin-top:12px"></div>
+    <p id="auditStatus" class="status"></p>
+  </div>
+</div>
+</div>
+<script>
+const classes=['5-1','5-2','5-3','6-1','6-2','6-3'];
+const $=id=>document.getElementById(id);
+let schedules=new Map();
+function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function setStatus(id,text,error=false){const el=$(id);el.textContent=text||'';el.className='status '+(error?'error':text?'ok':'');}
+async function api(path,options={}){const response=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const type=response.headers.get('content-type')||'';const data=type.includes('application/json')?await response.json():await response.text();if(!response.ok){const err=new Error(data?.error||`HTTP_${response.status}`);err.status=response.status;throw err;}return data;}
+function renderSchedules(list){schedules=new Map(list.map(s=>[s.classId,s]));$('scheduleRows').innerHTML=classes.map(classId=>{const s=schedules.get(classId)||{classId,revision:0,appStartDate:'',nationalityRevealDate:'',videoViewDate:'',exchangeDate:''};return `<tr data-class="${classId}"><td>${classId}</td><td><input type="date" data-key="appStartDate" value="${esc(s.appStartDate)}"></td><td><input type="date" data-key="nationalityRevealDate" value="${esc(s.nationalityRevealDate)}"></td><td><input type="date" data-key="videoViewDate" value="${esc(s.videoViewDate)}"></td><td><input type="date" data-key="exchangeDate" value="${esc(s.exchangeDate)}"></td><td data-revision>${s.revision||0}</td><td><button class="primary" data-save="${classId}">この学級を保存</button></td></tr>`;}).join('');
+ document.querySelectorAll('[data-save]').forEach(btn=>btn.addEventListener('click',()=>saveClass(btn.dataset.save)));
+}
+function phaseText(counts){const labels={unconfigured:'未設定',pre_start:'開始前',unknown_virtual_other:'Phase 1',anticipated_other:'Phase 2',identified_real_other:'Phase 3',exchange_or_after:'交流会当日以降'};return Object.entries(counts||{}).filter(([,v])=>v).map(([k,v])=>`${labels[k]||k}: ${v}`).join(' / ')||'データなし';}
+function renderAudit(audit){const rows=audit?.classes||[];$('auditGrid').innerHTML=rows.map(row=>`<div class="audit-item"><h3>${esc(row.classId)}</h3><p>日程設定: <b>${row.configuredFields}/4</b> ・ revision ${row.scheduleRevision}</p><p>AI対話: ${row.sessions}件（main ${row.mainSessions}）</p><p>Reflection: ${row.reflections}件（main ${row.mainReflections}）</p><p>research_id + local_date一致: <b>${row.matchedDialogueReflectionDayKeys}/${row.dialogueDayKeys}</b></p><div class="phase">AI対話Phase: ${esc(phaseText(row.sessionPhases))}</div><div class="phase">Reflection Phase: ${esc(phaseText(row.reflectionPhases))}</div></div>`).join('');
+ setStatus('auditStatus','schedule→AI対話/Reflection: class_id + local_date、AI対話↔Reflection: research_id + local_date で監査済み');}
+async function loadAll(){setStatus('scheduleStatus','読込中…');const data=await api('/api/management/study-schedules/query',{method:'POST',body:'{}'});renderSchedules(data.schedules||[]);renderAudit(data.audit);setStatus('scheduleStatus','最新のFirestore設定を読み込みました');}
+async function saveClass(classId){const tr=document.querySelector(`tr[data-class="${classId}"]`);const current=schedules.get(classId)||{revision:0};const body={classId,expectedRevision:current.revision||0};tr.querySelectorAll('input[data-key]').forEach(input=>body[input.dataset.key]=input.value);try{setStatus('scheduleStatus',`${classId} を保存中…`);const data=await api('/api/management/study-schedules',{method:'PUT',body:JSON.stringify(body)});schedules.set(classId,data.schedule);tr.querySelector('[data-revision]').textContent=data.schedule.revision;setStatus('scheduleStatus',`${classId} を保存しました（revision ${data.schedule.revision}）`);await refreshAudit();}catch(error){if(error.status===409) setStatus('scheduleStatus','別の画面で更新されています。再読込してから保存してください。',true);else setStatus('scheduleStatus',`保存できません: ${error.message}`,true);}}
+async function refreshAudit(){try{const audit=await api('/api/management/study-schedules/audit',{method:'POST',body:'{}'});renderAudit(audit);}catch(error){setStatus('auditStatus',`監査できません: ${error.message}`,true);}}
+async function login(){try{setStatus('loginStatus','ログイン中…');await api('/api/management/login',{method:'POST',body:JSON.stringify({username:$('username').value,password:$('password').value})});$('password').value='';await showPanel();}catch(error){setStatus('loginStatus','ログインできません。研究者ID・パスワードを確認してください。',true);}}
+async function showPanel(){try{await api('/api/management/me');$('login').style.display='none';$('panel').style.display='block';await loadAll();}catch{$('login').style.display='block';$('panel').style.display='none';}}
+$('loginBtn').addEventListener('click',login);$('password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});$('reloadBtn').addEventListener('click',loadAll);$('auditBtn').addEventListener('click',refreshAudit);$('logoutBtn').addEventListener('click',async()=>{await api('/api/management/logout',{method:'POST',body:'{}'});location.reload();});$('csvBtn').addEventListener('click',async()=>{try{const response=await fetch('/api/management/study-schedules/linkage.csv',{method:'POST',credentials:'same-origin'});if(!response.ok)throw new Error(`HTTP_${response.status}`);const blob=await response.blob();const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='study-schedule-linkage.csv';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);}catch(error){setStatus('auditStatus',`CSVを取得できません: ${error.message}`,true);}});
+if(location.hostname.endsWith('github.io')){document.body.innerHTML='<div class="wrap"><div class="card"><h1>Study 1 学級スケジュール管理</h1><p>この管理画面はCloud Run本番環境で使用してください。</p><a href="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app/study-schedule.html">Cloud Runの管理画面を開く</a></div></div>';}else{showPanel();}
+</script>
+</body>
+</html>
