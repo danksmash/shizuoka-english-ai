@@ -69,7 +69,6 @@ jobs:
           echo "$HEALTH" | grep -q '"learningDataConfigured":true'
           echo "$HEALTH" | grep -q '"managementConfigured":true'
 
-          # Wait until GitHub Pages has successfully deployed the same main commit.
           PAGES_CONCLUSION=''
           for attempt in $(seq 1 30); do
             RUNS="$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$HEAD_SHA&per_page=20")"
@@ -97,9 +96,11 @@ jobs:
             fi
             if echo "$PUPIL_PAGE" | grep -q '<div id="root"></div>' && \
                echo "$TEACHER_PAGE" | grep -q '<div id="root"></div>' && \
-               echo "$PAGES_BUNDLE" | grep -q '自分の考えをつたえることができた' && \
-               echo "$PAGES_BUNDLE" | grep -q '相手の話を聞いてわかろうとした' && \
-               echo "$PAGES_BUNDLE" | grep -q '全部を書く必要はありません'; then
+               echo "$PAGES_BUNDLE" | grep -q 'ふりかえりポイント' && \
+               echo "$PAGES_BUNDLE" | grep -q 'めあてに向かって取り組めた' && \
+               echo "$PAGES_BUNDLE" | grep -q '相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした' && \
+               echo "$PAGES_BUNDLE" | grep -q '学び方を工夫した' && \
+               echo "$PAGES_BUNDLE" | grep -q '考えていたこと'; then
               break
             fi
             sleep 5
@@ -108,8 +109,13 @@ jobs:
           echo "$TEACHER_PAGE" | grep -q '<div id="root"></div>'
           echo "$PAGES_BUNDLE" | grep -q 'My English Growth'
           echo "$PAGES_BUNDLE" | grep -q 'わたしの英語の学び'
-          echo "$PAGES_BUNDLE" | grep -q '自分の考えをつたえることができた'
-          echo "$PAGES_BUNDLE" | grep -q '相手の話を聞いてわかろうとした'
+          echo "$PAGES_BUNDLE" | grep -q 'ふりかえりポイント'
+          echo "$PAGES_BUNDLE" | grep -q 'めあてに向かって取り組めた'
+          echo "$PAGES_BUNDLE" | grep -q '相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした'
+          echo "$PAGES_BUNDLE" | grep -q 'できなかった'
+          echo "$PAGES_BUNDLE" | grep -q 'よくできた'
+          echo "$PAGES_BUNDLE" | grep -q '学び方を工夫した'
+          echo "$PAGES_BUNDLE" | grep -q '考えていたこと'
           echo "$PAGES_BUNDLE" | grep -q '全部を書く必要はありません'
           echo "$PAGES_BUNDLE" | grep -q '私の成長'
           echo "$PAGES_BUNDLE" | grep -q 'みんなの振り返り'
@@ -128,8 +134,13 @@ jobs:
           CLOUD_BUNDLE="$(curl --fail --silent --show-error --max-time 30 "$API_URL$CLOUD_JS")"
           echo "$CLOUD_BUNDLE" | grep -q 'My English Growth'
           echo "$CLOUD_BUNDLE" | grep -q 'わたしの英語の学び'
-          echo "$CLOUD_BUNDLE" | grep -q '自分の考えをつたえることができた'
-          echo "$CLOUD_BUNDLE" | grep -q '相手の話を聞いてわかろうとした'
+          echo "$CLOUD_BUNDLE" | grep -q 'ふりかえりポイント'
+          echo "$CLOUD_BUNDLE" | grep -q 'めあてに向かって取り組めた'
+          echo "$CLOUD_BUNDLE" | grep -q '相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした'
+          echo "$CLOUD_BUNDLE" | grep -q 'できなかった'
+          echo "$CLOUD_BUNDLE" | grep -q 'よくできた'
+          echo "$CLOUD_BUNDLE" | grep -q '学び方を工夫した'
+          echo "$CLOUD_BUNDLE" | grep -q '考えていたこと'
           echo "$CLOUD_BUNDLE" | grep -q '全部を書く必要はありません'
           if echo "$CLOUD_BUNDLE" | grep -q 'Chromebook想定 / スクロールなし'; then
             echo 'Obsolete Chromebook implementation badge is still present in Cloud Run bundle.'
