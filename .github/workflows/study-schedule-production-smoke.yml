@@ -15,7 +15,7 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Verify Study 1 schedule page and protected API
+      - name: Verify Study 1 schedule page, dashboard navigation and protected API
         run: |
           API_URL="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app"
 
@@ -24,6 +24,11 @@ jobs:
           echo "$page" | grep -q '来校留学生国籍告知日'
           echo "$page" | grep -q '自己紹介ビデオ視聴日'
           echo "$page" | grep -q '留学生交流会実施日'
+          echo "$page" | grep -q 'href="/management"'
+
+          dashboard="$(curl --fail --silent --show-error --max-time 20 "$API_URL/management")"
+          echo "$dashboard" | grep -q 'Study 1 日程管理'
+          echo "$dashboard" | grep -q 'href="/study-schedule.html"'
 
           query_status=$(curl --silent --show-error --max-time 20 \
             -o /tmp/study-schedule-query.json \
