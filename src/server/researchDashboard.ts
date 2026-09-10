@@ -325,6 +325,7 @@ export function buildResearchExportDataSets(rawSessions: Record<string, any>[]):
 
 function textQuery(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 export type ResearchDataScope = 'main' | 'pilot_b' | 'test' | 'reserve';
+export const MAIN_RESEARCH_START_DATE = '2026-09-17';
 const PILOT_B_OFFICIAL_DATES = new Set(['2026-09-09']);
 export function researchDataScopeForRow(row: Record<string, unknown>): ResearchDataScope {
   const storedClass = String(row.class_id || '');
@@ -332,7 +333,8 @@ export function researchDataScopeForRow(row: Record<string, unknown>): ResearchD
   if (storedClass === 'テスト') return 'test';
   if (storedClass === '予備') return 'reserve';
   if (storedClass === '5-PB' || storedClass === '6-PB') return PILOT_B_OFFICIAL_DATES.has(localDate) ? 'pilot_b' : 'test';
-  return 'main';
+  if (/^[56]-[123]$/.test(storedClass)) return localDate >= MAIN_RESEARCH_START_DATE ? 'main' : 'test';
+  return 'test';
 }
 function dataScopeMatches(row: Row, scope: string): boolean {
   if (!scope || scope === 'all') return true;
