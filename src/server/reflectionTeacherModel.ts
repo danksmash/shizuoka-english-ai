@@ -20,6 +20,12 @@ export const REFLECTION_RATING_SCALE_MAX = 4;
 export const REFLECTION_RATING_ITEM_1 = 'めあてに向かって取り組めた';
 export const REFLECTION_RATING_ITEM_2 = '相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした';
 
+export const RESEARCH_LESSON_REFLECTION_HEADERS = [
+  'research_id', 'class_id', 'data_scope', 'grade_level', 'class_number', 'local_date', 'status', 'today_goal',
+  'goal_rating', 'communication_rating', 'rating_scale_min', 'rating_scale_max', 'rating_item_1', 'rating_item_2',
+  'reflection_text', 'reflection_char_count', 'revision', 'created_at', 'updated_at', 'submitted_at',
+] as const;
+
 export interface TeacherReflectionFilterQuery {
   dataScope?: unknown;
   grade?: unknown;
@@ -108,6 +114,22 @@ function membershipMatches(classId: string, filters: ReturnType<typeof normalize
   return true;
 }
 
+function activeRosterForFilters(roster: TeacherRosterStudent[], filters: ReturnType<typeof normalizeFilters>): TeacherRosterStudent[] {
+  return roster
+    .filter((student) => student.active && student.learningId && student.classId)
+    .filter((student) => membershipMatches(student.classId, filters));
+}
+
+function latestRecordMap(records: ReflectionRecord[], allowedStudentIds: Set<string>, localDate: string): Map<string, ReflectionRecord> {
+  const map = new Map<string, ReflectionRecord>();
+  for (const record of records) {
+    if (record.localDate !== localDate || !allowedStudentIds.has(record.studentId)) continue;
+    const current = map.get(record.studentId);
+    if (!current || record.updatedAt > current.updatedAt) map.set(record.studentId, record);
+  }
+  return map;
+}
+
 export function buildTeacherReflectionDashboard(
   roster: TeacherRosterStudent[],
   records: ReflectionRecord[],
@@ -119,14 +141,8 @@ export function buildTeacherReflectionDashboard(
   const filters = normalizeFilters(requestedFilters);
   const activeRoster = roster.filter((student) => student.active && student.learningId && student.classId);
   const classes = Array.from(new Set(activeRoster.map((student) => student.classId))).sort((a, b) => a.localeCompare(b, 'ja'));
-  const selectedRoster = activeRoster.filter((student) => membershipMatches(student.classId, filters));
-  const allowedStudentIds = new Set(selectedRoster.map((student) => student.studentId));
-  const recordsByStudent = new Map<string, ReflectionRecord>();
-  for (const record of records) {
-    if (record.localDate !== localDate || !allowedStudentIds.has(record.studentId)) continue;
-    const current = recordsByStudent.get(record.studentId);
-    if (!current || record.updatedAt > current.updatedAt) recordsByStudent.set(record.studentId, record);
-  }
+  const selectedRoster = activeRosterForFilters(roster, filters);
+  const recordsByStudent = latestRecordMap(records, new Set(selectedRoster.map((student) => student.studentId)), localDate);
   const students: TeacherReflectionStudentRow[] = selectedRoster.map((student): TeacherReflectionStudentRow => {
     const record = recordsByStudent.get(student.studentId);
     const status: TeacherReflectionStudentRow['status'] = record?.status === 'submitted' ? 'submitted' : record ? 'draft' : 'missing';
@@ -169,6 +185,39 @@ function csvCell(value: unknown): string {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
+const TEACHER_CSV_HEADERS = [
+  'local_date', 'class_id', 'data_scope', 'grade_level', 'class_number', 'learning_id', 'attendance_number', 'status', 'today_goal',
+  'goal_rating', 'communication_rating', 'rating_scale_min', 'rating_scale_max', 'rating_item_1', 'rating_item_2', 'reflection_text', 'reflection_char_count',
+  'revision', 'created_at', 'updated_at', 'submitted_at',
+] as const;
+
+function teacherCsvValues(student: TeacherRosterStudent, localDate: string, record: ReflectionRecord | undefined): unknown[] {
+  const status = record?.status === 'submitted' ? 'submitted' : record ? 'draft' : 'missing';
+  return [
+    localDate,
+    student.classId,
+    reflectionDataScopeForClassId(student.classId),
+    reflectionGradeForClassId(student.classId),
+    reflectionClassNumberForClassId(student.classId),
+    student.learningId,
+    student.attendanceNumber || '',
+    status,
+    record?.todayGoal || '',
+    record?.goalRating ?? '',
+    record?.communicationRating ?? '',
+    REFLECTION_RATING_SCALE_MIN,
+    REFLECTION_RATING_SCALE_MAX,
+    REFLECTION_RATING_ITEM_1,
+    REFLECTION_RATING_ITEM_2,
+    record?.reflectionText || '',
+    record ? record.reflectionCharCount : '',
+    record?.revision ?? '',
+    record?.createdAt || '',
+    record?.updatedAt || '',
+    record?.submittedAt || '',
+  ];
+}
+
 export function serializeTeacherReflectionCsv(
   roster: TeacherRosterStudent[],
   records: ReflectionRecord[],
@@ -177,26 +226,43 @@ export function serializeTeacherReflectionCsv(
 ): string {
   const filters = normalizeFilters(requestedFilters);
   const dateText = typeof requestedDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : '';
-  const rosterByStudent = new Map(roster.map((student) => [student.studentId, student]));
+  const selectedRoster = activeRosterForFilters(roster, filters);
+  const selectedByStudent = new Map(selectedRoster.map((student) => [student.studentId, student]));
+  const lines = [TEACHER_CSV_HEADERS.map(csvCell).join(',')];
+
+  if (dateText) {
+    const recordsByStudent = latestRecordMap(records, new Set(selectedByStudent.keys()), dateText);
+    const ordered = selectedRoster.slice().sort((a, b) => a.classId.localeCompare(b.classId, 'ja') || Number(a.attendanceNumber || 999) - Number(b.attendanceNumber || 999) || a.learningId.localeCompare(b.learningId));
+    for (const student of ordered) lines.push(teacherCsvValues(student, dateText, recordsByStudent.get(student.studentId)).map(csvCell).join(','));
+  } else {
+    const activeRecords = records
+      .filter((record) => selectedByStudent.has(record.studentId))
+      .sort((a, b) => a.localDate.localeCompare(b.localDate) || (selectedByStudent.get(a.studentId)?.classId || '').localeCompare(selectedByStudent.get(b.studentId)?.classId || '', 'ja') || (selectedByStudent.get(a.studentId)?.learningId || '').localeCompare(selectedByStudent.get(b.studentId)?.learningId || ''));
+    for (const record of activeRecords) {
+      const student = selectedByStudent.get(record.studentId);
+      if (student) lines.push(teacherCsvValues(student, record.localDate, record).map(csvCell).join(','));
+    }
+  }
+  return `\uFEFF${lines.join('\r\n')}\r\n`;
+}
+
+export function serializeResearchLessonReflectionCsv(
+  records: ReflectionRecord[],
+  requestedDate?: unknown,
+): string {
+  const dateText = typeof requestedDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : '';
   const rows = records
-    .filter((record) => membershipMatches(record.classId, filters) && (!dateText || record.localDate === dateText))
-    .sort((a, b) => a.localDate.localeCompare(b.localDate) || a.classId.localeCompare(b.classId, 'ja') || (rosterByStudent.get(a.studentId)?.learningId || '').localeCompare(rosterByStudent.get(b.studentId)?.learningId || ''));
-  const headers = [
-    'local_date', 'class_id', 'data_scope', 'grade_level', 'class_number', 'learning_id', 'attendance_number', 'status', 'today_goal',
-    'goal_rating', 'communication_rating', 'rating_scale_min', 'rating_scale_max', 'rating_item_1', 'rating_item_2', 'reflection_text', 'reflection_char_count',
-    'revision', 'created_at', 'updated_at', 'submitted_at',
-  ];
-  const lines = [headers.map(csvCell).join(',')];
+    .filter((record) => !dateText || record.localDate === dateText)
+    .sort((a, b) => a.localDate.localeCompare(b.localDate) || a.classId.localeCompare(b.classId, 'ja') || a.researchId.localeCompare(b.researchId));
+  const lines = [RESEARCH_LESSON_REFLECTION_HEADERS.map(csvCell).join(',')];
   for (const record of rows) {
-    const rosterStudent = rosterByStudent.get(record.studentId);
     lines.push([
-      record.localDate,
+      record.researchId,
       record.classId,
       reflectionDataScopeForClassId(record.classId),
       reflectionGradeForClassId(record.classId),
       reflectionClassNumberForClassId(record.classId),
-      rosterStudent?.learningId || record.learningId,
-      rosterStudent?.attendanceNumber || '',
+      record.localDate,
       record.status,
       record.todayGoal,
       record.goalRating ?? '',
