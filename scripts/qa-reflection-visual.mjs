@@ -11,7 +11,7 @@ const reflectionText = '今日は、はじめは少し緊張したけれど、�
 
 const record = (overrides = {}) => ({
   reflectionId: 'R-1', localDate: '2026-09-10', todayGoal: goalText,
-  goalRating: 4, selfRegulationRating: 5, reflectionText,
+  goalRating: 4, selfRegulationRating: 5, ratingSchemaVersion: 'v2', reflectionText,
   reflectionCharCount: [...reflectionText].length, status: 'draft', revision: 1,
   createdAt: '2026-09-10T00:00:00.000Z', updatedAt: '2026-09-10T00:00:00.000Z', submittedAt: '',
   achievements: '', languageUsed: '', thinking: '', difficultyStrategy: '', languageCultureAwareness: '', nextGoal: '',
@@ -25,7 +25,7 @@ await page.route('**/api/reflection/bootstrap', async (route) => {
   await route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ success: true, learningId: '6RSX', today: record(), previous: record({ reflectionId: 'R-0', localDate: '2026-09-09', todayGoal: '', reflectionText: previousText, reflectionCharCount: [...previousText].length, status: 'submitted' }) }),
+    body: JSON.stringify({ success: true, learningId: '6RSX', today: record(), previous: record({ reflectionId: 'R-0', localDate: '2026-09-09', todayGoal: '', reflectionText: previousText, reflectionCharCount: [...previousText].length, status: 'submitted', ratingSchemaVersion: 'v1' }) }),
   });
 });
 await page.route('**/api/reflection/save', async (route) => {
@@ -44,10 +44,13 @@ async function inspect(width, height, screenshotPath) {
       if (!el) throw new Error(`missing ${selector}`);
       const r = el.getBoundingClientRect();
       const s = getComputedStyle(el);
-      return { x:r.x, y:r.y, width:r.width, height:r.height, bottom:r.bottom, right:r.right, fontSize:parseFloat(s.fontSize), background:s.backgroundImage, borderRadius:s.borderRadius };
+      return { x:r.x, y:r.y, width:r.width, height:r.height, bottom:r.bottom, right:r.right, centerX:r.x + r.width / 2, centerY:r.y + r.height / 2, fontSize:parseFloat(s.fontSize), background:s.backgroundImage, borderRadius:s.borderRadius };
     };
+    const rects = (selector) => [...document.querySelectorAll(selector)].map((el) => {
+      const r = el.getBoundingClientRect();
+      return { x:r.x, y:r.y, width:r.width, height:r.height, bottom:r.bottom, right:r.right, centerX:r.x + r.width / 2, centerY:r.y + r.height / 2 };
+    });
     const labels = [...document.querySelectorAll('.meg-nav button')].map((el) => el.textContent?.trim());
-    const hintRects = [...document.querySelectorAll('.meg-hint-chip')].map((el) => { const r=el.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; });
     return {
       innerHeight: window.innerHeight,
       innerWidth: window.innerWidth,
@@ -71,9 +74,12 @@ async function inspect(width, height, screenshotPath) {
       sectionHeading: rect('.meg-entry-goal .meg-section-title h2'),
       ratingLabel: rect('.meg-entry-ratings .meg-rating-block h3'),
       ratingDot: rect('.meg-rating-dot'),
+      scaleLow: rect('.meg-scale-one'),
+      scaleHigh: rect('.meg-scale-five'),
+      ratingNumbers: rects('.meg-rating-block:first-of-type .meg-rating-number'),
       footer: rect('.meg-entry-footer'),
       labels,
-      hintRects,
+      hintRects: rects('.meg-hint-chip'),
       bodyText: document.body.textContent || '',
     };
   });
@@ -111,17 +117,29 @@ async function inspect(width, height, screenshotPath) {
   assert(metrics.bodyText.includes('My English Growth — わたしの英語の学び'), `${width}x${height} full brand title missing`);
   assert(metrics.bodyText.includes('ID: 6RSX'), `${width}x${height} ID label missing`);
   assert(metrics.bodyText.includes('小さなふりかえりが、大きな成長につながります。'), `${width}x${height} footer message missing`);
-  assert(metrics.bodyText.includes('自分の考えをつたえることができた'), `${width}x${height} first rating wording missing`);
-  assert(metrics.bodyText.includes('相手の話を聞いてわかろうとした'), `${width}x${height} second rating wording missing`);
-  assert(metrics.hintRects.length === 7, `${width}x${height} expected seven hint chips`);
+  assert(metrics.bodyText.includes('ふりかえりポイント'), `${width}x${height} reflection points heading missing`);
+  assert(metrics.bodyText.includes('めあてに向かって取り組めた'), `${width}x${height} first rating wording missing`);
+  assert(metrics.bodyText.includes('相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした'), `${width}x${height} second rating wording missing`);
+  assert(metrics.bodyText.includes('できなかった') && metrics.bodyText.includes('よくできた'), `${width}x${height} rating scale anchors missing`);
+  assert(metrics.ratingNumbers.length === 5, `${width}x${height} expected five rating numbers`);
+  near(metrics.scaleLow.centerX, metrics.ratingNumbers[0].centerX, 4, `${width}x${height} low scale label over number 1`);
+  near(metrics.scaleHigh.centerX, metrics.ratingNumbers[4].centerX, 4, `${width}x${height} high scale label over number 5`);
+  assert(metrics.scaleLow.bottom <= metrics.ratingNumbers[0].y + 2, `${width}x${height} low scale label is not above number 1`);
+  assert(metrics.scaleHigh.bottom <= metrics.ratingNumbers[4].y + 2, `${width}x${height} high scale label is not above number 5`);
+  assert(metrics.hintRects.length === 9, `${width}x${height} expected nine hint chips`);
   near(metrics.hintRects[0].y, metrics.hintRects[1].y, 2, `${width}x${height} hint row 1`);
   near(metrics.hintRects[1].y, metrics.hintRects[2].y, 2, `${width}x${height} hint row 1`);
-  assert(metrics.hintRects[3].y > metrics.hintRects[0].y, `${width}x${height} hints are not a 3-column grid`);
+  near(metrics.hintRects[3].y, metrics.hintRects[4].y, 2, `${width}x${height} hint row 2`);
+  near(metrics.hintRects[4].y, metrics.hintRects[5].y, 2, `${width}x${height} hint row 2`);
+  near(metrics.hintRects[6].y, metrics.hintRects[7].y, 2, `${width}x${height} hint row 3`);
+  near(metrics.hintRects[7].y, metrics.hintRects[8].y, 2, `${width}x${height} hint row 3`);
+  assert(metrics.hintRects[3].y > metrics.hintRects[0].y && metrics.hintRects[6].y > metrics.hintRects[3].y, `${width}x${height} hints are not a 3x3 grid`);
 
   console.log(`[qa:reflection-visual] ${width}x${height} PASS`, JSON.stringify({
     scrollHeight: metrics.scrollHeight, leftRatio: Number(leftRatio.toFixed(3)),
     leftHeight: Math.round(metrics.left.height), previousHeight: Math.round(metrics.previous.height), hintsHeight: Math.round(metrics.hints.height),
     goalHeight: Math.round(metrics.goal.height), ratingsHeight: Math.round(metrics.ratings.height), reflectionHeight: Math.round(metrics.reflection.height),
+    scaleAlignment: { low: Number((metrics.scaleLow.centerX - metrics.ratingNumbers[0].centerX).toFixed(2)), high: Number((metrics.scaleHigh.centerX - metrics.ratingNumbers[4].centerX).toFixed(2)) },
     fonts: { brand: metrics.brand.fontSize, previous: metrics.previousText.fontSize, goal: metrics.goalText.fontSize, reflection: metrics.reflectionText.fontSize, heading: metrics.sectionHeading.fontSize, rating: metrics.ratingLabel.fontSize, hint: metrics.hintText.fontSize, submit: metrics.submit.fontSize },
   }));
 }
@@ -132,4 +150,4 @@ await inspect(1366, 680, 'artifacts/reflection-1366x680.png');
 await inspect(1366, 600, 'artifacts/reflection-1366x600.png');
 await inspect(1280, 600, 'artifacts/reflection-1280x600.png');
 await browser.close();
-console.log('[qa:reflection-visual] PASS: rendered Chromebook layout matches the approved structural and typography constraints across standard and reduced browser viewports.');
+console.log('[qa:reflection-visual] PASS: rendered Chromebook layout preserves the approved B design, nine hints, and scale labels aligned above rating numbers across standard and reduced viewports.');
