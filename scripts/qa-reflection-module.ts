@@ -4,6 +4,14 @@ const read = (path: string) => fs.readFileSync(path, 'utf8');
 const fail = (message: string): never => { throw new Error(`[qa:reflection] ${message}`); };
 const requireText = (source: string, needle: string, label: string) => { if (!source.includes(needle)) fail(`${label} missing: ${needle}`); };
 const forbidText = (source: string, needle: string, label: string) => { if (source.includes(needle)) fail(`${label} must not contain: ${needle}`); };
+const requireOrder = (source: string, needles: string[], label: string) => {
+  let cursor = -1;
+  for (const needle of needles) {
+    const next = source.indexOf(needle, cursor + 1);
+    if (next < 0 || next <= cursor) fail(`${label} order mismatch at: ${needle}`);
+    cursor = next;
+  }
+};
 
 const main = read('src/main.tsx');
 const reflection = read('src/reflection/ReflectionApp.tsx');
@@ -29,18 +37,41 @@ forbidText(app, 'lesson_reflections', 'existing AI App');
 forbidText(app, 'ReflectionApp', 'existing AI App');
 forbidText(dataContract, 'lesson_reflections', 'existing AI data contract');
 
-// Canonical pupil B-design: goal + two fixed 5-point items + one large free reflection + seven hints.
-requireText(reflection, "Today's Goal", 'reflection UI');
-requireText(reflection, "Today's Reflection", 'reflection UI');
+// Canonical pupil B-design: previous reflection + hints + submit on left; goal + two fixed 5-point items + one large free reflection on right.
+for (const label of ['振り返り','私の成長','みんなの振り返り']) requireText(reflection, label, 'top navigation');
+requireText(reflection, 'meg-entry-grid', 'fixed B two-column layout');
+requireText(reflection, 'meg-entry-left', 'left column');
+requireText(reflection, 'meg-entry-right', 'right column');
+requireOrder(reflection, ['meg-entry-left','meg-entry-previous','meg-entry-hints','meg-submit-panel','meg-entry-right','meg-entry-goal','meg-entry-ratings','meg-entry-reflection'], 'B-layout source');
+requireText(reflection, '今日のめあて', 'goal field');
+requireText(reflection, '5件法のふりかえり', 'five-point reflection section');
+requireText(reflection, '今日のふりかえり', 'free reflection field');
 requireText(reflection, '今日のめあてに向かって学ぶことができましたか？', 'goal rating');
 requireText(reflection, '自分で考えたり、工夫したりしながら学ぶことができましたか？', 'self-regulation rating');
 requireText(reflection, 'goalRating', 'goal rating state');
 requireText(reflection, 'selfRegulationRating', 'self-regulation state');
 requireText(reflection, 'reflectionText', 'single free reflection field');
 requireText(reflection, 'meg-main-reflection', 'large reflection field');
-requireText(css, 'min-height:280px', 'large Chromebook writing area');
+requireText(reflection, '<Send />', 'submit icon');
+requireText(reflection, "'送信する'", 'left-column submit action');
 for (const hint of ['できたこと','よかった学び方','授業中に考えていたこと','気づいたこと','友達のよかったところ','疑問に思ったこと','次に頑張りたいこと']) requireText(reflection, hint, 'reflection hint');
 requireText(reflection, '全部を書く必要はありません', 'optional hints guidance');
+forbidText(reflection, 'meg-side-note', 'removed next-lesson side card');
+forbidText(reflection, 'Chromebook想定', 'implementation-only viewport badge');
+forbidText(reflection, 'スクロールなし', 'implementation-only viewport badge');
+
+// Chromebook viewport guards: equal-height columns, compact no-page-scroll entry mode, and flexible writing space.
+requireText(css, '.meg-entry-left,.meg-entry-right', 'paired equal-height columns');
+requireText(css, 'height:100%', 'equal-height column rule');
+requireText(css, 'grid-template-rows:minmax(0,1fr) auto auto', 'left column vertical distribution');
+requireText(css, 'grid-template-rows:auto auto minmax(0,1fr)', 'right column vertical distribution');
+requireText(css, '.meg-app:has(.meg-entry-grid){height:100dvh;min-height:0;overflow:hidden}', 'desktop entry viewport containment');
+requireText(css, '.meg-main-reflection textarea', 'large reflection textarea styling');
+requireText(css, 'flex:1', 'flexible writing-area growth');
+requireText(css, '@media (max-height:680px)', 'short Chromebook viewport compaction');
+requireText(css, '@media (max-width:1099px)', 'narrow-screen scrolling fallback');
+
+// Autosave, draft isolation, and current B-data contract must remain intact.
 requireText(reflection, 'draftKey = (token: string)', 'per-device local draft key');
 requireText(reflection, "timeZone: 'Asia/Tokyo'", 'Tokyo day boundary');
 requireText(reflection, 'local.savedAt > serverUpdatedAt', 'local/server draft freshness comparison');
@@ -108,4 +139,4 @@ requireText(packageJson, 'dist/reflection/teacher', 'teacher static route');
 requireText(packageJson, '"build": "vite build && npm run build:server"', 'Cloud Run build isolation');
 forbidText(packageJson, '"build": "npm run build:pages', 'Cloud Run must not reuse Pages asset base');
 
-console.log('[qa:reflection] PASS: B-design, button/API linkage, storage integrity, privacy, compatibility, and deployment guards verified.');
+console.log('[qa:reflection] PASS: fixed B layout, Chromebook viewport, storage integrity, privacy, compatibility, and deployment guards verified.');
