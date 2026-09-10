@@ -97,7 +97,8 @@ jobs:
             fi
             if echo "$PUPIL_PAGE" | grep -q '<div id="root"></div>' && \
                echo "$TEACHER_PAGE" | grep -q '<div id="root"></div>' && \
-               echo "$PAGES_BUNDLE" | grep -q '今日のめあてに向かって学ぶことができましたか？' && \
+               echo "$PAGES_BUNDLE" | grep -q '自分の考えをつたえることができた' && \
+               echo "$PAGES_BUNDLE" | grep -q '相手の話を聞いてわかろうとした' && \
                echo "$PAGES_BUNDLE" | grep -q '全部を書く必要はありません'; then
               break
             fi
@@ -105,10 +106,18 @@ jobs:
           done
           echo "$PUPIL_PAGE" | grep -q '<div id="root"></div>'
           echo "$TEACHER_PAGE" | grep -q '<div id="root"></div>'
-          echo "$PAGES_BUNDLE" | grep -q '今日のめあてに向かって学ぶことができましたか？'
+          echo "$PAGES_BUNDLE" | grep -q 'My English Growth'
+          echo "$PAGES_BUNDLE" | grep -q 'わたしの英語の学び'
+          echo "$PAGES_BUNDLE" | grep -q '自分の考えをつたえることができた'
+          echo "$PAGES_BUNDLE" | grep -q '相手の話を聞いてわかろうとした'
           echo "$PAGES_BUNDLE" | grep -q '全部を書く必要はありません'
-          echo "$PAGES_BUNDLE" | grep -q 'わたしの成長'
-          echo "$PAGES_BUNDLE" | grep -q 'みんなのふりかえり'
+          echo "$PAGES_BUNDLE" | grep -q '私の成長'
+          echo "$PAGES_BUNDLE" | grep -q 'みんなの振り返り'
+          echo "$PAGES_BUNDLE" | grep -q '小さなふりかえりが、大きな成長につながります。'
+          if echo "$PAGES_BUNDLE" | grep -q 'Chromebook想定 / スクロールなし'; then
+            echo 'Obsolete Chromebook implementation badge is still present in production bundle.'
+            exit 1
+          fi
 
           CLOUD_PUPIL="$(curl --fail --silent --show-error --max-time 20 "$API_URL/reflection/")"
           CLOUD_TEACHER="$(curl --fail --silent --show-error --max-time 20 "$API_URL/reflection/teacher/")"
@@ -117,8 +126,15 @@ jobs:
           CLOUD_JS="$(printf '%s' "$CLOUD_PUPIL" | grep -oE 'src="[^"]+\.js"' | head -1 | cut -d'"' -f2)"
           test -n "$CLOUD_JS"
           CLOUD_BUNDLE="$(curl --fail --silent --show-error --max-time 30 "$API_URL$CLOUD_JS")"
-          echo "$CLOUD_BUNDLE" | grep -q '今日のめあてに向かって学ぶことができましたか？'
+          echo "$CLOUD_BUNDLE" | grep -q 'My English Growth'
+          echo "$CLOUD_BUNDLE" | grep -q 'わたしの英語の学び'
+          echo "$CLOUD_BUNDLE" | grep -q '自分の考えをつたえることができた'
+          echo "$CLOUD_BUNDLE" | grep -q '相手の話を聞いてわかろうとした'
           echo "$CLOUD_BUNDLE" | grep -q '全部を書く必要はありません'
+          if echo "$CLOUD_BUNDLE" | grep -q 'Chromebook想定 / スクロールなし'; then
+            echo 'Obsolete Chromebook implementation badge is still present in Cloud Run bundle.'
+            exit 1
+          fi
 
           CORS_HEADERS="$(mktemp)"
           curl --silent --show-error --max-time 20 -D "$CORS_HEADERS" -o /dev/null -X OPTIONS "$API_URL/api/reflection/bootstrap" \
