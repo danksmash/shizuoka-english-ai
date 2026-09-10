@@ -15,6 +15,8 @@ import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } fr
 import { validateAiResponse, inspectAiResponse, buildAlignedReply } from './src/utils/responseValidation';
 import { getAllSessionsForManagement, getStudentHistory, persistenceConfigured, resolveStudentByCode, saveCanonicalSession } from './src/server/persistence';
 import { buildResearchDashboardData, buildResearchExportDataSets, filterResearchExportDataSets, normalizeFormalResearchExportQuery, serializeResearchCsv, type ResearchExportDatasetName } from './src/server/researchDashboard';
+import { getAllReflectionRecordsForTeacher } from './src/server/reflectionPersistence';
+import { buildResearchLessonReflectionCodebookRows, buildResearchLessonReflectionRows, serializeResearchLessonReflectionCsv } from './src/server/researchLessonReflectionExport';
 import { authenticateManagement, clearManagementCookie, managementAuthConfigured, requireManagementRole, setManagementCookie, type AuthenticatedRequest } from './src/server/auth';
 import { managementPageHtml } from './src/server/managementPage';
 
@@ -764,8 +766,12 @@ app.get('/api/management/research.summary',requireManagementRole(['researcher'])
 
 app.get('/api/management/research.dashboard',requireManagementRole(['researcher']),async(req,res)=>{
   try{
-    const dashboard=buildResearchDashboardData(await getAllSessionsForManagement(),req.query);
-    res.setHeader('Cache-Control','no-store');return res.json(dashboard);
+    const [sessions,lessonReflections]=await Promise.all([getAllSessionsForManagement(),getAllReflectionRecordsForTeacher()]);
+    const dashboard=buildResearchDashboardData(sessions,req.query);
+    const lessonReflectionRowCount=buildResearchLessonReflectionRows(lessonReflections,normalizeFormalResearchExportQuery(req.query)).length;
+    const lessonCodebookCount=buildResearchLessonReflectionCodebookRows().length;
+    const exportFiles=dashboard.exportFiles.map((file:any)=>file.dataset==='codebook'?{...file,rowCount:Number(file.rowCount||0)+lessonCodebookCount}:file);
+    res.setHeader('Cache-Control','no-store');return res.json({...dashboard,exportFiles,lessonReflectionRowCount});
   }catch(error:any){console.error('Research dashboard failed',{message:error?.message});return res.status(503).json({success:false,error:'RESEARCH_DASHBOARD_UNAVAILABLE'});}
 });
 
@@ -790,11 +796,14 @@ function buildStoredZip(files:Array<{name:string;content:string}>):Buffer{
 app.get('/api/management/research.bundle.zip',requireManagementRole(['researcher']),async(req,res)=>{
   try{
     const exportQuery=normalizeFormalResearchExportQuery(req.query);
-    const datasets=filterResearchExportDataSets(buildResearchExportDataSets(await getAllSessionsForManagement()),exportQuery);
+    const [sourceSessions,lessonReflections]=await Promise.all([getAllSessionsForManagement(),getAllReflectionRecordsForTeacher()]);
+    const datasets=filterResearchExportDataSets(buildResearchExportDataSets(sourceSessions),exportQuery);
+    const lessonReflectionRows=buildResearchLessonReflectionRows(lessonReflections,exportQuery);
+    const codebookRows=[...datasets.codebook,...buildResearchLessonReflectionCodebookRows()];
     const exportedAt=new Date().toISOString();
-    const names=['sessions','utterances','expressions','personas','codebook'] as const;
-    const manifest={export_id:`export_${Date.now()}`,exported_at:exportedAt,schema_version:4,filters:exportQuery,row_counts:Object.fromEntries(names.map((name)=>[name,datasets[name].length]))};
-    const files=names.map((name)=>({name:`${name}.csv`,content:serializeResearchCsv(datasets[name],name)}));
+    const rowCounts={sessions:datasets.sessions.length,utterances:datasets.utterances.length,expressions:datasets.expressions.length,personas:datasets.personas.length,lesson_reflections:lessonReflectionRows.length,codebook:codebookRows.length};
+    const manifest={export_id:`export_${Date.now()}`,exported_at:exportedAt,schema_version:5,filters:exportQuery,row_counts:rowCounts,lesson_reflection_join_key:['research_id','local_date'],lesson_reflection_filter_scope:['start','end','dataScope','grade','classId']};
+    const files=[{name:'sessions.csv',content:serializeResearchCsv(datasets.sessions,'sessions')},{name:'utterances.csv',content:serializeResearchCsv(datasets.utterances,'utterances')},{name:'expressions.csv',content:serializeResearchCsv(datasets.expressions,'expressions')},{name:'personas.csv',content:serializeResearchCsv(datasets.personas,'personas')},{name:'lesson_reflections.csv',content:serializeResearchLessonReflectionCsv(lessonReflectionRows)},{name:'codebook.csv',content:serializeResearchCsv(codebookRows,'codebook')}];
     const zip=buildStoredZip([...files,{name:'manifest.json',content:JSON.stringify(manifest,null,2)}]);
     res.setHeader('Content-Type','application/zip');res.setHeader('Content-Disposition',`attachment; filename="research-bundle-${exportedAt.slice(0,10).replace(/-/g,'')}.zip"`);res.setHeader('Cache-Control','no-store');return res.send(zip);
   }catch(error:any){console.error('Research bundle export failed',{message:error?.message});return res.status(503).json({success:false,error:'RESEARCH_BUNDLE_UNAVAILABLE'});}
@@ -803,6 +812,17 @@ app.get('/api/management/research.bundle.zip',requireManagementRole(['researcher
 app.get('/api/management/research.csv',requireManagementRole(['researcher']),async(req,res)=>{
   try{
     const requested=typeof req.query?.dataset==='string'?req.query.dataset:'sessions';
+    if(requested==='lesson_reflections'){
+      const rows=buildResearchLessonReflectionRows(await getAllReflectionRecordsForTeacher(),normalizeFormalResearchExportQuery(req.query));
+      const csv=serializeResearchLessonReflectionCsv(rows);
+      res.setHeader('Content-Type','text/csv; charset=utf-8');res.setHeader('Content-Disposition','attachment; filename="lesson_reflections.csv"');res.setHeader('Cache-Control','no-store');return res.send(csv);
+    }
+    if(requested==='codebook'){
+      const datasets=buildResearchExportDataSets([]);
+      const rows=[...datasets.codebook,...buildResearchLessonReflectionCodebookRows()];
+      const csv=serializeResearchCsv(rows,'codebook');
+      res.setHeader('Content-Type','text/csv; charset=utf-8');res.setHeader('Content-Disposition','attachment; filename="codebook.csv"');res.setHeader('Cache-Control','no-store');return res.send(csv);
+    }
     const allowed=['sessions','utterances','expressions','personas','codebook'] as const;
     if(!(allowed as readonly string[]).includes(requested)) return res.status(400).json({success:false,error:'INVALID_RESEARCH_DATASET'});
     const dataset=requested as ResearchExportDatasetName;

@@ -39,7 +39,7 @@
     "qa:dashboard": "tsx scripts/qa-dashboard-data-sync.ts",
     "qa:pilot-b": "tsx scripts/qa-pilot-b-isolation.ts",
     "qa:load": "tsx scripts/qa-research-run-load.ts",
-    "qa:research-export": "tsx scripts/qa-research-export-complete.ts",
+    "qa:research-export": "tsx scripts/qa-research-export-complete.ts && tsx scripts/qa-research-lesson-reflection-bundle.ts",
     "qa:contextual-asr": "tsx scripts/qa-contextual-asr.ts"
   },
   "dependencies": {
