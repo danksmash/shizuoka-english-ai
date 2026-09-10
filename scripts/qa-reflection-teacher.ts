@@ -35,8 +35,12 @@ const records: ReflectionRecord[] = [
 
 for (const [classId, scope] of [['5-1','main'],['6-PB','pilot_b'],['テスト','test'],['予備','reserve']] as const) {
   assert(reflectionDataScopeForClassId(classId) === scope, `Reflection scope mismatch for ${classId}`);
-  assert(researchDataScopeForRow({ class_id: classId, local_date: '2026-09-09' }) === scope, `Research dashboard scope mismatch for ${classId}`);
 }
+assert(researchDataScopeForRow({ class_id: '5-1', local_date: '2026-09-09' }) === 'test', 'Pre-study ordinary class must be research test scope');
+assert(researchDataScopeForRow({ class_id: '5-1', local_date: '2026-09-17' }) === 'main', 'Ordinary class becomes research main on study start date');
+assert(researchDataScopeForRow({ class_id: '6-PB', local_date: '2026-09-09' }) === 'pilot_b', 'Official Pilot B date must remain pilot scope');
+assert(researchDataScopeForRow({ class_id: 'テスト', local_date: '2026-09-17' }) === 'test', 'Explicit test class must remain test scope');
+assert(researchDataScopeForRow({ class_id: '予備', local_date: '2026-09-17' }) === 'reserve', 'Reserve class must remain reserve scope');
 assert(reflectionGradeForClassId('6-PB') === '6', 'Pilot B grade should be derived as 6');
 assert(reflectionClassNumberForClassId('6-PB') === '', 'Pilot B must not masquerade as class 1/2/3');
 assert(reflectionClassNumberForClassId('5-2') === '2', 'ordinary room number should be derived');
