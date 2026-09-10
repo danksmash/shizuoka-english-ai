@@ -1,0 +1,44 @@
+name: Study schedule production smoke
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy production to Cloud Run
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Study 1 schedule page and protected API
+        run: |
+          API_URL="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app"
+
+          page="$(curl --fail --silent --show-error --max-time 20 "$API_URL/study-schedule.html")"
+          echo "$page" | grep -q 'Study 1 学級スケジュール管理'
+          echo "$page" | grep -q '来校留学生国籍告知日'
+          echo "$page" | grep -q '自己紹介ビデオ視聴日'
+          echo "$page" | grep -q '留学生交流会実施日'
+
+          query_status=$(curl --silent --show-error --max-time 20 \
+            -o /tmp/study-schedule-query.json \
+            -w '%{http_code}' \
+            -X POST "$API_URL/api/management/study-schedules/query" \
+            -H 'Content-Type: application/json' \
+            --data '{}')
+          test "$query_status" = '401'
+          grep -q 'UNAUTHORIZED' /tmp/study-schedule-query.json
+
+          save_status=$(curl --silent --show-error --max-time 20 \
+            -o /tmp/study-schedule-save.json \
+            -w '%{http_code}' \
+            -X PUT "$API_URL/api/management/study-schedules" \
+            -H 'Content-Type: application/json' \
+            --data '{"classId":"5-1","appStartDate":"2026-09-17","nationalityRevealDate":"2026-10-01","videoViewDate":"2026-10-08","exchangeDate":"2026-10-15","expectedRevision":0}')
+          test "$save_status" = '401'
+          grep -q 'UNAUTHORIZED' /tmp/study-schedule-save.json
