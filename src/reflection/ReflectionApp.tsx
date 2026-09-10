@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
   BookOpen,
@@ -32,7 +32,10 @@ import {
 
 const TOKEN_KEY = 'my-english-growth-device-token';
 const tokyoDate = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
-const draftKey = (token: string) => `my-english-growth-draft-four-point-${tokyoDate()}-${token.slice(0, 16)}`;
+const GOAL_MAX_CHARS = 150;
+const REFLECTION_MAX_CHARS = 600;
+const draftKey = (token: string) => `my-english-growth-draft-goal150-reflection600-${tokyoDate()}-${token.slice(0, 16)}`;
+const limitCharacters = (value: string, max: number) => [...value].slice(0, max).join('');
 
 type View = 'entry' | 'history' | 'class';
 type Draft = {
@@ -65,10 +68,10 @@ function normalizeDraft(value: unknown): Draft | null {
   const row = value as Record<string, unknown>;
   const rating = (candidate: unknown) => Number.isInteger(candidate) && Number(candidate) >= 1 && Number(candidate) <= 4 ? Number(candidate) : null;
   return {
-    todayGoal: typeof row.todayGoal === 'string' ? row.todayGoal : '',
+    todayGoal: typeof row.todayGoal === 'string' ? limitCharacters(row.todayGoal, GOAL_MAX_CHARS) : '',
     goalRating: rating(row.goalRating),
     communicationRating: rating(row.communicationRating),
-    reflectionText: typeof row.reflectionText === 'string' ? row.reflectionText : '',
+    reflectionText: typeof row.reflectionText === 'string' ? limitCharacters(row.reflectionText, REFLECTION_MAX_CHARS) : '',
   };
 }
 
@@ -106,6 +109,50 @@ const formatDate = (value: string) => {
   const date = new Date(`${value}T00:00:00`);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' });
 };
+
+function AutoFitPreviousReflection({ text }: { text: string }) {
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const fitText = useCallback(() => {
+    const element = textRef.current;
+    if (!element) return;
+    element.style.removeProperty('font-size');
+    element.style.removeProperty('line-height');
+    const computed = window.getComputedStyle(element);
+    const maxFontSize = Number.parseFloat(computed.fontSize) || 16;
+    const lineHeight = Number.parseFloat(computed.lineHeight);
+    const lineHeightRatio = Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight / maxFontSize : 1.55;
+    const apply = (fontSize: number) => {
+      element.style.setProperty('font-size', `${fontSize}px`, 'important');
+      element.style.setProperty('line-height', String(lineHeightRatio), 'important');
+      return element.scrollHeight <= element.clientHeight + 1;
+    };
+    if (apply(maxFontSize)) return;
+    let low = 9;
+    let high = maxFontSize;
+    let best = low;
+    apply(low);
+    for (let index = 0; index < 12; index += 1) {
+      const middle = (low + high) / 2;
+      if (apply(middle)) { best = middle; low = middle; }
+      else high = middle;
+    }
+    apply(best);
+  }, [text]);
+
+  useLayoutEffect(() => {
+    const element = textRef.current;
+    if (!element) return;
+    let frame = window.requestAnimationFrame(fitText);
+    const observer = new ResizeObserver(() => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(fitText);
+    });
+    observer.observe(element.parentElement || element);
+    return () => { window.cancelAnimationFrame(frame); observer.disconnect(); };
+  }, [fitText]);
+
+  return <p ref={textRef} className="meg-previous-summary" data-auto-fit="true">{text}</p>;
+}
 
 function FirstUse({ onRegistered }: { onRegistered: (token: string) => void }) {
   const [code, setCode] = useState('');
@@ -242,8 +289,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
 
   const previous = bootstrap.previous;
   const previousFull = displayReflectionText(previous);
-  const previousSummary = previousFull.length > 300 ? `${previousFull.slice(0, 300)}…` : previousFull;
-  const previousChars = [...previousSummary.replace(/…$/, '')].length;
+  const previousChars = [...previousFull].length;
 
   return <>
     <main className="meg-main-grid meg-entry-grid">
@@ -251,8 +297,8 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
         <div className="meg-previous-card meg-entry-previous">
           <div className="meg-section-title"><BookOpen /><h2>前回のふりかえり</h2>{previous && <span>{formatDate(previous.localDate)}</span>}</div>
           <div className="meg-previous-body">
-            {previousSummary ? <p className="meg-previous-summary">{previousSummary}</p> : <p className="meg-muted">前回の振り返りはまだありません。</p>}
-            {previousSummary && <div className="meg-field-count">{previousChars} / 300</div>}
+            {previousFull ? <AutoFitPreviousReflection text={previousFull} /> : <p className="meg-muted">前回の振り返りはまだありません。</p>}
+            {previousFull && <div className="meg-field-count">{previousChars} / {REFLECTION_MAX_CHARS}</div>}
           </div>
         </div>
 
@@ -275,8 +321,10 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
       <section className="meg-right meg-entry-right">
         <div className="meg-card meg-goal-card meg-entry-goal">
           <div className="meg-section-title"><Pencil /><h2>今日のめあて</h2></div>
-          <textarea value={draft.todayGoal} onChange={(e) => setDraft((current) => ({ ...current, todayGoal: e.target.value.slice(0, 1000) }))} onBlur={() => void flushGoalAutosave()} placeholder="前回の振り返りも思い出して、今日のめあてを自分の言葉で書きましょう。" />
-          <div className="meg-field-count">{goalChars} / 300</div>
+          <div className="meg-goal-input">
+            <textarea rows={3} maxLength={GOAL_MAX_CHARS} value={draft.todayGoal} onChange={(e) => setDraft((current) => ({ ...current, todayGoal: limitCharacters(e.target.value, GOAL_MAX_CHARS) }))} onBlur={() => void flushGoalAutosave()} placeholder="前回の振り返りも思い出して、今日のめあてを自分の言葉で書きましょう。" />
+            <div className="meg-field-count">{goalChars} / {GOAL_MAX_CHARS}</div>
+          </div>
         </div>
 
         <div className="meg-card meg-entry-ratings">
@@ -295,8 +343,8 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
         <div className="meg-card meg-reflection-card meg-entry-reflection">
           <div className="meg-section-title"><Pencil /><h2>今日のふりかえり</h2></div>
           <div className="meg-main-reflection">
-            <textarea value={draft.reflectionText} onChange={(e) => setDraft((current) => ({ ...current, reflectionText: e.target.value.slice(0, 12000) }))} placeholder="今日の学習を振り返って、できたこと、わかったこと、つたえられたこと、聞けたこと、学び方を工夫したこと、考えていたこと、くふうしたこと、気づいたこと、次にがんばりたいことなどから、自分が大切だと思うことを書きましょう。" />
-            <div className="meg-field-count">{reflectionChars} / 300</div>
+            <textarea maxLength={REFLECTION_MAX_CHARS} value={draft.reflectionText} onChange={(e) => setDraft((current) => ({ ...current, reflectionText: limitCharacters(e.target.value, REFLECTION_MAX_CHARS) }))} placeholder="今日の学習を振り返って、できたこと、わかったこと、つたえられたこと、聞けたこと、学び方を工夫したこと、考えていたこと、くふうしたこと、気づいたこと、次にがんばりたいことなどから、自分が大切だと思うことを書きましょう。" />
+            <div className="meg-field-count">{reflectionChars} / {REFLECTION_MAX_CHARS}</div>
           </div>
           <div className="meg-save-meta"><span>文字数は振り返りのよさを表す点数ではありません。</span></div>
         </div>
