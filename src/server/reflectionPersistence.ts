@@ -4,6 +4,8 @@ import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, q
 const DEVICE_COLLECTION = 'reflection_devices';
 const REFLECTION_COLLECTION = 'lesson_reflections';
 
+export type RatingSchemaVersion = 'v1' | 'v2';
+
 export interface ReflectionIdentity {
   studentId: string;
   researchId: string;
@@ -21,6 +23,7 @@ export interface ReflectionRecord {
   todayGoal: string;
   goalRating: number | null;
   selfRegulationRating: number | null;
+  ratingSchemaVersion: RatingSchemaVersion;
   reflectionText: string;
   reflectionCharCount: number;
   status: 'draft' | 'submitted';
@@ -92,6 +95,10 @@ function rating(value: unknown): number | null {
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 5 ? parsed : null;
 }
 
+function ratingSchema(value: unknown): RatingSchemaVersion {
+  return value === 'v2' ? 'v2' : 'v1';
+}
+
 function sixPartCharCount(record: Pick<ReflectionRecord, 'achievements' | 'languageUsed' | 'thinking' | 'difficultyStrategy' | 'languageCultureAwareness' | 'nextGoal'>): number {
   return [record.achievements, record.languageUsed, record.thinking, record.difficultyStrategy, record.languageCultureAwareness, record.nextGoal]
     .reduce((sum, value) => sum + [...value].length, 0);
@@ -113,6 +120,7 @@ function normalizeStoredRecord(row: Record<string, any> | null): ReflectionRecor
     todayGoal: cleanText(row.todayGoal, 1000),
     goalRating: rating(row.goalRating),
     selfRegulationRating: rating(row.selfRegulationRating),
+    ratingSchemaVersion: ratingSchema(row.ratingSchemaVersion),
     reflectionText: cleanText(row.reflectionText, 12000),
     reflectionCharCount: Number(row.reflectionCharCount || 0),
     status: row.status === 'submitted' ? 'submitted' : 'draft',
@@ -137,6 +145,7 @@ export async function saveLessonReflection(
     todayGoal?: unknown;
     goalRating?: unknown;
     selfRegulationRating?: unknown;
+    ratingSchemaVersion?: unknown;
     reflectionText?: unknown;
     status?: unknown;
     // Accepted only for backward compatibility with the briefly deployed six-part client.
@@ -155,6 +164,9 @@ export async function saveLessonReflection(
   const now = new Date().toISOString();
   // Submission is monotonic. A delayed autosave can never downgrade a submitted record to draft.
   const status: 'draft' | 'submitted' = input.status === 'submitted' || existing?.status === 'submitted' ? 'submitted' : 'draft';
+  // Rating semantics are fixed when the daily record is first created. Legacy records without
+  // an explicit schema remain v1 so historical values are never silently relabelled.
+  const ratingSchemaVersion: RatingSchemaVersion = existing?.ratingSchemaVersion || ratingSchema(input.ratingSchemaVersion);
   const record: ReflectionRecord = {
     reflectionId,
     studentId: identity.studentId,
@@ -165,6 +177,7 @@ export async function saveLessonReflection(
     todayGoal: input.todayGoal === undefined ? (existing?.todayGoal || '') : cleanText(input.todayGoal, 1000),
     goalRating: input.goalRating === undefined ? (existing?.goalRating ?? null) : rating(input.goalRating),
     selfRegulationRating: input.selfRegulationRating === undefined ? (existing?.selfRegulationRating ?? null) : rating(input.selfRegulationRating),
+    ratingSchemaVersion,
     reflectionText: input.reflectionText === undefined ? (existing?.reflectionText || '') : cleanText(input.reflectionText, 12000),
     reflectionCharCount: 0,
     status,
