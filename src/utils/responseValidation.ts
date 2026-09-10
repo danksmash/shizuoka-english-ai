@@ -12,15 +12,53 @@ interface RawReplySegment {
   japanese?: unknown;
 }
 
+export interface BuildAlignedReplyOptions {
+  recentHistory?: Array<{ sender?: unknown; englishText?: unknown }>;
+}
+
 function cleanSegmentText(value: unknown): string {
   return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+}
+
+function isQuestion(text: string): boolean {
+  return /\?\s*$/.test(text);
+}
+
+function isBriefReaction(text: string): boolean {
+  const words = text.split(/\s+/).filter(Boolean);
+  return words.length <= 3 && !/\b(i|you|my|your|we|he|she|they|it)\b/i.test(text);
+}
+
+function countTrailingAiQuestionTurns(history: BuildAlignedReplyOptions['recentHistory']): number {
+  if (!Array.isArray(history)) return 0;
+  let count = 0;
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const message = history[index];
+    if (message?.sender !== 'ai') continue;
+    const text = cleanSegmentText(message?.englishText);
+    if (text.includes('?')) {
+      count += 1;
+      continue;
+    }
+    break;
+  }
+  return count;
 }
 
 /**
  * Keeps English and Japanese together as atomic sentence pairs.
  * It never shortens English independently from its translation.
+ *
+ * Study 1 turn-taking protection: after two consecutive AI turns that contain
+ * questions, prefer a non-question reply segment when Claude supplied one.
+ * This does not impose a global question-rate quota and still allows a genuine
+ * clarification/information-gap question when Claude supplied only questions.
  */
-export function buildAlignedReply(parsed: any, personaName: string = 'AI Student'): AlignedReply {
+export function buildAlignedReply(
+  parsed: any,
+  personaName: string = 'AI Student',
+  options: BuildAlignedReplyOptions = {},
+): AlignedReply {
   const rawSegments: RawReplySegment[] = Array.isArray(parsed?.replySegments)
     ? parsed.replySegments
     : [];
@@ -32,18 +70,28 @@ export function buildAlignedReply(parsed: any, personaName: string = 'AI Student
     }))
     .filter((segment) => segment.english && segment.japanese);
 
-  let selected = validSegments.slice(0, 2);
-  if (validSegments.length > 2) {
-    const finalQuestion = [...validSegments].reverse().find((segment) => /\?\s*$/.test(segment.english));
-    if (finalQuestion) {
-      const first = validSegments[0];
-      const firstWords = first.english.split(/\s+/).filter(Boolean);
-      const firstIsBriefReaction =
-        firstWords.length <= 3 &&
-        !/\b(i|you|my|your|we|he|she|they|it)\b/i.test(first.english);
-      const directAnswer = firstIsBriefReaction && validSegments[1] ? validSegments[1] : first;
-      selected = finalQuestion !== directAnswer ? [directAnswer, finalQuestion] : [directAnswer];
+  const shouldYieldFloor = countTrailingAiQuestionTurns(options.recentHistory) >= 2;
+  const usableSegments = shouldYieldFloor
+    ? (() => {
+        const nonQuestions = validSegments.filter((segment) => !isQuestion(segment.english));
+        return nonQuestions.length > 0 ? nonQuestions : validSegments;
+      })()
+    : validSegments;
+
+  let selected: Array<{ english: string; japanese: string }> = [];
+  if (usableSegments.length > 0) {
+    let primaryIndex = 0;
+    if (
+      usableSegments.length > 1 &&
+      isBriefReaction(usableSegments[0].english) &&
+      !isQuestion(usableSegments[1].english)
+    ) {
+      primaryIndex = 1;
     }
+
+    selected = [usableSegments[primaryIndex]];
+    const laterSegment = usableSegments.slice(primaryIndex + 1)[0];
+    if (laterSegment) selected.push(laterSegment);
   }
 
   if (selected.length === 0) {
