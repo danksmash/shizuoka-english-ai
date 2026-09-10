@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-const page=fs.readFileSync('src/server/managementPage.ts','utf8');const server=fs.readFileSync('server.ts','utf8');
+const page=fs.readFileSync('src/server/managementPage.ts','utf8');const server=fs.readFileSync('server.ts','utf8');const schedule=fs.readFileSync('public/study-schedule.html','utf8');
 assert.ok(page.includes('研究データ管理'));assert.ok(page.includes('research.bundle.zip'));assert.ok(!page.includes('教師用管理'));assert.ok(!page.includes('学習者ID管理'));
+assert.ok(page.includes('id="scheduleBtn"'));assert.ok(page.includes('href="/study-schedule.html"'));assert.ok(page.includes('Study 1 日程管理'));
+assert.ok(schedule.includes('href="/management"'));assert.ok(schedule.includes('研究ダッシュボード'));
 assert.ok(server.includes("requireManagementRole(['researcher'])"));assert.ok(!server.includes("requireManagementRole(['teacher'])"));assert.ok(!server.includes("'/api/management/student-codes'"));assert.ok(!server.includes("'/api/management/sessions'"));
-console.log('Research-only management QA: PASS');
+console.log('Research-only management/navigation QA: PASS');
