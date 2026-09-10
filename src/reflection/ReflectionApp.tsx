@@ -6,8 +6,7 @@ import {
   Lightbulb,
   MessageCircle,
   Pencil,
-  Save,
-  TrendingUp,
+  Send,
   Users,
 } from 'lucide-react';
 import { isValidLearningCode, normalizeLearningCode } from '../dataContract';
@@ -73,6 +72,7 @@ function readLocalDraft(token: string): LocalDraftPayload | null {
     return draft && Number.isFinite(savedAt) ? { draft, savedAt } : null;
   } catch { return null; }
 }
+
 function persistLocalDraft(token: string, draft: Draft) {
   try { window.localStorage.setItem(draftKey(token), JSON.stringify({ draft, savedAt: Date.now() })); } catch {}
 }
@@ -111,7 +111,9 @@ const formatDate = (value: string) => {
 };
 
 function FirstUse({ onRegistered }: { onRegistered: (token: string) => void }) {
-  const [code, setCode] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const submit = async () => {
     const normalized = normalizeLearningCode(code);
     if (!isValidLearningCode(normalized)) { setError('先生から配られた4文字の学習者IDを入力してください。'); return; }
@@ -123,8 +125,7 @@ function FirstUse({ onRegistered }: { onRegistered: (token: string) => void }) {
         : e?.code === 'REFLECTION_CLASS_NOT_ASSIGNED'
           ? 'この学習者IDには学級が設定されていません。先生に確認してください。'
           : '学習者IDを確認できませんでした。先生に確認してください。');
-    }
-    finally { setBusy(false); }
+    } finally { setBusy(false); }
   };
   return <div className="meg-first-use"><div className="meg-first-card">
     <div className="meg-logo"><BarChart3 /></div><h1>My English Growth</h1><p>今日の英語の学びをふりかえろう</p>
@@ -136,7 +137,11 @@ function FirstUse({ onRegistered }: { onRegistered: (token: string) => void }) {
 
 function Header({ learningId, view, setView }: { learningId: string; view: View; setView: (view: View) => void }) {
   return <header className="meg-header"><div className="meg-brand"><div className="meg-logo"><BarChart3 /></div><div><h1>My English Growth</h1><p>今日の英語の学びをふりかえろう</p></div></div>
-    <nav className="meg-nav" aria-label="ページ切り替え"><button type="button" className={view === 'entry' ? 'active' : ''} onClick={() => setView('entry')}><Pencil />ふりかえり</button><button type="button" className={view === 'history' ? 'active' : ''} onClick={() => setView('history')}><BarChart3 />わたしの成長</button><button type="button" className={view === 'class' ? 'active' : ''} onClick={() => setView('class')}><Users />みんな</button></nav>
+    <nav className="meg-nav" aria-label="ページ切り替え">
+      <button type="button" className={view === 'entry' ? 'active' : ''} onClick={() => setView('entry')}><Pencil />振り返り</button>
+      <button type="button" className={view === 'history' ? 'active' : ''} onClick={() => setView('history')}><BarChart3 />私の成長</button>
+      <button type="button" className={view === 'class' ? 'active' : ''} onClick={() => setView('class')}><Users />みんなの振り返り</button>
+    </nav>
     <div className="meg-id-pill">{learningId}</div></header>;
 }
 
@@ -155,8 +160,11 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
     return serverDraft;
   });
   const [status, setStatus] = useState<'draft' | 'submitted'>(bootstrap.today?.status === 'submitted' ? 'submitted' : 'draft');
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle'); const [message, setMessage] = useState('');
-  const firstRender = useRef(true); const timerRef = useRef<number | null>(null); const skipAutosaveOnce = useRef(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+  const firstRender = useRef(true);
+  const timerRef = useRef<number | null>(null);
+  const skipAutosaveOnce = useRef(false);
   const latestGoalRef = useRef(draft.todayGoal);
   const lastGoalSavedRef = useRef(bootstrap.today?.todayGoal || '');
   const reflectionChars = useMemo(() => [...draft.reflectionText].length, [draft.reflectionText]);
@@ -223,25 +231,34 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
 
   const previous = bootstrap.previous;
   const previousFull = displayReflectionText(previous);
-  const previousSummary = previousFull.length > 260 ? `${previousFull.slice(0, 260)}…` : previousFull;
-  return <main className="meg-main-grid"><section className="meg-left">
-    <div className="meg-previous-card"><div className="meg-section-title"><MessageCircle /><h2>前回のふりかえり</h2>{previous && <span>{formatDate(previous.localDate)}</span>}</div>
-      {previous ? <>{previous.todayGoal && <p className="meg-previous-goal"><b>前回のめあて：</b>{previous.todayGoal}</p>}{previousSummary && <p className="meg-previous-summary">{previousSummary}</p>}</> : <p className="meg-muted">前回の振り返りはまだありません。</p>}
-    </div>
-    <div className="meg-card meg-goal-card"><div className="meg-section-title"><Flag /><h2>Today's Goal</h2><strong>今日のめあて</strong></div><textarea value={draft.todayGoal} onChange={(e) => setDraft((current) => ({ ...current, todayGoal: e.target.value.slice(0, 1000) }))} onBlur={() => void flushGoalAutosave()} placeholder="前回の振り返りも思い出して、今日のめあてを自分の言葉で書きましょう。" /></div>
-    <div className="meg-card meg-reflection-card"><div className="meg-section-title"><Pencil /><h2>Today's Reflection</h2><strong>今日の振り返り</strong></div>
-      <div className="meg-ratings-grid"><RatingScale title="今日のめあてに向かって学ぶことができましたか？" value={draft.goalRating} onChange={(value) => setDraft((current) => ({ ...current, goalRating: value }))} /><RatingScale title="自分で考えたり、工夫したりしながら学ぶことができましたか？" value={draft.selfRegulationRating} onChange={(value) => setDraft((current) => ({ ...current, selfRegulationRating: value }))} /></div>
-      <div className="meg-main-reflection"><h3>今日の学習を振り返って、考えたことを詳しく書こう。</h3><textarea value={draft.reflectionText} onChange={(e) => setDraft((current) => ({ ...current, reflectionText: e.target.value.slice(0, 12000) }))} placeholder="できたこと、学び方、考えていたこと、気づいたこと、友達から学んだこと、疑問、次に頑張りたいことなどから、自分が大切だと思うことを書きましょう。" /><div className="meg-field-count">{reflectionChars}文字</div></div>
-      <div className="meg-save-meta"><span>文字数は振り返りのよさを表す点数ではありません。</span><span className={saveState === 'error' ? 'error' : ''}>{saveState === 'saving' ? '保存しています…' : saveState === 'saved' ? '✓ 自動保存済み' : saveState === 'error' ? '自動保存できませんでした' : ''}</span></div>
-      {message && <p className={saveState === 'error' ? 'meg-error' : 'meg-message'}>{message}</p>}<button type="button" className="meg-primary meg-save" onClick={submit} disabled={saveState === 'saving'}><Save />{status === 'submitted' ? '更新して保存する' : '今日の振り返りを保存する'}</button>
-    </div></section>
-    <aside className="meg-right"><div className="meg-card meg-hints-card"><div className="meg-hints-head"><Lightbulb /><div><h2>振り返りのヒント</h2><p>全部を書く必要はありません。自分が大切だと思うことを選ぼう。</p></div></div><div className="meg-hint-list">{HINTS.map((hint, index) => <div key={hint}><span>{index + 1}</span><b>{hint}</b></div>)}</div><p className="meg-privacy-note">名前・住所・電話番号など、自分や友達の個人情報は書かないようにしましょう。</p></div>
-      <div className="meg-card meg-side-note"><TrendingUp /><div><b>次の授業につなげよう</b><p>前回の振り返りを読み返しながら、次の自分のめあてを考えていこう。</p></div></div></aside>
+  const previousSummary = previousFull.length > 360 ? `${previousFull.slice(0, 360)}…` : previousFull;
+  return <main className="meg-main-grid meg-entry-grid">
+    <section className="meg-left meg-entry-left">
+      <div className="meg-previous-card meg-entry-previous"><div className="meg-section-title"><MessageCircle /><h2>前回のふりかえり</h2>{previous && <span>{formatDate(previous.localDate)}</span>}</div>
+        {previousSummary ? <p className="meg-previous-summary">{previousSummary}</p> : <p className="meg-muted">前回の振り返りはまだありません。</p>}
+      </div>
+      <div className="meg-card meg-hints-card meg-entry-hints"><div className="meg-hints-head"><Lightbulb /><div><h2>今日のふりかえりのヒント</h2><p>全部を書く必要はありません。自分が大切だと思うことを選ぼう。</p></div></div><div className="meg-hint-list">{HINTS.map((hint, index) => <div key={hint}><span>{index + 1}</span><b>{hint}</b></div>)}</div><p className="meg-privacy-note">名前・住所・電話番号など、自分や友達の個人情報は書かないようにしましょう。</p></div>
+      <div className="meg-submit-panel">
+        {message && <p className={saveState === 'error' ? 'meg-error' : 'meg-message'}>{message}</p>}
+        <button type="button" className="meg-primary meg-submit" onClick={submit} disabled={saveState === 'saving'}><Send />{status === 'submitted' ? '更新して送信する' : '送信する'}</button>
+        <div className={saveState === 'error' ? 'meg-submit-status error' : 'meg-submit-status'}>{saveState === 'saving' ? '保存しています…' : saveState === 'saved' ? '✓ 自動保存済み' : saveState === 'error' ? '自動保存できませんでした' : ''}</div>
+      </div>
+    </section>
+    <section className="meg-right meg-entry-right">
+      <div className="meg-card meg-goal-card meg-entry-goal"><div className="meg-section-title"><Flag /><h2>今日のめあて</h2></div><textarea value={draft.todayGoal} onChange={(e) => setDraft((current) => ({ ...current, todayGoal: e.target.value.slice(0, 1000) }))} onBlur={() => void flushGoalAutosave()} placeholder="前回の振り返りも思い出して、今日のめあてを自分の言葉で書きましょう。" /></div>
+      <div className="meg-card meg-entry-ratings"><div className="meg-section-title"><BarChart3 /><h2>5件法のふりかえり</h2></div><div className="meg-ratings-grid"><RatingScale title="今日のめあてに向かって学ぶことができましたか？" value={draft.goalRating} onChange={(value) => setDraft((current) => ({ ...current, goalRating: value }))} /><RatingScale title="自分で考えたり、工夫したりしながら学ぶことができましたか？" value={draft.selfRegulationRating} onChange={(value) => setDraft((current) => ({ ...current, selfRegulationRating: value }))} /></div></div>
+      <div className="meg-card meg-reflection-card meg-entry-reflection"><div className="meg-section-title"><Pencil /><h2>今日のふりかえり</h2></div>
+        <div className="meg-main-reflection"><h3>今日の学習を振り返って、考えたことを詳しく書こう。</h3><textarea value={draft.reflectionText} onChange={(e) => setDraft((current) => ({ ...current, reflectionText: e.target.value.slice(0, 12000) }))} placeholder="できたこと、学び方、考えていたこと、気づいたこと、友達から学んだこと、疑問、次に頑張りたいことなどから、自分が大切だと思うことを書きましょう。" /><div className="meg-field-count">{reflectionChars}文字</div></div>
+        <div className="meg-save-meta"><span>文字数は振り返りのよさを表す点数ではありません。</span></div>
+      </div>
+    </section>
   </main>;
 }
 
 function HistoryView({ token }: { token: string }) {
-  const [rows, setRows] = useState<ReflectionRecordDto[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
+  const [rows, setRows] = useState<ReflectionRecordDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   useEffect(() => { setLoading(true); setError(''); loadReflectionHistory(token).then(setRows).catch(() => setError('学習履歴を読み込めませんでした。')).finally(() => setLoading(false)); }, [token]);
   return <main className="meg-wide-page"><div className="meg-card"><div className="meg-page-heading"><BarChart3 /><div><h2>わたしの成長</h2><p>前の自分が考えていたことと、今の自分を比べてみよう。</p></div></div>
     {loading ? <p>読み込んでいます…</p> : error ? <p className="meg-error">{error}</p> : rows.length === 0 ? <p className="meg-muted">保存された振り返りはまだありません。</p> : <div className="meg-history-list">{rows.map((row) => <article key={row.reflectionId} className="meg-history-item"><div className="meg-history-meta"><b>{formatDate(row.localDate)}</b><span>{row.reflectionCharCount}文字</span></div><h3>今日のめあて</h3><p>{row.todayGoal || '—'}</p><div className="meg-history-ratings"><span>めあて {row.goalRating ?? '—'}/5</span><span>考え・工夫 {row.selfRegulationRating ?? '—'}/5</span></div><h3>今日の振り返り</h3><p>{displayReflectionText(row) || '—'}</p></article>)}</div>}
@@ -253,13 +270,20 @@ function ClassCard({ row, index }: { key?: React.Key; row: ClassReflectionDto; i
 }
 
 function ClassView({ token, submitted }: { token: string; submitted: boolean }) {
-  const [rows, setRows] = useState<ClassReflectionDto[]>([]); const [loading, setLoading] = useState(false); const [error, setError] = useState('');
+  const [rows, setRows] = useState<ClassReflectionDto[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   useEffect(() => { if (!submitted) return; setLoading(true); setError(''); loadClassReflections(token).then(setRows).catch((e: any) => setError(e?.code === 'SUBMIT_FIRST' ? '自分の振り返りを書いたあとに見られます。' : '読み込めませんでした。')).finally(() => setLoading(false)); }, [token, submitted]);
   return <main className="meg-wide-page"><div className="meg-card"><div className="meg-page-heading"><Users /><div><h2>みんなのふりかえり</h2><p>友達の考え方や学び方から、新しい見方を見つけよう。</p></div></div>{!submitted ? <div className="meg-lock-message">自分の今日の振り返りを保存すると、今日のみんなの振り返りを読むことができます。</div> : loading ? <p>読み込んでいます…</p> : error ? <p className="meg-error">{error}</p> : rows.length === 0 ? <p className="meg-muted">今日、公開されている友達の振り返りはまだありません。</p> : <div className="meg-class-grid">{rows.map((row, index) => <ClassCard key={row.reflectionId} row={row} index={index} />)}</div>}</div></main>;
 }
 
 export default function ReflectionApp() {
-  const [token, setToken] = useState(readToken); const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null); const [loading, setLoading] = useState(Boolean(token)); const [loadError, setLoadError] = useState(''); const [view, setView] = useState<View>('entry'); const [submitted, setSubmitted] = useState(false);
+  const [token, setToken] = useState(readToken);
+  const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
+  const [loading, setLoading] = useState(Boolean(token));
+  const [loadError, setLoadError] = useState('');
+  const [view, setView] = useState<View>('entry');
+  const [submitted, setSubmitted] = useState(false);
   const load = useCallback(async (deviceToken: string) => {
     setLoading(true); setLoadError('');
     try { const data = await bootstrapReflection(deviceToken); setBootstrap(data); setSubmitted(data.today?.status === 'submitted'); }
