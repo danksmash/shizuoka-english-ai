@@ -35,8 +35,8 @@ const make = (
 });
 
 const records: ReflectionRecord[] = [
-  make('R-MAIN-5-1', '5-1', '2026-09-08'),
-  make('R-MAIN-6-2', '6-2', '2026-09-10', { status: 'draft', submittedAt: '', reflectionText: '=1+1' }),
+  make('R-MAIN-5-1', '5-1', '2026-09-18'),
+  make('R-MAIN-6-2', '6-2', '2026-09-20', { status: 'draft', submittedAt: '', reflectionText: '=1+1' }),
   make('R-PILOT-OFFICIAL', '6-PB', '2026-09-09'),
   make('R-PILOT-OFFDATE', '6-PB', '2026-09-10'),
   make('R-TEST', 'テスト', '2026-09-10'),
@@ -55,7 +55,7 @@ const testRows = buildResearchLessonReflectionRows(records, { dataScope: 'test' 
 assert.ok(testRows.some((row) => row.research_id === 'R-PILOT-OFFDATE'), 'off-date Pilot B data must be test scope');
 assert.ok(testRows.some((row) => row.research_id === 'R-TEST'), 'explicit test class must remain test scope');
 
-const mainClassRows = buildResearchLessonReflectionRows(records, { dataScope: 'main', grade: '5', classId: '1', start: '2026-09-08', end: '2026-09-08' });
+const mainClassRows = buildResearchLessonReflectionRows(records, { dataScope: 'main', grade: '5', classId: '1', start: '2026-09-18', end: '2026-09-18' });
 assert.deepEqual(mainClassRows.map((row) => row.research_id), ['R-MAIN-5-1'], 'shared date/grade/class filters must apply');
 
 const aiSpecificFiltersIgnored = buildResearchLessonReflectionRows(records, {
