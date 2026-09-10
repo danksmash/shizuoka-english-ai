@@ -143,6 +143,7 @@ jobs:
           PY
 
           API_URL="$API_URL" node scripts/qa-production-persona-arrival.mjs
+          API_URL="$API_URL" node scripts/qa-production-intro-conversation.mjs
 
           python3 - <<'PY'
           import json,time
