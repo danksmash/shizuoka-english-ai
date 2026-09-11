@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { phaseForLocalDate, validateStudyScheduleOrder, normalizeStudyDate, STUDY_CLASS_IDS } from '../src/server/studySchedulePersistence';
 
-assert.deepEqual(STUDY_CLASS_IDS, ['5-1','5-2','5-3','6-1','6-2','6-3']);
+assert.deepEqual(STUDY_CLASS_IDS, ['5-1','5-2','5-3','6-1','6-2']);
 assert.equal(normalizeStudyDate('2026-09-17'), '2026-09-17');
 assert.equal(normalizeStudyDate(''), '');
 assert.throws(() => normalizeStudyDate('2026-02-30'), /INVALID_STUDY_DATE/);
@@ -32,8 +32,13 @@ assert.ok(routes.includes("dialogueToReflection: ['research_id', 'local_date']")
 assert.ok(routes.includes("scheduleToDialogue: ['class_id', 'local_date']"));
 assert.ok(routes.includes("scheduleToReflection: ['class_id', 'local_date']"));
 assert.ok(persistence.includes("STUDY_SCHEDULE_COLLECTION = 'study_schedules'"));
+assert.ok(persistence.includes("STUDY_CLASS_IDS = ['5-1', '5-2', '5-3', '6-1', '6-2']"));
+assert.ok(!persistence.includes("'6-3'] as const"));
 assert.ok(persistence.includes('expectedRevision !== current.revision'));
 assert.ok(persistence.includes('history: [...current.history, snapshot].slice(-100)'));
+assert.ok(page.includes("const classes=['5-1','5-2','5-3','6-1','6-2'];"));
+assert.ok(!page.includes("'6-3'"));
+assert.ok(page.includes('本調査5学級'));
 assert.ok(page.includes('アプリ使用開始日'));
 assert.ok(page.includes('来校留学生国籍告知日'));
 assert.ok(page.includes('自己紹介ビデオ視聴日'));
