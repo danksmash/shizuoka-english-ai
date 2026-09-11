@@ -1,7 +1,7 @@
 import { getDocument, listCollection, setDocument } from './firestore';
 
 export const STUDY_SCHEDULE_COLLECTION = 'study_schedules';
-export const STUDY_CLASS_IDS = ['5-1', '5-2', '5-3', '6-1', '6-2', '6-3'] as const;
+export const STUDY_CLASS_IDS = ['5-1', '5-2', '5-3', '6-1', '6-2'] as const;
 export type StudyClassId = typeof STUDY_CLASS_IDS[number];
 export type StudyPhase = 'unconfigured' | 'pre_start' | 'unknown_virtual_other' | 'anticipated_other' | 'identified_real_other' | 'exchange_or_after';
 
