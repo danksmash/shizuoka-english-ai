@@ -53,20 +53,30 @@ assert.equal(tenryu.text, 'I like Tenryu River.');
 const sanaru = interpretContextualAsr({ text: 'I like Lake Sonaru.', previousAiText: 'What lake do you like?', topic: 'shizuoka_culture' });
 assert.equal(sanaru.text, 'I like Lake Sanaru.');
 
+// Stage 1 bias must remain conservative. Broad prompts should not feed the
+// recognizer dozens of unrelated local terms. Stage 2/3 may still use the
+// broader lexicon after recognition.
 const broadFavoritesBias = getContextualAsrBiasPhrases({
   previousAiText: "Let's talk about our favorite things. What do you like?",
   topic: 'favorites',
 });
-assert.ok(broadFavoritesBias.some((item) => item.phrase === 'natto'));
-assert.ok(broadFavoritesBias.some((item) => item.phrase === 'Hamamatsu'));
-assert.ok(broadFavoritesBias.some((item) => item.phrase === 'matsuri'));
+assert.equal(broadFavoritesBias.length, 0, 'broad favorites prompt must not inject food/place/culture bias');
+
 const shizuokaBias = getContextualAsrBiasPhrases({
   previousAiText: "Let's talk about Shizuoka and culture. What do you like about Shizuoka?",
   topic: 'shizuoka_culture',
 });
-for (const term of ['unagi','Lake Hamana','Suruga Bay','matsuri']) {
-  assert.ok(shizuokaBias.some((item) => item.phrase === term), 'Shizuoka broad bias missing: ' + term);
-}
+assert.ok(shizuokaBias.some((item) => item.phrase === 'matsuri'), 'explicit culture prompt should keep culture bias');
+assert.equal(shizuokaBias.some((item) => item.phrase === 'unagi'), false, 'Shizuoka culture prompt must not inject food bias');
+assert.equal(shizuokaBias.some((item) => item.phrase === 'Lake Hamana'), false, 'Shizuoka culture prompt must not inject place bias');
+
+const explicitFoodBias = getContextualAsrBiasPhrases({ previousAiText: 'What food do you like?', topic: 'favorites' });
+assert.ok(explicitFoodBias.some((item) => item.phrase === 'natto'));
+assert.equal(explicitFoodBias.some((item) => item.phrase === 'Hamamatsu'), false);
+const explicitPlaceBias = getContextualAsrBiasPhrases({ previousAiText: 'What lake do you like?', topic: 'shizuoka_culture' });
+assert.ok(explicitPlaceBias.some((item) => item.phrase === 'Lake Hamana'));
+assert.equal(explicitPlaceBias.some((item) => item.phrase === 'natto'), false);
+
 const sportBias = getContextualAsrBiasPhrases({ previousAiText: 'What sport do you like?', topic: 'favorites' });
 assert.equal(sportBias.length, 0, 'unrelated explicit sport context must not receive local-term bias');
 
@@ -161,6 +171,7 @@ const asrSource = readFileSync('src/utils/contextualAsr.ts', 'utf8');
 const speechSource = readFileSync('src/utils/speech.ts', 'utf8');
 assert.ok(speechSource.includes('SpeechRecognitionPhrase'), 'experimental contextual-bias progressive enhancement must be present');
 assert.ok(speechSource.includes("!('phrases' in recognition)"), 'unsupported browser guard must be present');
+assert.ok(asrSource.includes('broad prompts such as "What do you like?"'), 'Stage 1 broad-bias rollback guard must remain documented');
 assert.equal(/know to[\s\S]{0,80}natto|natto[\s\S]{0,80}know to/i.test(asrSource), false, 'fixed know-to/natto replacement mapping is forbidden');
 assert.ok(asrSource.includes('replySupport || !translationSupport') || asrSource.includes('!replySupport || !translationSupport'), 'Stage 3 must require independent AI evidence');
 
