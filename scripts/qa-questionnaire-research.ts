@@ -99,8 +99,13 @@ assert.ok(codebook.some((row) => row.variable==='survey_wave' && String(row.allo
 
 const entry = fs.readFileSync('server-entry.ts','utf8');
 const runtime = fs.readFileSync('src/server/questionnaireDashboardRuntime.ts','utf8');
+const routes = fs.readFileSync('src/server/questionnaireRoutes.ts','utf8');
 assert.ok(entry.includes('createQuestionnaireRouter'));
 assert.ok(entry.includes('withQuestionnaireResearchRuntime'));
+assert.ok(routes.includes("router.post('/questionnaire/statistics'"), 'statistics must use POST because mounted research routers come after the production GET catch-all');
+assert.ok(!routes.includes("router.get('/questionnaire/statistics'"));
+assert.ok(runtime.includes('/api/management/research.csv?dataset=student_questionnaires'));
+assert.ok(runtime.includes("fetch('/api/management/questionnaire/statistics',{method:'POST'"));
 assert.ok(runtime.includes('student_questionnaires.csv'));
 assert.ok(runtime.includes('schema_version:6'));
 assert.ok(runtime.includes('Holm補正後 p &lt; .05'));
