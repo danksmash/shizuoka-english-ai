@@ -187,20 +187,35 @@ function inferCategories(previousAiText: string, topic: DialogueTopic): Category
   return { categories: explicit, person: false, broad: false };
 }
 
+// Stage 1 recognition bias intentionally stays conservative. Unlike Stage 2/3
+// text reconciliation, the browser recognizer receives hints only when the
+// previous AI turn clearly identifies one category. This restores the safer
+// pre-hybrid behavior and avoids feeding dozens of unrelated local terms into
+// broad prompts such as "What do you like?".
+function inferBiasCategory(previousAiText: string, topic: DialogueTopic): ContextualAsrCategory | null {
+  const previous = normalize(previousAiText);
+  if (!previous) return null;
+  if (/\b(food|eat|eating|drink|breakfast|lunch|dinner|snack|dish|meal|fruit)\b/.test(previous)) return 'food';
+  if (/\b(where|place|city|town|lake|river|mountain|mount|park|station|sea|beach|live|from|visit|visited|go to|went to)\b/.test(previous)) return 'place';
+  if (/\b(culture|festival|tradition|custom|japanese|japan|shizuoka)\b/.test(previous)) return 'culture';
+  if (/\b(name|who|person|friend)\b/.test(previous)) return 'person';
+  if (topic === 'shizuoka_culture' && /\b(what do you like|tell me about)\b/.test(previous)) return 'culture';
+  return null;
+}
+
 export interface ContextualAsrBiasPhrase {
   phrase: string;
   boost: number;
 }
 
 export function getContextualAsrBiasPhrases(input: Pick<ContextualAsrInput, 'previousAiText' | 'topic'>): ContextualAsrBiasPhrase[] {
-  const inference = inferCategories(input.previousAiText || '', input.topic);
-  if (inference.person || inference.categories.length === 0) return [];
-  const categories = new Set(inference.categories);
+  const category = inferBiasCategory(input.previousAiText || '', input.topic);
+  if (!category || category === 'person') return [];
   return CONTEXTUAL_ASR_LEXICON
-    .filter((entry) => categories.has(entry.category))
+    .filter((entry) => entry.category === category)
     .map((entry) => ({
       phrase: entry.term,
-      boost: Math.max(0, Math.min(10, inference.broad ? Math.min(entry.boost ?? 2.5, 2.5) : (entry.boost ?? 2.5))),
+      boost: Math.max(0, Math.min(10, entry.boost ?? 2.5)),
     }));
 }
 
