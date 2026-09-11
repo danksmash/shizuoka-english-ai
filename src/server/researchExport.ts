@@ -282,7 +282,8 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
       child_repair_count: communication.childRepairCount, child_reason_expression_count: communication.childReasonExpressionCount,
       child_curriculum_vocab_count: curriculum.child.size, ai_curriculum_vocab_count: curriculum.ai.size, encountered_curriculum_vocab_count: curriculum.all.size,
       unique_vocabulary_count: curriculum.all.size, legacy_unique_vocabulary_count: session.uniqueVocabularyCount ?? '',
-      reflection_conveyed_ideas: session.reflection?.conveyedIdeas ?? '', reflection_understood_partner: session.reflection?.understoodPartner ?? '',
+      reflection_scale_version: session.reflection?.scaleVersion || (session.reflection ? 'legacy-135' : ''),
+      reflection_understood_partner: session.reflection?.understoodPartner ?? '', reflection_conveyed_ideas: session.reflection?.conveyedIdeas ?? '',
       reflection_noticed_language_culture: session.reflection?.noticedLanguageCulture ?? '', system_event_count: systemEvents.length,
       session_completed: dialogueCompleted ? 1 : 0, session_status: sessionStatus, data_quality_flag: dataQuality,
     });

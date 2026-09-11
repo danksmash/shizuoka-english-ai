@@ -13,10 +13,14 @@ export const DIALOGUE_DURATIONS_MINUTES = [1, 2, 3, 5] as const satisfies readon
 
 export interface StudentIdentity { learningCode: string; }
 
+export type ReflectionScaleVersion = 'legacy-135' | '4point-v1';
+export type ReflectionRating = 1 | 2 | 3 | 4 | 5;
+
 export interface ReflectionAnswers {
-  conveyedIdeas: 1 | 3 | 5;
-  understoodPartner: 1 | 3 | 5;
-  noticedLanguageCulture: 1 | 3 | 5;
+  scaleVersion?: ReflectionScaleVersion;
+  conveyedIdeas: ReflectionRating;
+  understoodPartner: ReflectionRating;
+  noticedLanguageCulture: ReflectionRating;
 }
 
 export const RESEARCH_SYSTEM_EVENT_TYPES = [
@@ -156,15 +160,17 @@ export function maskHistoryForStorage(history: ChatMessage[]): ChatMessage[] {
 export function parseReflectionAnswers(value: unknown): ReflectionAnswers | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const source = value as Record<string, unknown>;
-  const rating = (key: string): 1 | 3 | 5 | null => {
+  const scaleVersion: ReflectionScaleVersion = source.scaleVersion === '4point-v1' ? '4point-v1' : 'legacy-135';
+  const allowed = scaleVersion === '4point-v1' ? new Set([1, 2, 3, 4]) : new Set([1, 3, 5]);
+  const rating = (key: string): ReflectionRating | null => {
     const number = Number(source[key]);
-    return number === 1 || number === 3 || number === 5 ? number : null;
+    return allowed.has(number) ? number as ReflectionRating : null;
   };
   const conveyedIdeas = rating('conveyedIdeas');
   const understoodPartner = rating('understoodPartner');
   const noticedLanguageCulture = rating('noticedLanguageCulture');
   if (conveyedIdeas === null || understoodPartner === null || noticedLanguageCulture === null) return undefined;
-  return { conveyedIdeas, understoodPartner, noticedLanguageCulture };
+  return { scaleVersion, conveyedIdeas, understoodPartner, noticedLanguageCulture };
 }
 
 export function parseResearchSystemEvents(value: unknown): ResearchSystemEvent[] {

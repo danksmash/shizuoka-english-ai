@@ -43,8 +43,8 @@ const sample = {
   filters:{classes:['1','2','3'],grades:['5','6'],personas:['emma_usa','rahul_bangladesh'],labelConditions:['shown','hidden'],topics:['favorites','shizuoka_culture']},
   charts:{
     daily:[
-      {date:'2026-09-01',sessions:45,mean_child_words:12.5,mean_child_words_per_minute:17.2,reflection_conveyed:3.1,reflection_understood:3.2,reflection_culture:3.0},
-      {date:'2026-09-02',sessions:52,mean_child_words:14.2,mean_child_words_per_minute:19.1,reflection_conveyed:3.4,reflection_understood:3.5,reflection_culture:3.3},
+      {date:'2026-09-01',sessions:45,mean_child_words:12.5,mean_child_words_per_minute:17.2,reflection_understood:3.2,reflection_understood_n:45,reflection_conveyed:3.2,reflection_conveyed_n:45,reflection_culture:3.2,reflection_culture_n:44},
+      {date:'2026-09-02',sessions:52,mean_child_words:14.2,mean_child_words_per_minute:19.1,reflection_understood:3.5,reflection_understood_n:52,reflection_conveyed:3.4,reflection_conveyed_n:51,reflection_culture:3.3,reflection_culture_n:50},
     ],
     personas:[{label:'Emma',value:45},{label:'Rahul',value:30}],aggregation:'daily',
   },
@@ -99,11 +99,14 @@ assert.equal(element('iIndividual').textContent, 92);
 assert.ok(element('iIndividualDetail').textContent.includes('54'));
 for (const id of ['chartDaily','chartPersona']) assert.ok(element(id).innerHTML.includes('bar-chart-html'), `${id} must render readable HTML bars`);
 for (const id of ['chartWords','chartReflection']) assert.ok(element(id).innerHTML.includes('<svg'), `${id} must render inline SVG`);
-assert.equal(element('chartReflectionTitle').textContent,'授業振り返り平均（4件法）');
-assert.ok(element('chartReflection').innerHTML.includes('めあて'));
-assert.ok(element('chartReflection').innerHTML.includes('聞く・伝える'));
-assert.ok(element('chartReflection').innerHTML.includes('1 = できなかった'));
-assert.equal(element('chartReflection').innerHTML.includes('#f59e0b'),false,'obsolete third reflection series must not render');
+assert.equal(element('chartReflectionTitle').textContent,'AI対話ふりかえり平均（4件法）');
+assert.ok(element('chartReflection').innerHTML.includes('相手の話を聞いて分かる'));
+assert.ok(element('chartReflection').innerHTML.includes('自分の考えを伝える'));
+assert.ok(element('chartReflection').innerHTML.includes('新しい言葉や文化に気づいた'));
+assert.ok(element('chartReflection').innerHTML.includes('1 = 次はがんばる'));
+assert.ok(element('chartReflection').innerHTML.includes('class="reflection-axis-label">1</text>') && element('chartReflection').innerHTML.includes('class="reflection-axis-label">4</text>'));
+assert.ok(element('chartReflection').innerHTML.includes('#2774ee') && element('chartReflection').innerHTML.includes('#20a567') && element('chartReflection').innerHTML.includes('#f59e0b'));
+assert.ok(element('chartReflection').innerHTML.includes('<circle') && element('chartReflection').innerHTML.includes('<rect') && element('chartReflection').innerHTML.includes('<polygon'));
 assert.equal(element('chartReflection').innerHTML.includes('class="svg-value"'),false,'reflection chart must not print a value label at every point');
 assert.ok(element('qualityRows').innerHTML.includes('研究データ品質'));
 assert.ok(element('qualityRows').innerHTML.includes('システム品質'));
@@ -195,8 +198,10 @@ assert.ok(pageSource.includes('告知前／告知後セッション'));
 assert.ok(pageSource.includes('担当国Persona選択率'));
 assert.ok(pageSource.includes('個別利用らしいセッション'));
 assert.ok(pageSource.includes('主研究データとAI/TTSのシステム品質は分離'));
-assert.ok(pageSource.includes('lesson_reflections.csv の4件法2項目'));
-assert.ok(pageSource.includes('授業振り返り平均（4件法）'));
+assert.ok(pageSource.includes('AI対話ふりかえりグラフは'));
+assert.ok(pageSource.includes('lesson_reflections.csv として別に保持'));
+assert.ok(pageSource.includes('AI対話ふりかえり平均（4件法）'));
+assert.ok(pageSource.includes('.reflection-axis-label{font-size:18px'));
 assert.equal(pageSource.includes('振り返り平均値（1/3/5）'),false,'obsolete 1/3/5 chart title must not return');
 for (const id of ['filterBtn','resetBtn','refreshBtn','bundleBtn','logoutBtn']) assert.ok(pageSource.includes(`id="${id}"`), `button missing ${id}`);
 assert.ok(pageSource.includes("$('filterBtn').onclick=loadDashboard"));
