@@ -1,11 +1,9 @@
 import express from 'express';
 import { requireManagementRole } from './auth';
 import {
-  buildQuestionnaireExportRows,
   buildQuestionnaireStatistics,
   getAllQuestionnaireRecords,
   importGoogleFormsQuestionnaireCsv,
-  serializeQuestionnaireCsv,
   type QuestionnaireWave,
 } from './questionnaireResearch';
 
@@ -20,7 +18,7 @@ router.post('/questionnaire/import', requireManagementRole(['researcher']), asyn
     const surveyWave = wave(req.body?.surveyWave);
     const csvText = typeof req.body?.csvText === 'string' ? req.body.csvText : '';
     if (!surveyWave) return res.status(400).json({ success: false, error: 'INVALID_SURVEY_WAVE' });
-    if (!csvText || csvText.length > 2_000_000) return res.status(400).json({ success: false, error: 'INVALID_QUESTIONNAIRE_CSV' });
+    if (!csvText || csvText.length > 450_000) return res.status(400).json({ success: false, error: 'INVALID_QUESTIONNAIRE_CSV' });
     const result = await importGoogleFormsQuestionnaireCsv(csvText, surveyWave);
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, ...result });
@@ -31,7 +29,7 @@ router.post('/questionnaire/import', requireManagementRole(['researcher']), asyn
   }
 });
 
-router.get('/questionnaire/statistics', requireManagementRole(['researcher']), async (_req, res) => {
+router.post('/questionnaire/statistics', requireManagementRole(['researcher']), async (_req, res) => {
   try {
     const records = await getAllQuestionnaireRecords();
     res.setHeader('Cache-Control', 'no-store');
@@ -39,19 +37,6 @@ router.get('/questionnaire/statistics', requireManagementRole(['researcher']), a
   } catch (error: any) {
     console.error('Questionnaire statistics failed', { message: error?.message });
     return res.status(503).json({ success: false, error: 'QUESTIONNAIRE_STATISTICS_UNAVAILABLE' });
-  }
-});
-
-router.get('/questionnaire/export.csv', requireManagementRole(['researcher']), async (req, res) => {
-  try {
-    const rows = buildQuestionnaireExportRows(await getAllQuestionnaireRecords(), req.query as Record<string, unknown>);
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="student_questionnaires.csv"');
-    res.setHeader('Cache-Control', 'no-store');
-    return res.send(serializeQuestionnaireCsv(rows));
-  } catch (error: any) {
-    console.error('Questionnaire export failed', { message: error?.message });
-    return res.status(503).json({ success: false, error: 'QUESTIONNAIRE_EXPORT_UNAVAILABLE' });
   }
 });
 
