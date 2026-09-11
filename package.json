@@ -21,7 +21,7 @@
     "qa:security": "tsx scripts/qa-security.ts",
     "qa:data": "tsx scripts/qa-data-contract.ts",
     "qa:ai-reflection-ui": "tsx scripts/qa-ai-reflection-4point-ui.ts",
-    "qa:management": "tsx scripts/qa-management-page.ts",
+    "qa:management": "tsx scripts/qa-management-page.ts && tsx scripts/qa-persona-country-dashboard.ts",
     "qa:study-schedule": "tsx scripts/qa-study-schedule.ts",
     "qa:research-phase": "tsx scripts/qa-research-phase-filter.ts",
     "qa:responsive-vocab": "tsx scripts/qa-responsive-vocabulary.ts",

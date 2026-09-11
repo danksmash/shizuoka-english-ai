@@ -2,6 +2,7 @@ import express from 'express';
 import { createReflectionRouter } from './src/server/reflectionRoutes';
 import { createStudyScheduleRouter } from './src/server/studyScheduleRoutes';
 import { phaseAwareGetHandler } from './src/server/researchPhaseRuntime';
+import { withPersonaCountryDashboardLabels } from './src/server/personaCountryDashboardLabels';
 
 const application = express.application as any;
 const originalGet = application.get;
@@ -11,6 +12,7 @@ application.get = function researchPhaseAwareGet(this: any, path: any, ...handle
   if (typeof path === 'string' && handlers.length > 0) {
     const replacement = phaseAwareGetHandler(path);
     if (replacement) handlers[handlers.length - 1] = replacement;
+    handlers[handlers.length - 1] = withPersonaCountryDashboardLabels(path, handlers[handlers.length - 1]);
   }
   return originalGet.call(this, path, ...handlers);
 };
