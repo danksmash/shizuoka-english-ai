@@ -39,8 +39,8 @@ jobs:
         run: |
           set -euo pipefail
           export ACCESS_TOKEN="$(gcloud auth print-access-token)"
-          node <<'NODE'
-          const crypto = require('node:crypto');
+          node --input-type=module <<'NODE'
+          import crypto from 'node:crypto';
           const project = process.env.PROJECT_ID;
           const token = process.env.ACCESS_TOKEN;
           const targetHash = process.env.TARGET_STUDENT_ID_SHA256;
