@@ -21,6 +21,12 @@ jobs:
 
           page="$(curl --fail --silent --show-error --max-time 20 "$API_URL/study-schedule.html")"
           echo "$page" | grep -q 'Study 1 学級スケジュール管理'
+          echo "$page" | grep -q '本調査5学級'
+          echo "$page" | grep -q "const classes=\['5-1','5-2','5-3','6-1','6-2'\]"
+          if echo "$page" | grep -q "'6-3'"; then
+            echo 'Nonexistent class 6-3 is still present in Study 1 schedule page.'
+            exit 1
+          fi
           echo "$page" | grep -q '来校留学生国籍告知日'
           echo "$page" | grep -q '自己紹介ビデオ視聴日'
           echo "$page" | grep -q '留学生交流会実施日'
