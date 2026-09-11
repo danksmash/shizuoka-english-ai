@@ -24,7 +24,7 @@ const finalPlusInterim = buildStableSpeechSnapshot([
   { isFinal: true, alternatives: [{ transcript: 'I like', confidence: 0.9 }] },
   { isFinal: false, alternatives: [{ transcript: 'natto', confidence: 0.5 }] },
 ]);
-assert.equal(finalPlusInterim.finalText, 'I like.');
+assert.equal(finalPlusInterim.finalText, 'I like', 'live finalized prefix must not show terminal punctuation before interim speech');
 assert.equal(finalPlusInterim.interimText.toLowerCase(), 'natto');
 assert.equal(finalPlusInterim.bestText, 'I like natto.');
 
