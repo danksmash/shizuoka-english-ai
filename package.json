@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "tsx server-entry.ts",
     "qa:dialogue": "tsx scripts/qa-dialogue.ts",
-    "build:pages": "VITE_DEPLOY_TARGET=pages vite build && mkdir -p dist/reflection/teacher && cp dist/index.html dist/reflection/index.html && cp dist/index.html dist/404.html",
+    "build:pages": "VITE_DEPLOY_TARGET=pages vite build && mkdir -p dist/reflection/teacher && cp dist/index.html dist/reflection/index.html && cp dist/index.html dist/reflection/teacher/index.html && cp dist/index.html dist/404.html",
     "build:server": "tsx scripts/build-server.ts",
     "build": "vite build && npm run build:server",
     "start": "node dist/server.cjs",
