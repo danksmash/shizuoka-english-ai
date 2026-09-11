@@ -19,13 +19,18 @@ import {
 } from './types';
 import { getAIStudentById } from './data/curriculum';
 import { detectVocabularyInText } from './data/vocabulary56';
-import { getContextualAsrBiasPhrases, interpretContextualAsr } from './utils/contextualAsr';
+import { getContextualAsrBiasPhrases } from './utils/contextualAsr';
+import { interpretContextualAsrWithAlternatives } from './utils/contextualAsrAlternatives';
+import {
+  createStableSpeechRecognitionSession,
+  type StableSpeechRecognitionSession,
+  type StableSpeechSnapshot,
+} from './utils/stableSpeechRecognition';
 import { generateFallbackFeedback } from './utils/feedbackFallback';
 import {
   speakStudentVoice,
   speakVocabularyWord,
   stopSpeaking,
-  createSpeechRecognitionInstance,
   countEnglishWords,
   getStudentFarewellMessage,
 } from './utils/speech';
@@ -38,6 +43,14 @@ const apiUrl = (path: string) => `${API_BASE_URL}${path}`;
 const PERSONA_LABEL_CONDITION: 'shown' | 'hidden' = import.meta.env.VITE_PERSONA_LABEL_CONDITION === 'hidden' ? 'hidden' : 'shown';
 const LABELS_VISIBLE = PERSONA_LABEL_CONDITION === 'shown';
 const CONTEXTUAL_ASR_ENABLED = import.meta.env.VITE_CONTEXTUAL_ASR_ENABLED !== 'false';
+const emptySpeechSnapshot = (): StableSpeechSnapshot => ({
+  finalText: '',
+  interimText: '',
+  displayText: '',
+  bestText: '',
+  rawBestText: '',
+  alternatives: [],
+});
 
 export default function App() {
   const [phase, setPhase] = useState<'setup' | 'dialogue' | 'reflection' | 'feedback' | 'history'>('setup');
@@ -64,10 +77,12 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isAiResponding, setIsAiResponding] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [speechTranscript, setSpeechTranscript] = useState('');
-  const liveTranscriptRef = useRef('');
+  const [isFinalizingSpeech, setIsFinalizingSpeech] = useState(false);
+  const [speechFinalTranscript, setSpeechFinalTranscript] = useState('');
+  const [speechInterimTranscript, setSpeechInterimTranscript] = useState('');
+  const liveSpeechSnapshotRef = useRef<StableSpeechSnapshot>(emptySpeechSnapshot());
   const [micHintMessage, setMicHintMessage] = useState('');
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<StableSpeechRecognitionSession | null>(null);
   const [farewellBanner, setFarewellBanner] = useState<{ english: string; japanese: string } | null>(null);
   const farewellTransitionRef = useRef<(() => void) | null>(null);
   const farewellSafetyTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -154,6 +169,12 @@ export default function App() {
     return task;
   }, []);
 
+  const clearSpeechDraft = useCallback(() => {
+    liveSpeechSnapshotRef.current = emptySpeechSnapshot();
+    setSpeechFinalTranscript('');
+    setSpeechInterimTranscript('');
+  }, []);
+
   const handleStartDialogue = (newProfile: StudentProfile, code: string) => {
     chatAbortControllerRef.current?.abort();
     chatAbortControllerRef.current = null;
@@ -170,7 +191,7 @@ export default function App() {
     setTurnCount(0); turnCountRef.current = 0;
     setTotalChildWords(0); totalChildWordsRef.current = 0;
     setFeedback(null); setEncounteredVocabList([]); encounteredVocabRef.current = [];
-    setLatestVocabItem(null); setFarewellBanner(null); setMicHintMessage('');
+    setLatestVocabItem(null); setFarewellBanner(null); setMicHintMessage(''); clearSpeechDraft();
     const studentObj = getAIStudentById(newProfile.selectedAiStudentId);
     currentAiStudentRef.current = studentObj;
     const starterPrompt = studentObj.topicPrompts[newProfile.selectedTopic] || studentObj.starterPromptDefault;
@@ -207,15 +228,16 @@ export default function App() {
   }, [phase]);
 
   const stopRecordingInternal = () => {
-    if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch (e) { console.warn('Recognition stop error', e); } }
+    recognitionRef.current?.cancel();
     recognitionRef.current = null;
-    setIsRecording(false); setIsListening(false);
+    setIsRecording(false); setIsListening(false); setIsFinalizingSpeech(false);
   };
 
-  const interpretSpokenText = useCallback((text: string) => {
+  const interpretSpokenText = useCallback((text: string, alternatives: StableSpeechSnapshot['alternatives'] = []) => {
     const previousAiText = [...messagesRef.current].reverse().find((message) => message.sender === 'ai')?.englishText || '';
-    const result = interpretContextualAsr({
+    const result = interpretContextualAsrWithAlternatives({
       text,
+      alternatives,
       previousAiText,
       topic: profileRef.current.selectedTopic,
       enabled: CONTEXTUAL_ASR_ENABLED,
@@ -245,7 +267,7 @@ export default function App() {
     const newHistory = [...messagesRef.current, childMsg]; setMessages(newHistory); messagesRef.current = newHistory;
     const nextTurnCount = turnCountRef.current + 1; turnCountRef.current = nextTurnCount; setTurnCount(nextTurnCount);
     const nextTotalWords = totalChildWordsRef.current + words; totalChildWordsRef.current = nextTotalWords; setTotalChildWords(nextTotalWords);
-    setSpeechTranscript(''); liveTranscriptRef.current = ''; setIsAiResponding(true); setMood('thinking');
+    clearSpeechDraft(); setIsAiResponding(true); setMood('thinking');
     const controller = new AbortController(); chatAbortControllerRef.current = controller;
     const aiRequestStartedAt = Date.now();
     try {
@@ -292,18 +314,40 @@ export default function App() {
       case 'no-speech': return '声が聞こえなかったよ。もう一度マイクを押して話してみよう！';
       case 'audio-capture': return 'マイクを使えません。ほかのアプリがマイクを使っていないか確認してください。';
       case 'network': return '音声認識サービスにつながりませんでした。通信状態を確認してください。';
+      case 'recognition-ended-repeatedly': return '音声認識が何度も中断されました。もう一度マイクを押してください。';
       default: return '音声認識を開始できませんでした。もう一度試してください。';
     }
   };
 
   const handleToggleRecording = async () => {
-    if (isAiResponding) return;
+    if (isAiResponding || isFinalizingSpeech) return;
     if (isRecording) {
-      const spokenText = liveTranscriptRef.current.trim();
-      recordResearchEvent('mic_stop_send', spokenText ? 'with_speech' : 'empty');
-      stopRecordingInternal();
-      if (spokenText) { const interpretedText=interpretSpokenText(spokenText); await handleSendMessage(interpretedText); liveTranscriptRef.current=''; setSpeechTranscript(''); }
-      else { setMicHintMessage('英語が聞き取れませんでした。もう1度マイクを押して話してみてね！'); setTimeout(() => setMicHintMessage(''), 4000); }
+      const session = recognitionRef.current;
+      if (!session) {
+        setIsRecording(false); setIsListening(false);
+        return;
+      }
+      setIsFinalizingSpeech(true);
+      try {
+        const snapshot = await session.requestStop();
+        recognitionRef.current = null;
+        liveSpeechSnapshotRef.current = snapshot;
+        setSpeechFinalTranscript(snapshot.finalText);
+        setSpeechInterimTranscript(snapshot.interimText);
+        setIsRecording(false); setIsListening(false);
+        const spokenText = snapshot.bestText.trim();
+        recordResearchEvent('mic_stop_send', spokenText ? 'with_speech' : 'empty');
+        if (spokenText) {
+          const interpretedText = interpretSpokenText(spokenText, snapshot.alternatives);
+          await handleSendMessage(interpretedText);
+        } else {
+          setMicHintMessage('英語が聞き取れませんでした。もう1度マイクを押して話してみてね！');
+          setTimeout(() => setMicHintMessage(''), 4000);
+          clearSpeechDraft();
+        }
+      } finally {
+        setIsFinalizingSpeech(false);
+      }
       return;
     }
 
@@ -321,21 +365,37 @@ export default function App() {
     }
 
     recordResearchEvent('mic_start');
-    liveTranscriptRef.current=''; setSpeechTranscript(''); setIsRecording(true); setIsListening(true);
-    await new Promise((resolve) => setTimeout(resolve, 180));
+    clearSpeechDraft();
     const previousAiText = [...messagesRef.current].reverse().find((message) => message.sender === 'ai')?.englishText || '';
     const asrBiasPhrases = getContextualAsrBiasPhrases({ previousAiText, topic: profileRef.current.selectedTopic });
-    const recognition = createSpeechRecognitionInstance(
-      (text) => { liveTranscriptRef.current=text; setSpeechTranscript(text); },
-      (err) => { recordResearchEvent('mic_error', String(err).slice(0, 40)); console.warn('Speech Rec Error:', err); setMicHintMessage(mapSpeechError(err)); setIsRecording(false); setIsListening(false); setTimeout(() => setMicHintMessage(''), 6000); },
-      () => { setIsRecording(false); setIsListening(false); },
-      asrBiasPhrases,
-      (applied, phraseCount) => { if (phraseCount > 0) recordResearchEvent('asr_bias_status', `${applied ? 'applied' : 'unavailable'}:${phraseCount}`); }
-    );
-    if (recognition) {
-      recognitionRef.current = recognition;
-      try { recognition.start(); }
-      catch (e) { recordResearchEvent('mic_error', 'start'); console.warn('Speech Rec start error', e); setMicHintMessage('マイクを開始できませんでした。もう一度試してください。'); setIsRecording(false); setIsListening(false); }
+    const session = createStableSpeechRecognitionSession({
+      biasPhrases: asrBiasPhrases,
+      maxAlternatives: 3,
+      onStart: () => { setIsRecording(true); setIsListening(true); },
+      onUpdate: (snapshot) => {
+        liveSpeechSnapshotRef.current = snapshot;
+        setSpeechFinalTranscript(snapshot.finalText);
+        setSpeechInterimTranscript(snapshot.interimText);
+      },
+      onError: (err) => {
+        recordResearchEvent('mic_error', String(err).slice(0, 40));
+        console.warn('Speech Rec Error:', err);
+        setMicHintMessage(mapSpeechError(err));
+        setIsRecording(false); setIsListening(false); setIsFinalizingSpeech(false);
+        setTimeout(() => setMicHintMessage(''), 6000);
+      },
+      onEnd: () => { setIsRecording(false); setIsListening(false); },
+      onRestart: (count) => { recordResearchEvent('asr_restart', String(count)); setIsRecording(true); setIsListening(true); },
+      onBiasStatus: (applied, phraseCount) => { if (phraseCount > 0) recordResearchEvent('asr_bias_status', `${applied ? 'applied' : 'unavailable'}:${phraseCount}`); },
+    });
+    if (session) {
+      recognitionRef.current = session;
+      const started = session.start();
+      if (started) {
+        setIsRecording(true); setIsListening(true);
+      } else {
+        recognitionRef.current = null;
+      }
     } else {
       recordResearchEvent('mic_error', 'unsupported');
       setMicHintMessage('このブラウザでは音声認識を利用できません。Chromeなど音声認識に対応したブラウザで開いてください。'); setIsRecording(false); setIsListening(false); setTimeout(() => setMicHintMessage(''), 5000);
@@ -349,16 +409,24 @@ export default function App() {
 
   const handleFinishDialogue = async () => {
     if (phase !== 'dialogue' || !dialogueActiveRef.current) return;
-    dialogueActiveRef.current=false; chatAbortControllerRef.current?.abort(); chatAbortControllerRef.current=null; setIsAiResponding(false); stopSpeaking(); stopRecordingInternal();
+    dialogueActiveRef.current=false; chatAbortControllerRef.current?.abort(); chatAbortControllerRef.current=null; setIsAiResponding(false); stopSpeaking();
+    let pendingSnapshot = liveSpeechSnapshotRef.current;
+    if (recognitionRef.current) {
+      setIsFinalizingSpeech(true);
+      try { pendingSnapshot = await recognitionRef.current.requestStop(); }
+      catch (error) { console.warn('Final speech flush unavailable:', error); }
+      recognitionRef.current = null;
+    }
+    setIsRecording(false); setIsListening(false); setIsFinalizingSpeech(false);
     if (timerRef.current) clearInterval(timerRef.current);
     if (farewellSafetyTimerRef.current) { clearTimeout(farewellSafetyTimerRef.current); farewellSafetyTimerRef.current=null; }
-    const pendingRawText=(liveTranscriptRef.current || speechTranscript || '').trim();
-    const pendingText=pendingRawText ? interpretSpokenText(pendingRawText) : '';
+    const pendingRawText=(pendingSnapshot.bestText || speechFinalTranscript || speechInterimTranscript || '').trim();
+    const pendingText=pendingRawText ? interpretSpokenText(pendingRawText, pendingSnapshot.alternatives) : '';
     let currentHistory=[...messagesRef.current];
     if (pendingText && !currentHistory.some((m) => m.sender==='child' && m.englishText.trim()===pendingText)) {
       extractAndAddVocab(pendingText); const words=countEnglishWords(pendingText);
       const pendingChildMsg:ChatMessage={id:`child-${Date.now()}`,sender:'child',englishText:pendingText,japaneseText:'日本語に訳せませんでした。',timestamp:Date.now(),wordCount:words};
-      currentHistory=[...currentHistory,pendingChildMsg]; turnCountRef.current+=1; totalChildWordsRef.current+=words; setTurnCount(turnCountRef.current); setTotalChildWords(totalChildWordsRef.current); setSpeechTranscript(''); liveTranscriptRef.current='';
+      currentHistory=[...currentHistory,pendingChildMsg]; turnCountRef.current+=1; totalChildWordsRef.current+=words; setTurnCount(turnCountRef.current); setTotalChildWords(totalChildWordsRef.current); clearSpeechDraft();
     }
     sessionEndedAtRef.current = Date.now(); recordResearchEvent('session_finish');
     const currentProf=profileRef.current; const studentObj=getAIStudentById(currentProf.selectedAiStudentId); const farewell=getStudentFarewellMessage(studentObj.id); setFarewellBanner(farewell);
@@ -416,7 +484,7 @@ export default function App() {
     finally { setHistoryLoading(false); }
   };
 
-  const handleRestart=()=>{dialogueActiveRef.current=false;chatAbortControllerRef.current?.abort();chatAbortControllerRef.current=null;stopSpeaking();stopRecordingInternal();if(farewellSafetyTimerRef.current){clearTimeout(farewellSafetyTimerRef.current);farewellSafetyTimerRef.current=null;}farewellTransitionRef.current=null;setPhase('setup');setMessages([]);setTurnCount(0);setTotalChildWords(0);setEncounteredVocabList([]);setLatestVocabItem(null);setFarewellBanner(null);setMicHintMessage('');setLearningCode('');setSessionId('');initialSessionSaveRef.current=null;sessionSaveQueueRef.current=Promise.resolve();setReflectionSaveMessage('');};
+  const handleRestart=()=>{dialogueActiveRef.current=false;chatAbortControllerRef.current?.abort();chatAbortControllerRef.current=null;stopSpeaking();stopRecordingInternal();if(farewellSafetyTimerRef.current){clearTimeout(farewellSafetyTimerRef.current);farewellSafetyTimerRef.current=null;}farewellTransitionRef.current=null;setPhase('setup');setMessages([]);setTurnCount(0);setTotalChildWords(0);setEncounteredVocabList([]);setLatestVocabItem(null);setFarewellBanner(null);setMicHintMessage('');clearSpeechDraft();setLearningCode('');setSessionId('');initialSessionSaveRef.current=null;sessionSaveQueueRef.current=Promise.resolve();setReflectionSaveMessage('');};
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-800 flex flex-col">
@@ -441,7 +509,7 @@ export default function App() {
               <div className="sm:hidden flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50 text-xs font-bold text-slate-700">{LABELS_VISIBLE && <span className="text-xl">{currentAiStudent.flag}</span>}<span>{currentAiStudent.name}</span><span className="ml-auto text-slate-500">Turns {turnCount} · Words {totalChildWords}</span></div>
               <DialogueView labelCondition={PERSONA_LABEL_CONDITION} messages={messages} studentName={profile.name} aiStudent={currentAiStudent} isAiResponding={isAiResponding} onPlayAudio={(text)=>{recordResearchEvent('ai_replay','transcript');playAiVoice(text);}}/>
               <AnimatePresence>{micHintMessage&&<motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:10}} className="mx-3 sm:mx-4 mb-2 bg-amber-50 border border-amber-300 rounded-xl p-2.5 text-xs font-bold text-amber-900 text-center shadow-xs">{micHintMessage}</motion.div>}</AnimatePresence>
-              <div className="hidden lg:block"><SpeechInputBar isRecording={isRecording} transcript={speechTranscript} isAiResponding={isAiResponding} onToggleRecording={handleToggleRecording}/></div>
+              <div className="hidden lg:block"><SpeechInputBar isRecording={isRecording} finalTranscript={speechFinalTranscript} interimTranscript={speechInterimTranscript} isFinalizing={isFinalizingSpeech} isAiResponding={isAiResponding} onToggleRecording={handleToggleRecording}/></div>
             </div>
 
             <div className="col-span-12 lg:col-span-3 hidden lg:flex flex-col gap-4 overflow-y-auto min-h-0">
@@ -450,14 +518,14 @@ export default function App() {
           </main>
 
           <div className="lg:hidden fixed left-0 right-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur-md shadow-[0_-8px_24px_rgba(15,23,42,0.10)] pb-[env(safe-area-inset-bottom)]">
-            <SpeechInputBar compact isRecording={isRecording} transcript={speechTranscript} isAiResponding={isAiResponding} onToggleRecording={handleToggleRecording}/>
+            <SpeechInputBar compact isRecording={isRecording} finalTranscript={speechFinalTranscript} interimTranscript={speechInterimTranscript} isFinalizing={isFinalizingSpeech} isAiResponding={isAiResponding} onToggleRecording={handleToggleRecording}/>
           </div>
 
           <AnimatePresence>{farewellBanner&&<div id="farewell-overlay" onClick={handleSkipFarewell} className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer select-none"><motion.div initial={{scale:.9,opacity:0,y:10}} animate={{scale:1,opacity:1,y:0}} exit={{scale:.95,opacity:0}} onClick={(e)=>{e.stopPropagation();handleSkipFarewell();}} className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl text-center border-4 border-amber-300"><div className="text-3xl mb-2">🎉 {currentAiStudent.flag}</div><h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-1">Time is up! (対話終了)</h2><div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 my-4 text-left"><p className="text-base sm:text-lg font-black text-blue-950">“{farewellBanner.english}”</p><p className="text-xs sm:text-sm font-bold text-slate-600 mt-2">{farewellBanner.japanese}</p></div><button id="farewell-next-btn" type="button" onClick={(e)=>{e.stopPropagation();handleSkipFarewell();}} className="w-full min-h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-2xl">📊 レポート・アドバイスを見る</button></motion.div></div>}</AnimatePresence>
         </div>
       )}
-      {phase==='reflection'&&<ReflectionScreen aiStudent={currentAiStudent} profile={profile} learningCode={learningCode} totalTurns={turnCount} totalWords={totalChildWords} elapsedSeconds={elapsedSeconds} vocabCount={encounteredVocabList.length} onSubmit={handleSubmitReflection} isSaving={isSavingReflection} saveMessage={reflectionSaveMessage}/>}
-      {phase==='feedback'&&<FeedbackScreen profile={profile} learningId={learningCode} messages={messages} feedback={feedback} isLoadingFeedback={isLoadingFeedback} totalTurns={turnCount} totalWords={totalChildWords} elapsedSeconds={elapsedSeconds} encounteredVocabList={encounteredVocabList} onPlayAudio={playAiVoice} onRestart={handleRestart} onOpenHistory={learningDataEnabled && learningCode ? handleOpenHistory : undefined}/>}
+      {phase==='reflection'&&<ReflectionScreen aiStudent={currentAiStudent} profile={profile} learningCode={learningCode} totalTurns={turnCount} totalWords={totalChildWords} elapsedSeconds={elapsedSeconds} vocabCount={encounteredVocabList.length} onSubmit={handleSubmitReflection} isSaving={isSavingReflection} saveMessage={reflectionSaveMessage}/>} 
+      {phase==='feedback'&&<FeedbackScreen profile={profile} learningId={learningCode} messages={messages} feedback={feedback} isLoadingFeedback={isLoadingFeedback} totalTurns={turnCount} totalWords={totalChildWords} elapsedSeconds={elapsedSeconds} encounteredVocabList={encounteredVocabList} onPlayAudio={playAiVoice} onRestart={handleRestart} onOpenHistory={learningDataEnabled && learningCode ? handleOpenHistory : undefined}/>} 
       {phase==='history'&&<LearningHistoryScreen learningId={learningCode} rows={historyRows} loading={historyLoading} error={historyError} onBack={()=>setPhase('feedback')}/>} 
     </div>
   );
