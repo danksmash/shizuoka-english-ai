@@ -116,7 +116,8 @@ export function buildStableSpeechSnapshot(
   const rawFinalText = joinRaw(committedRaw, finalParts.join(' '));
   const rawInterimText = interimParts.join(' ').trim();
   const bestText = rawBestText ? formatSpeechText(rawBestText) : '';
-  const finalText = rawFinalText ? formatSpeechText(rawFinalText) : '';
+  const formattedFinal = rawFinalText ? formatSpeechText(rawFinalText) : '';
+  const finalText = rawInterimText ? stripTerminalPunctuation(formattedFinal) : formattedFinal;
   const interimText = rawInterimText ? stripTerminalPunctuation(formatSpeechText(rawInterimText)) : '';
 
   const alternatives: SpeechRecognitionAlternativeText[] = [];
@@ -191,6 +192,7 @@ export function createStableSpeechRecognitionSession(
   let stopPromise: Promise<StableSpeechSnapshot> | null = null;
   let stopResolve: ((snapshot: StableSpeechSnapshot) => void) | null = null;
   let stopTimer: ReturnType<typeof setTimeout> | null = null;
+  let stopFinished = false;
 
   const clearStopTimer = () => {
     if (stopTimer) clearTimeout(stopTimer);
@@ -198,6 +200,8 @@ export function createStableSpeechRecognitionSession(
   };
 
   const finishStop = (reason: 'stopped' | 'failed' = 'stopped') => {
+    if (stopFinished) return latestSnapshot;
+    stopFinished = true;
     clearStopTimer();
     const snapshot = latestSnapshot;
     recognition = null;
@@ -208,7 +212,7 @@ export function createStableSpeechRecognitionSession(
   };
 
   const fail = (error: string) => {
-    if (cancelled) return;
+    if (cancelled || stopFinished) return;
     recordingIntent = false;
     stopRequested = true;
     options.onError(error);
@@ -216,7 +220,7 @@ export function createStableSpeechRecognitionSession(
   };
 
   const startRecognizer = (isRestart = false): boolean => {
-    if (!recordingIntent || cancelled) return false;
+    if (!recordingIntent || cancelled || stopFinished) return false;
     try {
       const nextRecognition = new SpeechRec();
       nextRecognition.continuous = true;
@@ -227,13 +231,13 @@ export function createStableSpeechRecognitionSession(
       options.onBiasStatus?.(biasApplied, biasPhrases.length);
 
       nextRecognition.onstart = () => {
-        if (cancelled) return;
+        if (cancelled || stopFinished) return;
         if (isRestart) options.onRestart?.(restartCount);
         options.onStart?.();
       };
 
       nextRecognition.onresult = (event: any) => {
-        if (cancelled) return;
+        if (cancelled || stopFinished) return;
         const units = readRecognitionResults(event);
         latestSnapshot = buildStableSpeechSnapshot(units, committedRaw);
         if (latestSnapshot.rawBestText) restartCount = 0;
@@ -242,13 +246,13 @@ export function createStableSpeechRecognitionSession(
 
       nextRecognition.onerror = (event: any) => {
         const error = String(event?.error || 'speech-recognition-error');
-        if (cancelled || (stopRequested && error === 'aborted')) return;
+        if (cancelled || stopFinished || (stopRequested && error === 'aborted')) return;
         if (recordingIntent && (error === 'no-speech' || error === 'aborted')) return;
         fail(error);
       };
 
       nextRecognition.onend = () => {
-        if (cancelled) return;
+        if (cancelled || stopFinished) return;
         if (stopRequested || !recordingIntent) {
           finishStop('stopped');
           return;
@@ -267,7 +271,7 @@ export function createStableSpeechRecognitionSession(
         }
         recognition = null;
         window.setTimeout(() => {
-          if (recordingIntent && !stopRequested && !cancelled) startRecognizer(true);
+          if (recordingIntent && !stopRequested && !cancelled && !stopFinished) startRecognizer(true);
         }, 120);
       };
 
@@ -282,7 +286,7 @@ export function createStableSpeechRecognitionSession(
   };
 
   const start = () => {
-    if (recordingIntent || cancelled) return false;
+    if (recordingIntent || cancelled || stopFinished) return false;
     recordingIntent = true;
     stopRequested = false;
     committedRaw = '';
@@ -312,10 +316,12 @@ export function createStableSpeechRecognitionSession(
       return stopPromise;
     }
 
-    stopTimer = setTimeout(() => {
-      try { recognition?.abort?.(); } catch { /* no-op */ }
-      finishStop('stopped');
-    }, 900);
+    if (!stopFinished) {
+      stopTimer = setTimeout(() => {
+        try { recognition?.abort?.(); } catch { /* no-op */ }
+        finishStop('stopped');
+      }, 900);
+    }
     return stopPromise;
   };
 
