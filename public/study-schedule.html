@@ -21,12 +21,12 @@
 
 <div id="panel" style="display:none">
   <div class="card top">
-    <div><h1 class="title">Study 1 学級スケジュール管理</h1><div class="muted">各学級の4つのtrigger日を変更できます</div></div>
+    <div><h1 class="title">Study 1 学級スケジュール管理</h1><div class="muted">本調査5学級の4つのtrigger日を変更できます</div></div>
     <div class="actions"><button id="reloadBtn" class="secondary">↻ 再読込</button><button id="csvBtn" class="secondary">紐付け監査CSV</button><a href="/management"><button class="secondary">研究ダッシュボード</button></a><button id="logoutBtn" class="danger">ログアウト</button></div>
   </div>
 
   <div class="note card">
-    日付変更は既存のAI対話・Reflectionデータを書き換えません。各学級の現在値と最大100件のrevision履歴をFirestoreに保存します。Phaseは <b>class_id + local_date</b> から導出し、AI対話とReflectionは <b>research_id + local_date</b> で相互照合します。同一日内の時刻差は扱わず、日付単位です。
+    対象は <b>5-1 / 5-2 / 5-3 / 6-1 / 6-2</b> の5学級です。日付変更は既存のAI対話・Reflectionデータを書き換えません。各学級の現在値と最大100件のrevision履歴をFirestoreに保存します。Phaseは <b>class_id + local_date</b> から導出し、AI対話とReflectionは <b>research_id + local_date</b> で相互照合します。同一日内の時刻差は扱わず、日付単位です。
   </div>
 
   <div class="card">
@@ -45,7 +45,7 @@
 </div>
 </div>
 <script>
-const classes=['5-1','5-2','5-3','6-1','6-2','6-3'];
+const classes=['5-1','5-2','5-3','6-1','6-2'];
 const $=id=>document.getElementById(id);
 let schedules=new Map();
 function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
