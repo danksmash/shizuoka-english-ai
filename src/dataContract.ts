@@ -1,5 +1,6 @@
 import { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, PersonaLabelCondition, VisualVocabularyItem } from './types';
 import { maskTextForResearchExport } from './utils/privacy';
+import { confirmContextualAsrWithAi } from './utils/contextualAsr';
 
 export const AI_STUDENT_IDS = [
   'emma_usa','oliver_uk','liam_australia','bence_hungary','zofia_poland','rahul_bangladesh','linh_vietnam',
@@ -90,9 +91,9 @@ export function isValidLearningCode(value: unknown): boolean {
 export function countEnglishWords(text: string): number { return (text.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g) || []).length; }
 function englishWordTypes(text: string): string[] { return (text.toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) || []); }
 
-export function canonicalizeHistory(history: unknown): ChatMessage[] {
+export function canonicalizeHistory(history: unknown, topic: DialogueTopic = 'free'): ChatMessage[] {
   if (!Array.isArray(history)) return [];
-  return history.slice(-200).filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object')).map((item, index) => {
+  const parsed = history.slice(-200).filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object')).map((item, index) => {
     const sender = item.sender === 'ai' ? 'ai' : item.sender === 'child' ? 'child' : null;
     const englishText = typeof item.englishText === 'string' ? item.englishText.trim().slice(0, 300) : '';
     if (!sender || !englishText) return null;
@@ -104,6 +105,25 @@ export function canonicalizeHistory(history: unknown): ChatMessage[] {
       wordCount: sender === 'child' ? countEnglishWords(englishText) : undefined,
     } as ChatMessage;
   }).filter((item) => item !== null) as ChatMessage[];
+
+  return parsed.map((message, index) => {
+    if (message.sender !== 'child') return message;
+    const previousAiText = [...parsed.slice(0, index)].reverse().find((item) => item.sender === 'ai')?.englishText || '';
+    const nextAiText = parsed.slice(index + 1).find((item) => item.sender === 'ai')?.englishText || '';
+    const reconciled = confirmContextualAsrWithAi({
+      text: message.englishText,
+      previousAiText,
+      topic,
+      studentJapaneseTranslation: message.japaneseText || '',
+      aiReply: nextAiText,
+    });
+    if (!reconciled.applied || reconciled.text === message.englishText) return message;
+    return {
+      ...message,
+      englishText: reconciled.text,
+      wordCount: countEnglishWords(reconciled.text),
+    };
+  });
 }
 
 export function analyzeChildCommunication(history: ChatMessage[]) {
@@ -199,7 +219,7 @@ export function validateSessionSaveInput(body: unknown): { ok: true; value: Sess
   if (!/^[A-Za-z0-9_-]{8,120}$/.test(sessionId)) return { ok: false, error: 'INVALID_SESSION_ID' };
   const startedAt = Number(source.startedAt); const endedAt = Number(source.endedAt);
   if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt) || endedAt < startedAt) return { ok: false, error: 'INVALID_TIME_RANGE' };
-  const history = canonicalizeHistory(source.history);
+  const history = canonicalizeHistory(source.history, source.topic);
   return { ok: true, value: {
     sessionId, learningCode, aiStudentId: source.aiStudentId, topic: source.topic, targetDurationMinutes: source.targetDurationMinutes,
     startedAt, endedAt, history,
