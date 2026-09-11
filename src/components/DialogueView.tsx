@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { Volume2, User, Sparkles } from 'lucide-react';
 import { ChatMessage, AIStudentProfile } from '../types';
 import { StudentAvatar } from './StudentAvatar';
+import { reconcileContextualAsrDisplay } from '../utils/contextualAsr';
 
 interface DialogueViewProps {
   messages: ChatMessage[];
@@ -62,8 +63,26 @@ export const DialogueView: React.FC<DialogueViewProps> = ({
       </div>
 
       {/* Messages Stream */}
-      {messages.map((msg) => {
+      {messages.map((msg, index) => {
         const isAi = msg.sender === 'ai';
+        const previousAiText = !isAi
+          ? [...messages.slice(0, index)].reverse().find((message) => message.sender === 'ai')?.englishText || ''
+          : '';
+        const nextAiText = !isAi
+          ? messages.slice(index + 1).find((message) => message.sender === 'ai')?.englishText || ''
+          : '';
+        const displayEnglishText = isAi
+          ? msg.englishText
+          : reconcileContextualAsrDisplay({
+              text: msg.englishText,
+              previousAiText,
+              topic: 'free',
+              studentJapaneseTranslation: msg.japaneseText || '',
+              aiReply: nextAiText,
+            });
+        const displayWordCount = !isAi
+          ? (displayEnglishText.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g) || []).length
+          : 0;
 
         return (
           <div
@@ -90,9 +109,9 @@ export const DialogueView: React.FC<DialogueViewProps> = ({
                 <span className="text-[11px] font-bold text-slate-500">
                   {isAi ? (showLabels ? `${aiStudent.name} (${aiStudent.countryJapanese})` : aiStudent.name) : studentName || 'あなた (5・6年生)'}
                 </span>
-                {!isAi && msg.wordCount && (
+                {!isAi && displayWordCount > 0 && (
                   <span className="text-[10px] bg-slate-100 text-slate-500 font-mono px-1 rounded">
-                    {msg.wordCount} words
+                    {displayWordCount} words
                   </span>
                 )}
               </div>
@@ -107,7 +126,7 @@ export const DialogueView: React.FC<DialogueViewProps> = ({
               >
                 {/* English Text Display */}
                 <p className="font-medium tracking-wide">
-                  {msg.englishText}
+                  {displayEnglishText}
                 </p>
 
                 {/* Audio replay button for AI messages */}
