@@ -10,14 +10,14 @@
   "scripts": {
     "dev": "tsx server-entry.ts",
     "qa:dialogue": "tsx scripts/qa-dialogue.ts",
-    "build:pages": "VITE_DEPLOY_TARGET=pages vite build && mkdir -p dist/reflection/teacher && cp dist/index.html dist/reflection/index.html && cp dist/index.html dist/reflection/teacher/index.html && cp dist/index.html dist/404.html",
+    "build:pages": "VITE_DEPLOY_TARGET=pages vite build && mkdir -p dist/reflection/teacher && cp dist/index.html dist/reflection/index.html && cp dist/index.html dist/404.html",
     "build:server": "tsx scripts/build-server.ts",
     "build": "vite build && npm run build:server",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "qa:speech": "tsx scripts/test_speech_accumulation_qa.ts",
+    "qa:speech": "tsx scripts/test_speech_accumulation_qa.ts && tsx scripts/qa-stable-speech-recognition.ts",
     "qa:security": "tsx scripts/qa-security.ts",
     "qa:data": "tsx scripts/qa-data-contract.ts",
     "qa:ai-reflection-ui": "tsx scripts/qa-ai-reflection-4point-ui.ts",
@@ -42,7 +42,7 @@
     "qa:pilot-b": "tsx scripts/qa-pilot-b-isolation.ts",
     "qa:load": "tsx scripts/qa-research-run-load.ts",
     "qa:research-export": "tsx scripts/qa-research-export-complete.ts && tsx scripts/qa-research-lesson-reflection-bundle.ts",
-    "qa:contextual-asr": "tsx scripts/qa-contextual-asr.ts"
+    "qa:contextual-asr": "tsx scripts/qa-contextual-asr.ts && tsx scripts/qa-contextual-asr-alternatives.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
