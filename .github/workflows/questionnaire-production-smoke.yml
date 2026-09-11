@@ -1,0 +1,64 @@
+name: Questionnaire production smoke
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy production to Cloud Run
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify questionnaire production surface and auth guards
+        run: |
+          set -euo pipefail
+          API_URL="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app"
+
+          # The management HTML is public, but questionnaire data/actions remain hidden
+          # behind the researcher login. This check writes no research data.
+          management=""
+          for attempt in 1 2 3 4 5; do
+            if management=$(curl --fail --silent --show-error --max-time 20 "$API_URL/management"); then
+              break
+            fi
+            sleep 3
+          done
+          echo "$management" | grep -q 'id="questionnaireSection"'
+          echo "$management" | grep -q '事前・事後質問紙分析'
+          echo "$management" | grep -q 'student_questionnaires'
+          echo "$management" | grep -q 'Holm補正後 p &lt; .05'
+
+          # All questionnaire operations must reject an unauthenticated caller.
+          stats_status=$(curl --silent --show-error --max-time 20 \
+            -o /tmp/questionnaire-stats.json \
+            -w '%{http_code}' \
+            -X POST "$API_URL/api/management/questionnaire/statistics" \
+            -H 'Content-Type: application/json' \
+            --data '{}')
+          test "$stats_status" = '401'
+          grep -q '"error":"UNAUTHORIZED"' /tmp/questionnaire-stats.json
+
+          import_status=$(curl --silent --show-error --max-time 20 \
+            -o /tmp/questionnaire-import.json \
+            -w '%{http_code}' \
+            -X POST "$API_URL/api/management/questionnaire/import" \
+            -H 'Content-Type: application/json' \
+            --data '{}')
+          test "$import_status" = '401'
+          grep -q '"error":"UNAUTHORIZED"' /tmp/questionnaire-import.json
+
+          export_status=$(curl --silent --show-error --max-time 20 \
+            -o /tmp/questionnaire-export.json \
+            -w '%{http_code}' \
+            "$API_URL/api/management/research.csv?dataset=student_questionnaires")
+          test "$export_status" = '401'
+          grep -q '"error":"UNAUTHORIZED"' /tmp/questionnaire-export.json
+
+          echo 'QUESTIONNAIRE PRODUCTION SMOKE PASS: UI present; researcher data routes reject unauthenticated access; no writes performed.'

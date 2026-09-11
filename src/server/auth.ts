@@ -84,13 +84,16 @@ function readCookie(req: Request, name: string): string {
   return '';
 }
 
-function researcherRouteAllowed(req: Request): boolean {
+export function researcherRouteAllowed(req: Pick<Request, 'path'>): boolean {
   const path = req.path || '';
   if (path === '/api/management/me') return true;
   if (path === '/api/management/research.csv') return true;
   if (path === '/api/management/research.summary') return true;
   if (path === '/api/management/research.dashboard') return true;
   if (path === '/api/management/research.bundle.zip') return true;
+  // questionnaireRoutes is mounted at /api/management, so Express can expose
+  // either the router-local path or the full app path depending on call site.
+  if (path.startsWith('/questionnaire/') || path.startsWith('/api/management/questionnaire/')) return true;
   if (path.startsWith('/study-schedules') || path.startsWith('/api/management/study-schedules')) return true;
   return false;
 }
