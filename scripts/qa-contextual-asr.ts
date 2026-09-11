@@ -152,8 +152,8 @@ assert.equal(stage3NoEvidence.applied, false);
 
 const appSource = readFileSync('src/App.tsx', 'utf8');
 assert.ok(appSource.includes("VITE_CONTEXTUAL_ASR_ENABLED !== 'false'"), 'client rollback feature flag is required');
-assert.ok(appSource.includes('interpretSpokenText(spokenText)'), 'microphone send must use contextual interpretation');
-assert.ok(appSource.includes('interpretSpokenText(pendingRawText)'), 'timeout pending speech must use the same contextual interpretation');
+assert.ok(appSource.includes('interpretSpokenText(spokenText, snapshot.alternatives)'), 'microphone send must use contextual interpretation with acoustic alternatives');
+assert.ok(appSource.includes('interpretSpokenText(pendingRawText, pendingSnapshot.alternatives)'), 'timeout pending speech must use the same contextual interpretation with acoustic alternatives');
 assert.ok(appSource.includes('getContextualAsrBiasPhrases'), 'microphone path must prepare contextual recognition hints');
 assert.ok(appSource.includes("recordResearchEvent('asr_bias_status'"), 'ASR bias availability must be logged without transcript text');
 assert.ok(appSource.includes("recordResearchEvent('asr_contextual_correction'"), 'contextual corrections must be counted without raw transcript logging');
