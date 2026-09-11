@@ -148,9 +148,11 @@ assert.ok(dashboardUrl.includes('personaId=emma_usa') && dashboardUrl.includes('
 context.renderDashboard(sample, params.toString());
 assert.ok(context.appliedQueryUrl('/api/management/research.csv','sessions').includes('personaId=emma_usa'));
 
-const lessonRowsFromApi = await context.loadLessonReflectionRows(params);
+const lessonParams = new URLSearchParams(params.toString());
+lessonParams.set('dataScope','test');
+const lessonRowsFromApi = await context.loadLessonReflectionRows(lessonParams);
 assert.equal(lessonRowsFromApi.length,3);
-const lessonFetch = fetchCalls.find((url) => url.includes('dataset=lesson_reflections') && url.includes('dataScope='));
+const lessonFetch = fetchCalls.find((url) => url.includes('dataset=lesson_reflections') && url.includes('dataScope=test'));
 assert.ok(lessonFetch);
 assert.equal(lessonFetch!.includes('personaId='),false,'lesson reflection chart must ignore Persona filter');
 assert.equal(lessonFetch!.includes('topic='),false,'lesson reflection chart must ignore topic filter');
