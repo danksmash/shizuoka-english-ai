@@ -14,6 +14,7 @@ export interface StudentHistoryRow {
   totalChildWords: number;
   uniqueVocabularyCount: number;
   reflection?: {
+    scaleVersion?: 'legacy-135' | '4point-v1';
     conveyedIdeas?: number;
     understoodPartner?: number;
     noticedLanguageCulture?: number;
@@ -29,9 +30,9 @@ interface LearningHistoryScreenProps {
 }
 
 const reflectionKeys = [
-  ['conveyedIdeas', '伝える'],
-  ['understoodPartner', 'わかり合う'],
-  ['noticedLanguageCulture', 'ことば・文化'],
+  ['understoodPartner', '相手の話を聞いて分かる'],
+  ['conveyedIdeas', '自分の考えを伝える'],
+  ['noticedLanguageCulture', '新しい言葉や文化に気づいた'],
 ] as const;
 
 const TARGET_STUDENT_ID_SET = new Set<string>(TARGET_20_AI_STUDENT_IDS);
@@ -52,7 +53,10 @@ export const LearningHistoryScreen: React.FC<LearningHistoryScreenProps> = ({ le
   const targetRows = useMemo(() => rows.filter((row) => TARGET_STUDENT_ID_SET.has(row.aiStudentId)), [rows]);
 
   const averages = useMemo(() => reflectionKeys.map(([key, label]) => {
-    const values = targetRows.map((r) => Number(r.reflection?.[key])).filter((v) => Number.isFinite(v) && v >= 1 && v <= 5);
+    const values = targetRows
+      .filter((row) => row.reflection?.scaleVersion === '4point-v1')
+      .map((row) => Number(row.reflection?.[key]))
+      .filter((value) => Number.isFinite(value) && value >= 1 && value <= 4);
     return { label, value: values.length ? values.reduce((a, b) => a + b, 0) / values.length : null };
   }), [targetRows]);
 
@@ -81,7 +85,7 @@ export const LearningHistoryScreen: React.FC<LearningHistoryScreenProps> = ({ le
         {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center font-bold text-slate-600">学習履歴を読み込んでいます…</div> : error ? <div className="rounded-3xl border border-rose-200 bg-rose-50 p-5 font-bold text-rose-800">{error}</div> : <>
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="flex items-center gap-2 font-black text-slate-900"><Sparkles className="h-5 w-5 text-amber-500" />わたしのコミュニケーション</h2>
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">{averages.map((item) => <div key={item.label} className="rounded-2xl border border-blue-100 bg-blue-50 p-3 text-center"><p className="text-xs font-bold text-slate-700">{item.label}</p><p className="mt-1 text-2xl font-black text-blue-700">{item.value === null ? '—' : item.value.toFixed(1)}</p><p className="text-[10px] text-slate-500">ふりかえり平均</p></div>)}</div>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">{averages.map((item) => <div key={item.label} className="rounded-2xl border border-blue-100 bg-blue-50 p-3 text-center"><p className="text-xs font-bold text-slate-700">{item.label}</p><p className="mt-1 text-2xl font-black text-blue-700">{item.value === null ? '—' : item.value.toFixed(1)}</p><p className="text-[10px] text-slate-500">4件法ふりかえり平均</p></div>)}</div>
           </section>
 
           <section className="grid grid-cols-2 gap-2 lg:grid-cols-5">
@@ -89,7 +93,7 @@ export const LearningHistoryScreen: React.FC<LearningHistoryScreenProps> = ({ le
             <div className="rounded-2xl border border-slate-200 bg-white p-3 text-center"><p className="text-[10px] text-slate-500">累計対話時間</p><p className="text-xl font-black text-violet-700">{formatDuration(totalDurationSeconds)}</p></div>
             <div className="rounded-2xl border border-slate-200 bg-white p-3 text-center"><p className="text-[10px] text-slate-500">合計ターン</p><p className="text-xl font-black text-blue-700">{totalTurns}</p></div>
             <div className="rounded-2xl border border-slate-200 bg-white p-3 text-center"><p className="text-[10px] text-slate-500">合計発話語数</p><p className="text-xl font-black text-emerald-700">{totalWords}</p></div>
-            <div className="col-span-2 rounded-2xl border border-slate-200 bg-white p-3 text-center lg:col-span-1"><p className="text-[10px] text-slate-500">出会った語彙（各回合計）</p><p className="text-xl font-black text-amber-700">{totalVocab}語</p></div>
+            <div className="col-span-2 rounded-2xl border border-slate-200 bg-white p-3 text-center lg:col-span-1"><p className="text-[10px] text-slate-500">出会った語彙（各回合計）</p><p className="text-xl font-black text-amber-600">{totalVocab}語</p></div>
           </section>
 
           <section className="grid gap-3 sm:grid-cols-2">

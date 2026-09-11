@@ -18,18 +18,20 @@ interface ReflectionScreenProps {
 }
 
 const ITEMS = [
-  { key: 'conveyedIdeas', label: '自分の考えを伝える', icon: MessageCircle, iconClass: 'bg-emerald-600' },
   { key: 'understoodPartner', label: '相手の話を聞いて分かる', icon: Ear, iconClass: 'bg-blue-600' },
+  { key: 'conveyedIdeas', label: '自分の考えを伝える', icon: MessageCircle, iconClass: 'bg-emerald-600' },
   { key: 'noticedLanguageCulture', label: '新しい言葉や文化に気づいた', icon: Lightbulb, iconClass: 'bg-amber-600' },
 ] as const;
 
 const CHOICES = [
-  { value: 5, label: 'できた', className: 'border-emerald-400 text-emerald-700 bg-emerald-50' },
-  { value: 3, label: '少しできた', className: 'border-blue-400 text-blue-700 bg-blue-50' },
+  { value: 4, label: 'よくできた', className: 'border-emerald-400 text-emerald-700 bg-emerald-50' },
+  { value: 3, label: 'できた', className: 'border-blue-400 text-blue-700 bg-blue-50' },
+  { value: 2, label: '少しできた', className: 'border-amber-400 text-amber-700 bg-amber-50' },
   { value: 1, label: '次はがんばる', className: 'border-orange-400 text-orange-700 bg-orange-50' },
 ] as const;
 
 type RatingKey = typeof ITEMS[number]['key'];
+type FourPointRating = typeof CHOICES[number]['value'];
 
 export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
   aiStudent,
@@ -45,7 +47,7 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
   labelCondition = 'shown',
 }) => {
   const showLabels = labelCondition === 'shown';
-  const [ratings, setRatings] = useState<Partial<Record<RatingKey, number>>>({});
+  const [ratings, setRatings] = useState<Partial<Record<RatingKey, FourPointRating>>>({});
   const [submitted, setSubmitted] = useState(false);
   const reportOwner = profile.name && profile.name !== '5・6年生' ? profile.name : 'あなた';
 
@@ -56,15 +58,16 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
     return `${mins}分${String(secs).padStart(2, '0')}秒`;
   };
 
-  const choose = (key: RatingKey, value: number) => {
+  const choose = (key: RatingKey, value: FourPointRating) => {
     if (submitted || isSaving) return;
     const next = { ...ratings, [key]: value };
     setRatings(next);
     if (ITEMS.every((item) => Number.isInteger(next[item.key]))) {
       setSubmitted(true);
       void onSubmit({
-        conveyedIdeas: next.conveyedIdeas!,
+        scaleVersion: '4point-v1',
         understoodPartner: next.understoodPartner!,
+        conveyedIdeas: next.conveyedIdeas!,
         noticedLanguageCulture: next.noticedLanguageCulture!,
       });
     }
@@ -113,10 +116,10 @@ export const ReflectionScreen: React.FC<ReflectionScreenProps> = ({
                       <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white ${item.iconClass}`}><Icon className="h-6 w-6" /></div>
                       <span className="text-base font-black text-slate-800">{item.label}</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                    <div className="grid grid-cols-4 gap-2 sm:gap-3">
                       {CHOICES.map((choice) => {
                         const selected = ratings[item.key] === choice.value;
-                        return <button key={choice.value} type="button" aria-pressed={selected} disabled={submitted || isSaving} onClick={() => choose(item.key, choice.value)} className={`min-h-12 rounded-xl border-2 px-2 text-sm font-black transition disabled:cursor-default ${selected ? `${choice.className} ring-2 ring-offset-1` : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>{choice.label}</button>;
+                        return <button key={choice.value} type="button" aria-pressed={selected} disabled={submitted || isSaving} onClick={() => choose(item.key, choice.value)} className={`min-h-12 rounded-xl border-2 px-2 text-xs font-black leading-tight transition sm:text-sm disabled:cursor-default ${selected ? `${choice.className} ring-2 ring-offset-1` : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>{choice.label}</button>;
                       })}
                     </div>
                   </div>
