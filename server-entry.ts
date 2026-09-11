@@ -1,9 +1,19 @@
 import express from 'express';
 import { createReflectionRouter } from './src/server/reflectionRoutes';
 import { createStudyScheduleRouter } from './src/server/studyScheduleRoutes';
+import { phaseAwareGetHandler } from './src/server/researchPhaseRuntime';
 
 const application = express.application as any;
+const originalGet = application.get;
 const originalListen = application.listen;
+
+application.get = function researchPhaseAwareGet(this: any, path: any, ...handlers: any[]) {
+  if (typeof path === 'string' && handlers.length > 0) {
+    const replacement = phaseAwareGetHandler(path);
+    if (replacement) handlers[handlers.length - 1] = replacement;
+  }
+  return originalGet.call(this, path, ...handlers);
+};
 
 application.listen = function reflectionAwareListen(this: any, ...args: any[]) {
   if (!this.__reflectionRoutesMounted) {
