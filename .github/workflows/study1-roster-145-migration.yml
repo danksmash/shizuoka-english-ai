@@ -1,0 +1,155 @@
+name: Study 1 roster 145 migration
+
+on:
+  push:
+    branches:
+      - fix/study1-roster-145-20260911
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: shizuoka-english-ai
+  TARGET_STUDENT_ID_SHA256: fdcdd919216263309e3bffdfa0ddcf1b32f095e63bcef5a91dc989a487f3eae3
+
+jobs:
+  migrate-and-audit:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+
+      - name: Promote 5-3 reserve to pupil 25 and audit production roster
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          node <<'NODE'
+          const crypto = require('node:crypto');
+          const project = process.env.PROJECT_ID;
+          const token = process.env.ACCESS_TOKEN;
+          const targetHash = process.env.TARGET_STUDENT_ID_SHA256;
+          const base = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
+          const expected = new Map([['5-1',26],['5-2',25],['5-3',25],['6-1',34],['6-2',35]]);
+
+          const fieldString = (f, key) => f?.[key]?.stringValue || '';
+          const fieldBool = (f, key) => f?.[key]?.booleanValue;
+          const fieldInt = (f, key) => {
+            const raw = f?.[key]?.integerValue ?? f?.[key]?.doubleValue;
+            const n = Number(raw);
+            return Number.isInteger(n) ? n : null;
+          };
+          const sha = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
+
+          async function listStudents() {
+            let pageToken = '';
+            const docs = [];
+            do {
+              const url = new URL(`${base}/students`);
+              url.searchParams.set('pageSize','1000');
+              if (pageToken) url.searchParams.set('pageToken',pageToken);
+              const res = await fetch(url, {headers:{Authorization:`Bearer ${token}`}});
+              if (!res.ok) throw new Error(`LIST_STUDENTS_${res.status}:${await res.text()}`);
+              const json = await res.json();
+              docs.push(...(json.documents || []));
+              pageToken = json.nextPageToken || '';
+            } while (pageToken);
+            return docs;
+          }
+
+          async function patchRosterDoc(docName) {
+            const url = new URL(`https://firestore.googleapis.com/v1/${docName}`);
+            for (const field of ['classId','attendanceNumber','updatedAt']) url.searchParams.append('updateMask.fieldPaths', field);
+            const body = {
+              fields: {
+                classId: {stringValue:'5-3'},
+                attendanceNumber: {integerValue:'25'},
+                updatedAt: {stringValue:new Date().toISOString()},
+              },
+            };
+            const res = await fetch(url, {
+              method:'PATCH',
+              headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+              body:JSON.stringify(body),
+            });
+            if (!res.ok) throw new Error(`PATCH_STUDENT_${res.status}:${await res.text()}`);
+          }
+
+          function summarize(docs) {
+            const byStudent = new Map();
+            for (const doc of docs) {
+              const f = doc.fields || {};
+              const studentId = fieldString(f,'studentId');
+              if (!studentId) continue;
+              const active = fieldBool(f,'active') !== false;
+              const updatedAt = fieldString(f,'updatedAt');
+              const row = {
+                name: doc.name,
+                studentId,
+                researchId: fieldString(f,'researchId'),
+                classId: fieldString(f,'classId'),
+                attendanceNumber: fieldInt(f,'attendanceNumber'),
+                active,
+                updatedAt,
+              };
+              const cur = byStudent.get(studentId);
+              if (!cur || (active && !cur.active) || updatedAt > cur.updatedAt) byStudent.set(studentId,row);
+            }
+            return [...byStudent.values()].filter(r=>r.active);
+          }
+
+          let docs = await listStudents();
+          const targetDocs = docs.filter(doc => {
+            const sid = fieldString(doc.fields || {},'studentId');
+            return sid && sha(sid) === targetHash;
+          });
+          if (!targetDocs.length) throw new Error('TARGET_5_3_STUDENT_NOT_FOUND');
+          console.log(`Target student documents found: ${targetDocs.length}`);
+          const before = summarize(docs).find(r=>sha(r.studentId)===targetHash);
+          if (before) console.log(`Before: class=${before.classId || '(blank)'} attendance=${before.attendanceNumber ?? '(blank)'}`);
+          for (const doc of targetDocs) {
+            const f = doc.fields || {};
+            if (fieldString(f,'classId') !== '5-3' || fieldInt(f,'attendanceNumber') !== 25) await patchRosterDoc(doc.name);
+          }
+
+          docs = await listStudents();
+          const active = summarize(docs);
+          const targetAfter = active.find(r=>sha(r.studentId)===targetHash);
+          if (!targetAfter) throw new Error('TARGET_5_3_STUDENT_NOT_ACTIVE_AFTER');
+          if (targetAfter.classId !== '5-3' || targetAfter.attendanceNumber !== 25) throw new Error('TARGET_5_3_STUDENT_NOT_CORRECTED');
+          console.log(`After: class=${targetAfter.classId} attendance=${targetAfter.attendanceNumber}`);
+
+          let total = 0;
+          for (const [classId,count] of expected) {
+            const rows = active.filter(r=>r.classId===classId);
+            total += rows.length;
+            const attendance = rows.map(r=>r.attendanceNumber).sort((a,b)=>(a??999)-(b??999));
+            const expectedAttendance = Array.from({length:count},(_,i)=>i+1);
+            const attendanceOk = JSON.stringify(attendance) === JSON.stringify(expectedAttendance);
+            const researchIds = rows.map(r=>r.researchId).filter(Boolean);
+            const researchUnique = researchIds.length === count && new Set(researchIds).size === count;
+            console.log(`${classId}: active=${rows.length}/${count} attendance=${attendanceOk?'OK':'NG'} research_id=${researchUnique?'OK':'NG'}`);
+            if (rows.length !== count) throw new Error(`ROSTER_COUNT_MISMATCH_${classId}`);
+            if (!attendanceOk) throw new Error(`ATTENDANCE_MISMATCH_${classId}`);
+            if (!researchUnique) throw new Error(`RESEARCH_ID_MISMATCH_${classId}`);
+          }
+          if (total !== 145) throw new Error(`TOTAL_ROSTER_MISMATCH:${total}`);
+          const sixThree = active.filter(r=>r.classId==='6-3').length;
+          if (sixThree !== 0) throw new Error(`UNEXPECTED_6_3_STUDENTS:${sixThree}`);
+          console.log('STUDY1_PRODUCTION_ROSTER_145_PASS');
+          NODE
