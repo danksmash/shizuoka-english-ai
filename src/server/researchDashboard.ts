@@ -17,7 +17,7 @@ export type ResearchFilterQuery = {
 type Row = Record<string, unknown>;
 type ExportDataSets = Record<ResearchExportDatasetName, Row[]>;
 
-export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v3';
+export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v4';
 
 const RESEARCH_PERSONAS = TARGET_20_AI_STUDENT_IDS.map((id) => {
   const persona = AI_STUDENTS_MASTER_LIST.find((item) => item.id === id);
@@ -43,7 +43,7 @@ export const RESEARCH_EXPORT_HEADERS: Record<ResearchExportDatasetName, string[]
     'child_turn_count','ai_turn_count','dialogue_utterance_count',
     'child_repair_count','child_reason_expression_count',
     'target_duration_minutes','actual_duration_seconds',
-    'reflection_conveyed_ideas','reflection_understood_partner','reflection_noticed_language_culture',
+    'reflection_scale_version','reflection_understood_partner','reflection_conveyed_ideas','reflection_noticed_language_culture',
     'same_class_starts_5min','same_class_starts_10min','usage_context_inferred',
     'persona_label_condition','country_label_visible','accent_label_visible','flag_visible',
     'help_open_count','vocab_bank_open_count',
@@ -108,9 +108,10 @@ const FIELD_DEFINITION: Record<string, string> = {
   child_reason_expression_count:'because等の理由表現数',
   target_duration_minutes:'児童が選択した対話時間（分）',
   actual_duration_seconds:'実際の対話経過時間（秒）',
-  reflection_conveyed_ideas:'自分の考えを伝える振り返り（1/3/5）',
-  reflection_understood_partner:'相手の話を聞いて分かる振り返り（1/3/5）',
-  reflection_noticed_language_culture:'新しい言葉や文化に気づいた振り返り（1/3/5）',
+  reflection_scale_version:'AI対話直後の3項目自己評価で使用した尺度版',
+  reflection_understood_partner:'相手の話を聞いて分かる振り返り',
+  reflection_conveyed_ideas:'自分の考えを伝える振り返り',
+  reflection_noticed_language_culture:'新しい言葉や文化に気づいた振り返り',
   same_class_starts_5min:'当該開始時刻の前後5分以内に開始した同学級セッション数（当該sessionを含む）',
   same_class_starts_10min:'当該開始時刻の前後10分以内に開始した同学級セッション数（当該sessionを含む）',
   usage_context_inferred:'同学級の開始時刻の集中度だけから推定した一斉利用らしさ／個別利用らしさ',
@@ -177,9 +178,10 @@ const ALLOWED_VALUES: Record<string, string> = {
   persona_gender:'male | female', gender:'male | female',
   target_duration_minutes:'1 | 2 | 3 | 5',
   topic:'intro | favorites | shizuoka_culture | talents | daily_routine | free',
-  reflection_conveyed_ideas:'1 | 3 | 5',
-  reflection_understood_partner:'1 | 3 | 5',
-  reflection_noticed_language_culture:'1 | 3 | 5',
+  reflection_scale_version:'legacy-135 | 4point-v1 | blank',
+  reflection_understood_partner:'legacy-135: 1 | 3 | 5 / 4point-v1: 1 | 2 | 3 | 4',
+  reflection_conveyed_ideas:'legacy-135: 1 | 3 | 5 / 4point-v1: 1 | 2 | 3 | 4',
+  reflection_noticed_language_culture:'legacy-135: 1 | 3 | 5 / 4point-v1: 1 | 2 | 3 | 4',
   usage_context_inferred:'group_like | individual_like | unknown',
   persona_label_condition:'shown | hidden',
   country_label_visible:'0 | 1', accent_label_visible:'0 | 1', flag_visible:'0 | 1', session_completed:'0 | 1',
@@ -473,10 +475,12 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
     if (Number.isFinite(words) && Number.isFinite(seconds) && seconds > 0) {
       bucket.childWords += words; bucket.durationSeconds += seconds;
     }
-    [row.reflection_conveyed_ideas,row.reflection_understood_partner,row.reflection_noticed_language_culture].forEach((value, index) => {
-      const rating = Number(value);
-      if ([1,3,5].includes(rating)) bucket.reflections[index].push(rating);
-    });
+    if (String(row.reflection_scale_version || '') === '4point-v1') {
+      [row.reflection_understood_partner,row.reflection_conveyed_ideas,row.reflection_noticed_language_culture].forEach((value, index) => {
+        const rating = Number(value);
+        if ([1,2,3,4].includes(rating)) bucket.reflections[index].push(rating);
+      });
+    }
     target.set(key, bucket);
   };
   for (const row of data.sessions) {
@@ -570,9 +574,12 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
       sessions:value.sessions,
       mean_child_words:round(average(value.words),1),
       mean_child_words_per_minute:value.durationSeconds > 0 ? round(value.childWords * 60 / value.durationSeconds,1) : null,
-      reflection_conveyed:value.reflections[0].length ? round(average(value.reflections[0]),2) : null,
-      reflection_understood:value.reflections[1].length ? round(average(value.reflections[1]),2) : null,
+      reflection_understood:value.reflections[0].length ? round(average(value.reflections[0]),2) : null,
+      reflection_understood_n:value.reflections[0].length,
+      reflection_conveyed:value.reflections[1].length ? round(average(value.reflections[1]),2) : null,
+      reflection_conveyed_n:value.reflections[1].length,
       reflection_culture:value.reflections[2].length ? round(average(value.reflections[2]),2) : null,
+      reflection_culture_n:value.reflections[2].length,
     }));
   const dailyRows = seriesRows(daily);
   const weeklyRows = seriesRows(weekly);

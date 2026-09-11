@@ -15,7 +15,7 @@ const clustered = Array.from({ length: 8 }, (_, index) => ({
     {id:`a${index}`,sender:'ai',englishText:'I like soccer. How about you?',japaneseText:'私はサッカーが好きです。あなたは？',timestamp:base+index*15000},
     {id:`c${index}`,sender:'child',englishText:'I like soccer. How about you?',japaneseText:'私はサッカーが好きです。あなたは？',timestamp:base+index*15000+30000},
     {id:`c2${index}`,sender:'child',englishText:'Pardon? I like it because it is fun.',japaneseText:'もう一度お願いします。楽しいので好きです。',timestamp:base+index*15000+60000},
-  ],reflection:{conveyedIdeas:3,understoodPartner:3,noticedLanguageCulture:3},systemEvents:[{type:'session_start',timestamp:base+index*15000},{type:'session_finish',timestamp:base+index*15000+179000}],
+  ],reflection:{scaleVersion:'4point-v1',conveyedIdeas:3,understoodPartner:3,noticedLanguageCulture:3},systemEvents:[{type:'session_start',timestamp:base+index*15000},{type:'session_finish',timestamp:base+index*15000+179000}],
 }));
 const data = buildResearchDataSets(clustered as any);
 const first = data.sessions.find((row) => row.session_id === 'session_class_0')!;

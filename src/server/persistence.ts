@@ -348,8 +348,9 @@ export function anonymizeSessionForResearch(session: Record<string, any>): Recor
     target_duration_minutes: session.targetDurationMinutes || 0, actual_duration_seconds: session.actualDurationSeconds || 0,
     total_turns: session.totalTurns || 0, total_child_words: session.totalChildWords || 0,
     unique_vocabulary_count: session.uniqueVocabularyCount || 0,
-    reflection_conveyed_ideas: session.reflection?.conveyedIdeas ?? '',
+    reflection_scale_version: session.reflection?.scaleVersion || (session.reflection ? 'legacy-135' : ''),
     reflection_understood_partner: session.reflection?.understoodPartner ?? '',
+    reflection_conveyed_ideas: session.reflection?.conveyedIdeas ?? '',
     reflection_noticed_language_culture: session.reflection?.noticedLanguageCulture ?? '',
   };
 }
