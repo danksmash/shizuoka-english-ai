@@ -25,7 +25,7 @@ import { managementPageHtml } from './managementPage';
 
 export const STUDY_PHASE_FILTER_IDS = ['phase1', 'phase2', 'phase3', 'phase4'] as const;
 export type StudyPhaseFilterId = typeof STUDY_PHASE_FILTER_IDS[number];
-type PhaseAwareResearchQuery = ResearchFilterQuery & { studyPhase?: unknown };
+type PhaseAwareResearchQuery = ResearchFilterQuery & { studyPhase?: unknown; dataset?: unknown };
 
 const PHASE_TARGET: Record<StudyPhaseFilterId, StudyPhase> = {
   phase1: 'unknown_virtual_other',
