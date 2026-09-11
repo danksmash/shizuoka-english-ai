@@ -20,7 +20,7 @@ function makeElement(id: string): any {
 }
 function element(id: string) { if (!elements.has(id)) elements.set(id, makeElement(id)); return elements.get(id); }
 for (const id of ['grade','classId','personaId','labelCondition','topic']) element(id).value = 'all';
-for (const dataset of ['sessions','utterances','expressions','personas','codebook']) {
+for (const dataset of ['sessions','utterances','expressions','personas','codebook','lesson_reflections']) {
   const button = makeElement(`dynamic-${dataset}`); button.dataset.exportDataset = dataset; datasetButtons.push(button);
 }
 const downloaded: any[] = [];
@@ -48,6 +48,12 @@ const sample = {
     ],
     personas:[{label:'Emma',value:45},{label:'Rahul',value:30}],aggregation:'daily',
   },
+  lessonReflectionRowCount:3,
+  lessonReflectionRows:[
+    {local_date:'2026-09-01',status:'submitted',goal_rating:'3',communication_rating:'4'},
+    {local_date:'2026-09-01',status:'submitted',goal_rating:'4',communication_rating:'3'},
+    {local_date:'2026-09-02',status:'submitted',goal_rating:'4',communication_rating:'4'},
+  ],
   dataQuality:[{label:'complete',value:379},{label:'missing_reflection',value:5}],
   systemQuality:[{label:'AI応答失敗',value:2},{label:'マイクエラー',value:1},{label:'TTSフォールバック',value:3}],
   topExpressions:[{expression:'I like',count:342,source:'curriculum'},{expression:'surfing',count:187,source:'persona'}],
@@ -60,10 +66,21 @@ const sample = {
     {dataset:'codebook',fileName:'codebook.csv',contains:'variables',analysisUse:'reproducibility',rowCount:180},
   ],
 };
+const lessonCsv = '\uFEFF"research_id","class_id","data_scope","grade_level","class_number","local_date","status","today_goal","goal_rating","communication_rating"\n"R0001","5-1","test","5","1","2026-09-01","submitted","goal","3","4"\n"R0002","5-1","test","5","1","2026-09-01","submitted","goal","4","3"\n"R0003","5-1","test","5","1","2026-09-02","submitted","goal","4","4"\n';
 const urlApi: any = { createObjectURL:() => 'blob:test', revokeObjectURL:() => {} };
 const context: any = {
   console, document:documentStub, window:{}, location, alert:() => {}, URL:urlApi, URLSearchParams, Set, Map, Math, Number, String, Array, Object, Date, Blob,
-  fetch:async(url:string) => { fetchCalls.push(url); return {ok:true,status:200,json:async() => url.includes('/api/health') ? {appVersion:'1.0.7',build:'test'} : sample,blob:async() => new Blob(['test']),headers:{get:() => null}}; },
+  fetch:async(url:string) => {
+    fetchCalls.push(url);
+    const isLessonCsv = url.includes('/api/management/research.csv') && url.includes('dataset=lesson_reflections');
+    return {
+      ok:true,status:200,
+      json:async() => url.includes('/api/health') ? {appVersion:'1.0.7',build:'test'} : sample,
+      text:async() => isLessonCsv ? lessonCsv : '',
+      blob:async() => new Blob(['test']),
+      headers:{get:() => null},
+    };
+  },
   setTimeout:() => 0, clearTimeout:() => {},
 };
 vm.createContext(context);
@@ -82,12 +99,31 @@ assert.equal(element('iIndividual').textContent, 92);
 assert.ok(element('iIndividualDetail').textContent.includes('54'));
 for (const id of ['chartDaily','chartPersona']) assert.ok(element(id).innerHTML.includes('bar-chart-html'), `${id} must render readable HTML bars`);
 for (const id of ['chartWords','chartReflection']) assert.ok(element(id).innerHTML.includes('<svg'), `${id} must render inline SVG`);
+assert.equal(element('chartReflectionTitle').textContent,'授業振り返り平均（4件法）');
+assert.ok(element('chartReflection').innerHTML.includes('めあて'));
+assert.ok(element('chartReflection').innerHTML.includes('聞く・伝える'));
+assert.ok(element('chartReflection').innerHTML.includes('1 = できなかった'));
+assert.equal(element('chartReflection').innerHTML.includes('#f59e0b'),false,'obsolete third reflection series must not render');
+assert.equal(element('chartReflection').innerHTML.includes('class="svg-value"'),false,'reflection chart must not print a value label at every point');
 assert.ok(element('qualityRows').innerHTML.includes('研究データ品質'));
 assert.ok(element('qualityRows').innerHTML.includes('システム品質'));
 assert.ok(element('qualityRows').innerHTML.includes('TTSフォールバック'));
 assert.ok(element('topExpressions').innerHTML.includes('surfing'));
 assert.ok(element('recentRows').innerHTML.includes('R0123'));
 assert.ok(element('exportCards').innerHTML.includes('sessions.csv') && element('exportCards').innerHTML.includes('codebook.csv'));
+assert.ok(element('exportCards').innerHTML.includes('lesson_reflections.csv'));
+
+const parsedLesson = context.parseCsvRows(lessonCsv);
+assert.equal(parsedLesson.length,3);
+assert.equal(parsedLesson[0].research_id,'R0001');
+const ratingSeries = context.buildLessonReflectionSeries(parsedLesson,'daily');
+assert.deepEqual(JSON.parse(JSON.stringify(ratingSeries)),[
+  {date:'2026-09-01',goal_rating:3.5,communication_rating:3.5,goal_n:2,communication_n:2},
+  {date:'2026-09-02',goal_rating:4,communication_rating:4,goal_n:1,communication_n:1},
+]);
+const ratingSvg = context.ratingLineSvg(ratingSeries);
+assert.ok(ratingSvg.includes('>1</text>') && ratingSvg.includes('>4</text>'),'4-point y-axis must be explicit');
+assert.equal((ratingSvg.match(/class=\"svg-value\"/g)||[]).length,0,'rating chart must avoid dense numeric point labels');
 
 element('start').value='2026-09-01';
 element('end').value='2026-09-03';
@@ -111,6 +147,16 @@ const dashboardUrl = context.queryUrl('/api/management/research.dashboard');
 assert.ok(dashboardUrl.includes('personaId=emma_usa') && dashboardUrl.includes('completeOnly=1'));
 context.renderDashboard(sample, params.toString());
 assert.ok(context.appliedQueryUrl('/api/management/research.csv','sessions').includes('personaId=emma_usa'));
+
+const lessonParams = new URLSearchParams(params.toString());
+lessonParams.set('dataScope','test');
+const lessonRowsFromApi = await context.loadLessonReflectionRows(lessonParams);
+assert.equal(lessonRowsFromApi.length,3);
+const lessonFetch = fetchCalls.find((url) => url.includes('dataset=lesson_reflections') && url.includes('dataScope=test'));
+assert.ok(lessonFetch);
+assert.equal(lessonFetch!.includes('personaId='),false,'lesson reflection chart must ignore Persona filter');
+assert.equal(lessonFetch!.includes('topic='),false,'lesson reflection chart must ignore topic filter');
+assert.equal(lessonFetch!.includes('completeOnly='),false,'lesson reflection chart must ignore session-complete filter');
 
 await context.downloadDataset('sessions');
 assert.ok(fetchCalls.some((url) => url.startsWith('/api/management/research.csv?') && url.includes('dataset=sessions') && url.includes('classId=1')));
@@ -149,6 +195,9 @@ assert.ok(pageSource.includes('告知前／告知後セッション'));
 assert.ok(pageSource.includes('担当国Persona選択率'));
 assert.ok(pageSource.includes('個別利用らしいセッション'));
 assert.ok(pageSource.includes('主研究データとAI/TTSのシステム品質は分離'));
+assert.ok(pageSource.includes('lesson_reflections.csv の4件法2項目'));
+assert.ok(pageSource.includes('授業振り返り平均（4件法）'));
+assert.equal(pageSource.includes('振り返り平均値（1/3/5）'),false,'obsolete 1/3/5 chart title must not return');
 for (const id of ['filterBtn','resetBtn','refreshBtn','bundleBtn','logoutBtn']) assert.ok(pageSource.includes(`id="${id}"`), `button missing ${id}`);
 assert.ok(pageSource.includes("$('filterBtn').onclick=loadDashboard"));
 assert.ok(pageSource.includes("$('refreshBtn').onclick=loadDashboard"));
