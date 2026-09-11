@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { researcherRouteAllowed } from '../src/server/auth';
 import {
   QUESTIONNAIRE_EXPORT_HEADERS,
   QUESTIONNAIRE_INSTRUMENT_VERSION,
@@ -96,6 +97,12 @@ assert.equal(codebook.length, QUESTIONNAIRE_EXPORT_HEADERS.length);
 assert.ok(codebook.every((row) => row.file_name==='student_questionnaires.csv'));
 assert.ok(codebook.some((row) => row.variable==='q1_1' && String(row.definition).includes('逆転なし')));
 assert.ok(codebook.some((row) => row.variable==='survey_wave' && String(row.allowed_values).includes('pre_app')));
+
+assert.equal(researcherRouteAllowed({ path: '/questionnaire/statistics' } as any), true, 'mounted questionnaire statistics route must be researcher-accessible');
+assert.equal(researcherRouteAllowed({ path: '/questionnaire/import' } as any), true, 'mounted questionnaire import route must be researcher-accessible');
+assert.equal(researcherRouteAllowed({ path: '/api/management/questionnaire/statistics' } as any), true, 'full questionnaire statistics route must be researcher-accessible');
+assert.equal(researcherRouteAllowed({ path: '/api/management/questionnaire/import' } as any), true, 'full questionnaire import route must be researcher-accessible');
+assert.equal(researcherRouteAllowed({ path: '/unrelated-sensitive-route' } as any), false, 'researcher allowlist must remain narrow');
 
 const entry = fs.readFileSync('server-entry.ts','utf8');
 const runtime = fs.readFileSync('src/server/questionnaireDashboardRuntime.ts','utf8');
