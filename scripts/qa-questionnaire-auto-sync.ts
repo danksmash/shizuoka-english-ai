@@ -79,6 +79,8 @@ const manualRoute = fs.readFileSync('src/server/questionnaireRoutes.ts', 'utf8')
 const core = fs.readFileSync('src/server/questionnaireAutoSync.ts', 'utf8');
 const dashboardRuntime = fs.readFileSync('src/server/questionnaireAutoSyncDashboardRuntime.ts', 'utf8');
 const participantHashes = fs.readFileSync('src/server/study1FormalParticipantHashes.ts', 'utf8');
+const deployWorkflow = fs.readFileSync('.github/workflows/cloud-run-deploy.yml', 'utf8');
+const productionSmoke = fs.readFileSync('.github/workflows/questionnaire-production-smoke.yml', 'utf8');
 assert.ok(entry.includes("this.use('/api/questionnaire-auto', createQuestionnaireAutoSyncRouter())"));
 assert.ok(entry.includes('withQuestionnaireAutoSyncDashboardRuntime'));
 assert.ok(route.includes("router.post('/ingest'"));
@@ -98,5 +100,15 @@ assert.ok(dashboardRuntime.includes('/api/management/questionnaire/revision'));
 assert.ok(dashboardRuntime.includes('setInterval(pollQuestionnaireRevision,30000)'));
 assert.ok(dashboardRuntime.includes('Pre M(SD)［paired］'));
 assert.ok(dashboardRuntime.includes('Post M(SD)［paired］'));
+
+// Production must fail closed if the shared ingest secret has not been provisioned.
+assert.ok(deployWorkflow.includes('gcloud secrets describe "$secret"'));
+assert.ok(deployWorkflow.includes('QUESTIONNAIRE_INGEST_SECRET=QUESTIONNAIRE_INGEST_SECRET:latest'));
+assert.ok(deployWorkflow.includes("test \"$questionnaire_probe\" = '401'"));
+assert.ok(deployWorkflow.includes('INVALID_QUESTIONNAIRE_SIGNATURE'));
+assert.ok(productionSmoke.includes('id="qAutoSyncStatus"'));
+assert.ok(productionSmoke.includes('/api/questionnaire-auto/ingest'));
+assert.ok(productionSmoke.includes("test \"$auto_status\" = '401'"));
+assert.ok(productionSmoke.includes('INVALID_QUESTIONNAIRE_SIGNATURE'));
 
 console.log('Study 1 questionnaire auto-sync QA: PASS');
