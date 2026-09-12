@@ -34,8 +34,10 @@ jobs:
           echo "$management" | grep -q '事前・事後質問紙分析'
           echo "$management" | grep -q 'student_questionnaires'
           echo "$management" | grep -q 'Holm補正後 p &lt; .05'
+          echo "$management" | grep -q 'id="qAutoSyncStatus"'
+          echo "$management" | grep -q '30秒ごとに新しい回答を確認'
 
-          # All questionnaire operations must reject an unauthenticated caller.
+          # All researcher questionnaire operations must reject an unauthenticated caller.
           stats_status=$(curl --silent --show-error --max-time 20 \
             -o /tmp/questionnaire-stats.json \
             -w '%{http_code}' \
@@ -61,4 +63,24 @@ jobs:
           test "$export_status" = '401'
           grep -q '"error":"UNAUTHORIZED"' /tmp/questionnaire-export.json
 
-          echo 'QUESTIONNAIRE PRODUCTION SMOKE PASS: UI present; researcher data routes reject unauthenticated access; no writes performed.'
+          revision_status=$(curl --silent --show-error --max-time 20 \
+            -o /tmp/questionnaire-revision.json \
+            -w '%{http_code}' \
+            -X POST "$API_URL/api/management/questionnaire/revision" \
+            -H 'Content-Type: application/json' \
+            --data '{}')
+          test "$revision_status" = '401'
+          grep -q '"error":"UNAUTHORIZED"' /tmp/questionnaire-revision.json
+
+          # The Apps Script-facing ingest route is public by necessity, but it must
+          # be configured with the shared secret and reject an unsigned request.
+          auto_status=$(curl --silent --show-error --max-time 20 \
+            -o /tmp/questionnaire-auto.json \
+            -w '%{http_code}' \
+            -X POST "$API_URL/api/questionnaire-auto/ingest" \
+            -H 'Content-Type: application/json' \
+            --data '{"formId":"probe","formResponseId":"probe","submittedAt":"2026-09-12T00:00:00.000Z","learningCode":"Z9Q7","answers":{}}')
+          test "$auto_status" = '401'
+          grep -q '"error":"INVALID_QUESTIONNAIRE_SIGNATURE"' /tmp/questionnaire-auto.json
+
+          echo 'QUESTIONNAIRE PRODUCTION SMOKE PASS: UI present; auto-sync configured; protected routes reject unauthenticated/unsigned access; no writes performed.'
