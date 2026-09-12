@@ -51,7 +51,7 @@ jobs:
           project_id: shizuoka-english-ai
           version: '>= 416.0.0'
 
-      - name: Grant production runtime access to Azure Speech secret
+      - name: Verify required production secrets and grant runtime access
         run: |
           RUNTIME_SA=$(gcloud run services describe shizuoka-english-ai \
             --project shizuoka-english-ai \
@@ -62,11 +62,19 @@ jobs:
             RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
           fi
           test -n "$RUNTIME_SA"
-          gcloud secrets add-iam-policy-binding AZURE_SPEECH_KEY \
-            --project shizuoka-english-ai \
-            --member="serviceAccount:${RUNTIME_SA}" \
-            --role='roles/secretmanager.secretAccessor' \
-            --quiet
+          for secret in AZURE_SPEECH_KEY QUESTIONNAIRE_INGEST_SECRET; do
+            gcloud secrets describe "$secret" \
+              --project shizuoka-english-ai \
+              --format='value(name)' >/dev/null
+            gcloud secrets versions access latest \
+              --secret="$secret" \
+              --project shizuoka-english-ai >/dev/null
+            gcloud secrets add-iam-policy-binding "$secret" \
+              --project shizuoka-english-ai \
+              --member="serviceAccount:${RUNTIME_SA}" \
+              --role='roles/secretmanager.secretAccessor' \
+              --quiet
+          done
 
       - name: Deploy to Cloud Run
         run: |
@@ -82,7 +90,7 @@ jobs:
             --timeout 60 \
             --memory 512Mi \
             --update-env-vars ANTHROPIC_MODEL=claude-sonnet-5,SESSION_RETENTION_DAYS=1095,APP_VERSION=1.0.7,APP_BUILD="$BUILD_SHA",AZURE_SPEECH_REGION=japaneast \
-            --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,AZURE_SPEECH_KEY=AZURE_SPEECH_KEY:latest
+            --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,AZURE_SPEECH_KEY=AZURE_SPEECH_KEY:latest,QUESTIONNAIRE_INGEST_SECRET=QUESTIONNAIRE_INGEST_SECRET:latest
 
       - name: Production health and AI smoke test
         run: |
@@ -103,6 +111,17 @@ jobs:
           echo "$health" | grep -q '"azureTtsConfigured":true'
           echo "$health" | grep -q '"learningDataConfigured":true'
           echo "$health" | grep -q '"managementConfigured":true'
+
+          # Auto-sync must be configured in production. An unsigned probe must be
+          # rejected with 401. A missing secret would return 503 and fail deploy.
+          questionnaire_probe=$(curl --silent --show-error --max-time 20 \
+            -o /tmp/questionnaire-auto-probe.json \
+            -w '%{http_code}' \
+            -X POST "$API_URL/api/questionnaire-auto/ingest" \
+            -H 'Content-Type: application/json' \
+            --data '{"formId":"probe","formResponseId":"probe","submittedAt":"2026-09-12T00:00:00.000Z","learningCode":"Z9Q7","answers":{}}')
+          test "$questionnaire_probe" = '401'
+          grep -q 'INVALID_QUESTIONNAIRE_SIGNATURE' /tmp/questionnaire-auto-probe.json
 
           chat=""
           for attempt in 1 2 3; do
