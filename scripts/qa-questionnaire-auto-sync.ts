@@ -5,28 +5,40 @@ import {
   QUESTIONNAIRE_PRE_FORM_ID,
   canonicalQuestionnaireAutoPayload,
   computeQuestionnaireAutoSignature,
+  formalStudy1ParticipantHash,
   isFormalStudy1Participant,
+  isFormalStudy1ParticipantHash,
   normalizeQuestionnaireSubmittedAt,
   questionnaireWaveForFormId,
   verifyQuestionnaireAutoSignature,
   type QuestionnaireAutoIngestPayload,
 } from '../src/server/questionnaireAutoSync';
+import {
+  STUDY1_FORMAL_PARTICIPANT_COUNT,
+  STUDY1_FORMAL_PARTICIPANT_HASHES,
+} from '../src/server/study1FormalParticipantHashes';
 
 assert.equal(questionnaireWaveForFormId(QUESTIONNAIRE_PRE_FORM_ID), 'pre_app');
 assert.equal(questionnaireWaveForFormId(QUESTIONNAIRE_POST_FORM_ID), 'post_exchange');
 assert.equal(questionnaireWaveForFormId('unknown-form'), null);
 
-assert.equal(isFormalStudy1Participant({ classId: '5-1', attendanceNumber: 1 }), true);
-assert.equal(isFormalStudy1Participant({ classId: '5-1', attendanceNumber: 26 }), true);
-assert.equal(isFormalStudy1Participant({ classId: '5-1', attendanceNumber: 27 }), false);
-assert.equal(isFormalStudy1Participant({ classId: '5-2', attendanceNumber: 25 }), true);
-assert.equal(isFormalStudy1Participant({ classId: '5-3', attendanceNumber: 25 }), true);
-assert.equal(isFormalStudy1Participant({ classId: '6-1', attendanceNumber: 34 }), true);
-assert.equal(isFormalStudy1Participant({ classId: '6-2', attendanceNumber: 35 }), true);
-assert.equal(isFormalStudy1Participant({ classId: '6-3', attendanceNumber: 1 }), false);
-assert.equal(isFormalStudy1Participant({ classId: '6-PB', attendanceNumber: 1 }), false);
-assert.equal(isFormalStudy1Participant({ classId: 'テスト', attendanceNumber: 1 }), false);
-assert.equal(isFormalStudy1Participant({ classId: '5-2', attendanceNumber: '' }), false);
+assert.equal(STUDY1_FORMAL_PARTICIPANT_COUNT, 145);
+assert.equal(STUDY1_FORMAL_PARTICIPANT_HASHES.size, 145);
+assert.ok([...STUDY1_FORMAL_PARTICIPANT_HASHES].every((hash) => /^[0-9a-f]{64}$/.test(hash)));
+const formalHash = [...STUDY1_FORMAL_PARTICIPANT_HASHES][0];
+assert.equal(isFormalStudy1ParticipantHash(formalHash, '5-1', 1), true);
+assert.equal(isFormalStudy1ParticipantHash(formalHash, '5-1', 26), true);
+assert.equal(isFormalStudy1ParticipantHash(formalHash, '5-1', 27), false);
+assert.equal(isFormalStudy1ParticipantHash(formalHash, '5-2', 25), true);
+assert.equal(isFormalStudy1ParticipantHash(formalHash, '5-3', 25), true);
+assert.equal(isFormalStudy1ParticipantHash(formalHash, '6-1', 34), true);
+assert.equal(isFormalStudy1ParticipantHash(formalHash, '6-2', 35), true);
+assert.equal(isFormalStudy1ParticipantHash(formalHash, '6-3', 1), false);
+assert.equal(isFormalStudy1ParticipantHash(formalHash, '6-PB', 1), false);
+assert.equal(isFormalStudy1ParticipantHash(formalHash, 'テスト', 1), false);
+assert.equal(isFormalStudy1ParticipantHash(formalHash, '5-2', ''), false);
+assert.equal(STUDY1_FORMAL_PARTICIPANT_HASHES.has(formalStudy1ParticipantHash('not-a-formal-student-uuid')), false);
+assert.equal(isFormalStudy1Participant({ studentId: 'not-a-formal-student-uuid', classId: '5-1', attendanceNumber: 1 }), false);
 
 // Slash-formatted Google Forms timestamps must be interpreted as Japan local time,
 // not as the Cloud Run host timezone. Milliseconds are normalized away so auto
@@ -66,6 +78,7 @@ const route = fs.readFileSync('src/server/questionnaireAutoSyncRoutes.ts', 'utf8
 const manualRoute = fs.readFileSync('src/server/questionnaireRoutes.ts', 'utf8');
 const core = fs.readFileSync('src/server/questionnaireAutoSync.ts', 'utf8');
 const dashboardRuntime = fs.readFileSync('src/server/questionnaireAutoSyncDashboardRuntime.ts', 'utf8');
+const participantHashes = fs.readFileSync('src/server/study1FormalParticipantHashes.ts', 'utf8');
 assert.ok(entry.includes("this.use('/api/questionnaire-auto', createQuestionnaireAutoSyncRouter())"));
 assert.ok(entry.includes('withQuestionnaireAutoSyncDashboardRuntime'));
 assert.ok(route.includes("router.post('/ingest'"));
@@ -73,8 +86,11 @@ assert.ok(route.includes('QUESTIONNAIRE_INGEST_SECRET'));
 assert.ok(route.includes('X-Questionnaire-Timestamp'));
 assert.ok(route.includes('X-Questionnaire-Signature'));
 assert.ok(core.includes('NOT_FORMAL_STUDY1_PARTICIPANT'));
+assert.ok(core.includes('STUDY1_FORMAL_PARTICIPANT_HASHES'));
 assert.ok(core.includes('createDocumentIfAbsent'));
 assert.ok(core.includes('QUESTIONNAIRE_SYNC_STATE_COLLECTION'));
+assert.equal((participantHashes.match(/[0-9a-f]{64}/g) || []).length, 145, 'allowlist file must contain exactly 145 irreversible hashes');
+assert.ok(!participantHashes.includes('learningCode') && !participantHashes.includes('researchId') && !participantHashes.includes('studentId:'), 'allowlist source must not expose operational identifiers');
 assert.ok(manualRoute.includes('importStrictGoogleFormsQuestionnaireCsv'), 'manual CSV fallback must use the same formal-roster gate');
 assert.ok(!manualRoute.includes('importGoogleFormsQuestionnaireCsv'), 'old permissive importer must not remain on the management route');
 assert.ok(manualRoute.includes("router.post('/questionnaire/revision'"));
