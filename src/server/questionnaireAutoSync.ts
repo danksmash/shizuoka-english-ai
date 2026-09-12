@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { createDocumentIfAbsent, setDocument } from './firestore';
 import { resolveStudentByCode } from './persistence';
+import { STUDY1_FORMAL_PARTICIPANT_HASHES } from './study1FormalParticipantHashes';
 import {
   QUESTIONNAIRE_COLLECTION,
   QUESTIONNAIRE_INSTRUMENT_VERSION,
@@ -58,9 +59,9 @@ export function normalizeQuestionnaireSubmittedAt(value: unknown): string {
   const raw = String(value ?? '').trim();
   if (!raw) return '';
 
-  // Google Forms CSV timestamps are normally Japan-local slash-formatted values.
-  // Prefer this parser before Date.parse so Cloud Run's UTC timezone cannot shift
-  // a local Forms timestamp by nine hours during manual fallback import.
+  // Google Forms CSV timestamps are Japan-local slash-formatted values.
+  // Parse those explicitly before Date.parse so a UTC Cloud Run host cannot
+  // shift a local response time by nine hours during manual fallback import.
   const local = raw.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
   let ms = Number.NaN;
   if (local) {
@@ -77,13 +78,30 @@ function gradeForClassId(classId: string): 5 | 6 | null {
   return classId.startsWith('5-') ? 5 : classId.startsWith('6-') ? 6 : null;
 }
 
-export function isFormalStudy1Participant(student: { classId: string; attendanceNumber: number | '' }): boolean {
-  const max = FORMAL_CLASS_SIZES[student.classId];
-  const attendance = Number(student.attendanceNumber);
-  return Boolean(max)
+export function formalStudy1ParticipantHash(studentId: string): string {
+  return crypto.createHash('sha256').update(`study1-formal-v1|${String(studentId || '').trim()}`).digest('hex');
+}
+
+export function isFormalStudy1ParticipantHash(
+  studentIdHash: string,
+  classId: string,
+  attendanceNumber: number | '',
+): boolean {
+  const max = FORMAL_CLASS_SIZES[classId];
+  const attendance = Number(attendanceNumber);
+  return STUDY1_FORMAL_PARTICIPANT_HASHES.has(studentIdHash)
+    && Boolean(max)
     && Number.isInteger(attendance)
     && attendance >= 1
     && attendance <= max;
+}
+
+export function isFormalStudy1Participant(student: { studentId: string; classId: string; attendanceNumber: number | '' }): boolean {
+  return isFormalStudy1ParticipantHash(
+    formalStudy1ParticipantHash(student.studentId),
+    student.classId,
+    student.attendanceNumber,
+  );
 }
 
 function itemScoresFromAnswers(answers: Record<string, unknown>): QuestionnaireItemScores {
