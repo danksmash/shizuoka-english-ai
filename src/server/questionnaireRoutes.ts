@@ -3,9 +3,9 @@ import { requireManagementRole } from './auth';
 import {
   buildQuestionnaireStatistics,
   getAllQuestionnaireRecords,
-  importGoogleFormsQuestionnaireCsv,
   type QuestionnaireWave,
 } from './questionnaireResearch';
+import { importStrictGoogleFormsQuestionnaireCsv } from './questionnaireAutoSync';
 
 const router = express.Router();
 
@@ -19,7 +19,7 @@ router.post('/questionnaire/import', requireManagementRole(['researcher']), asyn
     const csvText = typeof req.body?.csvText === 'string' ? req.body.csvText : '';
     if (!surveyWave) return res.status(400).json({ success: false, error: 'INVALID_SURVEY_WAVE' });
     if (!csvText || csvText.length > 450_000) return res.status(400).json({ success: false, error: 'INVALID_QUESTIONNAIRE_CSV' });
-    const result = await importGoogleFormsQuestionnaireCsv(csvText, surveyWave);
+    const result = await importStrictGoogleFormsQuestionnaireCsv(csvText, surveyWave);
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, ...result });
   } catch (error: any) {
