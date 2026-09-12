@@ -1,11 +1,16 @@
 import express from 'express';
 import { requireManagementRole } from './auth';
+import { getDocument } from './firestore';
 import {
   buildQuestionnaireStatistics,
   getAllQuestionnaireRecords,
   type QuestionnaireWave,
 } from './questionnaireResearch';
-import { importStrictGoogleFormsQuestionnaireCsv } from './questionnaireAutoSync';
+import {
+  importStrictGoogleFormsQuestionnaireCsv,
+  QUESTIONNAIRE_SYNC_STATE_COLLECTION,
+  QUESTIONNAIRE_SYNC_STATE_DOCUMENT,
+} from './questionnaireAutoSync';
 
 const router = express.Router();
 
@@ -37,6 +42,22 @@ router.post('/questionnaire/statistics', requireManagementRole(['researcher']), 
   } catch (error: any) {
     console.error('Questionnaire statistics failed', { message: error?.message });
     return res.status(503).json({ success: false, error: 'QUESTIONNAIRE_STATISTICS_UNAVAILABLE' });
+  }
+});
+
+router.post('/questionnaire/revision', requireManagementRole(['researcher']), async (_req, res) => {
+  try {
+    const state = await getDocument(QUESTIONNAIRE_SYNC_STATE_COLLECTION, QUESTIONNAIRE_SYNC_STATE_DOCUMENT);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      success: true,
+      lastIngestedAt: String(state?.lastIngestedAt || ''),
+      lastResponseId: String(state?.lastResponseId || ''),
+      lastSurveyWave: String(state?.lastSurveyWave || ''),
+    });
+  } catch (error: any) {
+    console.error('Questionnaire revision read failed', { message: error?.message });
+    return res.status(503).json({ success: false, error: 'QUESTIONNAIRE_REVISION_UNAVAILABLE' });
   }
 });
 
