@@ -2,9 +2,11 @@ import type { RequestHandler } from 'express';
 
 function injectAutoSyncDashboard(html: string): string {
   if (!html.includes('id="questionnaireSection"')) return html;
-  let out = html;
+  let out = html
+    .replace('Pre M(SD)</th>', 'Pre M(SD)［paired］</th>')
+    .replace('Post M(SD)</th>', 'Post M(SD)［paired］</th>');
   const statusAnchor = '<p id="qStatus" class="q-status"></p>';
-  const autoStatus = `${statusAnchor}<p id="qAutoSyncStatus" class="q-note">自動同期：30秒ごとに新しい回答を確認します。</p>`;
+  const autoStatus = `${statusAnchor}<p id="qAutoSyncStatus" class="q-note">自動同期：30秒ごとに新しい回答を確認します。M・SDは事前・事後の両方に有効回答があるpaired児童について算出します。</p>`;
   if (out.includes(statusAnchor) && !out.includes('id="qAutoSyncStatus"')) {
     out = out.replace(statusAnchor, autoStatus);
   }
@@ -24,7 +26,7 @@ function injectAutoSyncDashboard(html: string): string {
       if(!res.ok||!data.success)return;
       var revision=String(data.lastIngestedAt||'')+'|'+String(data.lastResponseId||'');
       var status=document.getElementById('qAutoSyncStatus');
-      if(status){status.textContent=data.lastIngestedAt?'自動同期：最終取込 '+new Date(data.lastIngestedAt).toLocaleString('ja-JP')+'（30秒ごとに確認）':'自動同期：まだ取込回答はありません（30秒ごとに確認）'}
+      if(status){status.textContent=data.lastIngestedAt?'自動同期：最終取込 '+new Date(data.lastIngestedAt).toLocaleString('ja-JP')+'（30秒ごとに確認）。M・SDはpaired児童で算出。':'自動同期：まだ取込回答はありません（30秒ごとに確認）。M・SDはpaired児童で算出。'}
       if(initialized&&revision!==lastRevision&&revision!=='|'){
         if(status)status.textContent='自動同期：新しい回答を検知しました。統計表を更新します…';
         setTimeout(function(){location.reload()},600);
