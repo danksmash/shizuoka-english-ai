@@ -85,6 +85,7 @@ assert.ok(entry.includes("this.use('/api/questionnaire-auto', createQuestionnair
 assert.ok(entry.includes('withQuestionnaireAutoSyncDashboardRuntime'));
 assert.ok(route.includes("router.post('/ingest'"));
 assert.ok(route.includes('QUESTIONNAIRE_INGEST_SECRET'));
+assert.ok(route.includes("String(process.env.QUESTIONNAIRE_INGEST_SECRET || '').trim()"), 'Cloud Run ingest secret must normalize surrounding whitespace/newlines before HMAC verification');
 assert.ok(route.includes('X-Questionnaire-Timestamp'));
 assert.ok(route.includes('X-Questionnaire-Signature'));
 assert.ok(core.includes('NOT_FORMAL_STUDY1_PARTICIPANT'));
