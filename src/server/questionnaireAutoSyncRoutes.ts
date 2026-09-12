@@ -22,7 +22,12 @@ function payloadFromBody(value: unknown): QuestionnaireAutoIngestPayload | null 
 
 router.post('/ingest', async (req, res) => {
   try {
-    const secret = process.env.QUESTIONNAIRE_INGEST_SECRET || '';
+    // Secret Manager values can accidentally include a trailing newline when
+    // provisioned from shell output (for example `openssl rand -hex 32`).
+    // Apps Script properties are normalized before signing, so normalize the
+    // injected Cloud Run value too. This preserves fail-closed HMAC auth while
+    // preventing invisible surrounding whitespace from breaking signatures.
+    const secret = String(process.env.QUESTIONNAIRE_INGEST_SECRET || '').trim();
     if (!secret) return res.status(503).json({ success: false, error: 'QUESTIONNAIRE_AUTO_SYNC_NOT_CONFIGURED' });
 
     const payload = payloadFromBody(req.body);
