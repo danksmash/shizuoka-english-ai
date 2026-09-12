@@ -1,11 +1,16 @@
 import express from 'express';
 import { requireManagementRole } from './auth';
+import { getDocument } from './firestore';
 import {
   buildQuestionnaireStatistics,
   getAllQuestionnaireRecords,
-  importGoogleFormsQuestionnaireCsv,
   type QuestionnaireWave,
 } from './questionnaireResearch';
+import {
+  importStrictGoogleFormsQuestionnaireCsv,
+  QUESTIONNAIRE_SYNC_STATE_COLLECTION,
+  QUESTIONNAIRE_SYNC_STATE_DOCUMENT,
+} from './questionnaireAutoSync';
 
 const router = express.Router();
 
@@ -19,7 +24,7 @@ router.post('/questionnaire/import', requireManagementRole(['researcher']), asyn
     const csvText = typeof req.body?.csvText === 'string' ? req.body.csvText : '';
     if (!surveyWave) return res.status(400).json({ success: false, error: 'INVALID_SURVEY_WAVE' });
     if (!csvText || csvText.length > 450_000) return res.status(400).json({ success: false, error: 'INVALID_QUESTIONNAIRE_CSV' });
-    const result = await importGoogleFormsQuestionnaireCsv(csvText, surveyWave);
+    const result = await importStrictGoogleFormsQuestionnaireCsv(csvText, surveyWave);
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, ...result });
   } catch (error: any) {
@@ -37,6 +42,22 @@ router.post('/questionnaire/statistics', requireManagementRole(['researcher']), 
   } catch (error: any) {
     console.error('Questionnaire statistics failed', { message: error?.message });
     return res.status(503).json({ success: false, error: 'QUESTIONNAIRE_STATISTICS_UNAVAILABLE' });
+  }
+});
+
+router.post('/questionnaire/revision', requireManagementRole(['researcher']), async (_req, res) => {
+  try {
+    const state = await getDocument(QUESTIONNAIRE_SYNC_STATE_COLLECTION, QUESTIONNAIRE_SYNC_STATE_DOCUMENT);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      success: true,
+      lastIngestedAt: String(state?.lastIngestedAt || ''),
+      lastResponseId: String(state?.lastResponseId || ''),
+      lastSurveyWave: String(state?.lastSurveyWave || ''),
+    });
+  } catch (error: any) {
+    console.error('Questionnaire revision read failed', { message: error?.message });
+    return res.status(503).json({ success: false, error: 'QUESTIONNAIRE_REVISION_UNAVAILABLE' });
   }
 });
 
