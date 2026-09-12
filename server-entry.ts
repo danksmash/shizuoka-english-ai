@@ -7,6 +7,7 @@ import { phaseAwareGetHandler } from './src/server/researchPhaseRuntime';
 import { withPersonaCountryDashboardLabels } from './src/server/personaCountryDashboardLabels';
 import { withQuestionnaireResearchRuntime } from './src/server/questionnaireDashboardRuntime';
 import { withQuestionnaireAutoSyncDashboardRuntime } from './src/server/questionnaireAutoSyncDashboardRuntime';
+import { withResearchPhaseAnalyticsRuntime } from './src/server/researchPhaseAnalyticsRuntime';
 
 const application = express.application as any;
 const originalGet = application.get;
@@ -19,6 +20,7 @@ application.get = function researchPhaseAwareGet(this: any, path: any, ...handle
     handlers[handlers.length - 1] = withPersonaCountryDashboardLabels(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withQuestionnaireResearchRuntime(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withQuestionnaireAutoSyncDashboardRuntime(path, handlers[handlers.length - 1]);
+    handlers[handlers.length - 1] = withResearchPhaseAnalyticsRuntime(path, handlers[handlers.length - 1]);
   }
   return originalGet.call(this, path, ...handlers);
 };
