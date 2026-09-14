@@ -1,0 +1,99 @@
+name: Deploy ASR tablet diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/asr-tablet-events-20260914
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: asr-tablet-diagnostic
+  cancel-in-progress: true
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Full QA and production build
+        run: |
+          npm run qa
+          npm run build
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
+
+      - name: Deploy isolated diagnostic service
+        run: |
+          BUILD_SHA="${GITHUB_SHA:0:12}"
+          gcloud run deploy shizuoka-english-ai-asr-diagnostic \
+            --project shizuoka-english-ai \
+            --source . \
+            --region asia-northeast1 \
+            --allow-unauthenticated \
+            --min-instances 0 \
+            --max-instances 2 \
+            --concurrency 20 \
+            --timeout 60 \
+            --memory 512Mi \
+            --update-env-vars ANTHROPIC_MODEL=claude-sonnet-5,APP_VERSION=1.0.7-asr-diagnostic,APP_BUILD="$BUILD_SHA",AZURE_SPEECH_REGION=japaneast \
+            --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,AZURE_SPEECH_KEY=AZURE_SPEECH_KEY:latest
+
+      - name: Diagnostic smoke and print URL
+        run: |
+          DIAG_URL=$(gcloud run services describe shizuoka-english-ai-asr-diagnostic \
+            --project shizuoka-english-ai \
+            --region asia-northeast1 \
+            --format='value(status.url)')
+          echo "DIAG_URL=$DIAG_URL"
+          test -n "$DIAG_URL"
+
+          health=$(curl --fail --silent --show-error --max-time 20 "$DIAG_URL/api/health")
+          echo "$health" | grep -q '"status":"ok"'
+          echo "$health" | grep -q '"aiConfigured":true'
+          echo "$health" | grep -q '"model":"claude-sonnet-5"'
+          echo "$health" | grep -q '"azureTtsConfigured":true'
+          echo "$health" | grep -q '"learningDataConfigured":false'
+          curl --fail --silent --show-error --max-time 20 "$DIAG_URL/?asrdiag=1" >/dev/null
+
+          chat=$(curl --fail --silent --show-error --max-time 50 \
+            -X POST "$DIAG_URL/api/chat" \
+            -H 'Content-Type: application/json' \
+            --data '{"message":"Hello! My name is Ken.","history":[],"topic":"intro","studentName":"Ken","aiStudentId":"emma_usa"}')
+          echo "$chat" | grep -q '"success":true'
+          echo "$chat" | grep -q '"route":"anthropic-resilient"'
+
+          curl --fail --silent --show-error --max-time 30 \
+            -D /tmp/asr-diagnostic-tts-headers.txt \
+            -o /tmp/asr-diagnostic-tts.mp3 \
+            -X POST "$DIAG_URL/api/tts" \
+            -H 'Content-Type: application/json' \
+            --data '{"text":"Hello! Nice to meet you.","aiStudentId":"emma_usa","speakingRate":1.0}'
+          test -s /tmp/asr-diagnostic-tts.mp3
+          grep -qi '^x-tts-provider: azure-speech' /tmp/asr-diagnostic-tts-headers.txt
