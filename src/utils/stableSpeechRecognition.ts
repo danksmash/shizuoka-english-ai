@@ -193,6 +193,7 @@ export function createStableSpeechRecognitionSession(
   let stopResolve: ((snapshot: StableSpeechSnapshot) => void) | null = null;
   let stopTimer: ReturnType<typeof setTimeout> | null = null;
   let stopFinished = false;
+  let contextualBiasDisabled = false;
 
   const clearStopTimer = () => {
     if (stopTimer) clearTimeout(stopTimer);
@@ -227,8 +228,10 @@ export function createStableSpeechRecognitionSession(
       nextRecognition.interimResults = true;
       nextRecognition.maxAlternatives = maxAlternatives;
       nextRecognition.lang = 'en-US';
-      const biasApplied = applySpeechRecognitionBiasPhrases(nextRecognition, biasPhrases);
+      const biasApplied = !contextualBiasDisabled
+        && applySpeechRecognitionBiasPhrases(nextRecognition, biasPhrases);
       options.onBiasStatus?.(biasApplied, biasPhrases.length);
+      let retryWithoutBias = false;
 
       nextRecognition.onstart = () => {
         if (cancelled || stopFinished) return;
@@ -247,6 +250,12 @@ export function createStableSpeechRecognitionSession(
       nextRecognition.onerror = (event: any) => {
         const error = String(event?.error || 'speech-recognition-error');
         if (cancelled || stopFinished || (stopRequested && error === 'aborted')) return;
+        if (error === 'phrases-not-supported' && biasApplied && recordingIntent && !stopRequested) {
+          contextualBiasDisabled = true;
+          retryWithoutBias = true;
+          options.onBiasStatus?.(false, biasPhrases.length);
+          return;
+        }
         if (recordingIntent && (error === 'no-speech' || error === 'aborted')) return;
         fail(error);
       };
@@ -255,6 +264,14 @@ export function createStableSpeechRecognitionSession(
         if (cancelled || stopFinished) return;
         if (stopRequested || !recordingIntent) {
           finishStop('stopped');
+          return;
+        }
+
+        if (retryWithoutBias) {
+          recognition = null;
+          window.setTimeout(() => {
+            if (recordingIntent && !stopRequested && !cancelled && !stopFinished) startRecognizer(isRestart);
+          }, 0);
           return;
         }
 
