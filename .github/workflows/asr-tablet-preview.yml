@@ -73,9 +73,36 @@ jobs:
             --format='value(status.url)')
           echo "PREVIEW_URL=$PREVIEW_URL"
           test -n "$PREVIEW_URL"
+
           health=$(curl --fail --silent --show-error --max-time 20 "$PREVIEW_URL/api/health")
           echo "$health" | grep -q '"status":"ok"'
           echo "$health" | grep -q '"aiConfigured":true'
+          echo "$health" | grep -q '"model":"claude-sonnet-5"'
           echo "$health" | grep -q '"azureTtsConfigured":true'
           echo "$health" | grep -q '"learningDataConfigured":false'
           curl --fail --silent --show-error --max-time 20 "$PREVIEW_URL/" >/dev/null
+
+          chat=$(curl --fail --silent --show-error --max-time 50 \
+            -X POST "$PREVIEW_URL/api/chat" \
+            -H 'Content-Type: application/json' \
+            --data '{"message":"Hello! My name is Ken.","history":[],"topic":"intro","studentName":"Ken","aiStudentId":"emma_usa"}')
+          echo "$chat" | grep -q '"success":true'
+          echo "$chat" | grep -q '"route":"anthropic-resilient"'
+          echo "$chat" | grep -q '"model":"claude-sonnet-5"'
+          CHAT_JSON="$chat" python3 - <<'PY'
+          import json, os
+          data = json.loads(os.environ['CHAT_JSON'])
+          reply = str(data.get('data', {}).get('reply', '')).strip()
+          assert reply, data
+          assert len(reply) <= 220, reply
+          print('AI_REPLY=' + reply)
+          PY
+
+          curl --fail --silent --show-error --max-time 30 \
+            -D /tmp/asr-preview-tts-headers.txt \
+            -o /tmp/asr-preview-tts.mp3 \
+            -X POST "$PREVIEW_URL/api/tts" \
+            -H 'Content-Type: application/json' \
+            --data '{"text":"Hello! Nice to meet you.","aiStudentId":"emma_usa","speakingRate":1.0}'
+          test -s /tmp/asr-preview-tts.mp3
+          grep -qi '^x-tts-provider: azure-speech' /tmp/asr-preview-tts-headers.txt
