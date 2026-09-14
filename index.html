@@ -7,6 +7,247 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+    <script>
+      (() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('asrdiag') !== '1') return;
+
+        const startedAt = performance.now();
+        const entries = [];
+        const attached = new WeakSet();
+        let panel = null;
+        let logBox = null;
+
+        const safeText = (value) => {
+          try {
+            if (value === undefined) return '';
+            if (value === null) return 'null';
+            if (typeof value === 'string') return value;
+            return JSON.stringify(value);
+          } catch {
+            return String(value);
+          }
+        };
+
+        const render = () => {
+          if (!document.body) return;
+          if (!panel) {
+            panel = document.createElement('section');
+            panel.id = 'asr-diagnostic-panel';
+            panel.setAttribute('aria-label', 'ASR diagnostic log');
+            panel.style.cssText = [
+              'position:fixed',
+              'right:8px',
+              'bottom:8px',
+              'z-index:2147483647',
+              'width:min(520px,calc(100vw - 16px))',
+              'max-height:48vh',
+              'overflow:hidden',
+              'background:rgba(15,23,42,.96)',
+              'color:#f8fafc',
+              'border:2px solid #f59e0b',
+              'border-radius:12px',
+              'box-shadow:0 12px 30px rgba(0,0,0,.35)',
+              'font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace',
+              'text-align:left',
+              'user-select:text'
+            ].join(';');
+
+            const header = document.createElement('div');
+            header.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;background:#7c2d12;font-family:sans-serif;font-weight:700;';
+            const title = document.createElement('span');
+            title.textContent = 'ASR診断ログ（発話内容・録音は保存しません）';
+            title.style.flex = '1';
+
+            const copyButton = document.createElement('button');
+            copyButton.type = 'button';
+            copyButton.textContent = 'コピー';
+            copyButton.style.cssText = 'border:0;border-radius:6px;padding:4px 8px;background:#fff;color:#7c2d12;font-weight:700;cursor:pointer;';
+            copyButton.addEventListener('click', async () => {
+              const text = entries.map((entry) => entry.text).join('\n');
+              try {
+                await navigator.clipboard.writeText(text);
+                copyButton.textContent = 'コピー済み';
+                window.setTimeout(() => { copyButton.textContent = 'コピー'; }, 1200);
+              } catch {
+                copyButton.textContent = 'コピー失敗';
+              }
+            });
+
+            const clearButton = document.createElement('button');
+            clearButton.type = 'button';
+            clearButton.textContent = 'クリア';
+            clearButton.style.cssText = 'border:0;border-radius:6px;padding:4px 8px;background:#fff;color:#7c2d12;font-weight:700;cursor:pointer;';
+            clearButton.addEventListener('click', () => {
+              entries.length = 0;
+              render();
+            });
+
+            header.append(title, copyButton, clearButton);
+            logBox = document.createElement('pre');
+            logBox.style.cssText = 'margin:0;padding:8px 10px;max-height:calc(48vh - 42px);overflow:auto;white-space:pre-wrap;word-break:break-word;';
+            panel.append(header, logBox);
+            document.body.appendChild(panel);
+          }
+          if (logBox) {
+            logBox.textContent = entries.map((entry) => entry.text).join('\n');
+            logBox.scrollTop = logBox.scrollHeight;
+          }
+        };
+
+        const log = (name, detail) => {
+          const elapsed = (performance.now() - startedAt).toFixed(0).padStart(5, ' ');
+          const suffix = detail === undefined ? '' : ` ${safeText(detail)}`;
+          const text = `+${elapsed}ms  ${name}${suffix}`;
+          entries.push({ text });
+          if (entries.length > 120) entries.shift();
+          render();
+          console.info('[ASR-DIAG]', name, detail ?? '');
+        };
+
+        window.addEventListener('DOMContentLoaded', render, { once: true });
+        log('diagnostic:init', {
+          href: window.location.href,
+          secureContext: window.isSecureContext,
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          speechRecognition: typeof window.SpeechRecognition,
+          webkitSpeechRecognition: typeof window.webkitSpeechRecognition,
+        });
+
+        try {
+          if (navigator.permissions?.query) {
+            navigator.permissions.query({ name: 'microphone' }).then((status) => {
+              log('permission:microphone', { state: status.state });
+              status.addEventListener?.('change', () => log('permission:microphone-change', { state: status.state }));
+            }).catch((error) => log('permission:query-error', { name: error?.name, message: error?.message }));
+          } else {
+            log('permission:api-unavailable');
+          }
+        } catch (error) {
+          log('permission:query-throw', { name: error?.name, message: error?.message });
+        }
+
+        try {
+          const mediaDevices = navigator.mediaDevices;
+          if (mediaDevices?.getUserMedia) {
+            const nativeGetUserMedia = mediaDevices.getUserMedia.bind(mediaDevices);
+            mediaDevices.getUserMedia = async (...args) => {
+              log('getUserMedia:call', args[0]);
+              try {
+                const stream = await nativeGetUserMedia(...args);
+                const tracks = stream.getAudioTracks().map((track) => ({
+                  enabled: track.enabled,
+                  muted: track.muted,
+                  readyState: track.readyState,
+                  labelPresent: Boolean(track.label),
+                }));
+                log('getUserMedia:success', { audioTracks: tracks });
+                return stream;
+              } catch (error) {
+                log('getUserMedia:error', {
+                  name: error?.name,
+                  message: error?.message,
+                  constraint: error?.constraint,
+                });
+                throw error;
+              }
+            };
+          } else {
+            log('getUserMedia:unavailable');
+          }
+        } catch (error) {
+          log('getUserMedia:wrap-error', { name: error?.name, message: error?.message });
+        }
+
+        const attachRecognitionDiagnostics = (recognition) => {
+          if (!recognition || attached.has(recognition)) return recognition;
+          attached.add(recognition);
+          log('recognition:new');
+
+          const eventNames = [
+            'start',
+            'audiostart',
+            'soundstart',
+            'speechstart',
+            'speechend',
+            'soundend',
+            'audioend',
+            'nomatch',
+            'end',
+          ];
+          for (const eventName of eventNames) {
+            try {
+              recognition.addEventListener(eventName, (event) => {
+                const detail = eventName === 'nomatch' ? { resultCount: Number(event?.results?.length || 0) } : undefined;
+                log(`recognition:${eventName}`, detail);
+              });
+            } catch (error) {
+              log('recognition:add-listener-error', { eventName, name: error?.name, message: error?.message });
+            }
+          }
+
+          try {
+            recognition.addEventListener('result', (event) => {
+              log('recognition:result', { resultCount: Number(event?.results?.length || 0), resultIndex: Number(event?.resultIndex || 0) });
+            });
+          } catch { /* diagnostic only */ }
+
+          try {
+            recognition.addEventListener('error', (event) => {
+              log('recognition:error', {
+                error: String(event?.error || ''),
+                message: String(event?.message || ''),
+              });
+            });
+          } catch { /* diagnostic only */ }
+
+          for (const methodName of ['start', 'stop', 'abort']) {
+            try {
+              const original = recognition[methodName]?.bind(recognition);
+              if (!original) continue;
+              recognition[methodName] = (...args) => {
+                log(`recognition.${methodName}:call`);
+                try {
+                  const result = original(...args);
+                  log(`recognition.${methodName}:returned`);
+                  return result;
+                } catch (error) {
+                  log(`recognition.${methodName}:throw`, { name: error?.name, message: error?.message });
+                  throw error;
+                }
+              };
+            } catch (error) {
+              log('recognition:method-wrap-error', { methodName, name: error?.name, message: error?.message });
+            }
+          }
+          return recognition;
+        };
+
+        const wrapConstructor = (key) => {
+          const Native = window[key];
+          if (typeof Native !== 'function') {
+            log(`constructor:${key}:unavailable`);
+            return;
+          }
+          try {
+            const Wrapped = function (...args) {
+              const recognition = new Native(...args);
+              return attachRecognitionDiagnostics(recognition);
+            };
+            Wrapped.prototype = Native.prototype;
+            try { Object.setPrototypeOf(Wrapped, Native); } catch { /* no-op */ }
+            window[key] = Wrapped;
+            log(`constructor:${key}:wrapped`);
+          } catch (error) {
+            log(`constructor:${key}:wrap-error`, { name: error?.name, message: error?.message });
+          }
+        };
+
+        wrapConstructor('SpeechRecognition');
+        wrapConstructor('webkitSpeechRecognition');
+      })();
+    </script>
   </head>
   <body class="font-sans antialiased select-none">
     <div id="root"></div>
