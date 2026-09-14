@@ -50,14 +50,28 @@ assert.ok(stableSource.includes('nextRecognition.interimResults = true'), 'inter
 assert.ok(stableSource.includes('nextRecognition.maxAlternatives = maxAlternatives'), 'acoustic alternatives behavior must remain unchanged');
 assert.ok(stableSource.includes("nextRecognition.lang = 'en-US'"), 'recognition language must remain unchanged');
 assert.ok(stableSource.includes('if (stopFinished) return Promise.resolve(latestSnapshot);'), 'already-finished recognition must stop idempotently');
+assert.ok(stableSource.includes("error === 'phrases-not-supported'"), 'unsupported phrase bias must have a targeted fallback');
+assert.ok(stableSource.includes('contextualBiasDisabled = true'), 'phrase fallback must disable only browser-level contextual bias for the session');
+
+class FakeSpeechRecognitionPhrase {
+  phrase: string;
+  boost: number;
+
+  constructor(phrase: string, boost: number) {
+    this.phrase = phrase;
+    this.boost = boost;
+  }
+}
 
 class FakeSpeechRecognition {
   static lastInstance: FakeSpeechRecognition | null = null;
+  static instances: FakeSpeechRecognition[] = [];
 
   continuous = false;
   interimResults = false;
   maxAlternatives = 1;
   lang = '';
+  phrases: FakeSpeechRecognitionPhrase[] = [];
   onstart: (() => void) | null = null;
   onresult: ((event: any) => void) | null = null;
   onerror: ((event: any) => void) | null = null;
@@ -65,6 +79,7 @@ class FakeSpeechRecognition {
 
   constructor() {
     FakeSpeechRecognition.lastInstance = this;
+    FakeSpeechRecognition.instances.push(this);
   }
 
   start() {
@@ -81,6 +96,7 @@ class FakeSpeechRecognition {
 const originalWindow = (globalThis as any).window;
 (globalThis as any).window = {
   SpeechRecognition: FakeSpeechRecognition,
+  SpeechRecognitionPhrase: FakeSpeechRecognitionPhrase,
   setTimeout,
   clearTimeout,
 };
@@ -131,6 +147,46 @@ try {
   const normalSnapshot = await normalSession.requestStop();
   assert.equal(normalSnapshot.bestText, 'I like natto.', 'normal stop must preserve the recognized transcript');
   assert.equal(normalEndReason, 'stopped', 'normal stop reason must remain stopped');
+
+  FakeSpeechRecognition.instances = [];
+  FakeSpeechRecognition.lastInstance = null;
+  let fallbackError = '';
+  let fallbackUpdate = '';
+  const biasStatuses: boolean[] = [];
+  const fallbackSession = createStableSpeechRecognitionSession({
+    biasPhrases: [{ phrase: 'Hamamatsu', boost: 5 }],
+    onUpdate: (snapshot) => { fallbackUpdate = snapshot.bestText; },
+    onError: (error) => { fallbackError = error; },
+    onBiasStatus: (applied) => { biasStatuses.push(applied); },
+  });
+  assert.ok(fallbackSession, 'phrase-fallback session must be creatable');
+  assert.equal(fallbackSession.start(), true, 'phrase-fallback session must start with bias first');
+
+  const biasedRecognizer = FakeSpeechRecognition.lastInstance;
+  assert.ok(biasedRecognizer, 'biased recognizer must exist');
+  assert.equal(biasedRecognizer.phrases.length, 1, 'supported-looking browser should receive phrase bias initially');
+  biasedRecognizer.onerror?.({ error: 'phrases-not-supported' });
+  biasedRecognizer.onend?.();
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const fallbackRecognizer = FakeSpeechRecognition.lastInstance;
+  assert.ok(fallbackRecognizer, 'recognizer must be recreated after phrases-not-supported');
+  assert.notEqual(fallbackRecognizer, biasedRecognizer, 'fallback must use a fresh recognizer instance');
+  assert.equal(fallbackError, '', 'phrases-not-supported must not be surfaced as a fatal app error when fallback is possible');
+  assert.equal(fallbackRecognizer.phrases.length, 0, 'fallback recognizer must omit browser-level phrase bias');
+  assert.equal(fallbackRecognizer.continuous, true, 'fallback must preserve continuous=true');
+  assert.equal(fallbackRecognizer.interimResults, true, 'fallback must preserve interimResults=true');
+  assert.equal(fallbackRecognizer.maxAlternatives, 3, 'fallback must preserve acoustic alternatives');
+  assert.equal(fallbackRecognizer.lang, 'en-US', 'fallback must preserve recognition language');
+  assert.ok(biasStatuses.includes(true), 'first attempt must report phrase bias applied');
+  assert.ok(biasStatuses.includes(false), 'fallback must report phrase bias disabled');
+
+  const fallbackResult: any = [{ transcript: 'I live in Hamamatsu', confidence: 0.87 }];
+  fallbackResult.isFinal = true;
+  fallbackRecognizer.onresult?.({ results: [fallbackResult] });
+  assert.equal(fallbackUpdate, 'I live in Hamamatsu.', 'fallback recognizer must still produce the normal transcript');
+  const fallbackSnapshot = await fallbackSession.requestStop();
+  assert.equal(fallbackSnapshot.bestText, 'I live in Hamamatsu.', 'fallback stop must preserve recognized speech');
 } finally {
   if (typeof originalWindow === 'undefined') delete (globalThis as any).window;
   else (globalThis as any).window = originalWindow;
