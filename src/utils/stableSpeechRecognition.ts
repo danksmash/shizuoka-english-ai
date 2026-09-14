@@ -296,6 +296,7 @@ export function createStableSpeechRecognitionSession(
   };
 
   const requestStop = () => {
+    if (stopFinished) return Promise.resolve(latestSnapshot);
     if (stopPromise) return stopPromise;
     stopPromise = new Promise<StableSpeechSnapshot>((resolve) => {
       stopResolve = resolve;
