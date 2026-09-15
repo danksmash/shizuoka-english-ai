@@ -66,6 +66,22 @@ try {
     return new Response(new Uint8Array(800), { status: 200, headers: { 'content-type': 'audio/mpeg' } });
   }) as typeof fetch;
 
+  const leadingSilenceTag = '<mstts:silence type="Leading-exact" value="200ms"/>';
+  const sentenceBoundaryTag = '<mstts:silence type="Sentenceboundary-exact" value="250ms"/>';
+  for (const profile of profiles) {
+    await synthesizeAzureTts('Hello.', profile.personaId, 1.0);
+    const ssml = requests.at(-1) || '';
+    const leadingCount = ssml.split(leadingSilenceTag).length - 1;
+    const sentenceBoundaryCount = ssml.split(sentenceBoundaryTag).length - 1;
+    if (!ssml.includes('xmlns:mstts="http://www.w3.org/2001/mstts"')) fail(`Azure mstts namespace missing for ${profile.personaId}`);
+    if (leadingCount !== 1) fail(`Azure 200ms leading silence must appear exactly once for ${profile.personaId}; got ${leadingCount}`);
+    if (profile.personaId === 'liam_australia') {
+      if (sentenceBoundaryCount !== 1) fail(`Liam 250ms sentence-boundary pause must appear exactly once; got ${sentenceBoundaryCount}`);
+    } else if (sentenceBoundaryCount !== 0) {
+      fail(`Unexpected 250ms sentence-boundary pause for ${profile.personaId}`);
+    }
+  }
+
   const slow = await synthesizeAzureTts('Hello.', 'emma_usa', 0.75);
   if (slow.effectiveRate !== 0.75) fail(`Azure slow rate must remain 0.75; got ${slow.effectiveRate}`);
   if (!requests.at(-1)?.includes('<prosody rate="0.75">Hello.</prosody>')) fail('Azure SSML must apply the 0.75x UI rate');
@@ -79,7 +95,8 @@ try {
   if (fast.effectiveRate !== 1.25) fail(`Azure fast rate must remain 1.25; got ${fast.effectiveRate}`);
   if (!fastSsml.includes('<prosody rate="1.25">Hello. Nice to meet you.</prosody>')) fail('Azure SSML must apply the 1.25x UI rate');
   if (!fastSsml.includes('xmlns:mstts="http://www.w3.org/2001/mstts"')) fail('Liam sentence-pause namespace must remain');
-  if (!fastSsml.includes('<mstts:silence type="Sentenceboundary-exact" value="250ms"/>')) fail('Liam 250ms sentence-boundary pause must remain');
+  if (!fastSsml.includes(leadingSilenceTag)) fail('Liam 200ms leading silence must remain');
+  if (!fastSsml.includes(sentenceBoundaryTag)) fail('Liam 250ms sentence-boundary pause must remain');
 
   const clampedSlow = await synthesizeAzureTts('Hello.', 'emma_usa', 0.5);
   const clampedFast = await synthesizeAzureTts('Hello.', 'emma_usa', 1.5);
@@ -90,4 +107,4 @@ try {
   if (originalRegion === undefined) delete process.env.AZURE_SPEECH_REGION; else process.env.AZURE_SPEECH_REGION = originalRegion;
 }
 
-console.log(`Azure Voice Profile QA: PASS (${profiles.length} target personas, ${new Set(profiles.map((p) => p.voiceName)).size} unique voices, ${AZURE_VOICE_PROFILE_VERSION}, 0.75-1.25 speaking-rate control)`);
+console.log(`Azure Voice Profile QA: PASS (${profiles.length} target personas, ${new Set(profiles.map((p) => p.voiceName)).size} unique voices, ${AZURE_VOICE_PROFILE_VERSION}, 200ms leading silence, 0.75-1.25 speaking-rate control)`);
