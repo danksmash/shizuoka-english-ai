@@ -36,9 +36,9 @@ export const AI_STUDENTS_LIST: AIStudentProfile[] = [
     likes: ['Surfing 🏄‍♀️ (サーフィン)', 'Burgers 🍔 (ハンバーガー)', 'Video Games 🎮 (ゲーム)', 'Strawberries 🍓 (静岡いちご)'],
     japaneseBio: 'アメリカ・カリフォルニア出身。サーフィンとゲームが好きで、静岡のいちごにも関心がある留学生です。',
     characterMessage: "Hi! I am Emma from California. Let's talk in English!",
-    starterPromptDefault: "Hi! I'm Emma from California. What's your name?",
+    starterPromptDefault: "Hello! I'm Emma from California. What's your name?",
     topicPrompts: topicPrompts(
-      "Hi! I'm Emma from California. What's your name?",
+      "Hello! I'm Emma from California. What's your name?",
       "I like surfing and games. What do you like?",
       "I like Shizuoka. What do you like about Shizuoka?",
       "I can surf. What can you do?",
