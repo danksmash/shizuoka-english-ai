@@ -9,7 +9,7 @@ import { GOOGLE_TTS_VOICES } from './src/data/personaResearch';
 import { azureTtsConfigured, synthesizeAzureTts } from './src/server/azureTts';
 import { detectVocabularyInText } from './src/data/vocabulary56';
 import { getTopicLearningGoals } from './src/data/topicLearningGoals';
-import { calculateCanonicalStats, canonicalizeHistory, isAIStudentId, isDialogueDuration, isDialogueTopic, isValidLearningCode, normalizeLearningCode, validateSessionSaveInput } from './src/dataContract';
+import { MAX_CHILD_UTTERANCE_CHARS, calculateCanonicalStats, canonicalizeHistory, isAIStudentId, isDialogueDuration, isDialogueTopic, isValidLearningCode, normalizeLearningCode, validateSessionSaveInput } from './src/dataContract';
 import { generateFallbackFeedback } from './src/utils/feedbackFallback';
 import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } from './src/utils/security';
 import { validateAiResponse, inspectAiResponse, buildAlignedReply } from './src/utils/responseValidation';
@@ -424,7 +424,7 @@ app.post('/api/chat', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Empty message' });
   }
 
-  if (trimmedMessage.length > 100) {
+  if (trimmedMessage.length > MAX_CHILD_UTTERANCE_CHARS) {
     return res.json({
       success: true,
       data: {
@@ -457,7 +457,7 @@ app.post('/api/chat', async (req, res) => {
   const recentHistory = rawHistory.slice(-16);
   const formattedHistory = recentHistory
     .map((msg: { sender: string; englishText: string }) =>
-      `${msg.sender === 'ai' ? persona.name : 'Student'}: ${sanitizeStudentInput(msg.englishText || '').slice(0, 100)}`
+      `${msg.sender === 'ai' ? persona.name : 'Student'}: ${sanitizeStudentInput(msg.englishText || '').slice(0, MAX_CHILD_UTTERANCE_CHARS)}`
     )
     .join('\n');
 
