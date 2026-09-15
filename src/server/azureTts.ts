@@ -8,6 +8,8 @@ export type AzureTtsResult = {
   effectiveRate: number;
 };
 
+const AZURE_LEADING_SILENCE_MS = 200;
+
 function escapeXml(value: string): string {
   return value.replace(/[<>&'\"]/g, (char) => ({
     '<': '&lt;',
@@ -32,8 +34,11 @@ export function azureTtsConfigured(): boolean {
  *
  * The student-facing 0.75-1.25 speaking-rate control is applied to Azure via
  * SSML prosody. A rate of 1.00 remains the reviewed baseline voice condition.
+ * Every Azure utterance begins with a fixed 200 ms leading silence so browser
+ * and device audio output can stabilize before the first spoken phoneme.
  * Voice Profile v3 may also define a sentence-boundary pause for a specific
- * reviewed persona; that pause is preserved independently of speaking rate.
+ * reviewed persona; that pause is preserved independently of speaking rate
+ * and leading silence.
  */
 export async function synthesizeAzureTts(
   text: string,
@@ -53,15 +58,14 @@ export async function synthesizeAzureTts(
   }
 
   const rate = normalizeRate(requestedRate);
-  const msttsNamespace = profile.sentenceBoundaryMs
-    ? ' xmlns:mstts="http://www.w3.org/2001/mstts"'
-    : '';
+  const msttsNamespace = ' xmlns:mstts="http://www.w3.org/2001/mstts"';
+  const leadingSilence = `<mstts:silence type="Leading-exact" value="${AZURE_LEADING_SILENCE_MS}ms"/>`;
   const sentenceBoundary = profile.sentenceBoundaryMs
     ? `<mstts:silence type="Sentenceboundary-exact" value="${profile.sentenceBoundaryMs}ms"/>`
     : '';
   const ssml = [
     `<speak version="1.0"${msttsNamespace} xml:lang="${escapeXml(profile.synthesisLocale)}">`,
-    `<voice name="${escapeXml(profile.voiceName)}">${sentenceBoundary}<prosody rate="${rate.toFixed(2)}">${escapeXml(text)}</prosody></voice>`,
+    `<voice name="${escapeXml(profile.voiceName)}">${leadingSilence}${sentenceBoundary}<prosody rate="${rate.toFixed(2)}">${escapeXml(text)}</prosody></voice>`,
     '</speak>',
   ].join('');
 
