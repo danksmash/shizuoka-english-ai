@@ -5,6 +5,7 @@ import {
   collapseProgressiveSpeechUnits,
   createStableSpeechRecognitionSession,
 } from '../src/utils/stableSpeechRecognition';
+import { MAX_CHILD_UTTERANCE_CHARS } from '../src/dataContract';
 
 const repeated = buildStableSpeechSnapshot([
   { isFinal: true, alternatives: [{ transcript: 'natto', confidence: 0.88 }] },
@@ -187,6 +188,45 @@ try {
   assert.equal(fallbackUpdate, 'I live in Hamamatsu.', 'fallback recognizer must still produce the normal transcript');
   const fallbackSnapshot = await fallbackSession.requestStop();
   assert.equal(fallbackSnapshot.bestText, 'I live in Hamamatsu.', 'fallback stop must preserve recognized speech');
+
+  FakeSpeechRecognition.instances = [];
+  FakeSpeechRecognition.lastInstance = null;
+  let restartUpdate = '';
+  const restartCounts: number[] = [];
+  const diagnosticEvents: Array<{ type: string; restartCount: number; elapsedMs?: number }> = [];
+  const restartSession = createStableSpeechRecognitionSession({
+    onUpdate: (snapshot) => { restartUpdate = snapshot.bestText; },
+    onError: (error) => { throw new Error(`unexpected restart-path recognition error: ${error}`); },
+    onRestart: (count) => { restartCounts.push(count); },
+    onDiagnostic: (event) => { diagnosticEvents.push(event); },
+  });
+  assert.ok(restartSession, 'restart continuity session must be creatable');
+  assert.equal(restartSession.start(), true, 'restart continuity session must start');
+  const firstRestartRecognizer = FakeSpeechRecognition.lastInstance;
+  assert.ok(firstRestartRecognizer, 'first restart-path recognizer must exist');
+  const firstRestartResult: any = [{ transcript: 'I like soccer', confidence: 0.9 }];
+  firstRestartResult.isFinal = true;
+  firstRestartRecognizer.onresult?.({ results: [firstRestartResult] });
+  assert.equal(restartUpdate, 'I like soccer.', 'speech before an unexpected recognizer end must be retained');
+  firstRestartRecognizer.onend?.();
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const secondRestartRecognizer = FakeSpeechRecognition.lastInstance;
+  assert.ok(secondRestartRecognizer, 'recognizer must restart after an unexpected end');
+  assert.notEqual(secondRestartRecognizer, firstRestartRecognizer, 'restart must use a fresh recognizer instance');
+  assert.deepEqual(restartCounts, [1], 'restart callback must report the first restart once');
+  const secondRestartResult: any = [{ transcript: 'I play soccer with my friends', confidence: 0.88 }];
+  secondRestartResult.isFinal = true;
+  secondRestartRecognizer.onresult?.({ results: [secondRestartResult] });
+  assert.ok(restartUpdate.includes('I like soccer'), 'speech recognized before restart must remain in the combined transcript');
+  assert.ok(restartUpdate.includes('I play soccer with my friends'), 'speech recognized after restart must append to the combined transcript');
+  assert.ok(diagnosticEvents.some((event) => event.type === 'unexpected-end'), 'QA diagnostics must expose unexpected recognizer end');
+  assert.ok(diagnosticEvents.some((event) => event.type === 'restart-attempt'), 'QA diagnostics must expose restart attempt timing');
+  assert.ok(diagnosticEvents.some((event) => event.type === 'restart-ready'), 'QA diagnostics must expose restart-ready timing');
+  const readyDiagnostic = diagnosticEvents.find((event) => event.type === 'restart-ready');
+  assert.ok((readyDiagnostic?.elapsedMs ?? -1) >= 120, 'restart-ready diagnostic must include elapsed time from unexpected end');
+  const restartedSnapshot = await restartSession.requestStop();
+  assert.ok(restartedSnapshot.bestText.includes('I like soccer'), 'final restarted snapshot must keep pre-restart speech');
+  assert.ok(restartedSnapshot.bestText.includes('I play soccer with my friends'), 'final restarted snapshot must keep post-restart speech');
 } finally {
   if (typeof originalWindow === 'undefined') delete (globalThis as any).window;
   else (globalThis as any).window = originalWindow;
@@ -198,6 +238,13 @@ assert.ok(appSource.includes('requestStop()'), 'stop/send must wait for recogniz
 assert.equal(appSource.includes('setTimeout(resolve, 180)'), false, 'fixed 180ms microphone blind window must be removed');
 assert.ok(appSource.includes('speechFinalTranscript'), 'App must retain finalized speech separately');
 assert.ok(appSource.includes('speechInterimTranscript'), 'App must retain interim speech separately');
+assert.equal(appSource.includes("recordResearchEvent('asr_restart'"), false, 'ASR restarts must not be persisted as research system events');
+assert.ok(appSource.includes('ASR_DIAGNOSTICS_ENABLED'), 'ASR diagnostics must be opt-in for development or ?asrDebug=1');
+assert.ok(appSource.includes('MAX_CHILD_UTTERANCE_CHARS'), 'App must use the shared child utterance ceiling');
+assert.equal(MAX_CHILD_UTTERANCE_CHARS, 300, 'shared child utterance ceiling must match canonical 300-character storage');
+const serverSource = readFileSync('server.ts', 'utf8');
+assert.ok(serverSource.includes('trimmedMessage.length > MAX_CHILD_UTTERANCE_CHARS'), 'server chat guard must use the shared child utterance ceiling');
+assert.ok(serverSource.includes('slice(0, MAX_CHILD_UTTERANCE_CHARS)'), 'server dialogue context must retain the same child utterance ceiling');
 
 const inputSource = readFileSync('src/components/SpeechInputBar.tsx', 'utf8');
 assert.ok(inputSource.includes('finalTranscript'), 'speech UI must receive finalized speech separately');

@@ -36,13 +36,14 @@ import {
 } from './utils/speech';
 import { STARTER_PROMPTS_JAPANESE } from './utils/translation';
 import { motion, AnimatePresence } from 'motion/react';
-import type { ReflectionAnswers, ResearchSystemEvent, ResearchSystemEventType } from './dataContract';
+import { MAX_CHILD_UTTERANCE_CHARS, type ReflectionAnswers, type ResearchSystemEvent, type ResearchSystemEventType } from './dataContract';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const apiUrl = (path: string) => `${API_BASE_URL}${path}`;
 const PERSONA_LABEL_CONDITION: 'shown' | 'hidden' = import.meta.env.VITE_PERSONA_LABEL_CONDITION === 'hidden' ? 'hidden' : 'shown';
 const LABELS_VISIBLE = PERSONA_LABEL_CONDITION === 'shown';
 const CONTEXTUAL_ASR_ENABLED = import.meta.env.VITE_CONTEXTUAL_ASR_ENABLED !== 'false';
+const ASR_DIAGNOSTICS_ENABLED = import.meta.env.DEV || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('asrDebug') === '1');
 const emptySpeechSnapshot = (): StableSpeechSnapshot => ({
   finalText: '',
   interimText: '',
@@ -252,7 +253,7 @@ export default function App() {
     if (!dialogueActiveRef.current || phase !== 'dialogue' || remainingSeconds <= 0 || !text.trim() || isAiResponding) return;
     if (isRecording) stopRecordingInternal();
     const trimmed = text.trim();
-    if (trimmed.length > 100) { setMicHintMessage('文が少し長いです！もう少し短い英語で話してみてね。'); setTimeout(() => setMicHintMessage(''), 4000); return; }
+    if (trimmed.length > MAX_CHILD_UTTERANCE_CHARS) { setMicHintMessage('一度に話せる長さを少し超えました。少し短く分けて話してみてね。'); setTimeout(() => setMicHintMessage(''), 4000); return; }
     setMicHintMessage('');
     const spokenNameMatch = trimmed.match(/\b(?:my name is|i'm|i am|call me)\s+([A-Za-z]{2,15})\b/i);
     if (spokenNameMatch) {
@@ -385,7 +386,8 @@ export default function App() {
         setTimeout(() => setMicHintMessage(''), 6000);
       },
       onEnd: () => { setIsRecording(false); setIsListening(false); },
-      onRestart: (count) => { recordResearchEvent('asr_restart', String(count)); setIsRecording(true); setIsListening(true); },
+      onRestart: () => { setIsRecording(true); setIsListening(true); },
+      onDiagnostic: ASR_DIAGNOSTICS_ENABLED ? (event) => { console.debug('[ASR QA]', event); } : undefined,
       onBiasStatus: (applied, phraseCount) => { if (phraseCount > 0) recordResearchEvent('asr_bias_status', `${applied ? 'applied' : 'unavailable'}:${phraseCount}`); },
     });
     if (session) {

@@ -26,6 +26,13 @@ export interface SpeechRecognitionResultUnit {
   alternatives: Array<{ transcript: string; confidence?: number }>;
 }
 
+export interface StableSpeechDiagnosticEvent {
+  type: 'unexpected-end' | 'restart-attempt' | 'restart-ready';
+  restartCount: number;
+  timestampMs: number;
+  elapsedMs?: number;
+}
+
 export interface StableSpeechRecognitionOptions {
   biasPhrases?: readonly SpeechRecognitionBiasPhrase[];
   maxAlternatives?: number;
@@ -34,6 +41,7 @@ export interface StableSpeechRecognitionOptions {
   onError: (error: string) => void;
   onEnd?: (snapshot: StableSpeechSnapshot, reason: 'stopped' | 'failed') => void;
   onRestart?: (count: number) => void;
+  onDiagnostic?: (event: StableSpeechDiagnosticEvent) => void;
   onBiasStatus?: (applied: boolean, phraseCount: number) => void;
 }
 
@@ -194,6 +202,7 @@ export function createStableSpeechRecognitionSession(
   let stopTimer: ReturnType<typeof setTimeout> | null = null;
   let stopFinished = false;
   let contextualBiasDisabled = false;
+  let restartBeganAt = 0;
 
   const clearStopTimer = () => {
     if (stopTimer) clearTimeout(stopTimer);
@@ -235,7 +244,16 @@ export function createStableSpeechRecognitionSession(
 
       nextRecognition.onstart = () => {
         if (cancelled || stopFinished) return;
-        if (isRestart) options.onRestart?.(restartCount);
+        if (isRestart) {
+          const now = Date.now();
+          options.onDiagnostic?.({
+            type: 'restart-ready',
+            restartCount,
+            timestampMs: now,
+            elapsedMs: restartBeganAt ? Math.max(0, now - restartBeganAt) : undefined,
+          });
+          options.onRestart?.(restartCount);
+        }
         options.onStart?.();
       };
 
@@ -275,6 +293,13 @@ export function createStableSpeechRecognitionSession(
           return;
         }
 
+        const unexpectedEndAt = Date.now();
+        options.onDiagnostic?.({
+          type: 'unexpected-end',
+          restartCount: restartCount + 1,
+          timestampMs: unexpectedEndAt,
+        });
+
         if (latestSnapshot.rawBestText.trim()) {
           committedRaw = latestSnapshot.rawBestText.trim();
           latestSnapshot = emptySnapshot(committedRaw);
@@ -287,8 +312,18 @@ export function createStableSpeechRecognitionSession(
           return;
         }
         recognition = null;
+        restartBeganAt = unexpectedEndAt;
         window.setTimeout(() => {
-          if (recordingIntent && !stopRequested && !cancelled && !stopFinished) startRecognizer(true);
+          if (recordingIntent && !stopRequested && !cancelled && !stopFinished) {
+            const now = Date.now();
+            options.onDiagnostic?.({
+              type: 'restart-attempt',
+              restartCount,
+              timestampMs: now,
+              elapsedMs: Math.max(0, now - restartBeganAt),
+            });
+            startRecognizer(true);
+          }
         }, 120);
       };
 

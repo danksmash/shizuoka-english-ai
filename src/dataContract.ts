@@ -11,6 +11,7 @@ export const AI_STUDENT_IDS = [
 // Runtime registry includes the isolated Unit 3 extension while the established persona model remains unchanged.
 export const DIALOGUE_TOPIC_IDS = ['intro','favorites','shizuoka_culture','talents','daily_routine','free'] as const;
 export const DIALOGUE_DURATIONS_MINUTES = [1, 2, 3, 5] as const satisfies readonly DialogueDurationMinutes[];
+export const MAX_CHILD_UTTERANCE_CHARS = 300;
 
 export interface StudentIdentity { learningCode: string; }
 
@@ -95,7 +96,7 @@ export function canonicalizeHistory(history: unknown, topic: DialogueTopic = 'fr
   if (!Array.isArray(history)) return [];
   const parsed = history.slice(-200).filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object')).map((item, index) => {
     const sender = item.sender === 'ai' ? 'ai' : item.sender === 'child' ? 'child' : null;
-    const englishText = typeof item.englishText === 'string' ? item.englishText.trim().slice(0, 300) : '';
+    const englishText = typeof item.englishText === 'string' ? item.englishText.trim().slice(0, MAX_CHILD_UTTERANCE_CHARS) : '';
     if (!sender || !englishText) return null;
     const japaneseText = typeof item.japaneseText === 'string' ? item.japaneseText.trim().slice(0, 500) : '';
     const timestamp = Number.isFinite(Number(item.timestamp)) ? Number(item.timestamp) : Date.now() + index;
