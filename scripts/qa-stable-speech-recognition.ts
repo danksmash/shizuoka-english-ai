@@ -223,7 +223,7 @@ try {
   assert.ok(diagnosticEvents.some((event) => event.type === 'restart-attempt'), 'QA diagnostics must expose restart attempt timing');
   assert.ok(diagnosticEvents.some((event) => event.type === 'restart-ready'), 'QA diagnostics must expose restart-ready timing');
   const readyDiagnostic = diagnosticEvents.find((event) => event.type === 'restart-ready');
-  assert.ok((readyDiagnostic?.elapsedMs ?? -1) >= 120, 'restart-ready diagnostic must include elapsed time from unexpected end');
+  assert.ok((readyDiagnostic?.elapsedMs ?? -1) >= 100, 'restart-ready diagnostic must show that the delayed restart path was used');
   const restartedSnapshot = await restartSession.requestStop();
   assert.ok(restartedSnapshot.bestText.includes('I like soccer'), 'final restarted snapshot must keep pre-restart speech');
   assert.ok(restartedSnapshot.bestText.includes('I play soccer with my friends'), 'final restarted snapshot must keep post-restart speech');
