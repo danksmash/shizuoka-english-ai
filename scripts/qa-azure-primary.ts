@@ -29,7 +29,11 @@ for (const marker of ['telemetry?.fallbackFrom','telemetry?.fallbackReason','tel
 if (!persistence.includes("ttsTelemetryVersion: 'cors-visible-v1'")) throw new Error('TTS telemetry provenance version missing');
 
 if (!azureTts.includes('Math.max(0.75, Math.min(1.25, rate))')) throw new Error('Azure 0.75-1.25 rate clamp missing');
+if (!azureTts.includes('const AZURE_LEADING_SILENCE_MS = 200')) throw new Error('Azure 200ms leading silence constant missing');
+if (!azureTts.includes('xmlns:mstts=\"http://www.w3.org/2001/mstts\"')) throw new Error('Azure mstts namespace missing');
+if (!azureTts.includes('type=\"Leading-exact\" value=\"${AZURE_LEADING_SILENCE_MS}ms\"')) throw new Error('Azure Leading-exact silence control missing');
 if (!azureTts.includes('<prosody rate=\"${rate.toFixed(2)}\">')) throw new Error('Azure SSML prosody rate control missing');
 if (!azureTts.includes('effectiveRate: rate')) throw new Error('Azure effective rate provenance missing');
+if (!azureTts.includes("'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3'")) throw new Error('Azure output format changed unexpectedly');
 
-console.log('Azure primary + Voice Profile v3 + CORS provider observability QA: PASS');
+console.log('Azure primary + Voice Profile v3 + 200ms leading silence + CORS provider observability QA: PASS');
