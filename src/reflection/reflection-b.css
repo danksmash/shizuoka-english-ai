@@ -26,6 +26,11 @@
 .meg-section-title svg{width:29px;height:29px;color:#1681ee;stroke-width:2.3;flex:none}
 .meg-section-title h2{margin:0;font-size:clamp(21px,1.38vw,24px);line-height:1.1;font-weight:950;letter-spacing:-.015em}
 .meg-section-title>span{margin-left:auto;color:#6f8099;font-size:12px;font-weight:800}
+.meg-voice-button{width:30px;height:30px;flex:none;display:grid;place-items:center;border:1px solid #b8d4eb;border-radius:50%;padding:0;background:rgba(255,255,255,.86);color:#1681ee;cursor:pointer;box-sizing:border-box}
+.meg-voice-button svg{width:18px;height:18px;stroke-width:2.5}
+.meg-entry-goal .meg-voice-button{color:#4c9c31;border-color:#b8d9ad}
+.meg-voice-button.active{color:#d83d3d;border-color:#eb8686;background:#fff1f1;box-shadow:0 0 0 2px rgba(216,61,61,.12)}
+.meg-voice-button:disabled{opacity:.38;cursor:default}
 
 .meg-entry-previous{min-height:0;display:flex;flex-direction:column;padding:12px 14px 13px;border:1.5px solid #a9dff8;background:linear-gradient(180deg,#e8f7ff 0 58px,#fff 58px)}
 .meg-entry-previous .meg-section-title{flex:none;padding:0 3px 9px}
@@ -128,7 +133,7 @@
   .meg-header-meta{font-size:14px}
   .meg-nav button{padding-top:6px;padding-bottom:6px;font-size:13px}
   .meg-entry-grid{gap:9px}.meg-entry-left,.meg-entry-right{gap:7px}
-  .meg-section-title{min-height:31px}.meg-section-title h2,.meg-entry-hints .meg-hints-head h2{font-size:21px}.meg-section-title svg{width:24px;height:24px}
+  .meg-section-title{min-height:31px}.meg-section-title h2,.meg-entry-hints .meg-hints-head h2{font-size:21px}.meg-section-title svg{width:24px;height:24px}.meg-voice-button{width:26px;height:26px}.meg-voice-button svg{width:16px;height:16px}
   .meg-entry-previous{padding:8px 10px 9px;background:linear-gradient(180deg,#e8f7ff 0 49px,#fff 49px)}.meg-entry-previous .meg-section-title{padding-bottom:6px}
   .meg-previous-body{padding:8px 11px 5px}.meg-entry-previous .meg-previous-summary{font-size:16px!important;line-height:1.55!important;overflow:hidden!important}
   .meg-entry-hints{padding:8px 10px 7px;background:linear-gradient(180deg,#e8faeb 0 49px,#fff 49px)}
