@@ -25,6 +25,7 @@ import {
   buildPhaseDashboardErrorPayload,
 } from './researchPhaseDashboardConsistency';
 import { buildResearchSessionAudit } from './researchSessionAudit';
+import { buildResearchSessionAuditDetails } from './researchSessionAuditDetails';
 
 type PhaseAwareResearchQuery = ResearchFilterQuery & { studyPhase?: unknown; dataset?: unknown };
 
@@ -109,9 +110,9 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     const dashboard = buildResearchDashboardData(phaseSessions, query);
     const filteredAuditData = filterResearchExportDataSets(buildResearchExportDataSets(phaseSessions), query);
     const auditSessionIds = new Set(filteredAuditData.sessions.map((row) => String(row.session_id || '')).filter(Boolean));
-    const sessionAudit = buildResearchSessionAudit(
-      phaseSessions.filter((session) => auditSessionIds.has(String(session.sessionId || ''))),
-    );
+    const filteredAuditSessions = phaseSessions.filter((session) => auditSessionIds.has(String(session.sessionId || '')));
+    const sessionAudit = buildResearchSessionAudit(filteredAuditSessions);
+    const sessionAuditDetails = buildResearchSessionAuditDetails(filteredAuditSessions, sessionAudit);
     const auditQualityRows = [
       { label: '監査候補: 近接開始', value: sessionAudit.summary.near_start_pairs },
       { label: '監査候補: 0発話→近接有効session', value: sessionAudit.summary.zero_child_near_valid_pairs },
@@ -146,6 +147,7 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
       exportFiles,
       lessonReflectionRowCount,
       sessionAudit,
+      sessionAuditDetails,
       dashboardWarnings,
     });
   } catch (error: any) {
