@@ -7,6 +7,7 @@ import { phaseAwareGetHandler } from './src/server/researchPhaseRuntime';
 import { withPersonaCountryDashboardLabels } from './src/server/personaCountryDashboardLabels';
 import { withQuestionnaireResearchRuntime } from './src/server/questionnaireDashboardRuntime';
 import { withQuestionnaireAutoSyncDashboardRuntime } from './src/server/questionnaireAutoSyncDashboardRuntime';
+import { withQuestionnaireDescriptiveDashboardRuntime } from './src/server/questionnaireDescriptiveDashboardRuntime';
 import { withResearchPhaseAnalyticsRuntime } from './src/server/researchPhaseAnalyticsRuntime';
 import { withResearchPhaseDashboardRecovery } from './src/server/researchPhaseDashboardRecovery';
 import { withResearchPhaseDashboardConsistency } from './src/server/researchPhaseDashboardConsistency';
@@ -29,6 +30,7 @@ application.get = function researchPhaseAwareGet(this: any, path: any, ...handle
     handlers[handlers.length - 1] = withQuestionnaireResearchRuntime(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withQuestionnaireAutoSyncDashboardRuntime(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withResearchSessionAuditManagementPage(path, handlers[handlers.length - 1]);
+    handlers[handlers.length - 1] = withQuestionnaireDescriptiveDashboardRuntime(path, handlers[handlers.length - 1]);
     if (path === '/api/management/research.dashboard') {
       handlers[handlers.length - 1] = withResilientResearchPhaseDashboard(path, handlers[handlers.length - 1]);
     } else {
