@@ -1,4 +1,6 @@
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { getAzureTtsCacheKey, getAzureTtsStaticFilePath } from '../src/server/azureTts';
 
 const server = fs.readFileSync('server.ts', 'utf8');
 const speech = fs.readFileSync('src/utils/speech.ts', 'utf8');
@@ -6,6 +8,8 @@ const azureTts = fs.readFileSync('src/server/azureTts.ts', 'utf8');
 const dataContract = fs.readFileSync('src/dataContract.ts', 'utf8');
 const app = fs.readFileSync('src/App.tsx', 'utf8');
 const persistence = fs.readFileSync('src/server/persistence.ts', 'utf8');
+const workflow = fs.readFileSync('.github/workflows/cloud-run-deploy.yml', 'utf8');
+const fixedGenerator = fs.readFileSync('scripts/generate-fixed-azure-tts.ts', 'utf8');
 
 for (const required of [
   "ttsProvider: 'azure-speech'",
@@ -34,6 +38,29 @@ if (!azureTts.includes('xmlns:mstts=\"http://www.w3.org/2001/mstts\"')) throw ne
 if (!azureTts.includes('type=\"Leading-exact\" value=\"${AZURE_LEADING_SILENCE_MS}ms\"')) throw new Error('Azure Leading-exact silence control missing');
 if (!azureTts.includes('<prosody rate=\"${rate.toFixed(2)}\">')) throw new Error('Azure SSML prosody rate control missing');
 if (!azureTts.includes('effectiveRate: rate')) throw new Error('Azure effective rate provenance missing');
-if (!azureTts.includes("'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3'")) throw new Error('Azure output format changed unexpectedly');
+if (!azureTts.includes("const AZURE_OUTPUT_FORMAT = 'audio-24khz-48kbitrate-mono-mp3'")) throw new Error('Azure output format changed unexpectedly');
 
-console.log('Azure primary + Voice Profile v3 + 200ms leading silence + CORS provider observability QA: PASS');
+for (const marker of [
+  "export type AzureTtsCacheStatus = 'STATIC' | 'HIT' | 'MISS'",
+  'AZURE_TTS_MEMORY_CACHE_TTL_MS = 60 * 60_000',
+  'AZURE_TTS_MEMORY_CACHE_MAX_ENTRIES = 300',
+  'AZURE_TTS_MEMORY_CACHE_MAX_BYTES = 32 * 1024 * 1024',
+  'const azureTtsPending = new Map',
+  'readStaticAzureTts',
+]) if (!azureTts.includes(marker)) throw new Error('Azure cost-safe cache marker missing: ' + marker);
+
+if (!fixedGenerator.includes('DIALOGUE_TOPIC_IDS')) throw new Error('fixed TTS generator must include every dialogue topic');
+if (!fixedGenerator.includes('AI_STUDENT_IDS')) throw new Error('fixed TTS generator must include all research personas');
+if (!fixedGenerator.includes('getStudentFarewellMessage')) throw new Error('fixed TTS generator must include current farewell messages');
+if (!fixedGenerator.includes('getAzureTtsStaticFilePath')) throw new Error('fixed TTS generator must use the runtime cache-key path');
+if (!workflow.includes('Pre-generate fixed Azure TTS assets')) throw new Error('production workflow missing fixed Azure TTS generation');
+if (!workflow.includes('--min-instances 0')) throw new Error('Cloud Run must scale to zero when idle');
+if (workflow.includes('--min-instances 1')) throw new Error('Cloud Run min-instances=1 cost regression');
+
+const baseKey = getAzureTtsCacheKey('Hello.', 'emma_usa', 1.0);
+assert.equal(baseKey, getAzureTtsCacheKey('Hello.', 'emma_usa', 1.0), 'same Azure request must have a stable cache key');
+assert.notEqual(baseKey, getAzureTtsCacheKey('Hello.', 'emma_usa', 0.75), 'speaking rate must be part of the Azure cache key');
+assert.notEqual(baseKey, getAzureTtsCacheKey('Hello.', 'oliver_uk', 1.0), 'persona voice must be part of the Azure cache key');
+assert.match(getAzureTtsStaticFilePath('Hello.', 'emma_usa', 1.0), /runtime-static-tts/);
+
+console.log('Azure primary + Voice Profile v3 + cost-safe cache/static audio + min=0 QA: PASS');
