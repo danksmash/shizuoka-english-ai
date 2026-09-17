@@ -31,11 +31,15 @@ assert.equal(permanentAttempts, 1, 'permanent errors must not be retried');
 
 const resilientSource = fs.readFileSync('src/server/researchDashboardResilientRuntime.ts', 'utf8');
 assert.ok(resilientSource.includes("warnings: ['lesson_reflections_unavailable']"), 'Reflection failure must degrade partially, not blank the dashboard');
-assert.ok(resilientSource.includes('res.locals.researchDashboardSessions = sessions'), 'Phase comparison should reuse the already loaded session snapshot');
+assert.ok(
+  resilientSource.includes('res.locals.researchDashboardSessions = analysisSessions'),
+  'Phase comparison should reuse the already loaded, manual-exclusion-filtered session snapshot',
+);
 assert.ok(resilientSource.includes("body.success === false"), 'Phase enrichment must not start secondary work for a failed core dashboard response');
+assert.ok(resilientSource.includes('isManualResearchExcludedSessionId'), 'Manual research exclusions must be applied before dashboard and Phase analysis');
 
 const entry = fs.readFileSync('server-entry.ts', 'utf8');
-assert.ok(entry.includes('resilientResearchDashboardGetHandler(path) || phaseAwareGetHandler(path)'));
+assert.ok(entry.includes('manualResearchExclusionGetHandler(path) || resilientResearchDashboardGetHandler(path) || phaseAwareGetHandler(path)'));
 assert.ok(entry.includes('withResilientResearchPhaseDashboard'));
 assert.equal(
   entry.includes("if (path === '/api/management/research.dashboard') {\n      handlers[handlers.length - 1] = withResearchPhaseDashboardConsistency"),

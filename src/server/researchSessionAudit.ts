@@ -1,3 +1,5 @@
+import { getManualResearchExclusion } from './researchManualExclusions';
+
 export type ResearchSessionQuality = 'complete' | 'missing_reflection' | 'interrupted' | 'missing_core';
 export type ResearchSessionAuditStatus =
   | 'normal'
@@ -6,7 +8,8 @@ export type ResearchSessionAuditStatus =
   | 'restart_partner'
   | 'duplicate_keeper'
   | 'duplicate_start_shadow'
-  | 'overlapping_complete_conflict';
+  | 'overlapping_complete_conflict'
+  | 'manual_research_exclusion';
 
 export interface ResearchSessionAuditRow {
   session_id: string;
@@ -48,6 +51,7 @@ export interface ResearchSessionAuditResult {
     zero_child_near_valid_pairs: number;
     exact_duplicate_shadow_sessions: number;
     overlapping_complete_pairs: number;
+    manual_exclusion_sessions: number;
     requires_review_sessions: number;
   };
   rows: ResearchSessionAuditRow[];
@@ -69,6 +73,7 @@ const STATUS_PRIORITY: Record<ResearchSessionAuditStatus, number> = {
   duplicate_keeper: 40,
   overlapping_complete_conflict: 80,
   duplicate_start_shadow: 100,
+  manual_research_exclusion: 120,
 };
 
 function timestampMs(value: unknown): number {
@@ -301,6 +306,17 @@ export function buildResearchSessionAudit(rawSessions: Record<string, any>[]): R
     }
   }
 
+  // Manual data-cleaning decisions override automatic candidate states, but never mutate raw Firestore data.
+  for (const row of rows) {
+    const exclusion = getManualResearchExclusion(row.session_id);
+    if (!exclusion) continue;
+    row.audit_status = 'manual_research_exclusion';
+    row.audit_requires_review = 0;
+    row.analysis_include_primary = 0;
+    row.analysis_include_strict = 0;
+    row.analysis_exclusion_reason = exclusion.reason;
+  }
+
   const publicRows: ResearchSessionAuditRow[] = rows
     .sort((a, b) => b._start_ms - a._start_ms || b.session_id.localeCompare(a.session_id))
     .map(({ _start_ms, _end_ms, _created_ms, _history_identity, ...row }) => row);
@@ -316,6 +332,7 @@ export function buildResearchSessionAudit(rawSessions: Record<string, any>[]): R
       zero_child_near_valid_pairs: pairCount('zero_child_near_valid'),
       exact_duplicate_shadow_sessions: publicRows.filter((row) => row.audit_status === 'duplicate_start_shadow').length,
       overlapping_complete_pairs: pairCount('overlapping_complete'),
+      manual_exclusion_sessions: publicRows.filter((row) => row.audit_status === 'manual_research_exclusion').length,
       requires_review_sessions: publicRows.filter((row) => row.audit_requires_review === 1).length,
     },
     rows: publicRows,

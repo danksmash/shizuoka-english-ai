@@ -3,6 +3,11 @@ import fs from 'node:fs';
 import { buildResearchSessionAudit } from '../src/server/researchSessionAudit';
 import { buildResearchSessionAuditDetails } from '../src/server/researchSessionAuditDetails';
 import { injectResearchSessionAuditManagementHtml } from '../src/server/researchSessionAuditManagementRuntime';
+import {
+  MANUAL_RESEARCH_EXCLUSIONS,
+  filterManualResearchExcludedSessions,
+  getManualResearchExclusion,
+} from '../src/server/researchManualExclusions';
 
 const BASE = Date.parse('2026-09-17T02:00:00.000Z');
 
@@ -152,6 +157,48 @@ function completeSession(args: {
   const dashboardSource = fs.readFileSync(new URL('../src/server/researchDashboardResilientRuntime.ts', import.meta.url), 'utf8');
   assert.match(dashboardSource, /sessionAuditDetails/);
   assert.match(dashboardSource, /buildResearchSessionAuditDetails/);
+}
+
+// 7) Confirmed participant-identity conflicts remain in raw data but are excluded
+// from primary/strict analysis and from analysis-session filtering.
+{
+  assert.equal(MANUAL_RESEARCH_EXCLUSIONS.length, 2);
+  const excludedIds = MANUAL_RESEARCH_EXCLUSIONS.map((row) => row.sessionId);
+  assert.deepEqual(excludedIds.sort(), [
+    'session_30153c7998f0401eb6bd10d062a05442',
+    'session_cf4973c1cf96495eb7057c32fd99cd32',
+  ].sort());
+  assert.ok(MANUAL_RESEARCH_EXCLUSIONS.every((row) => row.researchId === 'R373562'));
+  assert.ok(MANUAL_RESEARCH_EXCLUSIONS.every((row) => row.reason === 'participant_identity_uncertain_id_shared'));
+
+  const a = completeSession({
+    sessionId: 'session_cf4973c1cf96495eb7057c32fd99cd32',
+    researchId: 'R373562',
+    start: BASE,
+    end: BASE + 120_000,
+  });
+  const b = completeSession({
+    sessionId: 'session_30153c7998f0401eb6bd10d062a05442',
+    researchId: 'R373562',
+    start: BASE + 4_000,
+    end: BASE + 124_000,
+  });
+  const keeper = completeSession({ sessionId: 'session_keep', researchId: 'R-KEEP', start: BASE + 300_000, end: BASE + 420_000 });
+  const result = buildResearchSessionAudit([a, b, keeper]);
+  const excludedRows = result.rows.filter((row) => excludedIds.includes(row.session_id));
+  assert.equal(excludedRows.length, 2);
+  assert.ok(excludedRows.every((row) => row.audit_status === 'manual_research_exclusion'));
+  assert.ok(excludedRows.every((row) => row.analysis_include_primary === 0));
+  assert.ok(excludedRows.every((row) => row.analysis_include_strict === 0));
+  assert.ok(excludedRows.every((row) => row.audit_requires_review === 0));
+  assert.ok(excludedRows.every((row) => row.analysis_exclusion_reason === 'participant_identity_uncertain_id_shared'));
+  assert.equal(result.summary.manual_exclusion_sessions, 2);
+  assert.equal(result.summary.primary_include_sessions, 1);
+  assert.equal(result.summary.strict_include_sessions, 1);
+
+  assert.equal(getManualResearchExclusion(a.sessionId)?.researchId, 'R373562');
+  const filtered = filterManualResearchExcludedSessions([a, b, keeper]);
+  assert.deepEqual(filtered.map((row) => row.sessionId), ['session_keep']);
 }
 
 console.log('Research session audit QA passed.');

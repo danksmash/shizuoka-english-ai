@@ -15,6 +15,7 @@ import {
   withResilientResearchPhaseDashboard,
 } from './src/server/researchDashboardResilientRuntime';
 import { withResearchSessionAuditManagementPage } from './src/server/researchSessionAuditManagementRuntime';
+import { manualResearchExclusionGetHandler } from './src/server/researchManualExclusionRuntime';
 
 const application = express.application as any;
 const originalGet = application.get;
@@ -22,7 +23,7 @@ const originalListen = application.listen;
 
 application.get = function researchPhaseAwareGet(this: any, path: any, ...handlers: any[]) {
   if (typeof path === 'string' && handlers.length > 0) {
-    const replacement = resilientResearchDashboardGetHandler(path) || phaseAwareGetHandler(path);
+    const replacement = manualResearchExclusionGetHandler(path) || resilientResearchDashboardGetHandler(path) || phaseAwareGetHandler(path);
     if (replacement) handlers[handlers.length - 1] = replacement;
     handlers[handlers.length - 1] = withPersonaCountryDashboardLabels(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withQuestionnaireResearchRuntime(path, handlers[handlers.length - 1]);
