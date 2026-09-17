@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { CheckCircle2, KeyRound, MessageCircle, Play } from 'lucide-react';
 import { DialogueTopic, StudentProfile, AIStudentProfile } from '../types';
 import { AI_STUDENTS_MASTER_LIST, DIALOGUE_TOPICS, TARGET_20_AI_STUDENT_IDS } from '../data/curriculum';
@@ -46,36 +46,50 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onStartDialogue, learn
   const [learningCode, setLearningCode] = useState(readRetainedLearningId);
   const [codeError, setCodeError] = useState('');
   const [checkingCode, setCheckingCode] = useState(false);
+  const startLockRef = useRef(false);
   const selectedStudent = TARGET_STUDENTS.find((student) => student.id === selectedStudentId) || TARGET_STUDENTS[0];
 
   const handleStart = async () => {
+    if (startLockRef.current) return;
+    startLockRef.current = true;
     stopSpeaking();
     const normalized = normalizeLearningCode(learningCode);
     if (learningDataEnabled) {
       if (!isValidLearningCode(normalized)) {
+        startLockRef.current = false;
         setCodeError('先生から配られた4文字の学習者IDを入力してね');
         return;
       }
       setCheckingCode(true);
       setCodeError('');
-      const ok = await onValidateLearningCode(normalized);
-      setCheckingCode(false);
+      let ok = false;
+      try {
+        ok = await onValidateLearningCode(normalized);
+      } finally {
+        setCheckingCode(false);
+      }
       if (!ok) {
+        startLockRef.current = false;
         setCodeError('学習者IDを確認できませんでした。先生に確認してください。');
         return;
       }
       retainLearningId(normalized);
     }
-    onStartDialogue(
-      {
-        name: '5・6年生',
-        grade: '小学校５・６年生',
-        selectedDurationMinutes: durationMinutes,
-        selectedTopic,
-        selectedAiStudentId: selectedStudentId as StudentProfile['selectedAiStudentId'],
-      },
-      learningDataEnabled ? normalized : '',
-    );
+    try {
+      onStartDialogue(
+        {
+          name: '5・6年生',
+          grade: '小学校５・６年生',
+          selectedDurationMinutes: durationMinutes,
+          selectedTopic,
+          selectedAiStudentId: selectedStudentId as StudentProfile['selectedAiStudentId'],
+        },
+        learningDataEnabled ? normalized : '',
+      );
+    } catch (error) {
+      startLockRef.current = false;
+      throw error;
+    }
   };
 
   return (

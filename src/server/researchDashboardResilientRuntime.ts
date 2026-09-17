@@ -1,6 +1,8 @@
 import type { RequestHandler } from 'express';
 import {
   buildResearchDashboardData,
+  buildResearchExportDataSets,
+  filterResearchExportDataSets,
   normalizeFormalResearchExportQuery,
   type ResearchFilterQuery,
 } from './researchDashboard';
@@ -22,6 +24,7 @@ import {
   buildConsistentPhaseComparison,
   buildPhaseDashboardErrorPayload,
 } from './researchPhaseDashboardConsistency';
+import { buildResearchSessionAudit } from './researchSessionAudit';
 
 type PhaseAwareResearchQuery = ResearchFilterQuery & { studyPhase?: unknown; dataset?: unknown };
 
@@ -104,6 +107,18 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     const phaseSessions = filterSessionsForStudyPhase(sessions, schedules, studyPhase);
     const phaseReflections = filterReflectionsForStudyPhase(reflectionSnapshot.records, schedules, studyPhase);
     const dashboard = buildResearchDashboardData(phaseSessions, query);
+    const filteredAuditData = filterResearchExportDataSets(buildResearchExportDataSets(phaseSessions), query);
+    const auditSessionIds = new Set(filteredAuditData.sessions.map((row) => String(row.session_id || '')).filter(Boolean));
+    const sessionAudit = buildResearchSessionAudit(
+      phaseSessions.filter((session) => auditSessionIds.has(String(session.sessionId || ''))),
+    );
+    const auditQualityRows = [
+      { label: '監査候補: 近接開始', value: sessionAudit.summary.near_start_pairs },
+      { label: '監査候補: 0発話→近接有効session', value: sessionAudit.summary.zero_child_near_valid_pairs },
+      { label: '監査除外候補: 完全重複shadow', value: sessionAudit.summary.exact_duplicate_shadow_sessions },
+      { label: '監査要確認: complete同時進行', value: sessionAudit.summary.overlapping_complete_pairs },
+      { label: '監査要確認session', value: sessionAudit.summary.requires_review_sessions },
+    ];
     const lessonReflectionRowCount = buildResearchLessonReflectionRows(
       phaseReflections,
       normalizeFormalResearchExportQuery(query),
@@ -114,16 +129,24 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
       : file);
     const filters = { ...dashboard.filters, studyPhases: [...STUDY_PHASE_FILTER_IDS] } as Record<string, unknown>;
     delete filters.labelConditions;
+    const dashboardWarnings = [
+      ...reflectionSnapshot.warnings,
+      ...(sessionAudit.summary.requires_review_sessions > 0
+        ? [`session_audit_review_required:${sessionAudit.summary.requires_review_sessions}`]
+        : []),
+    ];
 
     res.locals.researchDashboardSessions = sessions;
     if (schedules.length) res.locals.researchDashboardSchedules = schedules;
     res.setHeader('Cache-Control', 'no-store');
     return res.json({
       ...dashboard,
+      dataQuality: [...dashboard.dataQuality, ...auditQualityRows],
       filters,
       exportFiles,
       lessonReflectionRowCount,
-      dashboardWarnings: reflectionSnapshot.warnings,
+      sessionAudit,
+      dashboardWarnings,
     });
   } catch (error: any) {
     console.error('Resilient research dashboard failed', {
