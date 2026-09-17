@@ -9,6 +9,7 @@ import {
   HelpCircle,
   Lightbulb,
   MessageCircle,
+  Mic,
   Pencil,
   Search,
   Send,
@@ -38,6 +39,7 @@ const draftKey = (token: string) => `my-english-growth-draft-goal150-reflection6
 const limitCharacters = (value: string, max: number) => [...value].slice(0, max).join('');
 
 type View = 'entry' | 'history' | 'class';
+type VoiceField = 'todayGoal' | 'reflectionText';
 type Draft = {
   todayGoal: string;
   goalRating: number | null;
@@ -219,6 +221,9 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
   const [status, setStatus] = useState<'draft' | 'submitted'>(bootstrap.today?.status === 'submitted' ? 'submitted' : 'draft');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [voiceField, setVoiceField] = useState<VoiceField | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const voiceBaseTextRef = useRef('');
   const firstRender = useRef(true);
   const timerRef = useRef<number | null>(null);
   const skipAutosaveOnce = useRef(false);
@@ -228,6 +233,11 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
   const reflectionChars = useMemo(() => [...draft.reflectionText].length, [draft.reflectionText]);
 
   useEffect(() => { latestGoalRef.current = draft.todayGoal; }, [draft.todayGoal]);
+
+  useEffect(() => () => {
+    try { recognitionRef.current?.abort?.(); } catch {}
+    recognitionRef.current = null;
+  }, []);
 
   const flushGoalAutosave = useCallback(async () => {
     const goal = latestGoalRef.current;
@@ -271,6 +281,63 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
     }, 1000);
     return () => { if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; } };
   }, [draft, status, token, onRecordSaved]);
+
+  const toggleVoiceInput = useCallback((field: VoiceField) => {
+    const activeRecognition = recognitionRef.current;
+    if (activeRecognition) {
+      try { activeRecognition.stop(); } catch {}
+      recognitionRef.current = null;
+      setVoiceField(null);
+      return;
+    }
+
+    const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionClass) {
+      setMessage('この端末では音声入力を使えません。キーボードで入力してください。');
+      return;
+    }
+
+    const recognition = new SpeechRecognitionClass();
+    recognition.lang = 'ja-JP';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    voiceBaseTextRef.current = field === 'todayGoal' ? draft.todayGoal : draft.reflectionText;
+    const maxCharacters = field === 'todayGoal' ? GOAL_MAX_CHARS : REFLECTION_MAX_CHARS;
+
+    recognition.onresult = (event: any) => {
+      let spokenText = '';
+      for (let index = 0; index < Number(event?.results?.length || 0); index += 1) {
+        spokenText += String(event.results[index]?.[0]?.transcript || '');
+      }
+      const value = limitCharacters(`${voiceBaseTextRef.current}${spokenText}`, maxCharacters);
+      setDraft((current) => ({ ...current, [field]: value }));
+    };
+
+    recognition.onerror = (event: any) => {
+      if (String(event?.error || '') !== 'aborted') {
+        setMessage('音声入力を使えませんでした。キーボードで入力してください。');
+      }
+      recognitionRef.current = null;
+      setVoiceField(null);
+    };
+
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      setVoiceField(null);
+    };
+
+    recognitionRef.current = recognition;
+    setVoiceField(field);
+    setMessage('');
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+      setVoiceField(null);
+      setMessage('音声入力を開始できませんでした。キーボードで入力してください。');
+    }
+  }, [draft.todayGoal, draft.reflectionText]);
 
   const submit = async () => {
     if (!draft.todayGoal.trim()) { setMessage('今日のめあてを書いてください。'); return; }
@@ -320,7 +387,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
 
       <section className="meg-right meg-entry-right">
         <div className="meg-card meg-goal-card meg-entry-goal">
-          <div className="meg-section-title"><Pencil /><h2>今日のめあて</h2></div>
+          <div className="meg-section-title"><Pencil /><h2>今日のめあて</h2><button type="button" className={`meg-voice-button${voiceField === 'todayGoal' ? ' active' : ''}`} aria-pressed={voiceField === 'todayGoal'} aria-label={voiceField === 'todayGoal' ? '今日のめあての音声入力を終了' : '今日のめあてを音声入力'} title={voiceField === 'todayGoal' ? '音声入力を終了' : '音声入力'} disabled={voiceField !== null && voiceField !== 'todayGoal'} onClick={() => toggleVoiceInput('todayGoal')}><Mic /></button></div>
           <div className="meg-goal-input">
             <textarea rows={3} maxLength={GOAL_MAX_CHARS} value={draft.todayGoal} onChange={(e) => setDraft((current) => ({ ...current, todayGoal: limitCharacters(e.target.value, GOAL_MAX_CHARS) }))} onBlur={() => void flushGoalAutosave()} placeholder="前回の振り返りも思い出して、今日のめあてを自分の言葉で書きましょう。" />
             <div className="meg-field-count">{goalChars} / {GOAL_MAX_CHARS}</div>
@@ -341,7 +408,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
         </div>
 
         <div className="meg-card meg-reflection-card meg-entry-reflection">
-          <div className="meg-section-title"><Pencil /><h2>今日のふりかえり</h2></div>
+          <div className="meg-section-title"><Pencil /><h2>今日のふりかえり</h2><button type="button" className={`meg-voice-button${voiceField === 'reflectionText' ? ' active' : ''}`} aria-pressed={voiceField === 'reflectionText'} aria-label={voiceField === 'reflectionText' ? '今日のふりかえりの音声入力を終了' : '今日のふりかえりを音声入力'} title={voiceField === 'reflectionText' ? '音声入力を終了' : '音声入力'} disabled={voiceField !== null && voiceField !== 'reflectionText'} onClick={() => toggleVoiceInput('reflectionText')}><Mic /></button></div>
           <div className="meg-main-reflection">
             <textarea maxLength={REFLECTION_MAX_CHARS} value={draft.reflectionText} onChange={(e) => setDraft((current) => ({ ...current, reflectionText: limitCharacters(e.target.value, REFLECTION_MAX_CHARS) }))} placeholder="今日の学習を振り返って、できたこと、わかったこと、つたえられたこと、聞けたこと、学び方を工夫したこと、考えていたこと、くふうしたこと、気づいたこと、次にがんばりたいことなどから、自分が大切だと思うことを書きましょう。" />
             <div className="meg-field-count">{reflectionChars} / {REFLECTION_MAX_CHARS}</div>
