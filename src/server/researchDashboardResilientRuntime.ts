@@ -26,6 +26,11 @@ import {
 } from './researchPhaseDashboardConsistency';
 import { buildResearchSessionAudit } from './researchSessionAudit';
 import { buildResearchSessionAuditDetails } from './researchSessionAuditDetails';
+import {
+  MANUAL_RESEARCH_EXCLUSIONS,
+  isManuallyExcludedResearchSession,
+  manualResearchExclusionFor,
+} from './manualResearchExclusions';
 
 type PhaseAwareResearchQuery = ResearchFilterQuery & { studyPhase?: unknown; dataset?: unknown };
 
@@ -94,6 +99,30 @@ async function loadOptionalReflections(): Promise<{ records: Awaited<ReturnType<
   }
 }
 
+function applyManualAuditExclusions<T extends ReturnType<typeof buildResearchSessionAudit>>(audit: T): T {
+  const rows = audit.rows.map((row) => {
+    const exclusion = manualResearchExclusionFor(row.session_id);
+    if (!exclusion) return row;
+    return {
+      ...row,
+      audit_requires_review: 0 as const,
+      analysis_include_primary: 0 as const,
+      analysis_include_strict: 0 as const,
+      analysis_exclusion_reason: exclusion.reason,
+    };
+  });
+  return {
+    ...audit,
+    rows,
+    summary: {
+      ...audit.summary,
+      primary_include_sessions: rows.filter((row) => row.analysis_include_primary === 1).length,
+      strict_include_sessions: rows.filter((row) => row.analysis_include_strict === 1).length,
+      requires_review_sessions: rows.filter((row) => row.audit_requires_review === 1).length,
+    },
+  } as T;
+}
+
 const resilientDashboardHandler: RequestHandler = async (req, res) => {
   try {
     const query = req.query as PhaseAwareResearchQuery;
@@ -105,15 +134,21 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
       loadOptionalReflections(),
     ]);
 
-    const phaseSessions = filterSessionsForStudyPhase(sessions, schedules, studyPhase);
+    const phaseSessionsRaw = filterSessionsForStudyPhase(sessions, schedules, studyPhase);
+    const phaseSessions = phaseSessionsRaw.filter((session) => !isManuallyExcludedResearchSession(session.sessionId));
     const phaseReflections = filterReflectionsForStudyPhase(reflectionSnapshot.records, schedules, studyPhase);
     const dashboard = buildResearchDashboardData(phaseSessions, query);
-    const filteredAuditData = filterResearchExportDataSets(buildResearchExportDataSets(phaseSessions), query);
+    const filteredAuditData = filterResearchExportDataSets(buildResearchExportDataSets(phaseSessionsRaw), query);
     const auditSessionIds = new Set(filteredAuditData.sessions.map((row) => String(row.session_id || '')).filter(Boolean));
-    const filteredAuditSessions = phaseSessions.filter((session) => auditSessionIds.has(String(session.sessionId || '')));
-    const sessionAudit = buildResearchSessionAudit(filteredAuditSessions);
+    for (const record of MANUAL_RESEARCH_EXCLUSIONS) {
+      if (phaseSessionsRaw.some((session) => String(session.sessionId || '') === record.sessionId)) auditSessionIds.add(record.sessionId);
+    }
+    const filteredAuditSessions = phaseSessionsRaw.filter((session) => auditSessionIds.has(String(session.sessionId || '')));
+    const sessionAudit = applyManualAuditExclusions(buildResearchSessionAudit(filteredAuditSessions));
     const sessionAuditDetails = buildResearchSessionAuditDetails(filteredAuditSessions, sessionAudit);
+    const manualExcludedCount = filteredAuditSessions.filter((session) => isManuallyExcludedResearchSession(session.sessionId)).length;
     const auditQualityRows = [
+      { label: '研究分析対象外: 手動除外', value: manualExcludedCount },
       { label: '監査候補: 近接開始', value: sessionAudit.summary.near_start_pairs },
       { label: '監査候補: 0発話→近接有効session', value: sessionAudit.summary.zero_child_near_valid_pairs },
       { label: '監査除外候補: 完全重複shadow', value: sessionAudit.summary.exact_duplicate_shadow_sessions },
@@ -132,12 +167,14 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     delete filters.labelConditions;
     const dashboardWarnings = [
       ...reflectionSnapshot.warnings,
+      ...(manualExcludedCount > 0 ? [`manual_research_exclusions:${manualExcludedCount}`] : []),
       ...(sessionAudit.summary.requires_review_sessions > 0
         ? [`session_audit_review_required:${sessionAudit.summary.requires_review_sessions}`]
         : []),
     ];
 
-    res.locals.researchDashboardSessions = sessions;
+    const analysisSessions = sessions.filter((session) => !isManuallyExcludedResearchSession(session.sessionId));
+    res.locals.researchDashboardSessions = analysisSessions;
     if (schedules.length) res.locals.researchDashboardSchedules = schedules;
     res.setHeader('Cache-Control', 'no-store');
     return res.json({
@@ -148,6 +185,7 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
       lessonReflectionRowCount,
       sessionAudit,
       sessionAuditDetails,
+      manualResearchExclusions: MANUAL_RESEARCH_EXCLUSIONS,
       dashboardWarnings,
     });
   } catch (error: any) {
@@ -174,7 +212,7 @@ export function withResilientResearchPhaseDashboard(path: string, handler: Reque
       try {
         const sessions = Array.isArray(res.locals.researchDashboardSessions)
           ? res.locals.researchDashboardSessions
-          : await loadSessionsResilient();
+          : (await loadSessionsResilient()).filter((session) => !isManuallyExcludedResearchSession(session.sessionId));
         const schedules = Array.isArray(res.locals.researchDashboardSchedules) && res.locals.researchDashboardSchedules.length
           ? res.locals.researchDashboardSchedules
           : await loadStudySchedulesResilient();
