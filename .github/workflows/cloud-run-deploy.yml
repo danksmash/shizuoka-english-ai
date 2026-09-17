@@ -76,6 +76,18 @@ jobs:
               --quiet
           done
 
+      - name: Pre-generate fixed Azure TTS assets
+        run: |
+          rm -rf runtime-static-tts
+          export AZURE_SPEECH_REGION=japaneast
+          export AZURE_SPEECH_KEY="$(gcloud secrets versions access latest \
+            --secret=AZURE_SPEECH_KEY \
+            --project=shizuoka-english-ai)"
+          test -n "$AZURE_SPEECH_KEY"
+          npx tsx scripts/generate-fixed-azure-tts.ts
+          test "$(find runtime-static-tts -type f -name '*.mp3' | wc -l)" -ge 20
+          unset AZURE_SPEECH_KEY
+
       - name: Deploy to Cloud Run
         run: |
           BUILD_SHA="${GITHUB_SHA:0:12}"
@@ -84,7 +96,7 @@ jobs:
             --source . \
             --region asia-northeast1 \
             --allow-unauthenticated \
-            --min-instances 1 \
+            --min-instances 0 \
             --max-instances 10 \
             --concurrency 80 \
             --timeout 60 \
