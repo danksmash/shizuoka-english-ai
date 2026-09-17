@@ -6,6 +6,7 @@ import {
   normalizeFormalResearchExportQuery,
   serializeResearchCsv,
   type ResearchExportDatasetName,
+  type ResearchFilterQuery,
 } from './researchDashboard';
 import { getAllReflectionRecordsForTeacher } from './reflectionPersistence';
 import {
@@ -13,7 +14,21 @@ import {
   buildResearchLessonReflectionRows,
   serializeResearchLessonReflectionCsv,
 } from './researchLessonReflectionExport';
+import { getAllStudySchedules } from './studySchedulePersistence';
+import {
+  filterReflectionsForStudyPhase,
+  filterSessionsForStudyPhase,
+  normalizeStudyPhaseFilter,
+} from './researchPhaseRuntime';
 import { filterManualResearchExcludedSessions, MANUAL_RESEARCH_EXCLUSIONS } from './researchManualExclusions';
+
+type PhaseAwareResearchQuery = ResearchFilterQuery & { studyPhase?: unknown; dataset?: unknown };
+
+async function phaseContext(query: PhaseAwareResearchQuery) {
+  const studyPhase = normalizeStudyPhaseFilter(query.studyPhase);
+  const schedules = studyPhase ? await getAllStudySchedules() : [];
+  return { studyPhase, schedules };
+}
 
 function crc32(buffer: Buffer): number {
   let crc = 0xffffffff;
@@ -52,11 +67,15 @@ function buildStoredZip(files: Array<{ name: string; content: string }>): Buffer
 
 const researchCsvHandler: RequestHandler = async (req, res) => {
   try {
-    const requested = typeof req.query?.dataset === 'string' ? req.query.dataset : 'sessions';
+    const query = req.query as PhaseAwareResearchQuery;
+    const requested = typeof query?.dataset === 'string' ? query.dataset : 'sessions';
+    const { studyPhase, schedules } = await phaseContext(query);
+    const exportQuery = normalizeFormalResearchExportQuery(query);
     if (requested === 'lesson_reflections') {
+      const source = await getAllReflectionRecordsForTeacher();
       const rows = buildResearchLessonReflectionRows(
-        await getAllReflectionRecordsForTeacher(),
-        normalizeFormalResearchExportQuery(req.query),
+        filterReflectionsForStudyPhase(source, schedules, studyPhase),
+        exportQuery,
       );
       const csv = serializeResearchLessonReflectionCsv(rows);
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -78,9 +97,10 @@ const researchCsvHandler: RequestHandler = async (req, res) => {
     const dataset = requested as ResearchExportDatasetName;
     const rawSessions = (dataset === 'personas' || dataset === 'codebook') ? [] : await getAllSessionsForManagement();
     const analysisSessions = filterManualResearchExcludedSessions(rawSessions);
+    const phaseSessions = filterSessionsForStudyPhase(analysisSessions, schedules, studyPhase);
     const datasets = filterResearchExportDataSets(
-      buildResearchExportDataSets(analysisSessions),
-      normalizeFormalResearchExportQuery(req.query),
+      buildResearchExportDataSets(phaseSessions),
+      exportQuery,
     );
     const csv = serializeResearchCsv(datasets[dataset], dataset);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -95,14 +115,18 @@ const researchCsvHandler: RequestHandler = async (req, res) => {
 
 const researchBundleHandler: RequestHandler = async (req, res) => {
   try {
-    const exportQuery = normalizeFormalResearchExportQuery(req.query);
-    const [rawSessions, lessonReflections] = await Promise.all([
+    const query = req.query as PhaseAwareResearchQuery;
+    const exportQuery = normalizeFormalResearchExportQuery(query);
+    const [{ studyPhase, schedules }, rawSessions, lessonReflections] = await Promise.all([
+      phaseContext(query),
       getAllSessionsForManagement(),
       getAllReflectionRecordsForTeacher(),
     ]);
     const analysisSessions = filterManualResearchExcludedSessions(rawSessions);
-    const datasets = filterResearchExportDataSets(buildResearchExportDataSets(analysisSessions), exportQuery);
-    const lessonReflectionRows = buildResearchLessonReflectionRows(lessonReflections, exportQuery);
+    const phaseSessions = filterSessionsForStudyPhase(analysisSessions, schedules, studyPhase);
+    const phaseReflections = filterReflectionsForStudyPhase(lessonReflections, schedules, studyPhase);
+    const datasets = filterResearchExportDataSets(buildResearchExportDataSets(phaseSessions), exportQuery);
+    const lessonReflectionRows = buildResearchLessonReflectionRows(phaseReflections, exportQuery);
     const codebookRows = [...datasets.codebook, ...buildResearchLessonReflectionCodebookRows()];
     const exportedAt = new Date().toISOString();
     const rowCounts = {
@@ -116,17 +140,23 @@ const researchBundleHandler: RequestHandler = async (req, res) => {
     const manifest = {
       export_id: `export_${Date.now()}`,
       exported_at: exportedAt,
-      schema_version: 5,
+      schema_version: 6,
       filters: exportQuery,
+      study_phase: studyPhase || 'all',
       row_counts: rowCounts,
       lesson_reflection_join_key: ['research_id', 'local_date'],
-      lesson_reflection_filter_scope: ['start', 'end', 'dataScope', 'grade', 'classId'],
+      lesson_reflection_filter_scope: ['start', 'end', 'dataScope', 'grade', 'classId', 'studyPhase'],
       manual_session_exclusions: MANUAL_RESEARCH_EXCLUSIONS.map((row) => ({
         session_id: row.sessionId,
         research_id: row.researchId,
         decided_at: row.decidedAt,
         reason: row.reason,
+        note: row.note,
       })),
+    };
+    const exclusionRecord = {
+      rule: 'raw Firestore session is retained; listed sessions are excluded from research analysis and CSV datasets',
+      exclusions: MANUAL_RESEARCH_EXCLUSIONS,
     };
     const files = [
       { name: 'sessions.csv', content: serializeResearchCsv(datasets.sessions, 'sessions') },
@@ -135,6 +165,7 @@ const researchBundleHandler: RequestHandler = async (req, res) => {
       { name: 'personas.csv', content: serializeResearchCsv(datasets.personas, 'personas') },
       { name: 'lesson_reflections.csv', content: serializeResearchLessonReflectionCsv(lessonReflectionRows) },
       { name: 'codebook.csv', content: serializeResearchCsv(codebookRows, 'codebook') },
+      { name: 'research_exclusions.json', content: JSON.stringify(exclusionRecord, null, 2) },
     ];
     const zip = buildStoredZip([...files, { name: 'manifest.json', content: JSON.stringify(manifest, null, 2) }]);
     res.setHeader('Content-Type', 'application/zip');
