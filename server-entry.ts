@@ -14,6 +14,7 @@ import {
   resilientResearchDashboardGetHandler,
   withResilientResearchPhaseDashboard,
 } from './src/server/researchDashboardResilientRuntime';
+import { withResearchSessionAuditManagementPage } from './src/server/researchSessionAuditManagementRuntime';
 
 const application = express.application as any;
 const originalGet = application.get;
@@ -26,6 +27,7 @@ application.get = function researchPhaseAwareGet(this: any, path: any, ...handle
     handlers[handlers.length - 1] = withPersonaCountryDashboardLabels(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withQuestionnaireResearchRuntime(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withQuestionnaireAutoSyncDashboardRuntime(path, handlers[handlers.length - 1]);
+    handlers[handlers.length - 1] = withResearchSessionAuditManagementPage(path, handlers[handlers.length - 1]);
     if (path === '/api/management/research.dashboard') {
       handlers[handlers.length - 1] = withResilientResearchPhaseDashboard(path, handlers[handlers.length - 1]);
     } else {

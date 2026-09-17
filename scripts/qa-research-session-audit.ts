@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { buildResearchSessionAudit } from '../src/server/researchSessionAudit';
+import { buildResearchSessionAuditDetails } from '../src/server/researchSessionAuditDetails';
+import { injectResearchSessionAuditManagementHtml } from '../src/server/researchSessionAuditManagementRuntime';
 
 const BASE = Date.parse('2026-09-17T02:00:00.000Z');
 
@@ -22,6 +24,8 @@ function completeSession(args: {
     schemaVersion: 4,
     sessionId: args.sessionId,
     researchId: args.researchId || 'R-TEST',
+    studentId: 'MUST_NOT_LEAK',
+    learningId: 'MUST_NOT_LEAK',
     startedAt: new Date(args.start).toISOString(),
     endedAt: new Date(args.end).toISOString(),
     createdAt: new Date(args.createdAt || args.start).toISOString(),
@@ -37,6 +41,7 @@ function completeSession(args: {
     reflection: { scaleVersion: '4point-v1', conveyedIdeas: 3, understoodPartner: 3, noticedLanguageCulture: 3 },
     systemEvents: [{ type: 'session_finish', timestamp: args.end }],
     actualDurationSeconds: Math.round((args.end - args.start) / 1000),
+    totalChildWords: 5,
   };
 }
 
@@ -90,6 +95,17 @@ function completeSession(args: {
   assert.equal(result.summary.primary_include_sessions, 2);
   assert.equal(result.summary.strict_include_sessions, 0);
   assert.ok(result.rows.every((row) => row.audit_status === 'overlapping_complete_conflict'));
+
+  const details = buildResearchSessionAuditDetails([a, b], result);
+  assert.equal(details.pair_count, 1);
+  assert.equal(details.pairs[0].pair_kind, 'overlapping_complete');
+  assert.equal(details.pairs[0].session_a.transcript.length, 3);
+  assert.equal(details.pairs[0].session_b.transcript[1].sender, 'child');
+  assert.equal(details.pairs[0].session_a.analysis_include_primary, 1);
+  assert.equal(details.pairs[0].session_a.analysis_include_strict, 0);
+  const serialized = JSON.stringify(details);
+  assert.doesNotMatch(serialized, /MUST_NOT_LEAK/);
+  assert.doesNotMatch(serialized, /studentId|learningId/);
 }
 
 // 4) A byte-for-byte identical dialogue identity copied under another session_id
@@ -117,6 +133,25 @@ function completeSession(args: {
   assert.match(source, /if \(startLockRef\.current\) return;/);
   assert.match(source, /startLockRef\.current = true;/);
   assert.match(source, /startLockRef\.current = false;\s*\n\s*setCodeError/);
+}
+
+// 6) The researcher management page must receive the expandable audit comparison UI
+// without changing the large baseline managementPage template.
+{
+  const baseHtml = '<html><head><title>x</title></head><body><div id="quality"></div><script>function renderDashboard(){}</script></body></html>';
+  const injected = injectResearchSessionAuditManagementHtml(baseHtml);
+  assert.match(injected, /sessionAuditDetailStyle/);
+  assert.match(injected, /sessionAuditDetailScript/);
+  assert.match(injected, /セッション監査詳細/);
+  assert.match(injected, /overlapping_complete/);
+  assert.match(injected, /window\.renderDashboard/);
+  assert.equal(injectResearchSessionAuditManagementHtml(injected), injected);
+
+  const entrySource = fs.readFileSync(new URL('../server-entry.ts', import.meta.url), 'utf8');
+  assert.match(entrySource, /withResearchSessionAuditManagementPage/);
+  const dashboardSource = fs.readFileSync(new URL('../src/server/researchDashboardResilientRuntime.ts', import.meta.url), 'utf8');
+  assert.match(dashboardSource, /sessionAuditDetails/);
+  assert.match(dashboardSource, /buildResearchSessionAuditDetails/);
 }
 
 console.log('Research session audit QA passed.');
