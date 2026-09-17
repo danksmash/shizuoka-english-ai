@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireManagementRole } from './auth';
 import { getDocument } from './firestore';
+import { buildQuestionnaireDescriptiveStatistics } from './questionnaireDescriptive';
 import {
   buildQuestionnaireStatistics,
   getAllQuestionnaireRecords,
@@ -42,6 +43,17 @@ router.post('/questionnaire/statistics', requireManagementRole(['researcher']), 
   } catch (error: any) {
     console.error('Questionnaire statistics failed', { message: error?.message });
     return res.status(503).json({ success: false, error: 'QUESTIONNAIRE_STATISTICS_UNAVAILABLE' });
+  }
+});
+
+router.post('/questionnaire/descriptive', requireManagementRole(['researcher']), async (_req, res) => {
+  try {
+    const records = await getAllQuestionnaireRecords();
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, ...buildQuestionnaireDescriptiveStatistics(records) });
+  } catch (error: any) {
+    console.error('Questionnaire descriptive statistics failed', { message: error?.message });
+    return res.status(503).json({ success: false, error: 'QUESTIONNAIRE_DESCRIPTIVE_UNAVAILABLE' });
   }
 });
 
