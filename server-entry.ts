@@ -10,6 +10,10 @@ import { withQuestionnaireAutoSyncDashboardRuntime } from './src/server/question
 import { withResearchPhaseAnalyticsRuntime } from './src/server/researchPhaseAnalyticsRuntime';
 import { withResearchPhaseDashboardRecovery } from './src/server/researchPhaseDashboardRecovery';
 import { withResearchPhaseDashboardConsistency } from './src/server/researchPhaseDashboardConsistency';
+import {
+  resilientResearchDashboardGetHandler,
+  withResilientResearchPhaseDashboard,
+} from './src/server/researchDashboardResilientRuntime';
 
 const application = express.application as any;
 const originalGet = application.get;
@@ -17,13 +21,13 @@ const originalListen = application.listen;
 
 application.get = function researchPhaseAwareGet(this: any, path: any, ...handlers: any[]) {
   if (typeof path === 'string' && handlers.length > 0) {
-    const replacement = phaseAwareGetHandler(path);
+    const replacement = resilientResearchDashboardGetHandler(path) || phaseAwareGetHandler(path);
     if (replacement) handlers[handlers.length - 1] = replacement;
     handlers[handlers.length - 1] = withPersonaCountryDashboardLabels(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withQuestionnaireResearchRuntime(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withQuestionnaireAutoSyncDashboardRuntime(path, handlers[handlers.length - 1]);
     if (path === '/api/management/research.dashboard') {
-      handlers[handlers.length - 1] = withResearchPhaseDashboardConsistency(path, handlers[handlers.length - 1]);
+      handlers[handlers.length - 1] = withResilientResearchPhaseDashboard(path, handlers[handlers.length - 1]);
     } else {
       handlers[handlers.length - 1] = withResearchPhaseAnalyticsRuntime(path, handlers[handlers.length - 1]);
       handlers[handlers.length - 1] = withResearchPhaseDashboardRecovery(path, handlers[handlers.length - 1]);
