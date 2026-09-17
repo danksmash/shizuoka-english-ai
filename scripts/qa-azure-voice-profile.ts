@@ -86,9 +86,11 @@ try {
   if (slow.effectiveRate !== 0.75) fail(`Azure slow rate must remain 0.75; got ${slow.effectiveRate}`);
   if (!requests.at(-1)?.includes('<prosody rate="0.75">Hello.</prosody>')) fail('Azure SSML must apply the 0.75x UI rate');
 
-  const normal = await synthesizeAzureTts('Hello.', 'emma_usa', 1.0);
+  // Use a unique sentence here so the new identical-request cache cannot turn
+  // this SSML verification into a cache hit from the persona loop above.
+  const normal = await synthesizeAzureTts('Hello again.', 'emma_usa', 1.0);
   if (normal.effectiveRate !== 1.0) fail(`Azure normal rate must remain 1.00; got ${normal.effectiveRate}`);
-  if (!requests.at(-1)?.includes('<prosody rate="1.00">Hello.</prosody>')) fail('Azure SSML must preserve the 1.00x baseline rate');
+  if (!requests.at(-1)?.includes('<prosody rate="1.00">Hello again.</prosody>')) fail('Azure SSML must preserve the 1.00x baseline rate');
 
   const fast = await synthesizeAzureTts('Hello. Nice to meet you.', 'liam_australia', 1.25);
   const fastSsml = requests.at(-1) || '';
