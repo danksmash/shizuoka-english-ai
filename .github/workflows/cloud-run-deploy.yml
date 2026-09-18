@@ -320,7 +320,8 @@ jobs:
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             -f state=success \
             -f context=cloud-run-production \
-            -f description='Cloud Run deploy and production smoke passed'
+            -f description='Cloud Run deploy and production smoke passed' \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
       - name: Mark Cloud Run deployment failed
         if: failure()
@@ -330,4 +331,5 @@ jobs:
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             -f state=failure \
             -f context=cloud-run-production \
-            -f description='Cloud Run deploy or production smoke failed'
+            -f description='Cloud Run deploy or production smoke failed' \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
