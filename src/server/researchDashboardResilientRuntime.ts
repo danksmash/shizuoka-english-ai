@@ -19,6 +19,7 @@ import {
   normalizeStudyPhaseFilter,
 } from './researchPhaseRuntime';
 import { PHASE_CODEBOOK_ROWS } from './researchPhaseAnalyticsRuntime';
+import { QUESTIONNAIRE_EXPORT_HEADERS } from './questionnaireResearch';
 import {
   buildConsistentPhaseComparison,
   buildConsistentPhaseComparisonFromExportSessions,
@@ -123,8 +124,11 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
       normalizeFormalResearchExportQuery(query),
     ).length;
     const lessonCodebookCount = buildResearchLessonReflectionCodebookRows().length;
+    // Questionnaire answer data are not read here. Only the static CSV schema length
+    // is included so the seven-file codebook card reports the correct definition count.
+    const questionnaireCodebookCount = QUESTIONNAIRE_EXPORT_HEADERS.length;
     const exportFiles = dashboard.exportFiles.map((file: any) => file.dataset === 'codebook'
-      ? { ...file, rowCount: Number(file.rowCount || 0) + lessonCodebookCount }
+      ? { ...file, rowCount: Number(file.rowCount || 0) + lessonCodebookCount + questionnaireCodebookCount }
       : file);
     const filters = { ...dashboard.filters, studyPhases: [...STUDY_PHASE_FILTER_IDS] } as Record<string, unknown>;
     delete filters.labelConditions;
