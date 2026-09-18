@@ -317,9 +317,10 @@ function injectPhaseAnalyticsUi(html: string): string {
     chart.innerHTML=pc.phases.map(function(r){var v=r.participantMeanSharePercent===null?0:Math.max(0,Math.min(100,Number(r.participantMeanSharePercent)));return '<div class="phase-rate-row"><div class="phase-rate-label">'+r.label+'</div><div class="phase-rate-track"><div class="phase-rate-fill" style="width:'+v+'%"></div></div><div class="phase-rate-value">'+pct(r.participantMeanSharePercent)+'</div><div class="phase-rate-sub">児童 n='+r.participantN+' ／ session '+r.matchedSessions+'/'+r.eligibleSessions+' = '+pct(r.sessionSharePercent)+'</div></div>'}).join('');
     if(note)note.textContent=pc.phase1Note+' '+pc.filterNote;
   }
+  window.__renderPhaseComparison=renderPhaseComparison;
   window.addEventListener('research-dashboard-rendered',function(event){
     var data=event&&event.detail;
-    if(data&&data.success!==false)renderPhaseComparison(data);
+    if(data&&data.success!==false)window.__renderPhaseComparison(data);
   });
 })();
 </script>`;
