@@ -318,10 +318,6 @@ function injectPhaseAnalyticsUi(html: string): string {
     if(note)note.textContent=pc.phase1Note+' '+pc.filterNote;
   }
   window.__renderPhaseComparison=renderPhaseComparison;
-  window.addEventListener('research-dashboard-rendered',function(event){
-    var data=event&&event.detail;
-    if(data&&data.success!==false)window.__renderPhaseComparison(data);
-  });
 })();
 </script>`;
   return out.replace('</body>', `${script}</body>`);
