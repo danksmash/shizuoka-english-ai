@@ -114,7 +114,7 @@ assert.ok(!routes.includes("router.get('/questionnaire/statistics'"));
 assert.ok(runtime.includes('/api/management/research.csv?dataset=student_questionnaires'));
 assert.ok(runtime.includes("fetch('/api/management/questionnaire/statistics',{method:'POST'"));
 assert.ok(runtime.includes('student_questionnaires.csv'));
-assert.match(runtime,/dataset:\s*'student_questionnaires'[\s\S]*?fileName:\s*'student_questionnaires\\.csv'/,'dashboard CSV card must expose fileName, not a private label field');
+assert.match(runtime,/dataset:\s*'student_questionnaires'[\s\S]*?fileName:\s*'student_questionnaires\.csv'/,'dashboard CSV card must expose fileName, not a private label field');
 assert.match(runtime,/dataset:\s*'student_questionnaires'[\s\S]*?contains:\s*'[^']+'/,'questionnaire CSV card must describe contained data');
 assert.match(runtime,/dataset:\s*'student_questionnaires'[\s\S]*?analysisUse:\s*'[^']+'/,'questionnaire CSV card must describe analysis use');
 assert.equal(runtime.includes("label: 'student_questionnaires.csv'"),false,'questionnaire CSV card must not use the obsolete label-only contract');
