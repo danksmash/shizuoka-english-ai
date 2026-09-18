@@ -267,9 +267,7 @@ function personaRows(): Row[] {
   }));
 }
 
-export function buildResearchExportDataSets(rawSessions: Record<string, any>[]): ExportDataSets {
-  const researchSessions = rawSessions.filter(isResearchTargetSession);
-  const raw = buildResearchDataSets(researchSessions);
+function buildResearchExportDataSetsFromTechnical(raw: ReturnType<typeof buildResearchDataSets>): ExportDataSets {
   const eventCounts = eventCountMap(raw.system_events);
   const turnCounts = new Map<string, { child: number; ai: number }>();
   for (const row of raw.turns) {
@@ -325,6 +323,11 @@ export function buildResearchExportDataSets(rawSessions: Record<string, any>[]):
   };
 }
 
+export function buildResearchExportDataSets(rawSessions: Record<string, any>[]): ExportDataSets {
+  const researchSessions = rawSessions.filter(isResearchTargetSession);
+  return buildResearchExportDataSetsFromTechnical(buildResearchDataSets(researchSessions));
+}
+
 function textQuery(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 export type ResearchDataScope = 'main' | 'pilot_b' | 'test' | 'reserve';
 export const MAIN_RESEARCH_START_DATE = '2026-09-17';
@@ -375,6 +378,10 @@ function filterSessions(rows: Row[], query: ResearchFilterQuery): Row[] {
       && (!topic || topic === 'all' || String(row.topic || '') === topic)
       && (!completeOnly || String(row.data_quality_flag || '') === 'complete');
   });
+}
+
+export function filterResearchSessionRows(rows: Row[], query: ResearchFilterQuery): Row[] {
+  return filterSessions(rows, query);
 }
 
 export function filterResearchExportDataSets(data: ExportDataSets, query: ResearchFilterQuery): ExportDataSets {
@@ -434,12 +441,16 @@ function normalizedCountry(value: unknown): string {
   return aliases[raw] || raw;
 }
 
-export function buildResearchDashboardData(rawSessions: Record<string, any>[], query: ResearchFilterQuery = {}) {
+export function buildResearchDashboardData(
+  rawSessions: Record<string, any>[],
+  query: ResearchFilterQuery = {},
+  options: { includeInternal?: boolean } = {},
+) {
   const targetSessions = rawSessions.filter(isResearchTargetSession);
-  const allData = buildResearchExportDataSets(targetSessions);
+  const technical = buildResearchDataSets(targetSessions);
+  const allData = buildResearchExportDataSetsFromTechnical(technical);
   const data = filterResearchExportDataSets(allData, query);
   const allowedSessionIds = new Set(data.sessions.map((row) => String(row.session_id || '')));
-  const technical = buildResearchDataSets(targetSessions);
   const filteredTechnicalEvents = technical.system_events.filter((row) => allowedSessionIds.has(String(row.session_id || '')));
   const filteredTechnicalExpressions = technical.expressions.filter((row) => allowedSessionIds.has(String(row.session_id || '')));
 
@@ -586,7 +597,7 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
   const aggregation = dailyRows.length > 21 ? 'weekly' : 'daily';
   const chartRows = aggregation === 'weekly' ? weeklyRows : dailyRows;
 
-  return {
+  const payload = {
     success:true,
     metrics:{
       participantCount:participants.size,
@@ -631,4 +642,7 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
       dataset,fileName,contains,analysisUse,rowCount:data[dataset as ResearchExportDatasetName].length,
     })),
   };
+  return options.includeInternal
+    ? { ...payload, __internal: { exportSessions: allData.sessions } }
+    : payload;
 }
