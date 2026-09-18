@@ -138,9 +138,25 @@ jobs:
             sleep 2
           done
           grep -q '7 CSVを一括ZIP' <<<"$management_html"
-          grep -q 'dataset=student_questionnaires' <<<"$management_html"
+          grep -q 'questionnaire-analysis.html' <<<"$management_html"
+          if grep -q 'id="questionnaireSection"' <<<"$management_html"; then
+            echo 'Questionnaire analysis must not be embedded in Research Dashboard.' >&2
+            exit 1
+          fi
           dashboard_ref_count=$(printf '%s' "$management_html" | grep -o '/api/management/research.dashboard' | wc -l | tr -d ' ')
           test "$dashboard_ref_count" = '1'
+
+          questionnaire_html=""
+          for attempt in 1 2 3; do
+            if questionnaire_html=$(curl --fail --silent --show-error --max-time 20 "$API_URL/questionnaire-analysis.html"); then
+              break
+            fi
+            sleep 2
+          done
+          grep -q 'Study 1 事前・事後質問紙分析' <<<"$questionnaire_html"
+          grep -q '/api/management/questionnaire/analysis' <<<"$questionnaire_html"
+          grep -q 'dataset=student_questionnaires' <<<"$questionnaire_html"
+          grep -q 'Google Forms自動同期' <<<"$questionnaire_html"
 
           dashboard_probe=$(curl --silent --show-error --max-time 20 \
             -o /tmp/research-dashboard-auth-probe.json \
