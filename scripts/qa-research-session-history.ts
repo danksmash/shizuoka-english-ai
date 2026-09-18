@@ -37,7 +37,7 @@ const base = {
 const summary = buildResearchSessionHistorySummary(base);
 assert.equal(summary.session_id, 'session-qa-001');
 assert.equal(summary.research_id, 'R-ABCDEFGHJKLM');
-assert.equal(summary.persona_name, 'Emma');
+assert.equal(summary.persona_name, 'Emma Johnson');
 assert.equal(summary.topic_label, '好きなもの・すきなこと');
 assert.equal(summary.data_quality_flag, 'complete');
 assert.equal('studentId' in summary, false);
