@@ -136,8 +136,8 @@ jobs:
             fi
             sleep 2
           done
-          echo "$management_html" | grep -q '7 CSVを一括ZIP'
-          echo "$management_html" | grep -q 'student_questionnaires.csv'
+          grep -q '7 CSVを一括ZIP' <<<"$management_html"
+          grep -q 'student_questionnaires.csv' <<<"$management_html"
           dashboard_ref_count=$(printf '%s' "$management_html" | grep -o '/api/management/research.dashboard' | wc -l | tr -d ' ')
           test "$dashboard_ref_count" = '1'
 
