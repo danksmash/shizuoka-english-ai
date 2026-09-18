@@ -32,30 +32,30 @@ jobs:
             fi
             sleep 3
           done
-          echo "$management" | grep -q 'questionnaire-analysis.html'
-          if echo "$management" | grep -q 'id="questionnaireSection"'; then
+          grep -q 'questionnaire-analysis.html' <<<"$management"
+          if grep -q 'id="questionnaireSection"' <<<"$management"; then
             echo 'Questionnaire analysis is still embedded in Research Dashboard.' >&2
             exit 1
           fi
-          echo "$questionnaire" | grep -q 'Study 1 事前・事後質問紙分析'
-          echo "$questionnaire" | grep -q '/api/management/questionnaire/analysis'
-          echo "$questionnaire" | grep -q 'student_questionnaires'
-          echo "$questionnaire" | grep -q 'Holm補正後 p &lt; .05'
-          echo "$questionnaire" | grep -q 'Google Forms自動同期'
-          echo "$questionnaire" | grep -q 'setInterval(pollRevision,30000)'
-          if echo "$questionnaire" | grep -q 'id="qCsvFile"'; then
+          grep -q 'Study 1 事前・事後質問紙分析' <<<"$questionnaire"
+          grep -q '/api/management/questionnaire/analysis' <<<"$questionnaire"
+          grep -q 'student_questionnaires' <<<"$questionnaire"
+          grep -q 'Holm補正後 p &lt; .05' <<<"$questionnaire"
+          grep -q 'Google Forms自動同期' <<<"$questionnaire"
+          grep -q 'setInterval(pollRevision,30000)' <<<"$questionnaire"
+          if grep -q 'id="qCsvFile"' <<<"$questionnaire"; then
             echo 'Unexpected manual questionnaire CSV file input is visible.' >&2
             exit 1
           fi
-          if echo "$questionnaire" | grep -q 'id="qImportBtn"'; then
+          if grep -q 'id="qImportBtn"' <<<"$questionnaire"; then
             echo 'Unexpected manual questionnaire CSV import button is visible.' >&2
             exit 1
           fi
-          if echo "$questionnaire" | grep -q 'id="qWave"'; then
+          if grep -q 'id="qWave"' <<<"$questionnaire"; then
             echo 'Unexpected manual questionnaire wave selector is visible.' >&2
             exit 1
           fi
-          if echo "$questionnaire" | grep -q 'Google Forms回答CSV'; then
+          if grep -q 'Google Forms回答CSV' <<<"$questionnaire"; then
             echo 'Unexpected manual questionnaire CSV label is visible.' >&2
             exit 1
           fi
