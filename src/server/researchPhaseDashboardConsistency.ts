@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 import {
   buildResearchExportDataSets,
-  filterResearchExportDataSets,
+  filterResearchSessionRows,
   type ResearchFilterQuery,
 } from './researchDashboard';
 import { getAllSessionsForManagement } from './persistence';
@@ -9,6 +9,7 @@ import {
   PHASE_CODEBOOK_ROWS,
   PHASE_IDS,
   buildPhaseComparison,
+  buildPhaseComparisonFromExportSessions,
 } from './researchPhaseAnalyticsRuntime';
 import {
   getAllStudySchedules,
@@ -64,23 +65,23 @@ export function buildPhaseDashboardErrorPayload(query: Record<string, unknown>) 
   };
 }
 
-export function buildConsistentPhaseComparison(
-  rawSessions: Row[],
+export function buildConsistentPhaseComparisonFromExportSessions(
+  exportSessions: Row[],
   schedules: StudyScheduleRecord[],
   query: Record<string, unknown> = {},
 ) {
   const scope = phaseDashboardDataScope(query);
   if (scope !== 'main' && scope !== 'all') {
-    const base = buildPhaseComparison(rawSessions, schedules, { ...query, dataScope: scope });
+    const base = buildPhaseComparisonFromExportSessions(exportSessions, schedules, { ...query, dataScope: scope });
     return { ...base, applicable: false, status: 'not_applicable' as const };
   }
 
   const normalizedQuery = { ...query, dataScope: scope };
-  const base = buildPhaseComparison(rawSessions, schedules, normalizedQuery);
-  const candidates = filterResearchExportDataSets(
-    buildResearchExportDataSets(rawSessions),
+  const base = buildPhaseComparisonFromExportSessions(exportSessions, schedules, normalizedQuery);
+  const candidates = filterResearchSessionRows(
+    exportSessions,
     phaseComparisonQuery(normalizedQuery),
-  ).sessions;
+  );
   const byClass = new Map(schedules.map((schedule) => [schedule.classId, schedule]));
   const candidateClassIds = Array.from(new Set(candidates.map((row) => String(row.class_id || '')).filter(Boolean))).sort();
   const missingScheduleClassIds = candidateClassIds.filter((classId) => {
@@ -112,6 +113,18 @@ export function buildConsistentPhaseComparison(
       ? `データ区分=すべての場合も、Phase比較は本研究(main)のみを対象にします。${base.filterNote || ''}`
       : base.filterNote,
   };
+}
+
+export function buildConsistentPhaseComparison(
+  rawSessions: Row[],
+  schedules: StudyScheduleRecord[],
+  query: Record<string, unknown> = {},
+) {
+  return buildConsistentPhaseComparisonFromExportSessions(
+    buildResearchExportDataSets(rawSessions).sessions,
+    schedules,
+    query,
+  );
 }
 
 function patchManagementHtml(html: string): string {
