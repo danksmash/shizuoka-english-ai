@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  statuses: write
 
 concurrency:
   group: cloud-run-production
@@ -276,3 +277,23 @@ jobs:
             test "$(wc -c < "$tts_audio")" -gt 500
             rm -f "$tts_headers" "$tts_audio"
           done
+
+      - name: Mark Cloud Run deployment verified
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success \
+            -f context=cloud-run-production \
+            -f description='Cloud Run deploy and production smoke passed'
+
+      - name: Mark Cloud Run deployment failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=failure \
+            -f context=cloud-run-production \
+            -f description='Cloud Run deploy or production smoke failed'
