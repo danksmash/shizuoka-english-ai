@@ -94,6 +94,7 @@ export function researcherRouteAllowed(req: Pick<Request, 'path'>): boolean {
   if (path === '/research.sessions' || path === '/api/management/research.sessions') return true;
   if (path === '/research.session-history' || path === '/api/management/research.session-history') return true;
   if (path === '/research.session-detail' || path === '/api/management/research.session-detail') return true;
+  if (path === '/research.session-audit' || path === '/api/management/research.session-audit') return true;
   // questionnaireRoutes is mounted at /api/management, so Express can expose
   // either the router-local path or the full app path depending on call site.
   if (path.startsWith('/questionnaire/') || path.startsWith('/api/management/questionnaire/')) return true;
