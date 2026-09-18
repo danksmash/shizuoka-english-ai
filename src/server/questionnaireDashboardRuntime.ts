@@ -75,28 +75,6 @@ async function phaseContext(query: Record<string, unknown>) {
   return { studyPhase, schedules: studyPhase ? await getAllStudySchedules() : [] };
 }
 
-/**
- * Keep the shared codebook row count accurate without reading questionnaire
- * records on every Research Dashboard request. Questionnaire data/statistics are
- * intentionally loaded only on /questionnaire-analysis.html or explicit export.
- */
-function dashboardWrapper(handler: RequestHandler): RequestHandler {
-  return (req, res, next) => {
-    const questionnaireCodebookCount = buildQuestionnaireCodebookRows().length;
-    const originalJson = res.json.bind(res);
-    (res as any).json = (body: any) => {
-      if (!body || body.success === false) return originalJson(body);
-      const exportFiles = Array.isArray(body.exportFiles)
-        ? body.exportFiles.map((file: any) => file.dataset === 'codebook'
-          ? { ...file, rowCount: Number(file.rowCount || 0) + questionnaireCodebookCount }
-          : file)
-        : body.exportFiles;
-      return originalJson({ ...body, exportFiles });
-    };
-    return handler(req, res, next);
-  };
-}
-
 function csvWrapper(handler: RequestHandler): RequestHandler {
   return async (req, res, next) => {
     const requested = typeof req.query?.dataset === 'string' ? req.query.dataset : 'sessions';
@@ -182,7 +160,6 @@ const bundleHandler: RequestHandler = async (req, res) => {
 };
 
 export function withQuestionnaireResearchRuntime(path: string, handler: RequestHandler): RequestHandler {
-  if (path === '/api/management/research.dashboard') return dashboardWrapper(handler);
   if (path === '/api/management/research.csv') return csvWrapper(handler);
   if (path === '/api/management/research.bundle.zip') return bundleHandler;
   return handler;

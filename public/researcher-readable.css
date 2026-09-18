@@ -1,0 +1,47 @@
+/* Researcher-facing readability baseline.
+   Keep research administration readable on desktop/tablet without browser zoom. */
+html{font-size:16px}
+body{font-size:16px!important;line-height:1.6}
+button,input,select,textarea{font-size:16px!important;line-height:1.45!important}
+button{min-height:42px}
+.muted,.note,.status,.version{font-size:14px!important;line-height:1.6!important}
+.title{font-size:24px!important;line-height:1.35!important}
+.section-title{font-size:20px!important;line-height:1.4!important}
+.field label,.filters label{font-size:15px!important}
+.metric span{font-size:15px!important}
+.metric b{font-size:29px!important}
+.indicator h3{font-size:16px!important}
+.indicator p{font-size:14px!important;line-height:1.55!important}
+.quality-row,.expression-row{font-size:15px!important}
+.quality-group-title{font-size:14px!important}
+.recent,.stats,table{font-size:14px!important}
+.recent th,.recent td,.stats th,.stats td,th,td{line-height:1.45}
+.export-card h3{font-size:18px!important;line-height:1.35!important}
+.export-card p{font-size:15px!important;line-height:1.6!important}
+.export-card .download{font-size:16px!important}
+#exports>.note{font-size:15px!important}
+.phase-mini{font-size:15px!important}
+.phase-mini b{font-size:20px!important}
+.phase-rate-label,.phase-rate-value{font-size:15px!important}
+.phase-rate-sub,#chartPhaseNote{font-size:14px!important;line-height:1.5!important}
+.rsh-toolbar input,.rsh-toolbar button,.rsh-count{font-size:14px!important}
+.rsh-panel-head h2,.rsh-modal-head h2{font-size:20px!important}
+.rsh-history-main{font-size:15px!important}
+.rsh-history-sub,.rsh-detail-meta,.rsh-reflection,.rsh-events,.rsh-modal-table table{font-size:14px!important}
+.rsh-utterance{font-size:15px!important;line-height:1.55!important}
+.rsh-ja{font-size:14px!important}
+.audit-summary-pill,.audit-help,.audit-pair>summary,.audit-kind,.audit-pair-note,.audit-meta,.audit-tag,.audit-transcript-title,.audit-utterance,.audit-ja,.audit-events summary,.audit-event,.audit-reflection,.audit-empty,.audit-load-status{font-size:14px!important}
+.audit-session h4{font-size:16px!important}
+.chart-card h3{font-size:18px!important}
+.chart-card h4{font-size:16px!important}
+#chartTotal svg text,#chartPersistence svg text,#chartSelfRegulation svg text,#chartL2wtc svg text{font-size:13px!important}
+.qd-note,.qd-status,.qd-paired-head p{font-size:14px!important}
+.qd-table{font-size:14px!important}
+.metric span{letter-spacing:.01em}
+@media(max-width:760px){
+  body{font-size:15px!important}
+  button,input,select,textarea{font-size:15px!important}
+  .title{font-size:22px!important}
+}
+
+#rshSessionDetail b[style*="font-size"]{font-size:14px!important}

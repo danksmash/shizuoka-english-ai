@@ -83,7 +83,7 @@ const participantHashes = fs.readFileSync('src/server/study1FormalParticipantHas
 const deployWorkflow = fs.readFileSync('.github/workflows/cloud-run-deploy.yml', 'utf8');
 const productionSmoke = fs.readFileSync('.github/workflows/questionnaire-production-smoke.yml', 'utf8');
 assert.ok(entry.includes("this.use('/api/questionnaire-auto', createQuestionnaireAutoSyncRouter())"));
-assert.ok(entry.includes('withQuestionnaireAutoSyncDashboardRuntime'));
+assert.equal(entry.includes('withQuestionnaireAutoSyncDashboardRuntime'), false, 'Research Dashboard must not mount the legacy questionnaire auto-sync UI wrapper');
 assert.ok(route.includes("router.post('/ingest'"));
 assert.ok(route.includes('QUESTIONNAIRE_INGEST_SECRET'));
 assert.ok(route.includes("String(process.env.QUESTIONNAIRE_INGEST_SECRET || '').trim()"), 'Cloud Run ingest secret must normalize surrounding whitespace/newlines before HMAC verification');

@@ -3,6 +3,7 @@ import {
   RESEARCH_EXPORT_HEADERS,
   buildResearchExportDataSets,
   filterResearchExportDataSets,
+  filterResearchSessionRows,
   normalizeFormalResearchExportQuery,
   type ResearchFilterQuery,
 } from './researchDashboard';
@@ -94,8 +95,8 @@ function requestedDataScope(query: Record<string, unknown>): string {
   return typeof query.dataScope === 'string' && query.dataScope.trim() ? query.dataScope.trim() : 'main';
 }
 
-export function buildPhaseComparison(
-  rawSessions: Row[],
+export function buildPhaseComparisonFromExportSessions(
+  exportSessions: Row[],
   schedules: StudyScheduleRecord[],
   query: Record<string, unknown> = {},
 ) {
@@ -118,14 +119,11 @@ export function buildPhaseComparison(
     };
   }
 
-  const data = filterResearchExportDataSets(
-    buildResearchExportDataSets(rawSessions),
-    comparisonQuery(query),
-  );
+  const sessions = filterResearchSessionRows(exportSessions, comparisonQuery(query));
   const buckets = new Map<PhaseId, { sessions: number; eligible: number; matched: number; participants: Map<string, { eligible: number; matched: number }> }>();
   for (const phase of PHASE_IDS) buckets.set(phase, { sessions: 0, eligible: 0, matched: 0, participants: new Map() });
 
-  for (const row of data.sessions) {
+  for (const row of sessions) {
     const phase = phaseIdForRow(row, schedules);
     if (!phase) continue;
     const bucket = buckets.get(phase)!;
@@ -171,6 +169,18 @@ export function buildPhaseComparison(
     phase1Note: 'Phase 1は、後に担当となる国のPersonaとの一致率です。児童はこの時点では担当国を知りません。',
     phases,
   };
+}
+
+export function buildPhaseComparison(
+  rawSessions: Row[],
+  schedules: StudyScheduleRecord[],
+  query: Record<string, unknown> = {},
+) {
+  return buildPhaseComparisonFromExportSessions(
+    buildResearchExportDataSets(rawSessions).sessions,
+    schedules,
+    query,
+  );
 }
 
 export function augmentSessionRowsWithPhase(rows: Row[], schedules: StudyScheduleRecord[]): Row[] {

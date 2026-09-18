@@ -2,7 +2,6 @@ import type { RequestHandler } from 'express';
 import {
   buildResearchDashboardData,
   buildResearchExportDataSets,
-  filterResearchExportDataSets,
   normalizeFormalResearchExportQuery,
   type ResearchFilterQuery,
 } from './researchDashboard';
@@ -20,12 +19,12 @@ import {
   normalizeStudyPhaseFilter,
 } from './researchPhaseRuntime';
 import { PHASE_CODEBOOK_ROWS } from './researchPhaseAnalyticsRuntime';
+import { QUESTIONNAIRE_EXPORT_HEADERS } from './questionnaireResearch';
 import {
   buildConsistentPhaseComparison,
+  buildConsistentPhaseComparisonFromExportSessions,
   buildPhaseDashboardErrorPayload,
 } from './researchPhaseDashboardConsistency';
-import { buildResearchSessionAudit } from './researchSessionAudit';
-import { buildResearchSessionAuditDetails } from './researchSessionAuditDetails';
 import {
   MANUAL_RESEARCH_EXCLUSIONS,
   isManualResearchExcludedSessionId,
@@ -111,63 +110,53 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     ]);
     const readMs = Date.now() - readStartedAt;
 
+    const analysisSessions = sessions.filter((session) => !isManualResearchExcludedSessionId(session.sessionId));
     const phaseSessionsRaw = filterSessionsForStudyPhase(sessions, schedules, studyPhase);
-    const phaseSessions = phaseSessionsRaw.filter((session) => !isManualResearchExcludedSessionId(session.sessionId));
+    const phaseSessions = filterSessionsForStudyPhase(analysisSessions, schedules, studyPhase);
     const phaseReflections = filterReflectionsForStudyPhase(reflectionSnapshot.records, schedules, studyPhase);
     const dashboardStartedAt = Date.now();
-    const dashboard = buildResearchDashboardData(phaseSessions, query);
+    const dashboardBuilt = buildResearchDashboardData(phaseSessions, query, { includeInternal: true }) as any;
+    const { __internal: dashboardInternal = {}, ...dashboard } = dashboardBuilt;
     const dashboardMs = Date.now() - dashboardStartedAt;
-    const auditStartedAt = Date.now();
-    const filteredAuditData = filterResearchExportDataSets(buildResearchExportDataSets(phaseSessionsRaw), query);
-    const auditSessionIds = new Set(filteredAuditData.sessions.map((row) => String(row.session_id || '')).filter(Boolean));
-    for (const record of MANUAL_RESEARCH_EXCLUSIONS) {
-      if (phaseSessionsRaw.some((session) => String(session.sessionId || '') === record.sessionId)) auditSessionIds.add(record.sessionId);
-    }
-    const filteredAuditSessions = phaseSessionsRaw.filter((session) => auditSessionIds.has(String(session.sessionId || '')));
-    const sessionAudit = buildResearchSessionAudit(filteredAuditSessions);
-    const sessionAuditDetails = buildResearchSessionAuditDetails(filteredAuditSessions, sessionAudit);
-    const auditMs = Date.now() - auditStartedAt;
-    const manualExcludedCount = filteredAuditSessions.filter((session) => isManualResearchExcludedSessionId(session.sessionId)).length;
-    const auditQualityRows = [
-      { label: '研究分析対象外: 手動除外', value: manualExcludedCount },
-      { label: '監査候補: 近接開始', value: sessionAudit.summary.near_start_pairs },
-      { label: '監査候補: 0発話→近接有効session', value: sessionAudit.summary.zero_child_near_valid_pairs },
-      { label: '監査除外候補: 完全重複shadow', value: sessionAudit.summary.exact_duplicate_shadow_sessions },
-      { label: '監査要確認: complete同時進行', value: sessionAudit.summary.overlapping_complete_pairs },
-      { label: '監査要確認session', value: sessionAudit.summary.requires_review_sessions },
-    ];
+    const manualExcludedCount = Math.max(0, phaseSessionsRaw.length - phaseSessions.length);
     const lessonReflectionRowCount = buildResearchLessonReflectionRows(
       phaseReflections,
       normalizeFormalResearchExportQuery(query),
     ).length;
     const lessonCodebookCount = buildResearchLessonReflectionCodebookRows().length;
+    // Questionnaire answer data are not read here. Only the static CSV schema length
+    // is included so the seven-file codebook card reports the correct definition count.
+    const questionnaireCodebookCount = QUESTIONNAIRE_EXPORT_HEADERS.length;
     const exportFiles = dashboard.exportFiles.map((file: any) => file.dataset === 'codebook'
-      ? { ...file, rowCount: Number(file.rowCount || 0) + lessonCodebookCount }
+      ? { ...file, rowCount: Number(file.rowCount || 0) + lessonCodebookCount + questionnaireCodebookCount }
       : file);
     const filters = { ...dashboard.filters, studyPhases: [...STUDY_PHASE_FILTER_IDS] } as Record<string, unknown>;
     delete filters.labelConditions;
     const dashboardWarnings = [
       ...reflectionSnapshot.warnings,
       ...(manualExcludedCount > 0 ? [`manual_research_exclusions:${manualExcludedCount}`] : []),
-      ...(sessionAudit.summary.requires_review_sessions > 0
-        ? [`session_audit_review_required:${sessionAudit.summary.requires_review_sessions}`]
-        : []),
+      'session_audit_details_lazy',
     ];
 
-    const analysisSessions = sessions.filter((session) => !isManualResearchExcludedSessionId(session.sessionId));
     const phaseStartedAt = Date.now();
-    const phaseComparison = buildConsistentPhaseComparison(analysisSessions, schedules, query);
+    const preparedPhaseSessions = !studyPhase
+      ? (Array.isArray(dashboardInternal.exportSessions) ? dashboardInternal.exportSessions : [])
+      : buildResearchExportDataSets(analysisSessions).sessions;
+    const phaseComparison = preparedPhaseSessions.length || analysisSessions.length === 0
+      ? buildConsistentPhaseComparisonFromExportSessions(preparedPhaseSessions, schedules, query)
+      : buildConsistentPhaseComparison(analysisSessions, schedules, query);
     const phaseMs = Date.now() - phaseStartedAt;
     const totalMs = Date.now() - requestStartedAt;
     res.locals.researchDashboardSessions = analysisSessions;
     res.locals.researchDashboardSchedules = schedules;
+    res.locals.researchDashboardExportSessions = preparedPhaseSessions;
     res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Server-Timing', `reads;dur=${readMs}, dashboard;dur=${dashboardMs}, audit;dur=${auditMs}, phase;dur=${phaseMs}, core;dur=${totalMs}`);
+    res.setHeader('Server-Timing', `reads;dur=${readMs}, dashboard;dur=${dashboardMs}, audit;dur=0;desc="lazy", phase;dur=${phaseMs}, core;dur=${totalMs}`);
     console.info('Research dashboard timing', {
       totalMs,
       readMs,
       dashboardMs,
-      auditMs,
+      auditMs: 0,
       phaseMs,
       loadedSessions: sessions.length,
       loadedReflections: reflectionSnapshot.records.length,
@@ -177,12 +166,15 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     });
     return res.json({
       ...dashboard,
-      dataQuality: [...dashboard.dataQuality, ...auditQualityRows],
+      dataQuality: manualExcludedCount > 0
+        ? [...dashboard.dataQuality, { label: '研究分析対象外: 手動除外', value: manualExcludedCount }]
+        : dashboard.dataQuality,
       filters,
       exportFiles,
       lessonReflectionRowCount,
-      sessionAudit,
-      sessionAuditDetails,
+      sessionAudit: null,
+      sessionAuditDetails: null,
+      sessionAuditLazy: true,
       manualResearchExclusions: MANUAL_RESEARCH_EXCLUSIONS,
       dashboardWarnings,
       phaseComparison,
@@ -216,7 +208,12 @@ export function withResilientResearchPhaseDashboard(path: string, handler: Reque
           const schedules = Array.isArray(res.locals.researchDashboardSchedules)
             ? res.locals.researchDashboardSchedules
             : await loadStudySchedulesResilient();
-          phaseComparison = buildConsistentPhaseComparison(sessions, schedules, query);
+          const prepared = Array.isArray(res.locals.researchDashboardExportSessions)
+            ? res.locals.researchDashboardExportSessions
+            : [];
+          phaseComparison = prepared.length || sessions.length === 0
+            ? buildConsistentPhaseComparisonFromExportSessions(prepared, schedules, query)
+            : buildConsistentPhaseComparison(sessions, schedules, query);
         } catch (error: any) {
           console.error('Resilient phase dashboard read failed', { message: error?.message });
           phaseComparison = buildPhaseDashboardErrorPayload(query);
