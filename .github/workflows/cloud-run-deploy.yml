@@ -107,6 +107,7 @@ jobs:
       - name: Production health and AI smoke test
         run: |
           API_URL="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app"
+          EXPECTED_BUILD="${GITHUB_SHA:0:12}"
 
           health=""
           for attempt in 1 2 3 4 5; do
@@ -123,6 +124,28 @@ jobs:
           echo "$health" | grep -q '"azureTtsConfigured":true'
           echo "$health" | grep -q '"learningDataConfigured":true'
           echo "$health" | grep -q '"managementConfigured":true'
+          echo "$health" | grep -q "\"build\":\"${EXPECTED_BUILD}\""
+
+          # Research Dashboard deployment contract: verify the exact deployed build,
+          # the current seven-file UI, and that Phase analytics no longer injects
+          # a second dashboard API request into the management page.
+          management_html=""
+          for attempt in 1 2 3; do
+            if management_html=$(curl --fail --silent --show-error --max-time 20 "$API_URL/management"); then
+              break
+            fi
+            sleep 2
+          done
+          echo "$management_html" | grep -q '7 CSVを一括ZIP'
+          echo "$management_html" | grep -q 'student_questionnaires.csv'
+          dashboard_ref_count=$(printf '%s' "$management_html" | grep -o '/api/management/research.dashboard' | wc -l | tr -d ' ')
+          test "$dashboard_ref_count" = '1'
+
+          dashboard_probe=$(curl --silent --show-error --max-time 20 \
+            -o /tmp/research-dashboard-auth-probe.json \
+            -w '%{http_code}' \
+            "$API_URL/api/management/research.dashboard?dataScope=main")
+          test "$dashboard_probe" = '401'
 
           # Auto-sync must be configured in production. An unsigned probe must be
           # rejected with 401. A missing secret would return 503 and fail deploy.

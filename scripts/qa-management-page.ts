@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-const page=fs.readFileSync('src/server/managementPage.ts','utf8');const server=fs.readFileSync('server.ts','utf8');const schedule=fs.readFileSync('public/study-schedule.html','utf8');
+const page=fs.readFileSync('src/server/managementPage.ts','utf8');const server=fs.readFileSync('server.ts','utf8');const schedule=fs.readFileSync('public/study-schedule.html','utf8');const deploy=fs.readFileSync('.github/workflows/cloud-run-deploy.yml','utf8');
 assert.ok(page.includes('研究データ管理'));assert.ok(page.includes('research.bundle.zip'));assert.ok(!page.includes('教師用管理'));assert.ok(!page.includes('学習者ID管理'));
 assert.ok(page.includes('id="scheduleBtn"'));assert.ok(page.includes('href="/study-schedule.html"'));assert.ok(page.includes('Study 1 日程管理'));
 assert.ok(page.includes('7 CSVを一括ZIP'));assert.equal(page.includes('6 CSVを一括ZIP'),false,'CSV bundle label must match the seven exported CSV files');
@@ -8,6 +8,12 @@ assert.ok(page.includes("window.__renderPhaseComparison"),'Phase analytics must 
 assert.ok(page.includes("if(filterTimer){clearTimeout(filterTimer);filterTimer=0}"),'explicit loads must cancel pending debounced reloads');
 assert.ok(page.includes("dashboardLoading&&dashboardLoadingQuery===query"),'same-query dashboard requests must be deduplicated');
 assert.ok(page.includes('前回正常取得時の結果です'),'failed reloads must clearly label stale on-screen metrics');
+assert.ok(deploy.includes('EXPECTED_BUILD="${GITHUB_SHA:0:12}"'),'production smoke must verify the exact deployed main SHA');
+assert.ok(deploy.includes("grep -q '7 CSVを一括ZIP'"),'production smoke must verify the current Research Dashboard bundle label');
+assert.ok(deploy.includes("grep -q 'student_questionnaires.csv'"),'production smoke must verify questionnaire UI injection');
+assert.ok(deploy.includes("grep -o '/api/management/research.dashboard'"),'production smoke must guard against duplicate dashboard API references');
+assert.ok(deploy.includes("test \"$dashboard_ref_count\" = '1'"),'production smoke must require exactly one dashboard API reference');
+assert.ok(deploy.includes("test \"$dashboard_probe\" = '401'"),'production smoke must preserve the researcher authentication boundary');
 assert.ok(schedule.includes('href="/management"'));assert.ok(schedule.includes('研究ダッシュボード'));
 assert.ok(server.includes("requireManagementRole(['researcher'])"));assert.ok(!server.includes("requireManagementRole(['teacher'])"));assert.ok(!server.includes("'/api/management/student-codes'"));assert.ok(!server.includes("'/api/management/sessions'"));
 console.log('Research-only management/navigation QA: PASS');
