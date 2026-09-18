@@ -148,15 +148,21 @@ function completeSession(args: {
   assert.match(injected, /sessionAuditDetailStyle/);
   assert.match(injected, /sessionAuditDetailScript/);
   assert.match(injected, /セッション監査詳細/);
+  assert.match(injected, /監査詳細を読み込む/);
   assert.match(injected, /overlapping_complete/);
+  assert.match(injected, /\/api\/management\/research\.session-audit/);
   assert.match(injected, /window\.renderDashboard/);
   assert.equal(injectResearchSessionAuditManagementHtml(injected), injected);
 
   const entrySource = fs.readFileSync(new URL('../server-entry.ts', import.meta.url), 'utf8');
   assert.match(entrySource, /withResearchSessionAuditManagementPage/);
+  assert.match(entrySource, /createResearchSessionAuditRouter/);
+  const auditRouteSource = fs.readFileSync(new URL('../src/server/researchSessionAuditRoutes.ts', import.meta.url), 'utf8');
+  assert.match(auditRouteSource, /router\.post\('\/research\.session-audit'/);
+  assert.match(auditRouteSource, /buildResearchSessionAuditDetails/);
   const dashboardSource = fs.readFileSync(new URL('../src/server/researchDashboardResilientRuntime.ts', import.meta.url), 'utf8');
-  assert.match(dashboardSource, /sessionAuditDetails/);
-  assert.match(dashboardSource, /buildResearchSessionAuditDetails/);
+  assert.match(dashboardSource, /sessionAuditLazy: true/);
+  assert.doesNotMatch(dashboardSource, /buildResearchSessionAuditDetails/);
 }
 
 // 7) Confirmed participant-identity conflicts remain in raw data but are excluded
