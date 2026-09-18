@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { ReflectionAnswers, ResearchSystemEvent, calculateCanonicalStats, isAIStudentId, maskHistoryForStorage } from '../dataContract';
 import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, PersonaLabelCondition, VisualVocabularyItem } from '../types';
 import { getPersonaResearchMetadata } from '../data/personaResearch';
-import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, setDocument } from './firestore';
+import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, queryCollectionByStringRange, setDocument } from './firestore';
 import { resolveTtsRuntimeMetadata } from './ttsRuntimeMetadata';
 
 const STUDENT_COLLECTION = 'students';
@@ -309,11 +309,10 @@ export async function getStudentHistory(studentId: string): Promise<Record<strin
     totalChildWords: session.totalChildWords, uniqueVocabularyCount: session.uniqueVocabularyCount, reflection: session.reflection || null,
   }));
 }
-export async function getAllSessionsForManagement(): Promise<Record<string, any>[]> {
-  const [sessions, students] = await Promise.all([
-    listCollection(SESSION_COLLECTION, 1000),
-    getStudentRecordsForManagement(),
-  ]);
+function managementSessionsWithAssignments(
+  sessions: Record<string, any>[],
+  students: Awaited<ReturnType<typeof getStudentRecordsForManagement>>,
+): Record<string, any>[] {
   const studentById = new Map(students.map((student) => [student.studentId, student]));
   return sessions.map((session) => {
     const student = studentById.get(String(session.studentId || ''));
@@ -324,6 +323,27 @@ export async function getAllSessionsForManagement(): Promise<Record<string, any>
       assignmentAnnouncedAt: normalizeAssignmentAnnouncedAt(session.assignmentAnnouncedAt || student?.assignmentAnnouncedAt),
     };
   });
+}
+
+function managementDateBoundary(value: unknown): string {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+}
+
+export async function getSessionsForManagementByLocalDateRange(start?: unknown, end?: unknown): Promise<Record<string, any>[]> {
+  const from = managementDateBoundary(start);
+  const to = managementDateBoundary(end);
+  const [sessions, students] = await Promise.all([
+    (from || to)
+      ? queryCollectionByStringRange(SESSION_COLLECTION, 'localDate', from, to)
+      : listCollection(SESSION_COLLECTION, 1000),
+    getStudentRecordsForManagement(),
+  ]);
+  return managementSessionsWithAssignments(sessions, students);
+}
+
+export async function getAllSessionsForManagement(): Promise<Record<string, any>[]> {
+  return getSessionsForManagementByLocalDateRange();
 }
 
 export async function getTeacherSessionsForManagement(): Promise<Record<string, any>[]> {

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, queryCollectionByEqualities, setDocument } from './firestore';
+import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, queryCollectionByEqualities, queryCollectionByStringRange, setDocument } from './firestore';
 
 const DEVICE_COLLECTION = 'reflection_devices';
 const REFLECTION_COLLECTION = 'lesson_reflections';
@@ -193,12 +193,25 @@ export async function getClassReflections(identity: ReflectionIdentity): Promise
     }));
 }
 
-export async function getAllReflectionRecordsForTeacher(): Promise<ReflectionRecord[]> {
-  const rows = await listCollection(REFLECTION_COLLECTION, 500);
+function normalizedReflectionDateBoundary(value: unknown): string {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+}
+
+export async function getReflectionRecordsForTeacherDateRange(start?: unknown, end?: unknown): Promise<ReflectionRecord[]> {
+  const from = normalizedReflectionDateBoundary(start);
+  const to = normalizedReflectionDateBoundary(end);
+  const rows = (from || to)
+    ? await queryCollectionByStringRange(REFLECTION_COLLECTION, 'localDate', from, to)
+    : await listCollection(REFLECTION_COLLECTION, 500);
   return rows
     .map((row) => normalizeStoredRecord(row))
     .filter((row): row is ReflectionRecord => Boolean(row))
     .sort((a, b) => b.localDate.localeCompare(a.localDate) || a.classId.localeCompare(b.classId, 'ja') || a.learningId.localeCompare(b.learningId));
+}
+
+export async function getAllReflectionRecordsForTeacher(): Promise<ReflectionRecord[]> {
+  return getReflectionRecordsForTeacherDateRange();
 }
 
 export async function getReflectionRecordsForTeacherStudent(studentId: string): Promise<ReflectionRecord[]> {

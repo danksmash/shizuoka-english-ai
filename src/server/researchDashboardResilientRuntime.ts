@@ -6,8 +6,8 @@ import {
   normalizeFormalResearchExportQuery,
   type ResearchFilterQuery,
 } from './researchDashboard';
-import { getAllSessionsForManagement } from './persistence';
-import { getAllReflectionRecordsForTeacher } from './reflectionPersistence';
+import { getAllSessionsForManagement, getSessionsForManagementByLocalDateRange } from './persistence';
+import { getAllReflectionRecordsForTeacher, getReflectionRecordsForTeacherDateRange } from './reflectionPersistence';
 import {
   buildResearchLessonReflectionCodebookRows,
   buildResearchLessonReflectionRows,
@@ -42,7 +42,7 @@ function errorText(error: unknown): string {
 
 export function isTransientResearchDashboardReadError(error: unknown): boolean {
   const text = errorText(error);
-  return /FIRESTORE_(?:GET|LIST|QUERY|MULTI_QUERY)_(?:408|429|500|502|503|504)/i.test(text)
+  return /FIRESTORE_(?:GET|LIST|QUERY|MULTI_QUERY|RANGE_QUERY)_(?:408|429|500|502|503|504)/i.test(text)
     || /METADATA_TOKEN_(?:408|429|500|502|503|504)/i.test(text)
     || /AbortError|aborted|fetch failed|ECONNRESET|ETIMEDOUT|EAI_AGAIN|UND_ERR/i.test(text);
 }
@@ -79,14 +79,14 @@ async function loadStudySchedulesResilient(): Promise<StudyScheduleRecord[]> {
   return retryResearchDashboardRead('study_schedules', () => getAllStudySchedules());
 }
 
-async function loadSessionsResilient(): Promise<Record<string, any>[]> {
-  return retryResearchDashboardRead('sessions_and_students', () => getAllSessionsForManagement());
+async function loadSessionsResilient(start?: unknown, end?: unknown): Promise<Record<string, any>[]> {
+  return retryResearchDashboardRead('sessions_and_students', () => getSessionsForManagementByLocalDateRange(start, end));
 }
 
-async function loadOptionalReflections(): Promise<{ records: Awaited<ReturnType<typeof getAllReflectionRecordsForTeacher>>; warnings: string[] }> {
+async function loadOptionalReflections(start?: unknown, end?: unknown): Promise<{ records: Awaited<ReturnType<typeof getAllReflectionRecordsForTeacher>>; warnings: string[] }> {
   try {
     return {
-      records: await retryResearchDashboardRead('lesson_reflections', () => getAllReflectionRecordsForTeacher()),
+      records: await retryResearchDashboardRead('lesson_reflections', () => getReflectionRecordsForTeacherDateRange(start, end)),
       warnings: [],
     };
   } catch (error: any) {
@@ -99,20 +99,25 @@ async function loadOptionalReflections(): Promise<{ records: Awaited<ReturnType<
 }
 
 const resilientDashboardHandler: RequestHandler = async (req, res) => {
+  const requestStartedAt = Date.now();
   try {
     const query = req.query as PhaseAwareResearchQuery;
     const studyPhase = normalizeStudyPhaseFilter(query.studyPhase);
-    const schedulesPromise = studyPhase ? loadStudySchedulesResilient() : Promise.resolve([] as StudyScheduleRecord[]);
+    const readStartedAt = Date.now();
     const [schedules, sessions, reflectionSnapshot] = await Promise.all([
-      schedulesPromise,
-      loadSessionsResilient(),
-      loadOptionalReflections(),
+      loadStudySchedulesResilient(),
+      loadSessionsResilient(query.start, query.end),
+      loadOptionalReflections(query.start, query.end),
     ]);
+    const readMs = Date.now() - readStartedAt;
 
     const phaseSessionsRaw = filterSessionsForStudyPhase(sessions, schedules, studyPhase);
     const phaseSessions = phaseSessionsRaw.filter((session) => !isManualResearchExcludedSessionId(session.sessionId));
     const phaseReflections = filterReflectionsForStudyPhase(reflectionSnapshot.records, schedules, studyPhase);
+    const dashboardStartedAt = Date.now();
     const dashboard = buildResearchDashboardData(phaseSessions, query);
+    const dashboardMs = Date.now() - dashboardStartedAt;
+    const auditStartedAt = Date.now();
     const filteredAuditData = filterResearchExportDataSets(buildResearchExportDataSets(phaseSessionsRaw), query);
     const auditSessionIds = new Set(filteredAuditData.sessions.map((row) => String(row.session_id || '')).filter(Boolean));
     for (const record of MANUAL_RESEARCH_EXCLUSIONS) {
@@ -121,6 +126,7 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     const filteredAuditSessions = phaseSessionsRaw.filter((session) => auditSessionIds.has(String(session.sessionId || '')));
     const sessionAudit = buildResearchSessionAudit(filteredAuditSessions);
     const sessionAuditDetails = buildResearchSessionAuditDetails(filteredAuditSessions, sessionAudit);
+    const auditMs = Date.now() - auditStartedAt;
     const manualExcludedCount = filteredAuditSessions.filter((session) => isManualResearchExcludedSessionId(session.sessionId)).length;
     const auditQualityRows = [
       { label: '研究分析対象外: 手動除外', value: manualExcludedCount },
@@ -149,9 +155,26 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     ];
 
     const analysisSessions = sessions.filter((session) => !isManualResearchExcludedSessionId(session.sessionId));
+    const phaseStartedAt = Date.now();
+    const phaseComparison = buildConsistentPhaseComparison(analysisSessions, schedules, query);
+    const phaseMs = Date.now() - phaseStartedAt;
+    const totalMs = Date.now() - requestStartedAt;
     res.locals.researchDashboardSessions = analysisSessions;
-    if (schedules.length) res.locals.researchDashboardSchedules = schedules;
+    res.locals.researchDashboardSchedules = schedules;
     res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Server-Timing', `reads;dur=${readMs}, dashboard;dur=${dashboardMs}, audit;dur=${auditMs}, phase;dur=${phaseMs}, core;dur=${totalMs}`);
+    console.info('Research dashboard timing', {
+      totalMs,
+      readMs,
+      dashboardMs,
+      auditMs,
+      phaseMs,
+      loadedSessions: sessions.length,
+      loadedReflections: reflectionSnapshot.records.length,
+      start: typeof query.start === 'string' ? query.start : '',
+      end: typeof query.end === 'string' ? query.end : '',
+      dataScope: typeof query.dataScope === 'string' ? query.dataScope : 'main',
+    });
     return res.json({
       ...dashboard,
       dataQuality: [...dashboard.dataQuality, ...auditQualityRows],
@@ -162,6 +185,7 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
       sessionAuditDetails,
       manualResearchExclusions: MANUAL_RESEARCH_EXCLUSIONS,
       dashboardWarnings,
+      phaseComparison,
     });
   } catch (error: any) {
     console.error('Resilient research dashboard failed', {
@@ -183,18 +207,20 @@ export function withResilientResearchPhaseDashboard(path: string, handler: Reque
     (res as any).json = async (body: any) => {
       if (!body || body.success === false) return originalJson(body);
       const query = req.query as Record<string, unknown>;
-      let phaseComparison;
-      try {
-        const sessions = Array.isArray(res.locals.researchDashboardSessions)
-          ? res.locals.researchDashboardSessions
-          : (await loadSessionsResilient()).filter((session) => !isManualResearchExcludedSessionId(session.sessionId));
-        const schedules = Array.isArray(res.locals.researchDashboardSchedules) && res.locals.researchDashboardSchedules.length
-          ? res.locals.researchDashboardSchedules
-          : await loadStudySchedulesResilient();
-        phaseComparison = buildConsistentPhaseComparison(sessions, schedules, query);
-      } catch (error: any) {
-        console.error('Resilient phase dashboard read failed', { message: error?.message });
-        phaseComparison = buildPhaseDashboardErrorPayload(query);
+      let phaseComparison = body.phaseComparison;
+      if (!phaseComparison) {
+        try {
+          const sessions = Array.isArray(res.locals.researchDashboardSessions)
+            ? res.locals.researchDashboardSessions
+            : (await loadSessionsResilient(query.start, query.end)).filter((session) => !isManualResearchExcludedSessionId(session.sessionId));
+          const schedules = Array.isArray(res.locals.researchDashboardSchedules)
+            ? res.locals.researchDashboardSchedules
+            : await loadStudySchedulesResilient();
+          phaseComparison = buildConsistentPhaseComparison(sessions, schedules, query);
+        } catch (error: any) {
+          console.error('Resilient phase dashboard read failed', { message: error?.message });
+          phaseComparison = buildPhaseDashboardErrorPayload(query);
+        }
       }
       const exportFiles = Array.isArray(body.exportFiles)
         ? body.exportFiles.map((file: any) => file.dataset === 'codebook'

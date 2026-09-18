@@ -82,6 +82,28 @@ async function firestoreFetch(path: string, init: RequestInit = {}): Promise<Res
   }
 }
 
+async function runStructuredQuery(
+  structuredQuery: Record<string, any>,
+  errorPrefix: string,
+): Promise<Record<string, any>[]> {
+  const token = await getAccessToken();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(`${baseUrl()}:runQuery`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ structuredQuery }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`${errorPrefix}_${response.status}:${(await response.text()).slice(0, 500)}`);
+    const rows = await response.json() as Array<{ document?: { fields?: Record<string, any>; name?: string } }>;
+    return rows.filter((row) => row.document).map((row) => ({ ...fromFirestoreFields(row.document!.fields || {}), _name: row.document!.name }));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function firestoreAvailable(): Promise<boolean> {
   try {
     const response = await firestoreFetch('/__health_probe__?mask.fieldPaths=missing');
@@ -109,21 +131,11 @@ export async function setDocument(collection: string, id: string, data: Record<s
 }
 
 export async function queryCollection(collection: string, field: string, value: string, limit = 50): Promise<Record<string, any>[]> {
-  const token = await getAccessToken();
-  const response = await fetch(`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(PROJECT_ID)}/databases/${encodeURIComponent(DATABASE_ID)}/documents:runQuery`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      structuredQuery: {
-        from: [{ collectionId: collection }],
-        where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: value } } },
-        limit,
-      },
-    }),
-  });
-  if (!response.ok) throw new Error(`FIRESTORE_QUERY_${response.status}:${(await response.text()).slice(0, 500)}`);
-  const rows = await response.json() as Array<{ document?: { fields?: Record<string, any>; name?: string } }>;
-  return rows.filter((row) => row.document).map((row) => ({ ...fromFirestoreFields(row.document!.fields || {}), _name: row.document!.name }));
+  return runStructuredQuery({
+    from: [{ collectionId: collection }],
+    where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: value } } },
+    limit,
+  }, 'FIRESTORE_QUERY');
 }
 
 export async function queryCollectionByEqualities(
@@ -132,27 +144,37 @@ export async function queryCollectionByEqualities(
   limit = 200,
 ): Promise<Record<string, any>[]> {
   if (!filters.length) return [];
-  const token = await getAccessToken();
   const fieldFilters = filters.map(({ field, value }) => ({
     fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: value } },
   }));
   const where = fieldFilters.length === 1
     ? fieldFilters[0]
     : { compositeFilter: { op: 'AND', filters: fieldFilters } };
-  const response = await fetch(`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(PROJECT_ID)}/databases/${encodeURIComponent(DATABASE_ID)}/documents:runQuery`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      structuredQuery: {
-        from: [{ collectionId: collection }],
-        where,
-        limit: Math.max(1, Math.min(1000, limit)),
-      },
-    }),
-  });
-  if (!response.ok) throw new Error(`FIRESTORE_MULTI_QUERY_${response.status}:${(await response.text()).slice(0, 500)}`);
-  const rows = await response.json() as Array<{ document?: { fields?: Record<string, any>; name?: string } }>;
-  return rows.filter((row) => row.document).map((row) => ({ ...fromFirestoreFields(row.document!.fields || {}), _name: row.document!.name }));
+  return runStructuredQuery({
+    from: [{ collectionId: collection }],
+    where,
+    limit: Math.max(1, Math.min(1000, limit)),
+  }, 'FIRESTORE_MULTI_QUERY');
+}
+
+export async function queryCollectionByStringRange(
+  collection: string,
+  field: string,
+  startInclusive = '',
+  endInclusive = '',
+): Promise<Record<string, any>[]> {
+  const start = String(startInclusive || '').trim();
+  const end = String(endInclusive || '').trim();
+  if (!start && !end) return listCollection(collection, 1000);
+  const filters: Record<string, any>[] = [];
+  if (start) filters.push({ fieldFilter: { field: { fieldPath: field }, op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: start } } });
+  if (end) filters.push({ fieldFilter: { field: { fieldPath: field }, op: 'LESS_THAN_OR_EQUAL', value: { stringValue: end } } });
+  const where = filters.length === 1 ? filters[0] : { compositeFilter: { op: 'AND', filters } };
+  return runStructuredQuery({
+    from: [{ collectionId: collection }],
+    where,
+    orderBy: [{ field: { fieldPath: field }, direction: 'ASCENDING' }],
+  }, 'FIRESTORE_RANGE_QUERY');
 }
 
 export async function listCollection(collection: string, pageSize = 200): Promise<Record<string, any>[]> {

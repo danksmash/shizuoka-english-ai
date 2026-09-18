@@ -232,9 +232,26 @@ function cleanRecord(raw: Record<string, any>): QuestionnaireRecord | null {
   };
 }
 
+const QUESTIONNAIRE_READ_CACHE_MS = 2_000;
+let questionnaireReadCache: { records: QuestionnaireRecord[]; expiresAt: number } | null = null;
+let questionnaireReadInFlight: Promise<QuestionnaireRecord[]> | null = null;
+
 export async function getAllQuestionnaireRecords(): Promise<QuestionnaireRecord[]> {
-  const rows = await listCollection(QUESTIONNAIRE_COLLECTION, 1000);
-  return rows.map(cleanRecord).filter((row): row is QuestionnaireRecord => Boolean(row));
+  const now = Date.now();
+  if (questionnaireReadCache && now < questionnaireReadCache.expiresAt) return questionnaireReadCache.records;
+  if (questionnaireReadInFlight) return questionnaireReadInFlight;
+  const pending = (async () => {
+    const rows = await listCollection(QUESTIONNAIRE_COLLECTION, 1000);
+    const records = rows.map(cleanRecord).filter((row): row is QuestionnaireRecord => Boolean(row));
+    questionnaireReadCache = { records, expiresAt: Date.now() + QUESTIONNAIRE_READ_CACHE_MS };
+    return records;
+  })();
+  questionnaireReadInFlight = pending;
+  try {
+    return await pending;
+  } finally {
+    if (questionnaireReadInFlight === pending) questionnaireReadInFlight = null;
+  }
 }
 
 function mean(xs: number[]): number { return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN; }

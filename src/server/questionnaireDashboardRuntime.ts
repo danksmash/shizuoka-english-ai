@@ -73,23 +73,32 @@ function managementWrapper(handler: RequestHandler): RequestHandler {
 }
 
 function dashboardWrapper(handler: RequestHandler): RequestHandler {
-  return async (req, res, next) => {
-    try {
-      const qRecords = await getAllQuestionnaireRecords();
-      const qRows = buildQuestionnaireExportRows(qRecords, req.query as Record<string, unknown>);
-      const qCodebookCount = buildQuestionnaireCodebookRows().length;
-      const originalJson = res.json.bind(res);
-      (res as any).json = (body: any) => {
-        if (!body || body.success === false) return originalJson(body);
-        const exportFiles = Array.isArray(body.exportFiles) ? body.exportFiles.map((file: any) => file.dataset === 'codebook' ? { ...file, rowCount: Number(file.rowCount || 0) + qCodebookCount } : file) : [];
-        exportFiles.splice(Math.max(0, exportFiles.length - 1), 0, { dataset: 'student_questionnaires', label: 'student_questionnaires.csv', rowCount: qRows.length });
-        return originalJson({ ...body, exportFiles, questionnaireRowCount: qRows.length });
-      };
-      return handler(req, res, next);
-    } catch (error: any) {
-      console.error('Questionnaire dashboard wrapper failed', { message: error?.message });
-      return handler(req, res, next);
-    }
+  return (req, res, next) => {
+    const questionnaireStartedAt = Date.now();
+    const questionnairePromise = getAllQuestionnaireRecords()
+      .then((records) => ({
+        rows: buildQuestionnaireExportRows(records, req.query as Record<string, unknown>),
+        codebookCount: buildQuestionnaireCodebookRows().length,
+        durationMs: Date.now() - questionnaireStartedAt,
+      }))
+      .catch((error: any) => {
+        console.error('Questionnaire dashboard wrapper failed', { message: error?.message });
+        return null;
+      });
+    const originalJson = res.json.bind(res);
+    (res as any).json = async (body: any) => {
+      if (!body || body.success === false) return originalJson(body);
+      const questionnaire = await questionnairePromise;
+      if (!questionnaire) return originalJson(body);
+      const existingTiming = String(res.getHeader('Server-Timing') || '').trim();
+      res.setHeader('Server-Timing', [existingTiming, `questionnaire;dur=${questionnaire.durationMs}`].filter(Boolean).join(', '));
+      const exportFiles = Array.isArray(body.exportFiles)
+        ? body.exportFiles.map((file: any) => file.dataset === 'codebook' ? { ...file, rowCount: Number(file.rowCount || 0) + questionnaire.codebookCount } : file)
+        : [];
+      exportFiles.splice(Math.max(0, exportFiles.length - 1), 0, { dataset: 'student_questionnaires', label: 'student_questionnaires.csv', rowCount: questionnaire.rows.length });
+      return originalJson({ ...body, exportFiles, questionnaireRowCount: questionnaire.rows.length });
+    };
+    return handler(req, res, next);
   };
 }
 
