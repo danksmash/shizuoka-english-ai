@@ -26,6 +26,7 @@ const base = {
 
 const records: ReflectionRecord[] = [
   { ...base, researchId: 'R-MAIN-0001', reflectionId: 'r1', studentId: 's1', classId: '5-1', learningId: 'T5A2', status: 'submitted' },
+  { ...base, researchId: 'R-MAIN-0001', reflectionId: 'r1-old', studentId: 's1', classId: '5-1', learningId: 'T5A2', localDate: '2026-09-08', status: 'submitted', reflectionText: '前回の振り返り。' },
   { ...base, researchId: 'R-MAIN-0002', reflectionId: 'r2', studentId: 's2', classId: '5-1', learningId: 'T5B3', status: 'draft', submittedAt: '', reflectionText: '=HYPERLINK("https://example.invalid","x")' },
   { ...base, researchId: 'R-MAIN-0004', reflectionId: 'r4', studentId: 's4', classId: '6-1', learningId: 'T6D5', status: 'submitted', reflectionText: '英語で好きなものを伝えて質問した。' },
   { ...base, researchId: 'R-PILOT-0001', reflectionId: 'pb-r1', studentId: 'pb1', classId: '6-PB', learningId: 'P6A2', status: 'submitted', reflectionText: 'Pilot Bの振り返り。' },
@@ -66,7 +67,8 @@ const legacyExact = buildTeacherReflectionDashboard(roster, records, '2026-09-09
 assert(legacyExact.counts.total === 3, 'legacy cached classId filter should remain compatible');
 
 const history = buildTeacherStudentHistory(roster, records, 't5a2');
-assert(history?.history.length === 1, 'student history should contain the canonical record');
+assert(history?.history.length === 2, 'student history should contain all available records');
+assert(history?.history[0]?.localDate === '2026-09-09' && history.history[1]?.localDate === '2026-09-08', 'student history should be newest-first');
 assert(history?.dataScope === 'main' && history.grade === '5' && history.classNumber === '1', 'history should expose derived membership only');
 assert(history?.history[0]?.goalRating === 3 && history.history[0]?.communicationRating === 4, 'history should retain four-point ratings');
 const serializedHistory = JSON.stringify(history);
@@ -101,4 +103,4 @@ assert(researchCsv.includes('"goal_rating"') && researchCsv.includes('"communica
 assert(!researchCsv.includes('"learning_id"') && !researchCsv.includes('"student_id"'), 'research lesson Reflection CSV must not expose learning or internal student IDs');
 assert(researchCsv.includes("\"'=HYPERLINK("), 'research Reflection CSV must retain formula-injection protection');
 
-console.log('[qa:reflection-teacher] PASS: active-roster parity, daily missing rows, four-point fields, 6RSX isolation, research_id+local_date join export, formula safety, and privacy verified.');
+console.log('[qa:reflection-teacher] PASS: active-roster parity, complete newest-first student history, daily missing rows, four-point fields, 6RSX isolation, research_id+local_date join export, formula safety, and privacy verified.');

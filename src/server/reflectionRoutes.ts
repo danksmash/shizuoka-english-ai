@@ -4,6 +4,7 @@ import { authenticateManagement, clearManagementCookie, managementAuthConfigured
 import { getStudentRecordsForManagement, resolveStudentByCode } from './persistence';
 import {
   getAllReflectionRecordsForTeacher,
+  getReflectionRecordsForTeacherStudent,
   getClassReflections,
   getReflectionHistory,
   getTodayAndPrevious,
@@ -227,8 +228,12 @@ router.post('/teacher/dashboard', requireManagementRole(['teacher']), async (req
 router.post('/teacher/student', requireManagementRole(['teacher']), async (req, res) => {
   try {
     const learningId = typeof req.body?.learningId === 'string' ? req.body.learningId.slice(0, 20) : '';
-    const [roster, records] = await Promise.all([getStudentRecordsForManagement(), getAllReflectionRecordsForTeacher()]);
-    const student = buildTeacherStudentHistory(roster, records, learningId);
+    const normalized = learningId.trim().toUpperCase();
+    const roster = await getStudentRecordsForManagement();
+    const rosterStudent = roster.find((row) => row.active && row.learningId === normalized);
+    if (!rosterStudent) return res.status(404).json({ success: false, error: 'REFLECTION_STUDENT_NOT_FOUND' });
+    const records = await getReflectionRecordsForTeacherStudent(rosterStudent.studentId);
+    const student = buildTeacherStudentHistory(roster, records, normalized);
     if (!student) return res.status(404).json({ success: false, error: 'REFLECTION_STUDENT_NOT_FOUND' });
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, student });

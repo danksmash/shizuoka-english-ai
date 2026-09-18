@@ -98,7 +98,11 @@ export async function teacherExportCsv(localDate: string, dataScope: TeacherData
   const response = await fetch(apiUrl('/api/reflection/teacher/export.csv'), {
     method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ localDate, dataScope, grade, classNumber }),
   });
-  if (!response.ok) throw new Error(`HTTP_${response.status}`);
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    const error = new Error(data?.error || `HTTP_${response.status}`) as Error & { code?: string; status?: number };
+    error.code = data?.error; error.status = response.status; throw error;
+  }
   const blob = await response.blob();
   const href = URL.createObjectURL(blob);
   const anchor = document.createElement('a');

@@ -14,7 +14,7 @@ const membershipLabel = (value: { dataScope: string; grade: string; classNumber:
 };
 const ratingLabels = { first: 'めあてへの取組', second: '聞く・伝える' } as const;
 
-function Login({ onDone }: { onDone: () => void }) {
+function Login({ onDone, notice = '' }: { onDone: () => void; notice?: string }) {
   const [username, setUsername] = useState(''); const [password, setPassword] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); setBusy(true); setError('');
@@ -22,7 +22,7 @@ function Login({ onDone }: { onDone: () => void }) {
     catch (e: any) { setError(e?.code === 'TEACHER_ONLY' ? '教師用アカウントでログインしてください。' : e?.code === 'TOO_MANY_LOGIN_ATTEMPTS' ? 'ログイン試行回数が多すぎます。時間をおいてください。' : 'ユーザー名またはパスワードを確認してください。'); }
     finally { setBusy(false); }
   };
-  return <div className="megt-login-page"><form className="megt-login-card" onSubmit={submit}><div className="megt-logo"><BarChart3 /></div><h1>My English Growth</h1><h2>教師用 振り返り一覧</h2><p>児童の振り返り状況と学びの記録を確認します。</p><label>ユーザー名<input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus /></label><label>パスワード<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></label>{error && <div className="megt-error">{error}</div>}<button className="megt-primary" disabled={busy}>{busy ? '確認しています…' : 'ログイン'}</button></form></div>;
+  return <div className="megt-login-page"><form className="megt-login-card" onSubmit={submit}><div className="megt-logo"><BarChart3 /></div><h1>My English Growth</h1><h2>教師用 振り返り一覧</h2><p>児童の振り返り状況と学びの記録を確認します。</p>{notice && <div className="megt-session-notice" role="status">{notice}</div>}<label>ユーザー名<input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus /></label><label>パスワード<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></label>{error && <div className="megt-error">{error}</div>}<button className="megt-primary" disabled={busy}>{busy ? '確認しています…' : 'ログイン'}</button></form></div>;
 }
 
 function StatusChip({ status }: { status: 'submitted' | 'draft' | 'missing' }) {
@@ -41,24 +41,45 @@ export default function ReflectionTeacherApp() {
   const [dataScope, setDataScope] = useState<TeacherDataScope>('main'); const [grade, setGrade] = useState<TeacherGrade>('all'); const [classNumber, setClassNumber] = useState<TeacherClassNumber>('all');
   const [data, setData] = useState<TeacherDashboardResponse | null>(null); const [loading, setLoading] = useState(false); const [error, setError] = useState('');
   const [selected, setSelected] = useState<TeacherStudentHistoryResponse | null>(null); const [search, setSearch] = useState('');
+  const [loginNotice, setLoginNotice] = useState('');
 
-  const checkAuth = async () => { try { const me = await teacherMe(); setUser(me.username); setMode('ready'); } catch { setMode('login'); } };
+  const checkAuth = async () => {
+    try { const me = await teacherMe(); setUser(me.username); setLoginNotice(''); setMode('ready'); }
+    catch { setMode('login'); }
+  };
+  const handleUnauthorized = () => {
+    setSelected(null); setUser(''); setData(null); setError('');
+    setLoginNotice('ログインの有効期限が切れました。もう一度ログインしてください。');
+    setMode('login');
+  };
   const load = async (date = localDate, scope = dataScope, g = grade, room = classNumber) => {
     setLoading(true); setError('');
     try { setData(await teacherDashboard(date, scope, g, room)); }
-    catch (e: any) { if (e?.status === 401) setMode('login'); else setError('振り返り一覧を読み込めませんでした。'); }
+    catch (e: any) { if (e?.status === 401) handleUnauthorized(); else setError('振り返り一覧を読み込めませんでした。'); }
     finally { setLoading(false); }
   };
   useEffect(() => { const redirect = teacherShouldRedirectToApiOrigin(); if (redirect) { window.location.replace(redirect); return; } void checkAuth(); }, []);
   useEffect(() => { if (mode === 'ready') void load(); }, [mode, localDate, dataScope, grade, classNumber]);
 
   if (mode === 'checking') return <div className="megt-loading"><BarChart3 /><p>教師画面を読み込んでいます…</p></div>;
-  if (mode === 'login') return <Login onDone={() => void checkAuth()} />;
+  if (mode === 'login') return <Login notice={loginNotice} onDone={() => void checkAuth()} />;
 
   const filtered = (data?.students || []).filter((row) => !search.trim() || row.learningId.includes(search.trim().toUpperCase()));
-  const openStudent = async (learningId: string) => { try { setSelected(await teacherStudentHistory(learningId)); } catch { setError('児童の履歴を読み込めませんでした。'); } };
-  const logout = async () => { try { await teacherLogout(); } finally { setUser(''); setData(null); setMode('login'); } };
-  const exportCsv = async () => { try { await teacherExportCsv(localDate, dataScope, grade, classNumber); } catch { setError('CSVを書き出せませんでした。'); } };
+  const openStudent = async (learningId: string) => {
+    setError('');
+    try { setSelected(await teacherStudentHistory(learningId)); }
+    catch (e: any) {
+      if (e?.status === 401) handleUnauthorized();
+      else if (e?.status === 404) setError('児童の情報が見つかりませんでした。画面を更新してください。');
+      else setError('児童の履歴を読み込めませんでした。');
+    }
+  };
+  const logout = async () => { try { await teacherLogout(); } finally { setUser(''); setData(null); setSelected(null); setLoginNotice(''); setMode('login'); } };
+  const exportCsv = async () => {
+    setError('');
+    try { await teacherExportCsv(localDate, dataScope, grade, classNumber); }
+    catch (e: any) { if (e?.status === 401) handleUnauthorized(); else setError('CSVを書き出せませんでした。'); }
+  };
 
   return <div className="megt-app"><header className="megt-header"><div className="megt-brand"><div className="megt-logo"><BarChart3 /></div><div><h1>My English Growth</h1><p>教師用 振り返りダッシュボード</p></div></div><div className="megt-user"><span>{user}</span><button onClick={logout}><LogOut />ログアウト</button></div></header>
     <main className="megt-main"><section className="megt-toolbar">

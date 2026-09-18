@@ -200,3 +200,11 @@ export async function getAllReflectionRecordsForTeacher(): Promise<ReflectionRec
     .filter((row): row is ReflectionRecord => Boolean(row))
     .sort((a, b) => b.localDate.localeCompare(a.localDate) || a.classId.localeCompare(b.classId, 'ja') || a.learningId.localeCompare(b.learningId));
 }
+
+export async function getReflectionRecordsForTeacherStudent(studentId: string): Promise<ReflectionRecord[]> {
+  const rows = await queryCollection(REFLECTION_COLLECTION, 'studentId', studentId, 1000);
+  return rows
+    .map((row) => normalizeStoredRecord(row))
+    .filter((row): row is ReflectionRecord => Boolean(row))
+    .sort((a, b) => b.localDate.localeCompare(a.localDate) || b.updatedAt.localeCompare(a.updatedAt));
+}
