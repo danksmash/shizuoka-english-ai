@@ -129,7 +129,9 @@ assert.ok(runtime.includes('schema_version: 6'));
 assert.equal(runtime.includes('questionnairePromise'), false, 'Research Dashboard must not wait for questionnaire Firestore reads');
 assert.equal(runtime.includes('questionnaireRowCount'), false, 'Research Dashboard payload must not depend on questionnaire row count');
 assert.equal(runtime.includes('injectQuestionnaireUi'), false, 'questionnaire UI must live on its dedicated page');
-assert.ok(runtime.includes('questionnaireCodebookCount = buildQuestionnaireCodebookRows().length'), 'static codebook count may remain without reading questionnaire records');
+assert.equal(runtime.includes("path === '/api/management/research.dashboard'"), false, 'questionnaire export runtime must not wrap the Research Dashboard');
+assert.equal(entry.includes('withQuestionnaireAutoSyncDashboardRuntime'), false, 'legacy questionnaire dashboard UI wrapper must not be mounted');
+assert.equal(entry.includes('withQuestionnaireDescriptiveDashboardRuntime'), false, 'legacy questionnaire descriptive UI wrapper must not be mounted');
 assert.ok(!runtime.includes('改善＝'));
 
 console.log('Study 1 questionnaire research QA: PASS');
