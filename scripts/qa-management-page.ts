@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-const page=fs.readFileSync('src/server/managementPage.ts','utf8');const server=fs.readFileSync('server.ts','utf8');const schedule=fs.readFileSync('public/study-schedule.html','utf8');const deploy=fs.readFileSync('.github/workflows/cloud-run-deploy.yml','utf8');
+const page=fs.readFileSync('src/server/managementPage.ts','utf8');const server=fs.readFileSync('server.ts','utf8');const schedule=fs.readFileSync('public/study-schedule.html','utf8');const questionnaire=fs.readFileSync('public/questionnaire-analysis.html','utf8');const reflectionPolish=fs.readFileSync('src/server/researchReflectionChartPolishRuntime.ts','utf8');const deploy=fs.readFileSync('.github/workflows/cloud-run-deploy.yml','utf8');
 assert.ok(page.includes('研究データ管理'));assert.ok(page.includes('research.bundle.zip'));assert.ok(!page.includes('教師用管理'));assert.ok(!page.includes('学習者ID管理'));
-assert.ok(page.includes('id="scheduleBtn"'));assert.ok(page.includes('href="/study-schedule.html"'));assert.ok(page.includes('Study 1 日程管理'));
+assert.ok(page.includes('id="scheduleBtn"'));assert.ok(page.includes('href="/study-schedule.html"'));assert.ok(page.includes('Study 1 日程管理'));assert.ok(page.includes('id="questionnaireBtn"'));assert.ok(page.includes('href="/questionnaire-analysis.html"'));assert.ok(page.includes('質問紙分析'));assert.equal(page.includes('id="questionnaireSection"'),false,'questionnaire analysis must not be embedded in Research Dashboard');
 assert.ok(page.includes('7 CSVを一括ZIP'));assert.equal(page.includes('6 CSVを一括ZIP'),false,'CSV bundle label must match the seven exported CSV files');
 assert.ok(page.includes("window.__renderPhaseComparison"),'Phase analytics must reuse the successful dashboard payload without a second API request');
 assert.ok(page.includes("if(filterTimer){clearTimeout(filterTimer);filterTimer=0}"),'explicit loads must cancel pending debounced reloads');
@@ -10,11 +10,11 @@ assert.ok(page.includes("dashboardLoading&&dashboardLoadingQuery===query"),'same
 assert.ok(page.includes('前回正常取得時の結果です'),'failed reloads must clearly label stale on-screen metrics');
 assert.ok(deploy.includes('EXPECTED_BUILD="${GITHUB_SHA:0:12}"'),'production smoke must verify the exact deployed main SHA');
 assert.ok(deploy.includes("grep -q '7 CSVを一括ZIP'"),'production smoke must verify the current Research Dashboard bundle label');
-assert.ok(deploy.includes("grep -q 'dataset=student_questionnaires'"),'production smoke must verify the deployed questionnaire export route injection');
+assert.ok(deploy.includes("grep -q 'questionnaire-analysis.html'"),'production smoke must verify the questionnaire navigation link');assert.ok(deploy.includes('questionnaire_html'),'production smoke must inspect the dedicated questionnaire analysis page');assert.ok(deploy.includes("grep -q '/api/management/questionnaire/analysis'"),'production smoke must verify the dedicated questionnaire API');
 assert.ok(deploy.includes('<<<"$management_html"'),'production smoke must avoid grep -q pipelines that can fail with SIGPIPE on large management HTML');
 assert.ok(deploy.includes("grep -o '/api/management/research.dashboard'"),'production smoke must guard against duplicate dashboard API references');
 assert.ok(deploy.includes("test \"$dashboard_ref_count\" = '1'"),'production smoke must require exactly one dashboard API reference');
 assert.ok(deploy.includes("test \"$dashboard_probe\" = '401'"),'production smoke must preserve the researcher authentication boundary');
-assert.ok(schedule.includes('href="/management"'));assert.ok(schedule.includes('研究ダッシュボード'));
+assert.ok(schedule.includes('href="/management"'));assert.ok(schedule.includes('研究ダッシュボード'));assert.ok(schedule.includes('href="/questionnaire-analysis.html"'));assert.ok(questionnaire.includes('Study 1 事前・事後質問紙分析'));assert.ok(questionnaire.includes('/api/management/questionnaire/analysis'));assert.ok(questionnaire.includes('dataset=student_questionnaires'));assert.ok(questionnaire.includes('Google Forms自動同期'));assert.ok(questionnaire.includes('setInterval(pollRevision,30000)'));assert.equal(questionnaire.includes('id="qCsvFile"'),false);assert.equal(questionnaire.includes('id="qImportBtn"'),false);assert.ok(questionnaire.includes('href="/management"'));assert.ok(questionnaire.includes('href="/study-schedule.html"'));assert.ok(reflectionPolish.includes('researchReflectionChartPolish'));assert.ok(reflectionPolish.includes("shape.setAttribute('r','3.4')"));
 assert.ok(server.includes("requireManagementRole(['researcher'])"));assert.ok(!server.includes("requireManagementRole(['teacher'])"));assert.ok(!server.includes("'/api/management/student-codes'"));assert.ok(!server.includes("'/api/management/sessions'"));
 console.log('Research-only management/navigation QA: PASS');

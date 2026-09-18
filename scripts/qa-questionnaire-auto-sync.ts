@@ -78,6 +78,7 @@ const route = fs.readFileSync('src/server/questionnaireAutoSyncRoutes.ts', 'utf8
 const manualRoute = fs.readFileSync('src/server/questionnaireRoutes.ts', 'utf8');
 const core = fs.readFileSync('src/server/questionnaireAutoSync.ts', 'utf8');
 const dashboardRuntime = fs.readFileSync('src/server/questionnaireAutoSyncDashboardRuntime.ts', 'utf8');
+const analysisPage = fs.readFileSync('public/questionnaire-analysis.html', 'utf8');
 const participantHashes = fs.readFileSync('src/server/study1FormalParticipantHashes.ts', 'utf8');
 const deployWorkflow = fs.readFileSync('.github/workflows/cloud-run-deploy.yml', 'utf8');
 const productionSmoke = fs.readFileSync('.github/workflows/questionnaire-production-smoke.yml', 'utf8');
@@ -97,17 +98,21 @@ assert.ok(!participantHashes.includes('learningCode') && !participantHashes.incl
 assert.ok(manualRoute.includes('importStrictGoogleFormsQuestionnaireCsv'), 'manual CSV fallback must use the same formal-roster gate');
 assert.ok(!manualRoute.includes('importGoogleFormsQuestionnaireCsv'), 'old permissive importer must not remain on the management route');
 assert.ok(manualRoute.includes("router.post('/questionnaire/revision'"));
-assert.ok(dashboardRuntime.includes('/api/management/questionnaire/revision'));
-assert.ok(dashboardRuntime.includes('setInterval(pollQuestionnaireRevision,30000)'));
-assert.ok(dashboardRuntime.includes('Pre M(SD)［paired］'));
-assert.ok(dashboardRuntime.includes('Post M(SD)［paired］'));
+assert.ok(analysisPage.includes('/api/management/questionnaire/revision'));
+assert.ok(analysisPage.includes('setInterval(pollRevision,30000)'));
+assert.ok(analysisPage.includes('Pre M(SD)［paired］'));
+assert.ok(analysisPage.includes('Post M(SD)［paired］'));
+assert.ok(analysisPage.includes('/api/management/questionnaire/analysis'));
+assert.equal(analysisPage.includes('id="qCsvFile"'), false, 'manual questionnaire CSV file input must not be exposed on the dedicated page');
+assert.equal(analysisPage.includes('id="qImportBtn"'), false, 'manual questionnaire CSV import button must not be exposed on the dedicated page');
+assert.ok(dashboardRuntime.includes('removeQuestionnaireManualImportUi'), 'legacy transformation remains covered until dead runtime cleanup');
 
 // Production must fail closed if the shared ingest secret has not been provisioned.
 assert.ok(deployWorkflow.includes('gcloud secrets describe "$secret"'));
 assert.ok(deployWorkflow.includes('QUESTIONNAIRE_INGEST_SECRET=QUESTIONNAIRE_INGEST_SECRET:latest'));
 assert.ok(deployWorkflow.includes("test \"$questionnaire_probe\" = '401'"));
 assert.ok(deployWorkflow.includes('INVALID_QUESTIONNAIRE_SIGNATURE'));
-assert.ok(productionSmoke.includes('id="qAutoSyncStatus"'));
+assert.ok(productionSmoke.includes('questionnaire-analysis.html'));
 assert.ok(productionSmoke.includes('/api/questionnaire-auto/ingest'));
 assert.ok(productionSmoke.includes("test \"$auto_status\" = '401'"));
 assert.ok(productionSmoke.includes('INVALID_QUESTIONNAIRE_SIGNATURE'));

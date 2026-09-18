@@ -46,6 +46,29 @@ router.post('/questionnaire/statistics', requireManagementRole(['researcher']), 
   }
 });
 
+router.post('/questionnaire/analysis', requireManagementRole(['researcher']), async (_req, res) => {
+  try {
+    const [records, state] = await Promise.all([
+      getAllQuestionnaireRecords(),
+      getDocument(QUESTIONNAIRE_SYNC_STATE_COLLECTION, QUESTIONNAIRE_SYNC_STATE_DOCUMENT),
+    ]);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      success: true,
+      statistics: buildQuestionnaireStatistics(records),
+      descriptive: buildQuestionnaireDescriptiveStatistics(records),
+      revision: {
+        lastIngestedAt: String(state?.lastIngestedAt || ''),
+        lastResponseId: String(state?.lastResponseId || ''),
+        lastSurveyWave: String(state?.lastSurveyWave || ''),
+      },
+    });
+  } catch (error: any) {
+    console.error('Questionnaire analysis failed', { message: error?.message });
+    return res.status(503).json({ success: false, error: 'QUESTIONNAIRE_ANALYSIS_UNAVAILABLE' });
+  }
+});
+
 router.post('/questionnaire/descriptive', requireManagementRole(['researcher']), async (_req, res) => {
   try {
     const records = await getAllQuestionnaireRecords();
