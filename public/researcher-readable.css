@@ -34,6 +34,7 @@ button{min-height:42px}
 .audit-session h4{font-size:16px!important}
 .chart-card h3{font-size:18px!important}
 .chart-card h4{font-size:16px!important}
+#chartTotal svg text,#chartPersistence svg text,#chartSelfRegulation svg text,#chartL2wtc svg text{font-size:13px!important}
 .qd-note,.qd-status,.qd-paired-head p{font-size:14px!important}
 .qd-table{font-size:14px!important}
 .metric span{letter-spacing:.01em}
@@ -42,3 +43,5 @@ button{min-height:42px}
   button,input,select,textarea{font-size:15px!important}
   .title{font-size:22px!important}
 }
+
+#rshSessionDetail b[style*="font-size"]{font-size:14px!important}
