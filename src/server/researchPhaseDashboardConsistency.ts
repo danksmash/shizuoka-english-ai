@@ -8,7 +8,6 @@ import { getAllSessionsForManagement } from './persistence';
 import {
   PHASE_CODEBOOK_ROWS,
   PHASE_IDS,
-  buildPhaseComparison,
   buildPhaseComparisonFromExportSessions,
 } from './researchPhaseAnalyticsRuntime';
 import {
