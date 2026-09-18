@@ -53,7 +53,8 @@ const questionnaireSource = fs.readFileSync('src/server/questionnaireResearch.ts
 assert.ok(questionnaireSource.includes('QUESTIONNAIRE_READ_CACHE_MS = 2_000'), 'Concurrent questionnaire widgets should share a very short read snapshot');
 assert.ok(questionnaireSource.includes('questionnaireReadInFlight'), 'Questionnaire reads must collapse in-flight duplicates');
 const questionnaireRuntime = fs.readFileSync('src/server/questionnaireDashboardRuntime.ts', 'utf8');
-assert.ok(questionnaireRuntime.includes('const questionnairePromise = getAllQuestionnaireRecords()'), 'Questionnaire row-count enrichment must start in parallel with core dashboard loading');
+assert.equal(questionnaireRuntime.includes('questionnairePromise'), false, 'Research Dashboard must not wait for questionnaire reads after the analysis-page split');
+assert.ok(questionnaireRuntime.includes('questionnaireCodebookCount = buildQuestionnaireCodebookRows().length'), 'Only static questionnaire codebook metadata may enrich the dashboard response');
 
 const entry = fs.readFileSync('server-entry.ts', 'utf8');
 assert.ok(entry.includes('manualResearchExclusionGetHandler(path) || resilientResearchDashboardGetHandler(path) || phaseAwareGetHandler(path)'));
