@@ -11,6 +11,7 @@ assert.ok(page.includes('前回正常取得時の結果です'),'failed reloads 
 assert.ok(deploy.includes('EXPECTED_BUILD="${GITHUB_SHA:0:12}"'),'production smoke must verify the exact deployed main SHA');
 assert.ok(deploy.includes("grep -q '7 CSVを一括ZIP'"),'production smoke must verify the current Research Dashboard bundle label');
 assert.ok(deploy.includes("grep -q 'student_questionnaires.csv'"),'production smoke must verify questionnaire UI injection');
+assert.ok(deploy.includes('<<<"$management_html"'),'production smoke must avoid grep -q pipelines that can fail with SIGPIPE on large management HTML');
 assert.ok(deploy.includes("grep -o '/api/management/research.dashboard'"),'production smoke must guard against duplicate dashboard API references');
 assert.ok(deploy.includes("test \"$dashboard_ref_count\" = '1'"),'production smoke must require exactly one dashboard API reference');
 assert.ok(deploy.includes("test \"$dashboard_probe\" = '401'"),'production smoke must preserve the researcher authentication boundary');
