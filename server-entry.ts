@@ -16,6 +16,7 @@ import {
   withResilientResearchPhaseDashboard,
 } from './src/server/researchDashboardResilientRuntime';
 import { withResearchSessionAuditManagementPage } from './src/server/researchSessionAuditManagementRuntime';
+import { withResearchReflectionChartPolish } from './src/server/researchReflectionChartPolishRuntime';
 import {
   createResearchSessionHistoryRouter,
   withResearchSessionHistoryManagementPage,
@@ -36,6 +37,7 @@ application.get = function researchPhaseAwareGet(this: any, path: any, ...handle
     handlers[handlers.length - 1] = withResearchSessionAuditManagementPage(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withResearchSessionHistoryManagementPage(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withQuestionnaireDescriptiveDashboardRuntime(path, handlers[handlers.length - 1]);
+    handlers[handlers.length - 1] = withResearchReflectionChartPolish(path, handlers[handlers.length - 1]);
     if (path === '/api/management/research.dashboard') {
       handlers[handlers.length - 1] = withResilientResearchPhaseDashboard(path, handlers[handlers.length - 1]);
     } else {
