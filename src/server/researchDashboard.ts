@@ -560,9 +560,9 @@ export function buildResearchDashboardData(rawSessions: Record<string, any>[], q
 
   const recentSessions = [...data.sessions]
     .sort((a,b) => String(b.local_started_at || '').localeCompare(String(a.local_started_at || '')))
-    .slice(0,10)
+    .slice(0,50)
     .map((row) => ({
-      local_started_at:row.local_started_at || '', research_id:row.research_id || '', persona_id:row.persona_id || '',
+      session_id:row.session_id || '', local_started_at:row.local_started_at || '', research_id:row.research_id || '', persona_id:row.persona_id || '',
       persona_name:personaNames.get(String(row.persona_id || '')) || '', topic:topicLabel(String(row.topic || '')),
       target_duration_minutes:row.target_duration_minutes || '', data_quality_flag:row.data_quality_flag || '',
     }));

@@ -346,6 +346,18 @@ export async function getAllSessionsForManagement(): Promise<Record<string, any>
   return getSessionsForManagementByLocalDateRange();
 }
 
+export async function getResearchSessionsByResearchIdForManagement(researchId: string): Promise<Record<string, any>[]> {
+  const normalized = String(researchId || '').trim().toUpperCase();
+  if (!normalized) return [];
+  return queryCollection(SESSION_COLLECTION, 'researchId', normalized, 1000);
+}
+
+export async function getResearchSessionByIdForManagement(sessionId: string): Promise<Record<string, any> | null> {
+  const normalized = String(sessionId || '').trim();
+  if (!normalized) return null;
+  return getDocument(SESSION_COLLECTION, normalized);
+}
+
 export async function getTeacherSessionsForManagement(): Promise<Record<string, any>[]> {
   const [rows, students] = await Promise.all([getAllSessionsForManagement(), getStudentRecordsForManagement()]);
   const records = new Map(students.map((student) => [student.studentId, student]));

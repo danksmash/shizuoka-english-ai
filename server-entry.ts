@@ -16,6 +16,10 @@ import {
   withResilientResearchPhaseDashboard,
 } from './src/server/researchDashboardResilientRuntime';
 import { withResearchSessionAuditManagementPage } from './src/server/researchSessionAuditManagementRuntime';
+import {
+  createResearchSessionHistoryRouter,
+  withResearchSessionHistoryManagementPage,
+} from './src/server/researchSessionHistoryRuntime';
 import { manualResearchExclusionGetHandler } from './src/server/researchManualExclusionRuntime';
 
 const application = express.application as any;
@@ -30,6 +34,7 @@ application.get = function researchPhaseAwareGet(this: any, path: any, ...handle
     handlers[handlers.length - 1] = withQuestionnaireResearchRuntime(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withQuestionnaireAutoSyncDashboardRuntime(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withResearchSessionAuditManagementPage(path, handlers[handlers.length - 1]);
+    handlers[handlers.length - 1] = withResearchSessionHistoryManagementPage(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withQuestionnaireDescriptiveDashboardRuntime(path, handlers[handlers.length - 1]);
     if (path === '/api/management/research.dashboard') {
       handlers[handlers.length - 1] = withResilientResearchPhaseDashboard(path, handlers[handlers.length - 1]);
@@ -58,6 +63,10 @@ application.listen = function reflectionAwareListen(this: any, ...args: any[]) {
   if (!this.__questionnaireAutoSyncRoutesMounted) {
     this.use('/api/questionnaire-auto', createQuestionnaireAutoSyncRouter());
     this.__questionnaireAutoSyncRoutesMounted = true;
+  }
+  if (!this.__researchSessionHistoryRoutesMounted) {
+    this.use('/api/management', createResearchSessionHistoryRouter());
+    this.__researchSessionHistoryRoutesMounted = true;
   }
   return originalListen.apply(this, args);
 };
