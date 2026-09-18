@@ -6,7 +6,7 @@ import {
   normalizeFormalResearchExportQuery,
   type ResearchFilterQuery,
 } from './researchDashboard';
-import { getAllSessionsForManagement, getSessionsForManagementByLocalDateRange } from './persistence';
+import { getSessionsForManagementByLocalDateRange } from './persistence';
 import { getAllReflectionRecordsForTeacher, getReflectionRecordsForTeacherDateRange } from './reflectionPersistence';
 import {
   buildResearchLessonReflectionCodebookRows,
