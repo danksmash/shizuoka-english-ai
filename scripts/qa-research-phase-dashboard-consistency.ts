@@ -100,8 +100,8 @@ consistencyHandler({} as any, res, (() => {}) as any);
 
 assert.ok(html.includes('researchPhaseDashboardConsistencyPatch'));
 assert.ok(html.includes("window.__renderPhaseComparison=renderPhaseComparison"));
-assert.ok(html.includes("window.addEventListener('research-dashboard-rendered'"),'Phase rendering must be driven by the successful core dashboard payload');
-assert.equal(html.includes("window.__renderPhaseComparison(d)"), false, 'base renderer must not invoke a second legacy Phase path');
+assert.ok(html.includes("window.__renderPhaseComparison=renderPhaseComparison"),'Phase renderer must be registered once in the injected analytics UI');
+assert.ok(html.includes("window.__renderPhaseComparison(d)"),'base dashboard renderer must hand the successful payload directly to Phase rendering');
 assert.equal(html.includes("fetch('/api/management/research.dashboard?'+phaseParams().toString()"), false, 'Phase UI must not issue a second dashboard request');
 assert.ok(html.includes("v!=='all'||id==='dataScope'"), 'dataScope=all must be sent explicitly');
 assert.ok(html.includes("status==='schedule_missing'"));
