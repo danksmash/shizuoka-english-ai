@@ -21,40 +21,55 @@ jobs:
           set -euo pipefail
           API_URL="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app"
 
-          # The management HTML is public, but questionnaire data/actions remain hidden
-          # behind the researcher login. This check writes no research data.
+          # Research Dashboard and questionnaire analysis are separate production surfaces.
+          # Both HTML pages are public shells; all questionnaire data/actions remain behind researcher auth.
           management=""
+          questionnaire=""
           for attempt in 1 2 3 4 5; do
-            if management=$(curl --fail --silent --show-error --max-time 20 "$API_URL/management"); then
+            if management=$(curl --fail --silent --show-error --max-time 20 "$API_URL/management") \
+              && questionnaire=$(curl --fail --silent --show-error --max-time 20 "$API_URL/questionnaire-analysis.html"); then
               break
             fi
             sleep 3
           done
-          echo "$management" | grep -q 'id="questionnaireSection"'
-          echo "$management" | grep -q '事前・事後質問紙分析'
-          echo "$management" | grep -q 'student_questionnaires'
-          echo "$management" | grep -q 'Holm補正後 p &lt; .05'
-          echo "$management" | grep -q 'id="qAutoSyncStatus"'
-          echo "$management" | grep -q 'Google Forms自動同期'
-          echo "$management" | grep -q '事前／事後はForm IDから自動判定'
-          if echo "$management" | grep -q 'id="qCsvFile"'; then
-            echo 'Unexpected manual questionnaire CSV file input is still visible.' >&2
+          echo "$management" | grep -q 'questionnaire-analysis.html'
+          if echo "$management" | grep -q 'id="questionnaireSection"'; then
+            echo 'Questionnaire analysis is still embedded in Research Dashboard.' >&2
             exit 1
           fi
-          if echo "$management" | grep -q 'id="qImportBtn"'; then
-            echo 'Unexpected manual questionnaire CSV import button is still visible.' >&2
+          echo "$questionnaire" | grep -q 'Study 1 事前・事後質問紙分析'
+          echo "$questionnaire" | grep -q '/api/management/questionnaire/analysis'
+          echo "$questionnaire" | grep -q 'student_questionnaires'
+          echo "$questionnaire" | grep -q 'Holm補正後 p &lt; .05'
+          echo "$questionnaire" | grep -q 'Google Forms自動同期'
+          echo "$questionnaire" | grep -q 'setInterval(pollRevision,30000)'
+          if echo "$questionnaire" | grep -q 'id="qCsvFile"'; then
+            echo 'Unexpected manual questionnaire CSV file input is visible.' >&2
             exit 1
           fi
-          if echo "$management" | grep -q 'id="qWave"'; then
-            echo 'Unexpected manual questionnaire wave selector is still visible.' >&2
+          if echo "$questionnaire" | grep -q 'id="qImportBtn"'; then
+            echo 'Unexpected manual questionnaire CSV import button is visible.' >&2
             exit 1
           fi
-          if echo "$management" | grep -q 'Google Forms回答CSV'; then
-            echo 'Unexpected manual questionnaire CSV label is still visible.' >&2
+          if echo "$questionnaire" | grep -q 'id="qWave"'; then
+            echo 'Unexpected manual questionnaire wave selector is visible.' >&2
+            exit 1
+          fi
+          if echo "$questionnaire" | grep -q 'Google Forms回答CSV'; then
+            echo 'Unexpected manual questionnaire CSV label is visible.' >&2
             exit 1
           fi
 
           # All researcher questionnaire operations must reject an unauthenticated caller.
+          analysis_status=$(curl --silent --show-error --max-time 20 \
+            -o /tmp/questionnaire-analysis.json \
+            -w '%{http_code}' \
+            -X POST "$API_URL/api/management/questionnaire/analysis" \
+            -H 'Content-Type: application/json' \
+            --data '{}')
+          test "$analysis_status" = '401'
+          grep -q '"error":"UNAUTHORIZED"' /tmp/questionnaire-analysis.json
+
           stats_status=$(curl --silent --show-error --max-time 20 \
             -o /tmp/questionnaire-stats.json \
             -w '%{http_code}' \
@@ -102,4 +117,4 @@ jobs:
           test "$auto_status" = '401'
           grep -q '"error":"INVALID_QUESTIONNAIRE_SIGNATURE"' /tmp/questionnaire-auto.json
 
-          echo 'QUESTIONNAIRE PRODUCTION SMOKE PASS: auto-sync UI present; manual CSV controls absent; protected routes reject unauthenticated/unsigned access; no writes performed.'
+          echo 'QUESTIONNAIRE PRODUCTION SMOKE PASS: dedicated analysis page present; Research Dashboard detached; auto-sync UI present; protected routes reject unauthenticated/unsigned access; no writes performed.'
