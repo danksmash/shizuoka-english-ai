@@ -53,8 +53,20 @@ const questionnaireSource = fs.readFileSync('src/server/questionnaireResearch.ts
 assert.ok(questionnaireSource.includes('QUESTIONNAIRE_READ_CACHE_MS = 2_000'), 'Concurrent questionnaire widgets should share a very short read snapshot');
 assert.ok(questionnaireSource.includes('questionnaireReadInFlight'), 'Questionnaire reads must collapse in-flight duplicates');
 const questionnaireRuntime = fs.readFileSync('src/server/questionnaireDashboardRuntime.ts', 'utf8');
+assert.equal(questionnaireRuntime.includes("path === '/api/management/research.dashboard'"), false, 'Questionnaire runtime must not wrap the Research Dashboard at all');
 assert.equal(questionnaireRuntime.includes('questionnairePromise'), false, 'Research Dashboard must not wait for questionnaire reads after the analysis-page split');
-assert.ok(questionnaireRuntime.includes('questionnaireCodebookCount = buildQuestionnaireCodebookRows().length'), 'Only static questionnaire codebook metadata may enrich the dashboard response');
+
+const dashboardSource = fs.readFileSync('src/server/researchDashboard.ts', 'utf8');
+const dashboardFn = dashboardSource.slice(dashboardSource.indexOf('export function buildResearchDashboardData'), dashboardSource.indexOf('undefined', dashboardSource.indexOf('export function buildResearchDashboardData')));
+assert.ok(dashboardFn.includes('buildResearchDataSets(targetSessions)'), 'dashboard must build the detailed research dataset once');
+assert.ok(dashboardFn.includes('buildResearchExportDataSetsFromTechnical(technical)'), 'dashboard export rows must reuse that same detailed parse');
+assert.equal(dashboardFn.includes('buildResearchExportDataSets(targetSessions)'), false, 'dashboard must not reparse all dialogue history for export rows');
+
+const auditRoute = fs.readFileSync('src/server/researchSessionAuditRoutes.ts', 'utf8');
+assert.ok(auditRoute.includes("router.post('/research.session-audit'"), 'session audit must be available as an explicit lazy route');
+assert.ok(resilientSource.includes('sessionAuditLazy: true'), 'dashboard response must mark session audit as lazy');
+assert.equal(resilientSource.includes('buildResearchSessionAuditDetails'), false, 'session audit details must not run on the dashboard critical path');
+assert.ok(resilientSource.includes('buildConsistentPhaseComparisonFromExportSessions'), 'Phase comparison must reuse prepared export session rows');
 
 const entry = fs.readFileSync('server-entry.ts', 'utf8');
 assert.ok(entry.includes('manualResearchExclusionGetHandler(path) || resilientResearchDashboardGetHandler(path) || phaseAwareGetHandler(path)'));
