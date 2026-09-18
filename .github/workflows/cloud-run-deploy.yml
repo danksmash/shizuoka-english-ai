@@ -139,12 +139,22 @@ jobs:
           done
           grep -q '7 CSVを一括ZIP' <<<"$management_html"
           grep -q 'questionnaire-analysis.html' <<<"$management_html"
+          grep -q 'restoreManagementSession' <<<"$management_html"
+          grep -q 'researcher-readable.css' <<<"$management_html"
           if grep -q 'id="questionnaireSection"' <<<"$management_html"; then
             echo 'Questionnaire analysis must not be embedded in Research Dashboard.' >&2
             exit 1
           fi
+          if grep -q '/api/management/questionnaire/statistics\|/api/management/questionnaire/descriptive\|/api/management/questionnaire/revision\|/api/management/questionnaire/analysis' <<<"$management_html"; then
+            echo 'Questionnaire data requests must not be present in Research Dashboard HTML.' >&2
+            exit 1
+          fi
           dashboard_ref_count=$(printf '%s' "$management_html" | grep -o '/api/management/research.dashboard' | wc -l | tr -d ' ')
           test "$dashboard_ref_count" = '1'
+
+          readable_css=$(curl --fail --silent --show-error --max-time 20 "$API_URL/researcher-readable.css")
+          grep -q '.export-card p{font-size:15px!important' <<<"$readable_css"
+          grep -q 'button,input,select,textarea{font-size:16px!important' <<<"$readable_css"
 
           questionnaire_html=""
           for attempt in 1 2 3; do
@@ -163,6 +173,14 @@ jobs:
             -w '%{http_code}' \
             "$API_URL/api/management/research.dashboard?dataScope=main")
           test "$dashboard_probe" = '401'
+
+          audit_probe=$(curl --silent --show-error --max-time 20 \
+            -o /tmp/research-session-audit-auth-probe.json \
+            -w '%{http_code}' \
+            -X POST "$API_URL/api/management/research.session-audit" \
+            -H 'Content-Type: application/json' \
+            --data '{"filters":{"dataScope":"main"}}')
+          test "$audit_probe" = '401'
 
           # Auto-sync must be configured in production. An unsigned probe must be
           # rejected with 401. A missing secret would return 503 and fail deploy.
