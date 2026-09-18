@@ -97,14 +97,14 @@ assert.ok(capturedHtml.includes('id="chartPhaseCountry"'));
 assert.ok(capturedHtml.includes('id="iBefore" hidden'), 'legacy ids must remain hidden so the base renderer cannot break');
 assert.equal(capturedHtml.includes('<h3>告知前／告知後セッション</h3>'), false);
 assert.equal(capturedHtml.includes('<h3>告知後・担当国Persona選択率</h3>'), false);
-assert.ok(capturedHtml.includes("window.addEventListener('research-dashboard-rendered'"),'Phase UI must render from the already-loaded dashboard payload');
+assert.ok(capturedHtml.includes("window.__renderPhaseComparison=renderPhaseComparison"),'Phase UI must expose a renderer for the already-loaded dashboard payload');
 
 const source = fs.readFileSync('src/server/researchPhaseAnalyticsRuntime.ts', 'utf8');
 assert.ok(source.includes('study_schedule_snapshot'));
 assert.ok(source.includes("phase_comparison_filter_exclusions: ['personaId', 'studyPhase']"));
 assert.ok(source.includes('assignment_country_provenance'));
 assert.equal(source.includes("fetch('/api/management/research.dashboard?"),false,'Phase analytics must not issue a second dashboard request');
-assert.ok(source.includes("window.addEventListener('research-dashboard-rendered'"));
+assert.ok(source.includes("window.__renderPhaseComparison=renderPhaseComparison"));
 const entry = fs.readFileSync('server-entry.ts', 'utf8');
 assert.ok(entry.includes('withResearchPhaseAnalyticsRuntime'));
 
