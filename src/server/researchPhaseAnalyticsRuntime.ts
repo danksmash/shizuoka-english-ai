@@ -303,11 +303,6 @@ function injectPhaseAnalyticsUi(html: string): string {
 (function(){
   function p$(id){return document.getElementById(id)}
   function pct(value){return value===null||value===undefined||!isFinite(Number(value))?'—':Number(value).toFixed(1)+'%'}
-  function phaseParams(){
-    var p=typeof filterParams==='function'?filterParams():new URLSearchParams();
-    p.delete('personaId');p.delete('studyPhase');p.delete('dataset');
-    return p;
-  }
   function renderPhaseComparison(data){
     var box=p$('iPhaseCounts'), headline=p$('iPhaseCountryHeadline'), detail=p$('iPhaseCountryDetail'), chart=p$('chartPhaseCountry'), note=p$('chartPhaseNote');
     if(!box||!headline||!detail||!chart)return;
@@ -322,12 +317,7 @@ function injectPhaseAnalyticsUi(html: string): string {
     chart.innerHTML=pc.phases.map(function(r){var v=r.participantMeanSharePercent===null?0:Math.max(0,Math.min(100,Number(r.participantMeanSharePercent)));return '<div class="phase-rate-row"><div class="phase-rate-label">'+r.label+'</div><div class="phase-rate-track"><div class="phase-rate-fill" style="width:'+v+'%"></div></div><div class="phase-rate-value">'+pct(r.participantMeanSharePercent)+'</div><div class="phase-rate-sub">児童 n='+r.participantN+' ／ session '+r.matchedSessions+'/'+r.eligibleSessions+' = '+pct(r.sessionSharePercent)+'</div></div>'}).join('');
     if(note)note.textContent=pc.phase1Note+' '+pc.filterNote;
   }
-  async function loadPhaseComparison(){
-    try{var res=await fetch('/api/management/research.dashboard?'+phaseParams().toString(),{credentials:'same-origin'});if(res.status===401||res.status===403)return;var data=await res.json();if(res.ok&&data&&data.success!==false)renderPhaseComparison(data)}catch(_error){}
-  }
-  ['filterBtn','refreshBtn','resetBtn'].forEach(function(id){var el=p$(id);if(el)el.addEventListener('click',function(){setTimeout(loadPhaseComparison,120)})});
-  ['start','end','dataScope','grade','classId','personaId','studyPhase','topic','completeOnly'].forEach(function(id){var el=p$(id);if(el)el.addEventListener('change',function(){setTimeout(loadPhaseComparison,120)})});
-  var tries=0;(function waitPanel(){tries++;var panel=p$('panel');if(panel&&panel.style.display!=='none'){loadPhaseComparison();return}if(tries<600)setTimeout(waitPanel,500)})();
+  window.__renderPhaseComparison=renderPhaseComparison;
 })();
 </script>`;
   return out.replace('</body>', `${script}</body>`);

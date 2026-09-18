@@ -85,7 +85,7 @@ assert.ok(server.includes("file.dataset==='codebook'"), 'dashboard codebook row 
 assert.ok(server.includes('schema_version:5'), 'bundle manifest schema version must advance for the sixth formal CSV');
 assert.ok(server.includes("requested==='lesson_reflections'"), 'individual formal research CSV route must support lesson_reflections');
 assert.ok(server.includes('getAllReflectionRecordsForTeacher()'), 'formal bundle must read canonical Reflection records');
-assert.ok(page.includes('6 CSVを一括ZIP'), 'researcher UI must advertise six formal CSVs');
+assert.ok(page.includes('7 CSVを一括ZIP'), 'researcher UI must advertise the current seven formal CSVs');
 assert.ok(page.includes('lesson_reflections.csv'), 'researcher UI must explain the lesson Reflection file');
 assert.ok(page.includes('research_id + local_date'), 'researcher UI must document the cross-app join key');
 

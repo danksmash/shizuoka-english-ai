@@ -122,13 +122,6 @@ function patchManagementHtml(html: string): string {
   if (!out.includes(filterCondition)) throw new Error('PHASE_CONSISTENCY_FILTER_PARAMS_ANCHOR_MISSING');
   out = out.replace(filterCondition, "if(v&&(v!=='all'||id==='dataScope'))p.set(id,v)");
 
-  const renderAnchor = 'function renderDashboard(d,appliedQuery){';
-  if (!out.includes(renderAnchor)) throw new Error('PHASE_CONSISTENCY_RENDER_DASHBOARD_ANCHOR_MISSING');
-  out = out.replace(
-    renderAnchor,
-    "function renderDashboard(d,appliedQuery){if(typeof window.__renderPhaseComparison==='function')window.__renderPhaseComparison(d);",
-  );
-
   const statusStart = out.indexOf('    if(!pc||!pc.applicable){');
   const statusEnd = statusStart >= 0 ? out.indexOf('    box.innerHTML=', statusStart) : -1;
   if (statusStart < 0 || statusEnd < 0) throw new Error('PHASE_CONSISTENCY_STATUS_RENDER_ANCHOR_MISSING');
@@ -145,14 +138,6 @@ function patchManagementHtml(html: string): string {
     }
 `;
   out = out.slice(0, statusStart) + stateRenderer + out.slice(statusEnd);
-
-  const loadStart = out.indexOf('  async function loadPhaseComparison(){');
-  const loadEndMarker = "  var tries=0;(function waitPanel(){tries++;var panel=p$('panel');if(panel&&panel.style.display!=='none'){loadPhaseComparison();return}if(tries<600)setTimeout(waitPanel,500)})();\n";
-  const loadEnd = loadStart >= 0 ? out.indexOf(loadEndMarker, loadStart) : -1;
-  if (loadStart < 0 || loadEnd < 0) throw new Error('PHASE_CONSISTENCY_SECOND_REQUEST_ANCHOR_MISSING');
-  out = out.slice(0, loadStart)
-    + '  window.__renderPhaseComparison=renderPhaseComparison;\n'
-    + out.slice(loadEnd + loadEndMarker.length);
 
   const marker = '<script id="researchPhaseDashboardConsistencyPatch">window.__researchPhaseDashboardConsistency=true;</script>';
   return out.replace('</body>', `${marker}</body>`);

@@ -95,7 +95,7 @@ function dashboardWrapper(handler: RequestHandler): RequestHandler {
       const exportFiles = Array.isArray(body.exportFiles)
         ? body.exportFiles.map((file: any) => file.dataset === 'codebook' ? { ...file, rowCount: Number(file.rowCount || 0) + questionnaire.codebookCount } : file)
         : [];
-      exportFiles.splice(Math.max(0, exportFiles.length - 1), 0, { dataset: 'student_questionnaires', label: 'student_questionnaires.csv', rowCount: questionnaire.rows.length });
+      exportFiles.splice(Math.max(0, exportFiles.length - 1), 0, { dataset: 'student_questionnaires', fileName: 'student_questionnaires.csv', contains: '事前・事後質問紙15項目の匿名化回答・尺度得点・調査時点', analysisUse: '主体的に学習に取り組む態度・粘り強さ・学習の自己調整・L2 WTCの事前事後分析', rowCount: questionnaire.rows.length });
       return originalJson({ ...body, exportFiles, questionnaireRowCount: questionnaire.rows.length });
     };
     return handler(req, res, next);
