@@ -99,13 +99,14 @@ assert.equal(stats.calculation.scaleMaximum, 6);
 assert.ok(stats.calculation.absenceRule.includes('current_N_mean_SD'));
 
 const routes = fs.readFileSync('src/server/questionnaireRoutes.ts', 'utf8');
-const runtime = fs.readFileSync('src/server/questionnaireDescriptiveDashboardRuntime.ts', 'utf8');
-const entry = fs.readFileSync('server-entry.ts', 'utf8');
+const page = fs.readFileSync('public/questionnaire-analysis.html', 'utf8');
 assert.ok(routes.includes("router.post('/questionnaire/descriptive'"));
-assert.ok(runtime.includes('欠席者がいる場合も、その時点で回答済みの児童だけ'));
-assert.ok(runtime.includes("fetch('/api/management/questionnaire/descriptive',{method:'POST'"));
-assert.ok(runtime.includes('事前・事後対応分析（Pre/Post 両方がある同一児童のみ）'));
-assert.ok(runtime.includes('6件法平均値'));
-assert.ok(entry.includes('withQuestionnaireDescriptiveDashboardRuntime'));
+assert.ok(routes.includes("router.post('/questionnaire/analysis'"));
+assert.ok(page.includes('各時点で回答済みの児童に基づく N・平均値（M）・標準偏差（SD）'));
+assert.ok(page.includes("api('/api/management/questionnaire/analysis'"));
+assert.ok(page.includes('事前・事後対応分析'));
+assert.ok(page.includes('6件法平均値'));
+assert.ok(page.includes('renderDescriptive'));
+assert.ok(page.includes('renderPaired'));
 
 console.log('Questionnaire descriptive dashboard QA: PASS');
