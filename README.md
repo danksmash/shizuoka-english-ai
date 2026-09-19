@@ -114,6 +114,8 @@ https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app
 6. production health / AI smoke test
 7. Google TTS voice check
 
+重大な本番障害時の復旧手順は [docs/CLOUD_RUN_ROLLBACK_RUNBOOK.md](docs/CLOUD_RUN_ROLLBACK_RUNBOOK.md) を参照してください。ロールバックではFirestore等の研究データを書き換えず、Cloud Runの正常確認済みrevisionへトラフィックを戻します。
+
 ---
 
 ## 🔒 学校利用時の安全性
@@ -166,7 +168,7 @@ npm run dev
 npm run qa
 ```
 
-開発中は変更内容に対応するQA群だけを使い、PRではFull QAを1回通します。
+開発中は変更内容に対応するQA群だけを使い、PRではFull QAを1回通します。変更内容から推奨QAを確認する場合は `npm run qa:suggest` を使います。
 
 ```bash
 npm run qa:foundation
