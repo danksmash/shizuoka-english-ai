@@ -16,6 +16,28 @@
 | `qa:voice-stack` | Azure/TTS voice profile、primary voice、runtime metadata |
 | `qa:full` / `qa` | 上記すべて＋TypeScript型検査 |
 
+### 変更内容から推奨QAを確認する
+
+開発中は次で変更ファイルから推奨QA群を確認できます。
+
+```bash
+npm run qa:suggest
+```
+
+特定ファイルを明示する場合:
+
+```bash
+npm run qa:suggest -- src/server/managementPage.ts
+```
+
+機械可読出力:
+
+```bash
+npm run qa:suggest -- --json
+```
+
+これは**提案専用**です。QAを自動省略したり、PRのFull QAを置き換えたりしません。未分類の実装変更は安全側に倒し、横断的なCI・build・server入口変更は `qa:full` を提案します。
+
 ### 原則
 
 - 同じ不変条件を複数のQAファイルへ重複して追加しない。
@@ -130,3 +152,4 @@ AIによるリポジトリ作業もこの契約に従います。
 - CI / deployの途中状態は、次の意思決定に必要なときだけ確認する。
 - 完了条件を満たしたら追加のポーリング・監査を続けない。
 - 新しい仕組みを追加する前に、既存の仕組みを整理・統合できないか確認する。
+- 本番障害時は、原因調査より先に [Cloud Run 本番ロールバック Runbook](./CLOUD_RUN_ROLLBACK_RUNBOOK.md) に従い、研究データを書き換えずに正常revisionへ復旧する。
