@@ -144,6 +144,8 @@ jobs:
           grep -q 'analysis-session-layout' <<<"$management_html"
           grep -q 'phaseCountryPanelSlot' <<<"$management_html"
           grep -q 'recent-card' <<<"$management_html"
+          grep -q 'syncRecentCardHeight' <<<"$management_html"
+          grep -q '最大50件をこの枠内でスクロール' <<<"$management_html"
           grep -q 'restoreCachedDashboard(currentResearcherUsername)' <<<"$management_html"
           grep -q 'onchange=markDashboardFiltersPending' <<<"$management_html"
           if grep -q 'onchange=scheduleDashboardReload' <<<"$management_html"; then
