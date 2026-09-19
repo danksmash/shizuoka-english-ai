@@ -250,9 +250,31 @@ export function createStudyScheduleRouter() {
 
   router.put('/study-schedules', requireManagementRole(['researcher']), async (req: AuthenticatedRequest, res) => {
     try {
-      const saved = await saveStudySchedule(req.body || {}, req.managementUser?.username || 'researcher');
+      const actor = req.managementUser?.username || 'researcher';
+      const saved = await saveStudySchedule(req.body || {}, actor);
+      const students = await getStudentRecordsForManagement();
+      const classAssignments = students
+        .filter((student) => student.active && student.classId === saved.classId && Boolean(student.assignedPartnerCountry))
+        .map((student) => ({
+          researchId: student.researchId,
+          assignedPartnerCountry: student.assignedPartnerCountry,
+          assignedPartnerId: student.assignedPartnerId,
+          assignmentAnnouncedAt: assignmentAnnouncementIso(saved),
+          expectedAssignedPartnerCountry: student.assignedPartnerCountry,
+          expectedAssignedPartnerId: student.assignedPartnerId,
+        }));
+      const syncedAssignments = classAssignments.length
+        ? await updateStudentResearchAssignments(classAssignments, actor)
+        : [];
       res.setHeader('Cache-Control', 'no-store');
-      return res.json({ success: true, schedule: saved });
+      return res.json({
+        success: true,
+        schedule: saved,
+        assignmentAnnouncementSync: {
+          checked: syncedAssignments.length,
+          changed: syncedAssignments.filter((row) => row.changed).length,
+        },
+      });
     } catch (error: any) {
       const code = String(error?.message || '');
       if (code === 'STUDY_SCHEDULE_REVISION_CONFLICT') return res.status(409).json({ success: false, error: code });
