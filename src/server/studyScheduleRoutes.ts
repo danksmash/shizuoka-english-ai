@@ -166,15 +166,18 @@ function csvCell(value: unknown): string {
 }
 
 async function buildLinkageCsv(): Promise<string> {
-  const [schedules, sessions, reflections] = await Promise.all([
+  const [schedules, sessions, reflections, students] = await Promise.all([
     getAllStudySchedules(),
     getAllSessionsForManagement(),
     getAllReflectionRecordsForTeacher(),
+    getStudentRecordsForManagement(),
   ]);
   const scheduleByClass = new Map(schedules.map((schedule) => [schedule.classId, schedule]));
+  const studentByResearchId = new Map(students.map((student) => [student.researchId, student]));
   const headers = [
     'record_type', 'research_id', 'class_id', 'local_date', 'record_id', 'data_scope', 'study_phase', 'schedule_revision',
     'app_start_date', 'nationality_reveal_date', 'video_view_date', 'exchange_date',
+    'assigned_partner_country', 'assigned_partner_id', 'assignment_announced_at', 'persona_country', 'assigned_country_persona_match',
   ];
   const rows: Record<string, unknown>[] = [];
   for (const session of sessions) {
@@ -188,18 +191,31 @@ async function buildLinkageCsv(): Promise<string> {
       study_phase: phaseForLocalDate(localDate, schedule), schedule_revision: schedule.revision,
       app_start_date: schedule.appStartDate, nationality_reveal_date: schedule.nationalityRevealDate,
       video_view_date: schedule.videoViewDate, exchange_date: schedule.exchangeDate,
+      assigned_partner_country: session.assignedPartnerCountry || '',
+      assigned_partner_id: session.assignedPartnerId || '',
+      assignment_announced_at: session.assignmentAnnouncedAt || '',
+      persona_country: session.personaCountry || '',
+      assigned_country_persona_match: normalizedCountry(session.assignedPartnerCountry) && normalizedCountry(session.personaCountry)
+        ? (normalizedCountry(session.assignedPartnerCountry) === normalizedCountry(session.personaCountry) ? 1 : 0)
+        : '',
     });
   }
   for (const reflection of reflections) {
     const classId = reflection.classId;
     const schedule = scheduleByClass.get(classId as any);
     if (!schedule) continue;
+    const student = studentByResearchId.get(reflection.researchId);
     rows.push({
       record_type: 'lesson_reflection', research_id: reflection.researchId, class_id: classId, local_date: reflection.localDate,
       record_id: reflection.reflectionId, data_scope: researchDataScopeForRow({ class_id: classId, local_date: reflection.localDate }),
       study_phase: phaseForLocalDate(reflection.localDate, schedule), schedule_revision: schedule.revision,
       app_start_date: schedule.appStartDate, nationality_reveal_date: schedule.nationalityRevealDate,
       video_view_date: schedule.videoViewDate, exchange_date: schedule.exchangeDate,
+      assigned_partner_country: student?.assignedPartnerCountry || '',
+      assigned_partner_id: student?.assignedPartnerId || '',
+      assignment_announced_at: student?.assignmentAnnouncedAt || '',
+      persona_country: '',
+      assigned_country_persona_match: '',
     });
   }
   rows.sort((a, b) => String(a.local_date).localeCompare(String(b.local_date)) || String(a.class_id).localeCompare(String(b.class_id)) || String(a.record_type).localeCompare(String(b.record_type)));
@@ -260,8 +276,12 @@ export function createStudyScheduleRouter() {
           assignedPartnerCountry,
           assignedPartnerId,
           assignmentAnnouncedAt: assignedPartnerCountry ? assignmentAnnouncementIso(schedule) : '',
-          expectedAssignedPartnerCountry: input.expectedAssignedPartnerCountry,
-          expectedAssignedPartnerId: input.expectedAssignedPartnerId,
+          ...(Object.prototype.hasOwnProperty.call(input || {}, 'expectedAssignedPartnerCountry')
+            ? { expectedAssignedPartnerCountry: input.expectedAssignedPartnerCountry }
+            : {}),
+          ...(Object.prototype.hasOwnProperty.call(input || {}, 'expectedAssignedPartnerId')
+            ? { expectedAssignedPartnerId: input.expectedAssignedPartnerId }
+            : {}),
         };
       });
       const updated = await updateStudentResearchAssignments(prepared, req.managementUser?.username || 'researcher');
