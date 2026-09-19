@@ -79,6 +79,7 @@ export function suggestQa(filesInput: string[]): QaSuggestion {
   };
 
   for (const file of files) {
+    let fileClassified = false;
     if (/^(README\.md|docs\/.*\.md)$/.test(file)) {
       reasons.add('文書のみの変更は対象QA不要です。PRのFull QAは維持します。');
       continue;
@@ -93,6 +94,7 @@ export function suggestQa(filesInput: string[]): QaSuggestion {
       /^scripts\/build-server\.ts$/,
     ])) {
       groups.add('qa:full');
+      fileClassified = true;
       raiseRisk('high');
       reasons.add('CI・依存関係・build/deploy基盤は横断影響があるためFull QAを推奨します。');
       continue;
@@ -112,6 +114,7 @@ export function suggestQa(filesInput: string[]): QaSuggestion {
     ])) {
       groups.add('qa:voice-stack');
       groups.add('qa:foundation');
+      fileClassified = true;
       raiseRisk('medium');
       reasons.add('音声関連はvoice設定と基礎的な対話・認識の両方を確認します。');
     }
@@ -122,6 +125,7 @@ export function suggestQa(filesInput: string[]): QaSuggestion {
       /^scripts\/qa-(?:persona|20-persona)/,
     ])) {
       groups.add('qa:persona-stack');
+      fileClassified = true;
       raiseRisk('medium');
       reasons.add('Persona定義・画像・研究対象設定はpersona-stackで確認します。');
     }
@@ -134,6 +138,7 @@ export function suggestQa(filesInput: string[]): QaSuggestion {
       /^scripts\/qa-(?:research|management|study-schedule|questionnaire|reflection)/,
     ])) {
       groups.add('qa:research-stack');
+      fileClassified = true;
       raiseRisk('medium');
       reasons.add('研究者画面・Phase・session・質問紙・Reflectionはresearch-stackで確認します。');
     }
@@ -146,6 +151,7 @@ export function suggestQa(filesInput: string[]): QaSuggestion {
       /^scripts\/qa-(?:responsive|dialogue-viewport|setup-column|feedback|ai-reflection)/,
     ])) {
       groups.add('qa:experience');
+      fileClassified = true;
       raiseRisk('medium');
       reasons.add('UI構造・レスポンシブ・操作性はexperienceで確認します。');
     }
@@ -157,11 +163,12 @@ export function suggestQa(filesInput: string[]): QaSuggestion {
     ])) {
       groups.add('qa:foundation');
       groups.add('qa:research-stack');
+      fileClassified = true;
       raiseRisk('high');
       reasons.add('保存・認証・研究データ境界はHigh riskとしてfoundationとresearch-stackを確認します。');
     }
 
-    if (/^(src\/|scripts\/|public\/)/.test(file) && groups.size === 0) {
+    if (/^(src\/|scripts\/|public\/)/.test(file) && !fileClassified) {
       groups.add('qa:foundation');
       raiseRisk('medium');
       reasons.add('未分類の実装変更は安全側に倒してfoundationを推奨します。');
