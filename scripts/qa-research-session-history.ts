@@ -65,6 +65,9 @@ assert.ok(html.includes("api('research.session-detail'"));
 assert.ok(html.includes("api('research.sessions'"));
 assert.ok(html.includes('さらに50件'));
 assert.ok(html.includes('detailCache=new Map()'), 'session detail should be cached in the browser after first load');
+assert.ok(html.includes('.analysis-session-layout .recent-card .table-wrap'),'E-layout recent-session column must expand vertically');
+assert.ok(html.includes('min-height:620px'),'desktop E-layout must expose a useful vertical session list');
+assert.ok(html.includes('@media(max-width:1240px)'),'recent-session explorer must fall back cleanly when the two-column workspace collapses');
 
 const dashboardSource = fs.readFileSync('src/server/researchDashboard.ts', 'utf8');
 assert.ok(dashboardSource.includes('.slice(0,50)'), 'recent anonymized sessions must expose up to 50 rows');

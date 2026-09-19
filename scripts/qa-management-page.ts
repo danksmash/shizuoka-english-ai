@@ -4,6 +4,12 @@ const page=fs.readFileSync('src/server/managementPage.ts','utf8');const server=f
 assert.ok(page.includes('研究データ管理'));assert.ok(page.includes('research.bundle.zip'));assert.ok(!page.includes('教師用管理'));assert.ok(!page.includes('学習者ID管理'));
 assert.ok(page.includes('id="scheduleBtn"'));assert.ok(page.includes('href="/study-schedule.html"'));assert.ok(page.includes('Study 1 日程管理'));assert.ok(page.includes('id="questionnaireBtn"'));assert.ok(page.includes('href="/questionnaire-analysis.html"'));assert.ok(page.includes('質問紙分析'));assert.equal(page.includes('id="questionnaireSection"'),false,'questionnaire analysis must not be embedded in Research Dashboard');
 assert.ok(page.includes('7 CSVを一括ZIP'));assert.equal(page.includes('6 CSVを一括ZIP'),false,'CSV bundle label must match the seven exported CSV files');
+assert.ok(page.includes('analysis-session-layout'),'dashboard must use the E-layout analysis/session workspace');
+assert.ok(page.includes('analysis-column'),'left column must collect research analysis cards');
+assert.ok(page.includes('analysis-secondary'),'quality and expressions must share the lower-left analysis row');
+assert.ok(page.includes('id="phaseCountryPanelSlot"'),'Phase comparison must have a dedicated analysis-column slot');
+assert.ok(page.includes('recent-card'),'recent anonymized sessions must remain a dedicated card');
+assert.equal(page.includes('class="lower section"'),false,'legacy three-card lower grid must not return');
 assert.ok(page.includes("window.__renderPhaseComparison"),'Phase analytics must reuse the successful dashboard payload without a second API request');
 assert.ok(page.includes("if(filterTimer){clearTimeout(filterTimer);filterTimer=0}"),'explicit loads must cancel pending debounced reloads');
 assert.ok(page.includes("dashboardLoading&&dashboardLoadingQuery===query"),'same-query dashboard requests must be deduplicated');
