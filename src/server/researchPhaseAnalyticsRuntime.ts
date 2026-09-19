@@ -300,13 +300,12 @@ function injectPhaseAnalyticsUi(html: string): string {
   if (!html.includes(oldIndicators)) throw new Error('PHASE_ANALYTICS_INDICATOR_ANCHOR_MISSING');
   let out = html.replace(oldIndicators, newIndicators);
 
-  const reflectionCard = '<div class="card chart-card"><h3 id="chartReflectionTitle">AI対話ふりかえり平均（累積総セッション平均・4件法）</h3><div id="chartReflection" class="chart"></div></div></div>';
-  const phaseCard = '<div class="card chart-card"><h3>担当国Persona選択率のPhase別変化</h3><div id="chartPhaseCountry" class="chart"></div><p id="chartPhaseNote" class="muted" style="font-size:11px"></p></div></div>';
-  if (!out.includes(reflectionCard)) throw new Error('PHASE_ANALYTICS_CHART_ANCHOR_MISSING');
-  out = out.replace(reflectionCard, reflectionCard.replace('</div></div>', '</div></div>') + phaseCard.replace(/^/, '').replace('</div></div>', '</div></div>'));
-  out = out.replace('</div></div><div class="card chart-card"><h3>担当国Persona選択率のPhase別変化</h3>', '</div><div class="card chart-card"><h3>担当国Persona選択率のPhase別変化</h3>');
+  const phaseSlot = '<div id="phaseCountryPanelSlot" class="phase-country-slot"></div>';
+  const phaseCard = '<div class="card chart-card phase-country-card"><h3>担当国Persona選択率のPhase別変化</h3><div id="chartPhaseCountry" class="chart"></div><p id="chartPhaseNote" class="muted" style="font-size:11px"></p></div>';
+  if (!out.includes(phaseSlot)) throw new Error('PHASE_ANALYTICS_LAYOUT_SLOT_MISSING');
+  out = out.replace(phaseSlot, '<div id="phaseCountryPanelSlot" class="phase-country-slot">' + phaseCard + '</div>');
 
-  const extraStyle = '<style>.phase-mini{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 10px;font-size:13px}.phase-mini b{font-size:18px}.phase-rate-row{display:grid;grid-template-columns:80px 1fr 58px;gap:8px;align-items:center;margin:16px 4px}.phase-rate-track{height:18px;background:#edf3ff;border-radius:999px;overflow:hidden}.phase-rate-fill{height:100%;background:#4d8df7;border-radius:999px}.phase-rate-label{font-weight:800;color:#425878}.phase-rate-value{font-weight:900;text-align:right}.phase-rate-sub{grid-column:2/4;font-size:11px;color:#64748b;margin-top:-4px}@media(max-width:760px){.phase-mini{grid-template-columns:1fr 1fr}.phase-rate-row{grid-template-columns:70px 1fr 52px}}</style>';
+  const extraStyle = '<style>.phase-country-card{min-height:390px}.phase-country-card .chart{height:330px}.phase-mini{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 10px;font-size:13px}.phase-mini b{font-size:18px}.phase-rate-row{display:grid;grid-template-columns:80px 1fr 58px;gap:8px;align-items:center;margin:16px 4px}.phase-rate-track{height:18px;background:#edf3ff;border-radius:999px;overflow:hidden}.phase-rate-fill{height:100%;background:#4d8df7;border-radius:999px}.phase-rate-label{font-weight:800;color:#425878}.phase-rate-value{font-weight:900;text-align:right}.phase-rate-sub{grid-column:2/4;font-size:11px;color:#64748b;margin-top:-4px}@media(max-width:760px){.phase-mini{grid-template-columns:1fr 1fr}.phase-rate-row{grid-template-columns:70px 1fr 52px}}</style>';
   out = out.replace('</head>', `${extraStyle}</head>`);
 
   const script = `<script>
