@@ -16,6 +16,23 @@ export type ResearchAssignmentMetadata = {
   assignmentAnnouncedAt: string;
 };
 
+export type ResearchAssignmentUpdateInput = {
+  researchId: unknown;
+  assignedPartnerId?: unknown;
+  assignedPartnerCountry?: unknown;
+  assignmentAnnouncedAt?: unknown;
+  expectedAssignedPartnerId?: unknown;
+  expectedAssignedPartnerCountry?: unknown;
+};
+
+export type ResearchAssignmentUpdateResult = {
+  researchId: string;
+  assignedPartnerId: string;
+  assignedPartnerCountry: string;
+  assignmentAnnouncedAt: string;
+  changed: boolean;
+};
+
 function retentionDays(): number {
   const value = Number(process.env.SESSION_RETENTION_DAYS || 1095);
   return Number.isFinite(value) ? Math.max(30, Math.min(3650, Math.round(value))) : 1095;
@@ -164,6 +181,94 @@ export async function getStudentRecordsForManagement(): Promise<Array<{
     });
   }
   return result.sort((a, b) => a.classId.localeCompare(b.classId, 'ja') || (Number(a.attendanceNumber || 999) - Number(b.attendanceNumber || 999)) || a.learningId.localeCompare(b.learningId));
+}
+
+export async function updateStudentResearchAssignments(
+  inputs: ResearchAssignmentUpdateInput[],
+  updatedBy: string,
+): Promise<ResearchAssignmentUpdateResult[]> {
+  if (!Array.isArray(inputs) || inputs.length < 1 || inputs.length > 250) throw new Error('INVALID_RESEARCH_ASSIGNMENT_BATCH');
+  const allRecords = await listCollection(STUDENT_COLLECTION, 1000);
+  const byResearchId = new Map<string, Record<string, any>[]>();
+  for (const record of allRecords) {
+    const researchId = String(record.researchId || '').trim().toUpperCase();
+    if (!researchId) continue;
+    const list = byResearchId.get(researchId) || [];
+    list.push(record);
+    byResearchId.set(researchId, list);
+  }
+
+  const normalizedInputs = inputs.map((input) => {
+    const researchId = typeof input?.researchId === 'string' ? input.researchId.trim().toUpperCase() : '';
+    if (!/^R-[A-Z2-9]{8,20}$/.test(researchId)) throw new Error('INVALID_RESEARCH_ID');
+    const assignedPartnerId = normalizeAssignmentText(input.assignedPartnerId);
+    const assignedPartnerCountry = normalizeAssignmentText(input.assignedPartnerCountry);
+    const rawAnnouncedAt = typeof input.assignmentAnnouncedAt === 'string' ? input.assignmentAnnouncedAt.trim() : '';
+    const assignmentAnnouncedAt = normalizeAssignmentAnnouncedAt(rawAnnouncedAt);
+    if (rawAnnouncedAt && !assignmentAnnouncedAt) throw new Error('INVALID_ASSIGNMENT_ANNOUNCED_AT');
+    return {
+      researchId,
+      assignedPartnerId,
+      assignedPartnerCountry,
+      assignmentAnnouncedAt,
+      expectedAssignedPartnerId: normalizeAssignmentText(input.expectedAssignedPartnerId),
+      expectedAssignedPartnerCountry: normalizeAssignmentText(input.expectedAssignedPartnerCountry),
+      hasExpectedPartnerId: Object.prototype.hasOwnProperty.call(input || {}, 'expectedAssignedPartnerId'),
+      hasExpectedCountry: Object.prototype.hasOwnProperty.call(input || {}, 'expectedAssignedPartnerCountry'),
+    };
+  });
+  if (new Set(normalizedInputs.map((item) => item.researchId)).size !== normalizedInputs.length) throw new Error('DUPLICATE_RESEARCH_ASSIGNMENT');
+
+  const now = new Date().toISOString();
+  const actor = String(updatedBy || 'researcher').slice(0, 100);
+  const results: ResearchAssignmentUpdateResult[] = [];
+  for (const input of normalizedInputs) {
+    const records = byResearchId.get(input.researchId) || [];
+    if (!records.length) throw new Error('RESEARCH_PARTICIPANT_NOT_FOUND');
+    const sorted = records.slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+    const activeRecord = sorted.find((row) => row.active !== false) || sorted[0] || {};
+    const assignmentRecord = sorted.find((row) => row.assignedPartnerId || row.assignedPartnerCountry || row.assignmentAnnouncedAt) || activeRecord;
+    const current = researchAssignmentFromRecord(assignmentRecord);
+    if (input.hasExpectedCountry && input.expectedAssignedPartnerCountry !== current.assignedPartnerCountry) throw new Error('RESEARCH_ASSIGNMENT_CONFLICT');
+    if (input.hasExpectedPartnerId && input.expectedAssignedPartnerId !== current.assignedPartnerId) throw new Error('RESEARCH_ASSIGNMENT_CONFLICT');
+
+    const changed = current.assignedPartnerId !== input.assignedPartnerId
+      || current.assignedPartnerCountry !== input.assignedPartnerCountry
+      || current.assignmentAnnouncedAt !== input.assignmentAnnouncedAt;
+    if (changed) {
+      const historyEvent = {
+        previousPartnerId: current.assignedPartnerId,
+        newPartnerId: input.assignedPartnerId,
+        previousCountry: current.assignedPartnerCountry,
+        newCountry: input.assignedPartnerCountry,
+        previousAnnouncedAt: current.assignmentAnnouncedAt,
+        newAnnouncedAt: input.assignmentAnnouncedAt,
+        updatedAt: now,
+        updatedBy: actor,
+      };
+      for (const record of records) {
+        const id = documentId(record);
+        if (!id) continue;
+        const history = Array.isArray(record.researchAssignmentHistory) ? record.researchAssignmentHistory.slice(-99) : [];
+        await setDocument(STUDENT_COLLECTION, id, {
+          ...withoutInternal(record),
+          assignedPartnerId: input.assignedPartnerId,
+          assignedPartnerCountry: input.assignedPartnerCountry,
+          assignmentAnnouncedAt: input.assignmentAnnouncedAt,
+          researchAssignmentHistory: [...history, historyEvent],
+          updatedAt: now,
+        });
+      }
+    }
+    results.push({
+      researchId: input.researchId,
+      assignedPartnerId: input.assignedPartnerId,
+      assignedPartnerCountry: input.assignedPartnerCountry,
+      assignmentAnnouncedAt: input.assignmentAnnouncedAt,
+      changed,
+    });
+  }
+  return results;
 }
 
 export async function setStudentActive(studentId: string, active: boolean): Promise<void> {
