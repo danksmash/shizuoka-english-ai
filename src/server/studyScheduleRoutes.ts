@@ -40,6 +40,16 @@ function normalizedCountry(value: unknown): string {
   return aliases[raw] || raw;
 }
 
+function canonicalAssignedCountry(value: unknown): string {
+  const raw = String(value || '').trim().slice(0, 120);
+  if (!raw) return '';
+  const normalized = normalizedCountry(raw);
+  const canonical = BASE_COUNTRY_OPTIONS.find((option) => normalizedCountry(option.value) === normalized);
+  if (canonical) return canonical.value;
+  const persona = AI_STUDENTS_MASTER_LIST.find((item) => item.countryJapanese === raw || item.countryNative === raw);
+  return persona?.country || raw;
+}
+
 function assignmentAnnouncementIso(schedule: StudyScheduleRecord): string {
   if (!schedule.nationalityRevealDate) return '';
   return new Date(`${schedule.nationalityRevealDate}T00:00:00+09:00`).toISOString();
@@ -267,7 +277,7 @@ export function createStudyScheduleRouter() {
         if (!participant) throw new Error('RESEARCH_PARTICIPANT_NOT_FOUND');
         const schedule = scheduleByClass.get(participant.classId as any);
         if (!schedule) throw new Error('STUDY_SCHEDULE_NOT_FOUND');
-        const assignedPartnerCountry = typeof input?.assignedPartnerCountry === 'string' ? input.assignedPartnerCountry.trim().slice(0, 120) : '';
+        const assignedPartnerCountry = canonicalAssignedCountry(input?.assignedPartnerCountry);
         const assignedPartnerId = typeof input?.assignedPartnerId === 'string' ? input.assignedPartnerId.trim().slice(0, 120) : '';
         if (assignedPartnerId && !assignedPartnerCountry) throw new Error('ASSIGNED_COUNTRY_REQUIRED_FOR_PARTNER');
         if (assignedPartnerCountry && !schedule.nationalityRevealDate) throw new Error('NATIONALITY_REVEAL_DATE_REQUIRED');
