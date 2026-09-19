@@ -32,6 +32,15 @@ const documentStub: any = {
   body:{appendChild:() => {}},
 };
 const location: any = { href:'', reload:() => {} };
+const sessionStore = new Map<string,string>();
+const sessionStorageStub: any = {
+  get length(){ return sessionStore.size; },
+  key(index:number){ return Array.from(sessionStore.keys())[index] ?? null; },
+  getItem(key:string){ return sessionStore.has(key) ? sessionStore.get(key)! : null; },
+  setItem(key:string,value:string){ sessionStore.set(key,String(value)); },
+  removeItem(key:string){ sessionStore.delete(key); },
+  clear(){ sessionStore.clear(); },
+};
 const sample = {
   success:true,
   metrics:{participantCount:128,totalSessions:384,childUtteranceCount:9842,meanChildWordsPerMinute:18.4,completeRate:98.7,latestAt:'2026-09-03 14:32:00'},
@@ -69,7 +78,7 @@ const sample = {
 const lessonCsv = '\uFEFF"research_id","class_id","data_scope","grade_level","class_number","local_date","status","today_goal","goal_rating","communication_rating"\n"R0001","5-1","test","5","1","2026-09-01","submitted","goal","3","4"\n"R0002","5-1","test","5","1","2026-09-01","submitted","goal","4","3"\n"R0003","5-1","test","5","1","2026-09-02","submitted","goal","4","4"\n';
 const urlApi: any = { createObjectURL:() => 'blob:test', revokeObjectURL:() => {} };
 const context: any = {
-  console, document:documentStub, window:{}, location, alert:() => {}, URL:urlApi, URLSearchParams, Set, Map, Math, Number, String, Array, Object, Date, Blob,
+  console, document:documentStub, window:{}, location, sessionStorage:sessionStorageStub, alert:() => {}, URL:urlApi, URLSearchParams, Set, Map, Math, Number, String, Array, Object, Date, Blob,
   fetch:async(url:string) => {
     fetchCalls.push(url);
     const isLessonCsv = url.includes('/api/management/research.csv') && url.includes('dataset=lesson_reflections');
@@ -206,7 +215,8 @@ assert.equal(pageSource.includes('振り返り平均値（1/3/5）'),false,'obso
 for (const id of ['filterBtn','resetBtn','refreshBtn','bundleBtn','logoutBtn']) assert.ok(pageSource.includes(`id="${id}"`), `button missing ${id}`);
 assert.ok(pageSource.includes("$('filterBtn').onclick=loadDashboard"));
 assert.ok(pageSource.includes("$('refreshBtn').onclick=loadDashboard"));
-assert.ok(pageSource.includes('onchange=scheduleDashboardReload'));
+assert.ok(pageSource.includes('onchange=markDashboardFiltersPending'));
+assert.equal(pageSource.includes('onchange=scheduleDashboardReload'),false,'filter changes must not auto-aggregate');
 assert.ok(pageSource.includes('appliedQueryUrl'));
 assert.ok(pageSource.includes('flex-wrap:wrap'));
 assert.ok(pageSource.includes('.charts{display:grid;grid-template-columns:repeat(2'));
@@ -245,6 +255,38 @@ assert.equal(styledSvg.includes('stroke-dasharray='),false);
 assert.equal(styledSvg.includes('<rect '),false);
 assert.ok(styledSvg.includes('style=\"fill:#111827\"'));
 for (const color of ['#2774ee','#20a567','#f59e0b']) assert.ok(styledSvg.includes(`stroke=\"${color}\"`));
-for (const id of ['start','end','dataScope','grade','classId','personaId','labelCondition','topic','completeOnly']) assert.equal(typeof element(id).onchange,'function',`${id} must auto-refresh`);
+for (const id of ['start','end','dataScope','grade','classId','personaId','labelCondition','topic','completeOnly']) assert.equal(typeof element(id).onchange,'function',`${id} must mark filters pending`);
+
+const dashboardFetchCount = () => fetchCalls.filter((url) => url.includes('/api/management/research.dashboard')).length;
+const beforeChangeFetches = dashboardFetchCount();
+element('grade').value='5';
+element('grade').change();
+assert.equal(dashboardFetchCount(),beforeChangeFetches,'changing a filter must not fetch dashboard data automatically');
+assert.ok(element('dashboardStatus').textContent.includes('「絞り込む」を押すまで再集計しません'));
+
+context.currentResearcherUsername='researcher';
+context.saveDashboardSessionCache('researcher','dataScope=main',sample,123456789);
+const cached = context.readDashboardSessionCache('RESEARCHER');
+assert.equal(cached.query,'dataScope=main');
+assert.equal(cached.data.metrics.totalSessions,384);
+const beforeRestoreFetches = dashboardFetchCount();
+const originalFetch = context.fetch;
+context.fetch = async(url:string) => {
+  fetchCalls.push(url);
+  if (url === '/api/management/me') return {ok:true,status:200,json:async() => ({success:true,user:{username:'researcher',role:'researcher'}})};
+  if (url.includes('/api/management/research.dashboard')) return {ok:true,status:200,json:async() => sample};
+  return originalFetch(url);
+};
+await context.restoreManagementSession();
+assert.equal(dashboardFetchCount(),beforeRestoreFetches,'returning with a valid login and cache must not aggregate again');
+assert.equal(element('mSessions').textContent,384);
+assert.ok(element('dashboardStatus').textContent.includes('前回集計結果を再表示しています'));
+assert.equal(element('dataScope').value,'main');
+
+const beforeRefreshFetches = dashboardFetchCount();
+await element('refreshBtn').onclick();
+assert.equal(dashboardFetchCount(),beforeRefreshFetches+1,'refresh button must explicitly reaggregate dashboard data');
+context.clearDashboardSessionCache('researcher');
+assert.equal(context.readDashboardSessionCache('researcher'),null);
 
 console.log('Research dashboard graph/button/filter linkage QA: PASS');
