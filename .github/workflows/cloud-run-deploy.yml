@@ -145,6 +145,12 @@ jobs:
           grep -q 'phaseCountryPanelSlot' <<<"$management_html"
           grep -q 'recent-card' <<<"$management_html"
           grep -q 'syncRecentCardHeight' <<<"$management_html"
+          grep -q 'measureAnalysisContentHeight' <<<"$management_html"
+          grep -q 'align-items:start' <<<"$management_html"
+          if grep -q 'align-items:stretch}.analysis-column' <<<"$management_html"; then
+            echo 'Research Dashboard E-layout must not stretch the analysis column.' >&2
+            exit 1
+          fi
           grep -q '最大50件をこの枠内でスクロール' <<<"$management_html"
           grep -q 'restoreCachedDashboard(currentResearcherUsername)' <<<"$management_html"
           grep -q 'onchange=markDashboardFiltersPending' <<<"$management_html"

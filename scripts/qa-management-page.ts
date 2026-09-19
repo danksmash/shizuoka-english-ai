@@ -9,7 +9,11 @@ assert.ok(page.includes('analysis-column'),'left column must collect research an
 assert.ok(page.includes('analysis-secondary'),'quality and expressions must share the lower-left analysis row');
 assert.ok(page.includes('id="phaseCountryPanelSlot"'),'Phase comparison must have a dedicated analysis-column slot');
 assert.ok(page.includes('recent-card'),'recent anonymized sessions must remain a dedicated card');
-assert.ok(page.includes('.recent-card{min-width:0;min-height:0;height:100%;display:flex;flex-direction:column;overflow:hidden}'),'desktop recent-session contents must not determine the two-column workspace height');
+assert.ok(page.includes('.analysis-session-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(590px,.8fr);gap:12px;margin-top:12px;align-items:start}'),'desktop E-layout must preserve intrinsic column heights');
+assert.equal(page.includes('align-items:stretch}.analysis-column'),false,'stretch must never return because it makes the left measurement depend on the right session column');
+assert.ok(page.includes('.analysis-column{min-width:0;display:grid;gap:10px;align-content:start;align-self:start}'),'left analysis column must opt out of grid stretching');
+assert.ok(page.includes('.recent-card{min-width:0;min-height:0;height:auto;align-self:start;display:flex;flex-direction:column;overflow:hidden}'),'recent-session card must start from intrinsic height before JS synchronization');
+assert.equal(page.includes('.recent-card{min-width:0;min-height:0;height:100%'),false,'desktop recent-session card must not use height:100%');
 assert.ok(page.includes('.recent-card>.table-wrap{flex:1 1 auto;min-height:0;overflow:auto;scrollbar-gutter:stable}'),'session rows must scroll inside the card while the outer height stays balanced');
 assert.equal(page.includes('class="lower section"'),false,'legacy three-card lower grid must not return');
 assert.ok(page.includes("window.__renderPhaseComparison"),'Phase analytics must reuse the successful dashboard payload without a second API request');

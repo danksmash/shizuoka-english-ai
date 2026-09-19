@@ -288,6 +288,17 @@ const HISTORY_SCRIPT = `<script id="researchSessionHistoryScript">
   var recentRows=[],historyCache=new Map(),detailCache=new Map(),allRows=[],allTotal=0,allNext=null,allSearchTimer=0;
   function h$(id){return document.getElementById(id)}
   var heightObserver=null,heightSyncFrame=0;
+  function measureAnalysisContentHeight(left){
+    var children=Array.prototype.filter.call(left.children,function(node){
+      return node&&node.nodeType===1&&window.getComputedStyle(node).display!=='none';
+    });
+    if(!children.length)return 0;
+    var first=children[0].getBoundingClientRect();
+    var last=children[children.length-1].getBoundingClientRect();
+    var style=window.getComputedStyle(left);
+    var padTop=parseFloat(style.paddingTop)||0,padBottom=parseFloat(style.paddingBottom)||0;
+    return Math.ceil(Math.max(0,last.bottom-first.top)+padTop+padBottom);
+  }
   function syncRecentCardHeight(){
     if(heightSyncFrame)cancelAnimationFrame(heightSyncFrame);
     heightSyncFrame=requestAnimationFrame(function(){
@@ -295,9 +306,16 @@ const HISTORY_SCRIPT = `<script id="researchSessionHistoryScript">
       var left=document.querySelector('.analysis-session-layout .analysis-column');
       var card=document.querySelector('.analysis-session-layout .recent-card');
       if(!left||!card)return;
-      if(window.matchMedia('(max-width:1240px)').matches){card.style.height='';return}
-      var height=Math.round(left.getBoundingClientRect().height);
-      if(height>0)card.style.height=height+'px';
+      if(window.matchMedia('(max-width:1240px)').matches){
+        card.style.height='';
+        card.style.maxHeight='';
+        return;
+      }
+      var height=measureAnalysisContentHeight(left);
+      if(height>0){
+        card.style.height=height+'px';
+        card.style.maxHeight=height+'px';
+      }
     });
   }
   function watchWorkspaceHeight(){
@@ -307,6 +325,7 @@ const HISTORY_SCRIPT = `<script id="researchSessionHistoryScript">
     if(typeof ResizeObserver==='function'){
       heightObserver=new ResizeObserver(function(){syncRecentCardHeight()});
       heightObserver.observe(left);
+      Array.prototype.forEach.call(left.children,function(node){if(node&&node.nodeType===1)heightObserver.observe(node)});
     }
     window.addEventListener('resize',syncRecentCardHeight,{passive:true});
     syncRecentCardHeight();
