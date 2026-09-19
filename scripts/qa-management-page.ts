@@ -9,6 +9,8 @@ assert.ok(page.includes('analysis-column'),'left column must collect research an
 assert.ok(page.includes('analysis-secondary'),'quality and expressions must share the lower-left analysis row');
 assert.ok(page.includes('id="phaseCountryPanelSlot"'),'Phase comparison must have a dedicated analysis-column slot');
 assert.ok(page.includes('recent-card'),'recent anonymized sessions must remain a dedicated card');
+assert.ok(page.includes('.recent-card{min-width:0;min-height:0;height:100%;display:flex;flex-direction:column;overflow:hidden}'),'desktop recent-session contents must not determine the two-column workspace height');
+assert.ok(page.includes('.recent-card>.table-wrap{flex:1 1 auto;min-height:0;overflow:auto;scrollbar-gutter:stable}'),'session rows must scroll inside the card while the outer height stays balanced');
 assert.equal(page.includes('class="lower section"'),false,'legacy three-card lower grid must not return');
 assert.ok(page.includes("window.__renderPhaseComparison"),'Phase analytics must reuse the successful dashboard payload without a second API request');
 assert.ok(page.includes("if(filterTimer){clearTimeout(filterTimer);filterTimer=0}"),'explicit loads must cancel pending debounced reloads');
