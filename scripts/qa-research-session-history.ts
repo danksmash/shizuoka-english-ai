@@ -77,6 +77,10 @@ assert.ok(html.includes("card.style.maxHeight=''"),'responsive mode must clear t
 assert.ok(html.includes('ResizeObserver'),'left analysis changes must resynchronize the recent-session card');
 assert.ok(html.includes('最大50件をこの枠内でスクロール'),'UI must explain that up to 50 recent sessions scroll inside the fixed-height card');
 assert.ok(html.includes('@media(max-width:1240px)'),'recent-session explorer must fall back cleanly when the two-column workspace collapses');
+assert.ok(html.includes('grid-template-columns:max-content 44px minmax(0,1fr)'),'dialogue time must size to its content so it cannot collide with the speaker label');
+assert.ok(html.includes('.rsh-time{white-space:nowrap;font-variant-numeric:tabular-nums'),'dialogue time must stay on one line with stable numeric spacing');
+assert.ok(html.includes('class="rsh-time"'),'dialogue timestamps must use the dedicated non-overlapping time cell');
+assert.equal(html.includes('grid-template-columns:48px 44px minmax(0,1fr)'),false,'the old too-narrow fixed time column must not return');
 
 const dashboardSource = fs.readFileSync('src/server/researchDashboard.ts', 'utf8');
 assert.ok(dashboardSource.includes('.slice(0,50)'), 'recent anonymized sessions must expose up to 50 rows');
