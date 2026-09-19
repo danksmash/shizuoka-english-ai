@@ -458,6 +458,7 @@ export function buildResearchDashboardData(
   const complete = data.sessions.filter((row) => String(row.data_quality_flag || '') === 'complete').length;
   const latestAt = data.sessions.map((row) => String(row.local_ended_at || row.local_started_at || '')).sort().at(-1) || '';
   const sessionWordsPerMinute = (row: Row): number | null => {
+    if (String(row.data_quality_flag || '') === 'missing_core') return null;
     const words = Number(row.child_total_words);
     const seconds = Number(row.actual_duration_seconds);
     const childTurns = Number(row.child_turn_count);
@@ -621,7 +622,7 @@ export function buildResearchDashboardData(
             wpmSum += wpm;
             wpmN += 1;
           }
-          if (String(row.reflection_scale_version || '') === '4point-v1') {
+          if (String(row.data_quality_flag || '') !== 'missing_core' && String(row.reflection_scale_version || '') === '4point-v1') {
             [row.reflection_understood_partner,row.reflection_conveyed_ideas,row.reflection_noticed_language_culture].forEach((value, index) => {
               const rating = Number(value);
               if ([1,2,3,4].includes(rating)) {
