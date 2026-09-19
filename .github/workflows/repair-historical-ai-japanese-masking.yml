@@ -1,0 +1,59 @@
+name: Repair historical AI Japanese masking
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/repair-historical-ai-japanese-masking.ts'
+      - 'scripts/historical-ai-japanese-repair-manifest.json'
+      - '.github/workflows/repair-historical-ai-japanese-masking.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
+
+      - name: Repair audited AI Japanese translations
+        env:
+          GOOGLE_CLOUD_PROJECT: shizuoka-english-ai
+          FIRESTORE_DATABASE_ID: '(default)'
+          REPAIR_OUTPUT_DIR: repair-output
+        run: npx tsx scripts/repair-historical-ai-japanese-masking.ts
+
+      - name: Upload non-sensitive repair summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-ai-japanese-repair-summary
+          path: repair-output/
+          if-no-files-found: error
+          retention-days: 14
