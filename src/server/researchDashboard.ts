@@ -457,15 +457,16 @@ export function buildResearchDashboardData(
   const participants = new Set(data.sessions.map((row) => String(row.research_id || '')).filter(Boolean));
   const complete = data.sessions.filter((row) => String(row.data_quality_flag || '') === 'complete').length;
   const latestAt = data.sessions.map((row) => String(row.local_ended_at || row.local_started_at || '')).sort().at(-1) || '';
-  let totalWords = 0; let totalSeconds = 0;
-  for (const row of data.sessions) {
+  const sessionWordsPerMinute = (row: Row): number | null => {
+    if (String(row.data_quality_flag || '') === 'missing_core') return null;
     const words = Number(row.child_total_words);
     const seconds = Number(row.actual_duration_seconds);
-    if (Number.isFinite(words) && Number.isFinite(seconds) && seconds > 0) {
-      totalWords += words; totalSeconds += seconds;
-    }
-  }
-  const meanChildWordsPerMinute = totalSeconds > 0 ? round(totalWords * 60 / totalSeconds, 1) : 0;
+    const childTurns = Number(row.child_turn_count);
+    if (!Number.isFinite(words) || words < 0 || !Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(childTurns) || childTurns <= 0) return null;
+    return words * 60 / seconds;
+  };
+  const sessionWpmValues = data.sessions.map(sessionWordsPerMinute).filter((value): value is number => value !== null);
+  const meanChildWordsPerMinute = sessionWpmValues.length ? round(average(sessionWpmValues), 1) : 0;
 
   type SeriesBucket = { sessions:number; words:number[]; childWords:number; durationSeconds:number; reflections:[number[],number[],number[]] };
   const daily = new Map<string, SeriesBucket>();
@@ -597,6 +598,55 @@ export function buildResearchDashboardData(
   const aggregation = dailyRows.length > 21 ? 'weekly' : 'daily';
   const chartRows = aggregation === 'weekly' ? weeklyRows : dailyRows;
 
+  const cumulativeDailyRows = (() => {
+    const rowsByDate = new Map<string, Row[]>();
+    for (const row of data.sessions) {
+      const date = String(row.local_date || '');
+      if (!date) continue;
+      const rows = rowsByDate.get(date) || [];
+      rows.push(row);
+      rowsByDate.set(date, rows);
+    }
+    let cumulativeSessions = 0;
+    let wpmSum = 0;
+    let wpmN = 0;
+    const reflectionSums = [0,0,0];
+    const reflectionNs = [0,0,0];
+    return [...rowsByDate.entries()]
+      .sort(([a],[b]) => a.localeCompare(b))
+      .map(([date, rows]) => {
+        for (const row of rows) {
+          cumulativeSessions += 1;
+          const wpm = sessionWordsPerMinute(row);
+          if (wpm !== null) {
+            wpmSum += wpm;
+            wpmN += 1;
+          }
+          if (String(row.data_quality_flag || '') !== 'missing_core' && String(row.reflection_scale_version || '') === '4point-v1') {
+            [row.reflection_understood_partner,row.reflection_conveyed_ideas,row.reflection_noticed_language_culture].forEach((value, index) => {
+              const rating = Number(value);
+              if ([1,2,3,4].includes(rating)) {
+                reflectionSums[index] += rating;
+                reflectionNs[index] += 1;
+              }
+            });
+          }
+        }
+        return {
+          date,
+          sessions:cumulativeSessions,
+          mean_child_words_per_minute:wpmN ? round(wpmSum / wpmN, 1) : null,
+          mean_child_words_per_minute_n:wpmN,
+          reflection_understood:reflectionNs[0] ? round(reflectionSums[0] / reflectionNs[0], 2) : null,
+          reflection_understood_n:reflectionNs[0],
+          reflection_conveyed:reflectionNs[1] ? round(reflectionSums[1] / reflectionNs[1], 2) : null,
+          reflection_conveyed_n:reflectionNs[1],
+          reflection_culture:reflectionNs[2] ? round(reflectionSums[2] / reflectionNs[2], 2) : null,
+          reflection_culture_n:reflectionNs[2],
+        };
+      });
+  })();
+
   const payload = {
     success:true,
     metrics:{
@@ -627,7 +677,7 @@ export function buildResearchDashboardData(
       labelConditions:['shown','hidden'],
       topics:['intro','favorites','shizuoka_culture','talents','daily_routine','free'],
     },
-    charts:{ daily:chartRows, aggregation, personas:personaUsage },
+    charts:{ daily:chartRows, cumulativeDaily:cumulativeDailyRows, aggregation, personas:personaUsage },
     dataQuality:quality,
     systemQuality,
     topExpressions,

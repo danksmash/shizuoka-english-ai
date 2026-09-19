@@ -4,8 +4,8 @@ function injectReflectionChartPolish(html: string): string {
   if (!html.includes('id="chartReflection"') || html.includes('researchReflectionChartPolish')) return html;
   const script = `<script id="researchReflectionChartPolish">
 (function(){
-  function patchReflectionMarkers(){
-    var svg=document.querySelector('#chartReflection svg');
+  function patchResearchLineMarkers(chartId){
+    var svg=document.querySelector('#'+chartId+' svg');
     if(!svg)return;
     var order={'#2774ee':0,'#20a567':1,'#f59e0b':2};
     var markers=[];
@@ -49,13 +49,14 @@ function injectReflectionChartPolish(html: string): string {
   var queued=false;
   function schedule(){
     if(queued)return;queued=true;
-    var run=function(){queued=false;patchReflectionMarkers()};
+    var run=function(){queued=false;patchResearchLineMarkers('chartReflection');patchResearchLineMarkers('chartWords')};
     if(window.requestAnimationFrame)window.requestAnimationFrame(run);else setTimeout(run,0);
   }
   function watch(){
-    var chart=document.getElementById('chartReflection');if(!chart)return;
+    var charts=['chartReflection','chartWords'].map(function(id){return document.getElementById(id)}).filter(Boolean);
+    if(!charts.length)return;
     schedule();
-    if(window.MutationObserver)new MutationObserver(schedule).observe(chart,{childList:true,subtree:true});
+    if(window.MutationObserver)charts.forEach(function(chart){new MutationObserver(schedule).observe(chart,{childList:true,subtree:true})});
   }
   setTimeout(watch,700);
 })();

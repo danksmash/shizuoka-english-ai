@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { managementPageHtml } from '../src/server/managementPage';
+import { buildResearchDashboardData } from '../src/server/researchDashboard';
 
 const html = managementPageHtml();
 const match = html.match(/<script>([\s\S]*?)<\/script>/);
@@ -55,6 +56,10 @@ const sample = {
       {date:'2026-09-01',sessions:45,mean_child_words:12.5,mean_child_words_per_minute:17.2,reflection_understood:3.2,reflection_understood_n:45,reflection_conveyed:3.2,reflection_conveyed_n:45,reflection_culture:3.2,reflection_culture_n:44},
       {date:'2026-09-02',sessions:52,mean_child_words:14.2,mean_child_words_per_minute:19.1,reflection_understood:3.5,reflection_understood_n:52,reflection_conveyed:3.4,reflection_conveyed_n:51,reflection_culture:3.3,reflection_culture_n:50},
     ],
+    cumulativeDaily:[
+      {date:'2026-09-01',sessions:45,mean_child_words_per_minute:17.2,mean_child_words_per_minute_n:45,reflection_understood:3.2,reflection_understood_n:45,reflection_conveyed:3.2,reflection_conveyed_n:45,reflection_culture:3.2,reflection_culture_n:44},
+      {date:'2026-09-02',sessions:97,mean_child_words_per_minute:18.3,mean_child_words_per_minute_n:97,reflection_understood:3.36,reflection_understood_n:97,reflection_conveyed:3.3,reflection_conveyed_n:96,reflection_culture:3.25,reflection_culture_n:94},
+    ],
     personas:[{label:'Emma',value:45},{label:'Rahul',value:30}],aggregation:'daily',
   },
   lessonReflectionRowCount:3,
@@ -108,11 +113,15 @@ assert.equal(element('iIndividual').textContent, 92);
 assert.ok(element('iIndividualDetail').textContent.includes('54'));
 for (const id of ['chartDaily','chartPersona']) assert.ok(element(id).innerHTML.includes('bar-chart-html'), `${id} must render readable HTML bars`);
 for (const id of ['chartWords','chartReflection']) assert.ok(element(id).innerHTML.includes('<svg'), `${id} must render inline SVG`);
-assert.equal(element('chartReflectionTitle').textContent,'AI対話ふりかえり平均（4件法）');
+assert.equal(element('chartWordsTitle').textContent,'1分あたり平均発話語数（累積総セッション平均・日別）');
+assert.equal(element('chartReflectionTitle').textContent,'AI対話ふりかえり平均（累積総セッション平均・4件法）');
 assert.ok(element('chartReflection').innerHTML.includes('相手の話を聞いて分かる'));
 assert.ok(element('chartReflection').innerHTML.includes('自分の考えを伝える'));
 assert.ok(element('chartReflection').innerHTML.includes('新しい言葉や文化に気づいた'));
-assert.ok(element('chartReflection').innerHTML.includes('1 = 次はがんばる'));
+assert.ok(element('chartReflection').innerHTML.includes('当日までの有効回答の累積平均'));
+assert.ok(element('chartWords').innerHTML.includes('当日までの有効セッション累積平均'));
+assert.ok(element('chartWords').innerHTML.includes('n=97'));
+assert.equal(element('chartWords').innerHTML.includes('class=\"svg-value\"'),false,'cumulative words chart must not print dense point labels');
 assert.ok(element('chartReflection').innerHTML.includes('class="reflection-axis-label">1</text>') && element('chartReflection').innerHTML.includes('class="reflection-axis-label">4</text>'));
 assert.ok(element('chartReflection').innerHTML.includes('#2774ee') && element('chartReflection').innerHTML.includes('#20a567') && element('chartReflection').innerHTML.includes('#f59e0b'));
 assert.ok(element('chartReflection').innerHTML.includes('<circle') && element('chartReflection').innerHTML.includes('<rect') && element('chartReflection').innerHTML.includes('<polygon'));
@@ -209,7 +218,9 @@ assert.ok(pageSource.includes('個別利用らしいセッション'));
 assert.ok(pageSource.includes('主研究データとAI/TTSのシステム品質は分離'));
 assert.ok(pageSource.includes('AI対話ふりかえりグラフは'));
 assert.ok(pageSource.includes('lesson_reflections.csv として別に保持'));
-assert.ok(pageSource.includes('AI対話ふりかえり平均（4件法）'));
+assert.ok(pageSource.includes('AI対話ふりかえり平均（累積総セッション平均・4件法）'));
+assert.ok(pageSource.includes('1分あたり平均発話語数（累積総セッション平均・日別）'));
+assert.ok(pageSource.includes("research-dashboard-session-v2:"));
 assert.ok(pageSource.includes('.reflection-axis-label{font-size:18px'));
 assert.equal(pageSource.includes('振り返り平均値（1/3/5）'),false,'obsolete 1/3/5 chart title must not return');
 for (const id of ['filterBtn','resetBtn','refreshBtn','bundleBtn','logoutBtn']) assert.ok(pageSource.includes(`id="${id}"`), `button missing ${id}`);
@@ -288,5 +299,34 @@ await element('refreshBtn').onclick();
 assert.equal(dashboardFetchCount(),beforeRefreshFetches+1,'refresh button must explicitly reaggregate dashboard data');
 context.clearDashboardSessionCache('researcher');
 assert.equal(context.readDashboardSessionCache('researcher'),null);
+
+
+const words = (count:number) => Array.from({length:count},() => 'hello').join(' ');
+const researchSession = (id:string,date:string,wordCount:number,durationSeconds:number,reflection:any,withChild=true) => {
+  const startedAt = Date.parse(date+'T01:00:00.000Z');
+  const history:any[] = [{id:id+'-a',sender:'ai',englishText:'Hello. How are you?',japaneseText:'こんにちは。',timestamp:startedAt}];
+  if(withChild) history.push({id:id+'-c',sender:'child',englishText:words(wordCount),japaneseText:'',timestamp:startedAt+10000});
+  return {
+    schemaVersion:4,researchSchemaVersion:'research-2026-v4',researchId:'R-'+id,studentId:'S-'+id,classId:'5-1',sessionId:id,
+    aiStudentId:'emma_usa',personaId:'emma_usa',topic:'favorites',targetDurationMinutes:2,actualDurationSeconds:durationSeconds,
+    startedAt:new Date(startedAt).toISOString(),endedAt:new Date(startedAt+durationSeconds*1000).toISOString(),
+    history,reflection,systemEvents:[{type:'session_finish',timestamp:startedAt+durationSeconds*1000-1000}],
+  };
+};
+const cumulativeDashboard:any = buildResearchDashboardData([
+  researchSession('cum-1','2026-09-17',10,60,{scaleVersion:'4point-v1',understoodPartner:2,conveyedIdeas:3,noticedLanguageCulture:4}),
+  researchSession('cum-2','2026-09-17',20,60,{scaleVersion:'4point-v1',understoodPartner:4,conveyedIdeas:3,noticedLanguageCulture:2}),
+  researchSession('cum-3','2026-09-18',60,120,{scaleVersion:'4point-v1',understoodPartner:4,conveyedIdeas:4,noticedLanguageCulture:4}),
+  researchSession('cum-4','2026-09-19',0,60,null,false),
+],{dataScope:'main'});
+assert.equal(cumulativeDashboard.metrics.meanChildWordsPerMinute,20,'top WPM metric must average valid session WPM equally, not weight by session duration');
+assert.deepEqual(cumulativeDashboard.charts.cumulativeDaily.map((row:any)=>({
+  date:row.date,wpm:row.mean_child_words_per_minute,wpmN:row.mean_child_words_per_minute_n,sessions:row.sessions,
+  understood:row.reflection_understood,understoodN:row.reflection_understood_n,
+})),[
+  {date:'2026-09-17',wpm:15,wpmN:2,sessions:2,understood:3,understoodN:2},
+  {date:'2026-09-18',wpm:20,wpmN:3,sessions:3,understood:3.33,understoodN:3},
+  {date:'2026-09-19',wpm:20,wpmN:3,sessions:4,understood:3.33,understoodN:3},
+],'daily trend points must be cumulative over individual valid sessions/answers, never an average of daily averages');
 
 console.log('Research dashboard graph/button/filter linkage QA: PASS');

@@ -300,7 +300,7 @@ function injectPhaseAnalyticsUi(html: string): string {
   if (!html.includes(oldIndicators)) throw new Error('PHASE_ANALYTICS_INDICATOR_ANCHOR_MISSING');
   let out = html.replace(oldIndicators, newIndicators);
 
-  const reflectionCard = '<div class="card chart-card"><h3 id="chartReflectionTitle">AI対話ふりかえり平均（4件法）</h3><div id="chartReflection" class="chart"></div></div></div>';
+  const reflectionCard = '<div class="card chart-card"><h3 id="chartReflectionTitle">AI対話ふりかえり平均（累積総セッション平均・4件法）</h3><div id="chartReflection" class="chart"></div></div></div>';
   const phaseCard = '<div class="card chart-card"><h3>担当国Persona選択率のPhase別変化</h3><div id="chartPhaseCountry" class="chart"></div><p id="chartPhaseNote" class="muted" style="font-size:11px"></p></div></div>';
   if (!out.includes(reflectionCard)) throw new Error('PHASE_ANALYTICS_CHART_ANCHOR_MISSING');
   out = out.replace(reflectionCard, reflectionCard.replace('</div></div>', '</div></div>') + phaseCard.replace(/^/, '').replace('</div></div>', '</div></div>'));
