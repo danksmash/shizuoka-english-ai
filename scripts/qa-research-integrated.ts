@@ -39,7 +39,27 @@ run('sequence',()=>{
   assert.equal(unordered.sessions.find(r=>r.session_id==='seq_a')?.lifetime_session_number,1); assert.equal(unordered.sessions.find(r=>r.session_id==='seq_b')?.lifetime_session_number,2);
 });
 run('privacy',()=>{
-  const masked=maskTextForResearchExport('My name is Jonah Smith. I go to Kitahama Elementary School. My code is A7M4.'); for(const secret of ['Jonah Smith','Kitahama Elementary School','A7M4'])assert.equal(masked.includes(secret),false); assert.equal(maskTextForResearchExport('I like soccer because it is fun.'),'I like soccer because it is fun.');
+  const masked=maskTextForResearchExport('My name is Jonah Smith. I go to Kitahama Elementary School. My code is A7M4.');
+  for(const secret of ['Jonah Smith','Kitahama Elementary School','A7M4'])assert.equal(masked.includes(secret),false);
+  assert.equal(maskTextForResearchExport('I like soccer because it is fun.'),'I like soccer because it is fun.');
+  assert.equal(maskTextForResearchExport("I'm Taro."),"I'm Taro.",'bare self-introduction must require dialogue context');
+  assert.equal(maskTextForResearchExport('私は犬が好きです。'),'私は犬が好きです。','ordinary Japanese translation must not be treated as a name');
+
+  const privacyData=buildResearchDataSets([{
+    ...clustered[0],sessionId:'privacy_mask',researchId:'RPRIVACY',
+    history:[
+      {id:'pq',sender:'ai',englishText:"What's your name?",japaneseText:'お名前は何ですか？',timestamp:base},
+      {id:'pc',sender:'child',englishText:"I'm Taro.",japaneseText:'私は太郎です。',timestamp:base+1000,wordCount:2},
+      {id:'pa',sender:'ai',englishText:'I like dogs. They are so cute.',japaneseText:'私は犬が好きです。とても可愛いです。',timestamp:base+2000},
+    ],
+  }] as any);
+  const childTurn=privacyData.turns.find(r=>r.turn_sequence===2)!;
+  const aiTurn=privacyData.turns.find(r=>r.turn_sequence===3)!;
+  assert.equal(childTurn.english_text_anonymized,"I'm [name omitted].");
+  assert.equal(childTurn.japanese_translation,'私は [name omitted] です。');
+  assert.equal(childTurn.word_count,2,'learner word count must use the original stored wordCount');
+  assert.equal(aiTurn.english_text_anonymized,'I like dogs. They are so cute.');
+  assert.equal(aiTurn.japanese_translation,'私は犬が好きです。とても可愛いです。');
 });
 run('source',()=>{
   const source=fs.readFileSync('src/server/researchExport.ts','utf8'); assert.equal(source.includes('SCHOOL_START_MINUTE'),false); assert.equal(source.includes('SCHOOL_END_MINUTE'),false); assert.ok(source.includes("'group_like' | 'individual_like' | 'unknown'")); const management=fs.readFileSync('src/server/managementPage.ts','utf8'); assert.equal(management.includes('教師用管理'),false); assert.ok(management.includes('告知前／告知後セッション')); assert.ok(management.includes('担当国Persona選択率')); assert.ok(management.includes('個別利用らしいセッション'));

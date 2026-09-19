@@ -2,7 +2,7 @@ import { analyzeChildCommunication, countEnglishWords } from '../dataContract';
 import { detectPersonaProfileExpressions, getPersonaResearchMetadata, PERSONA_DICTIONARY_VERSION } from '../data/personaResearch';
 import { detectVocabularyInText } from '../data/vocabulary56';
 import type { ChatMessage, VisualVocabularyItem } from '../types';
-import { maskTextForResearchExport } from '../utils/privacy';
+import { maskChildMessageForResearch } from '../utils/privacy';
 
 export type ResearchDatasetName = 'sessions' | 'turns' | 'expressions' | 'system_events';
 type UsageContext = 'group_like' | 'individual_like' | 'unknown';
@@ -289,24 +289,26 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
     });
 
     const speakerCounts = { child: 0, ai: 0 };
+    let previousAiText = '';
     history.forEach((message, index) => {
       speakerCounts[message.sender] += 1;
       const flags = turnFlags(message);
       const local = tokyoParts(message.timestamp);
-      const previousText = index > 0 ? history[index - 1]?.englishText || '' : '';
-      let researchEnglish = maskTextForResearchExport(message.englishText || '');
-      let researchJapanese = maskTextForResearchExport(message.japaneseText || '');
-      if (message.sender === 'child' && /what(?:'|’)s your name|what is your name/i.test(previousText)) {
-        researchEnglish = researchEnglish.replace(/^\s*(i(?:'|’)m|i am)\s+.{1,40}?(?=\s+(?:and|but|how|what|where|when|i|my)\b|[,.!?]|$)/i, '$1 [name omitted]');
-        researchJapanese = researchJapanese.replace(/^\s*(私は|わたしは|僕は|ぼくは)\s*[^。！？,.]{1,30}?(です|だよ)(?=[。！？,.]|$)/, '$1 [name omitted] $2');
-      }
+      const researchMessage = message.sender === 'child'
+        ? maskChildMessageForResearch(message, previousAiText)
+        : message;
+      const storedWordCount = Number(message.wordCount);
+      const turnWordCount = message.sender === 'child' && Number.isFinite(storedWordCount) && storedWordCount >= 0
+        ? storedWordCount
+        : countEnglishWords(message.englishText || '');
       turnRows.push({
         ...commonFields(session, meta), turn_sequence: index + 1, speaker_turn_number: speakerCounts[message.sender], speaker: message.sender,
-        local_timestamp: local.valid ? `${local.date} ${local.time}` : '', english_text_anonymized: researchEnglish,
-        japanese_translation: researchJapanese, word_count: countEnglishWords(message.englishText || ''),
+        local_timestamp: local.valid ? `${local.date} ${local.time}` : '', english_text_anonymized: researchMessage.englishText || '',
+        japanese_translation: researchMessage.japaneseText || '', word_count: turnWordCount,
         is_question: flags.isQuestion, question_type: flags.questionType, is_reciprocal_question: flags.isReciprocal,
         is_repair: flags.isRepair, is_reason_expression: flags.isReason,
       });
+      if (message.sender === 'ai') previousAiText = message.englishText || '';
       for (const item of detectVocabularyInText(message.englishText || '')) {
         const unit = String(item.mitsumuraUnit || '');
         expressionRows.push({

@@ -1,5 +1,5 @@
 import { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, PersonaLabelCondition, VisualVocabularyItem } from './types';
-import { maskTextForResearchExport } from './utils/privacy';
+import { maskChildMessageForResearch } from './utils/privacy';
 import { confirmContextualAsrWithAi } from './utils/contextualAsr';
 
 export const AI_STUDENT_IDS = [
@@ -129,7 +129,10 @@ export function canonicalizeHistory(history: unknown, topic: DialogueTopic = 'fr
 
 export function analyzeChildCommunication(history: ChatMessage[]) {
   const childMessages = history.filter((message) => message.sender === 'child' && message.englishText.trim());
-  const wordCounts = childMessages.map((message) => countEnglishWords(message.englishText));
+  const wordCounts = childMessages.map((message) => {
+    const stored = Number(message.wordCount);
+    return Number.isFinite(stored) && stored >= 0 ? stored : countEnglishWords(message.englishText);
+  });
   const totalChildWords = wordCounts.reduce((sum, count) => sum + count, 0);
   const wordTypes = new Set(childMessages.flatMap((message) => englishWordTypes(message.englishText)));
   let childQuestionCount = 0;
@@ -170,12 +173,14 @@ export function calculateCanonicalStats(history: ChatMessage[], startedAt: numbe
 }
 
 export function maskHistoryForStorage(history: ChatMessage[]): ChatMessage[] {
-  return history.map((message) => ({
-    ...message,
-    englishText: maskTextForResearchExport(message.englishText),
-    japaneseText: message.japaneseText ? maskTextForResearchExport(message.japaneseText) : message.japaneseText,
-    culturalNote: message.culturalNote ? maskTextForResearchExport(message.culturalNote) : message.culturalNote,
-  }));
+  let previousAiText = '';
+  return history.map((message) => {
+    if (message.sender === 'ai') {
+      previousAiText = message.englishText || '';
+      return { ...message };
+    }
+    return maskChildMessageForResearch(message, previousAiText);
+  });
 }
 
 export function parseReflectionAnswers(value: unknown): ReflectionAnswers | undefined {

@@ -344,7 +344,8 @@ export interface SaveCanonicalSessionArgs {
 
 export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
   const safeHistory = maskHistoryForStorage(args.history);
-  const stats = calculateCanonicalStats(safeHistory, args.startedAt, args.endedAt, args.targetDurationMinutes, args.encounteredVocab);
+  // Research metrics must describe the learner's original English, not anonymization placeholders.
+  const stats = calculateCanonicalStats(args.history, args.startedAt, args.endedAt, args.targetDurationMinutes, args.encounteredVocab);
   const existing = await getDocument(SESSION_COLLECTION, args.sessionId);
   if (existing && existing.studentId && existing.studentId !== args.studentId) throw new Error('SESSION_ID_CONFLICT');
   const studentSessions = existing ? [] : (await queryCollection(SESSION_COLLECTION, 'studentId', args.studentId, 5000)).filter((session) => isAIStudentId(session.aiStudentId));
