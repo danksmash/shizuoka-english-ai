@@ -65,8 +65,13 @@ assert.ok(html.includes("api('research.session-detail'"));
 assert.ok(html.includes("api('research.sessions'"));
 assert.ok(html.includes('さらに50件'));
 assert.ok(html.includes('detailCache=new Map()'), 'session detail should be cached in the browser after first load');
-assert.ok(html.includes('.analysis-session-layout .recent-card .table-wrap'),'E-layout recent-session column must expand vertically');
-assert.ok(html.includes('min-height:620px'),'desktop E-layout must expose a useful vertical session list');
+assert.ok(html.includes('.analysis-session-layout .recent-card .table-wrap'),'E-layout recent-session column must use an internal scroll viewport');
+assert.ok(html.includes('min-height:0;overflow:auto'),'desktop recent-session table must not stretch the workspace height');
+assert.ok(html.includes('syncRecentCardHeight'),'desktop recent-session card must synchronize to the left analysis-column height');
+assert.ok(html.includes("left.getBoundingClientRect().height"),'height synchronization must use the rendered left-column height');
+assert.ok(html.includes("window.matchMedia('(max-width:1240px)').matches"),'height synchronization must be disabled after the responsive one-column breakpoint');
+assert.ok(html.includes('ResizeObserver'),'left analysis changes must resynchronize the recent-session card');
+assert.ok(html.includes('最大50件をこの枠内でスクロール'),'UI must explain that up to 50 recent sessions scroll inside the fixed-height card');
 assert.ok(html.includes('@media(max-width:1240px)'),'recent-session explorer must fall back cleanly when the two-column workspace collapses');
 
 const dashboardSource = fs.readFileSync('src/server/researchDashboard.ts', 'utf8');
