@@ -31,6 +31,8 @@ assert.ok(routes.includes("router.put('/study-schedules/assignments'"));
 assert.ok(routes.includes('getStudentRecordsForManagement'));
 assert.ok(routes.includes('updateStudentResearchAssignments'));
 assert.ok(routes.includes('NATIONALITY_REVEAL_DATE_REQUIRED'));
+assert.ok(routes.includes('assignmentAnnouncementSync'));
+assert.ok(routes.includes('assignmentAnnouncementIso(saved)'));
 assert.ok(routes.includes('assignedCountryConfiguredParticipants'));
 assert.ok(routes.includes('assignedCountryComparableSessions'));
 assert.ok(routes.includes('canonicalAssignedCountry'));
