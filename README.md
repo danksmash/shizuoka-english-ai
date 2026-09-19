@@ -166,6 +166,18 @@ npm run dev
 npm run qa
 ```
 
+開発中は変更内容に対応するQA群だけを使い、PRではFull QAを1回通します。
+
+```bash
+npm run qa:foundation
+npm run qa:experience
+npm run qa:research-stack
+npm run qa:persona-stack
+npm run qa:voice-stack
+```
+
+QAの責任範囲、変更リスク別の検査、終了条件は [docs/QA_OPERATING_CONTRACT.md](docs/QA_OPERATING_CONTRACT.md) を正本とします。
+
 ### 本番ビルド
 
 ```bash
