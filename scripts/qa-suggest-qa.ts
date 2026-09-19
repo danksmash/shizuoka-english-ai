@@ -29,4 +29,8 @@ const mixed = suggestQa(['src/server/managementPage.ts', 'src/data/personaResear
 assert.deepEqual(mixed.groups, ['qa:research-stack', 'qa:persona-stack']);
 assert.equal(mixed.risk, 'medium');
 
+const mixedWithUnknownImplementation = suggestQa(['src/server/managementPage.ts', 'scripts/custom-maintenance.ts']);
+assert.deepEqual(mixedWithUnknownImplementation.groups, ['qa:foundation', 'qa:research-stack']);
+assert.equal(mixedWithUnknownImplementation.risk, 'medium');
+
 console.log('QA suggestion classifier: PASS');
