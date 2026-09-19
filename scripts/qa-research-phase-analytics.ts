@@ -94,6 +94,9 @@ assert.ok(capturedHtml.includes('担当国Persona選択率（Phase別）'));
 assert.ok(capturedHtml.includes('個別利用らしいセッション（推定）'));
 assert.ok(capturedHtml.includes('担当国Persona選択率のPhase別変化'));
 assert.ok(capturedHtml.includes('id="chartPhaseCountry"'));
+assert.ok(capturedHtml.includes('id="phaseCountryPanelSlot"'),'Phase chart must render inside the E-layout analysis column');
+assert.ok(capturedHtml.includes('phase-country-card'),'Phase chart must use the dedicated analysis card class');
+assert.ok(capturedHtml.indexOf('id="phaseCountryPanelSlot"') > capturedHtml.indexOf('class="analysis-session-layout'),'Phase slot must remain inside the analysis/session workspace');
 assert.ok(capturedHtml.includes('id="iBefore" hidden'), 'legacy ids must remain hidden so the base renderer cannot break');
 assert.equal(capturedHtml.includes('<h3>告知前／告知後セッション</h3>'), false);
 assert.equal(capturedHtml.includes('<h3>告知後・担当国Persona選択率</h3>'), false);
@@ -105,6 +108,8 @@ assert.ok(source.includes("phase_comparison_filter_exclusions: ['personaId', 'st
 assert.ok(source.includes('assignment_country_provenance'));
 assert.equal(source.includes("fetch('/api/management/research.dashboard?"),false,'Phase analytics must not issue a second dashboard request');
 assert.ok(source.includes("window.__renderPhaseComparison=renderPhaseComparison"));
+assert.ok(source.includes("PHASE_ANALYTICS_LAYOUT_SLOT_MISSING"));
+assert.equal(source.includes("PHASE_ANALYTICS_CHART_ANCHOR_MISSING"),false,'Phase chart must no longer be appended as a fifth item in the two-column chart grid');
 const entry = fs.readFileSync('server-entry.ts', 'utf8');
 assert.ok(entry.includes('withResearchPhaseAnalyticsRuntime'));
 
