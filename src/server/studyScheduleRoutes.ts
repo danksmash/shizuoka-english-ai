@@ -1,6 +1,11 @@
 import express from 'express';
 import { requireManagementRole, type AuthenticatedRequest } from './auth';
-import { getAllSessionsForManagement } from './persistence';
+import { AI_STUDENTS_MASTER_LIST, TARGET_20_AI_STUDENT_IDS } from '../data/curriculum';
+import {
+  getAllSessionsForManagement,
+  getStudentRecordsForManagement,
+  updateStudentResearchAssignments,
+} from './persistence';
 import { getAllReflectionRecordsForTeacher } from './reflectionPersistence';
 import { researchDataScopeForRow } from './researchDashboard';
 import {
@@ -13,6 +18,32 @@ import {
 } from './studySchedulePersistence';
 
 const PHASES: StudyPhase[] = ['unconfigured', 'pre_start', 'unknown_virtual_other', 'anticipated_other', 'identified_real_other', 'exchange_or_after'];
+
+const BASE_COUNTRY_OPTIONS = TARGET_20_AI_STUDENT_IDS.map((id) => {
+  const persona = AI_STUDENTS_MASTER_LIST.find((item) => item.id === id);
+  if (!persona) throw new Error(`STUDY_ASSIGNMENT_PERSONA_MISSING:${id}`);
+  return { value: persona.country, label: `${persona.country}（${persona.countryJapanese}）` };
+}).filter((item, index, list) => list.findIndex((candidate) => candidate.value === item.value) === index);
+
+function normalizedCountry(value: unknown): string {
+  const raw = String(value || '').trim().toLowerCase().replace(/[._-]/g, ' ').replace(/\s+/g, ' ');
+  const aliases: Record<string, string> = {
+    usa: 'united states',
+    'u s a': 'united states',
+    'united states of america': 'united states',
+    uk: 'united kingdom',
+    'u k': 'united kingdom',
+    'great britain': 'united kingdom',
+    korea: 'south korea',
+    'republic of korea': 'south korea',
+  };
+  return aliases[raw] || raw;
+}
+
+function assignmentAnnouncementIso(schedule: StudyScheduleRecord): string {
+  if (!schedule.nationalityRevealDate) return '';
+  return new Date(`${schedule.nationalityRevealDate}T00:00:00+09:00`).toISOString();
+}
 
 function phaseCounts() {
   return Object.fromEntries(PHASES.map((phase) => [phase, 0])) as Record<StudyPhase, number>;
@@ -30,16 +61,39 @@ function configuredFieldCount(schedule: StudyScheduleRecord): number {
 }
 
 async function buildLinkageAudit() {
-  const [schedules, sessions, reflections] = await Promise.all([
+  const [schedules, sessions, reflections, students] = await Promise.all([
     getAllStudySchedules(),
     getAllSessionsForManagement(),
     getAllReflectionRecordsForTeacher(),
+    getStudentRecordsForManagement(),
   ]);
+  const participants = students
+    .filter((student) => student.active && (STUDY_CLASS_IDS as readonly string[]).includes(student.classId))
+    .map((student) => ({
+      researchId: student.researchId,
+      classId: student.classId,
+      attendanceNumber: student.attendanceNumber,
+      assignedPartnerCountry: student.assignedPartnerCountry,
+      assignedPartnerId: student.assignedPartnerId,
+      assignmentAnnouncedAt: student.assignmentAnnouncedAt,
+      updatedAt: student.updatedAt,
+    }))
+    .sort((a, b) => a.classId.localeCompare(b.classId, 'ja')
+      || Number(a.attendanceNumber || 999) - Number(b.attendanceNumber || 999)
+      || a.researchId.localeCompare(b.researchId));
+  const optionMap = new Map(BASE_COUNTRY_OPTIONS.map((option) => [option.value, option]));
+  for (const participant of participants) {
+    const country = String(participant.assignedPartnerCountry || '').trim();
+    if (country && !optionMap.has(country)) optionMap.set(country, { value: country, label: country });
+  }
+  const countryOptions = Array.from(optionMap.values());
   const scheduleByClass = new Map(schedules.map((schedule) => [schedule.classId, schedule]));
   const classRows = STUDY_CLASS_IDS.map((classId) => {
     const schedule = scheduleByClass.get(classId)!;
     const classSessions = sessions.filter((row) => String(row.classId || '') === classId);
     const classReflections = reflections.filter((row) => row.classId === classId);
+    const classParticipants = participants.filter((row) => row.classId === classId);
+    const configuredParticipants = classParticipants.filter((row) => Boolean(row.assignedPartnerCountry));
     const sessionPhases = phaseCounts();
     const reflectionPhases = phaseCounts();
     let mainSessions = 0;
@@ -61,6 +115,15 @@ async function buildLinkageAudit() {
     const reflectionKeys = new Set(classReflections.map((row) => row.researchId && row.localDate ? `${row.researchId}|${row.localDate}` : '').filter(Boolean));
     let matchedDayKeys = 0;
     for (const key of dialogueDayKeys) if (reflectionKeys.has(key)) matchedDayKeys += 1;
+    let assignedCountryComparableSessions = 0;
+    let assignedCountryMatchedSessions = 0;
+    for (const session of classSessions) {
+      const assigned = normalizedCountry(session.assignedPartnerCountry);
+      const selected = normalizedCountry(session.personaCountry);
+      if (!assigned || !selected) continue;
+      assignedCountryComparableSessions += 1;
+      if (assigned === selected) assignedCountryMatchedSessions += 1;
+    }
     return {
       classId,
       configuredFields: configuredFieldCount(schedule),
@@ -73,12 +136,19 @@ async function buildLinkageAudit() {
       dialogueDayKeys: dialogueDayKeys.size,
       reflectionDayKeys: reflectionKeys.size,
       matchedDialogueReflectionDayKeys: matchedDayKeys,
+      participantCount: classParticipants.length,
+      assignedCountryConfiguredParticipants: configuredParticipants.length,
+      assignedCountryUnconfiguredParticipants: classParticipants.length - configuredParticipants.length,
+      assignedCountryComparableSessions,
+      assignedCountryMatchedSessions,
       sessionPhases,
       reflectionPhases,
     };
   });
   return {
     success: true,
+    participants,
+    countryOptions,
     joinRules: {
       scheduleToDialogue: ['class_id', 'local_date'],
       scheduleToReflection: ['class_id', 'local_date'],
@@ -141,9 +211,11 @@ export function createStudyScheduleRouter() {
 
   router.post('/study-schedules/query', requireManagementRole(['researcher']), async (_req, res) => {
     try {
-      const [schedules, audit] = await Promise.all([getAllStudySchedules(), buildLinkageAudit()]);
+      const fullAudit = await buildLinkageAudit();
+      const { participants, countryOptions, ...audit } = fullAudit;
+      const schedules = audit.classes.map((row) => row.schedule);
       res.setHeader('Cache-Control', 'no-store');
-      return res.json({ success: true, schedules, audit });
+      return res.json({ success: true, schedules, participants, countryOptions, audit });
     } catch (error: any) {
       console.error('Study schedule query failed', { message: error?.message });
       return res.status(503).json({ success: false, error: 'STUDY_SCHEDULE_QUERY_UNAVAILABLE' });
@@ -164,10 +236,59 @@ export function createStudyScheduleRouter() {
     }
   });
 
+  router.put('/study-schedules/assignments', requireManagementRole(['researcher']), async (req: AuthenticatedRequest, res) => {
+    try {
+      const requested = Array.isArray(req.body?.assignments) ? req.body.assignments : [];
+      if (!requested.length || requested.length > 250) return res.status(400).json({ success: false, error: 'INVALID_RESEARCH_ASSIGNMENT_BATCH' });
+      const [schedules, students] = await Promise.all([getAllStudySchedules(), getStudentRecordsForManagement()]);
+      const scheduleByClass = new Map(schedules.map((schedule) => [schedule.classId, schedule]));
+      const participantByResearchId = new Map(students
+        .filter((student) => student.active && (STUDY_CLASS_IDS as readonly string[]).includes(student.classId))
+        .map((student) => [student.researchId, student]));
+      const prepared = requested.map((input: any) => {
+        const researchId = typeof input?.researchId === 'string' ? input.researchId.trim().toUpperCase() : '';
+        const participant = participantByResearchId.get(researchId);
+        if (!participant) throw new Error('RESEARCH_PARTICIPANT_NOT_FOUND');
+        const schedule = scheduleByClass.get(participant.classId as any);
+        if (!schedule) throw new Error('STUDY_SCHEDULE_NOT_FOUND');
+        const assignedPartnerCountry = typeof input?.assignedPartnerCountry === 'string' ? input.assignedPartnerCountry.trim().slice(0, 120) : '';
+        const assignedPartnerId = typeof input?.assignedPartnerId === 'string' ? input.assignedPartnerId.trim().slice(0, 120) : '';
+        if (assignedPartnerId && !assignedPartnerCountry) throw new Error('ASSIGNED_COUNTRY_REQUIRED_FOR_PARTNER');
+        if (assignedPartnerCountry && !schedule.nationalityRevealDate) throw new Error('NATIONALITY_REVEAL_DATE_REQUIRED');
+        return {
+          researchId,
+          assignedPartnerCountry,
+          assignedPartnerId,
+          assignmentAnnouncedAt: assignedPartnerCountry ? assignmentAnnouncementIso(schedule) : '',
+          expectedAssignedPartnerCountry: input.expectedAssignedPartnerCountry,
+          expectedAssignedPartnerId: input.expectedAssignedPartnerId,
+        };
+      });
+      const updated = await updateStudentResearchAssignments(prepared, req.managementUser?.username || 'researcher');
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({
+        success: true,
+        updated,
+        changedCount: updated.filter((row) => row.changed).length,
+        totalCount: updated.length,
+      });
+    } catch (error: any) {
+      const code = String(error?.message || '');
+      if (code === 'RESEARCH_ASSIGNMENT_CONFLICT') return res.status(409).json({ success: false, error: code });
+      if (code.startsWith('INVALID_') || code.endsWith('_REQUIRED') || code === 'RESEARCH_PARTICIPANT_NOT_FOUND' || code === 'STUDY_SCHEDULE_NOT_FOUND') {
+        return res.status(400).json({ success: false, error: code });
+      }
+      console.error('Study research assignment save failed', { message: error?.message });
+      return res.status(503).json({ success: false, error: 'RESEARCH_ASSIGNMENT_SAVE_UNAVAILABLE' });
+    }
+  });
+
   router.post('/study-schedules/audit', requireManagementRole(['researcher']), async (_req, res) => {
     try {
+      const fullAudit = await buildLinkageAudit();
+      const { participants: _participants, countryOptions: _countryOptions, ...audit } = fullAudit;
       res.setHeader('Cache-Control', 'no-store');
-      return res.json(await buildLinkageAudit());
+      return res.json(audit);
     } catch (error: any) {
       console.error('Study schedule audit failed', { message: error?.message });
       return res.status(503).json({ success: false, error: 'STUDY_SCHEDULE_AUDIT_UNAVAILABLE' });
