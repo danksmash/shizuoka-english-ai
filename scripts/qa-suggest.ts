@@ -81,7 +81,7 @@ export function suggestQa(filesInput: string[]): QaSuggestion {
   for (const file of files) {
     let fileClassified = false;
     if (/^(README\.md|docs\/.*\.md)$/.test(file)) {
-      reasons.add('文書のみの変更は対象QA不要です。PRのFull QAは維持します。');
+      reasons.add('文書ファイル自体には対象QA不要です。PRのFull QAは維持します。');
       continue;
     }
 
