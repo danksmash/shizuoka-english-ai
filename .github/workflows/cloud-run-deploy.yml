@@ -140,6 +140,13 @@ jobs:
           grep -q '7 CSVを一括ZIP' <<<"$management_html"
           grep -q 'questionnaire-analysis.html' <<<"$management_html"
           grep -q 'restoreManagementSession' <<<"$management_html"
+          grep -q 'DASHBOARD_SESSION_CACHE_PREFIX' <<<"$management_html"
+          grep -q 'restoreCachedDashboard(currentResearcherUsername)' <<<"$management_html"
+          grep -q 'onchange=markDashboardFiltersPending' <<<"$management_html"
+          if grep -q 'onchange=scheduleDashboardReload' <<<"$management_html"; then
+            echo 'Research Dashboard must not auto-reaggregate when filters change.' >&2
+            exit 1
+          fi
           grep -q 'researcher-readable.css' <<<"$management_html"
           if grep -q 'id="questionnaireSection"' <<<"$management_html"; then
             echo 'Questionnaire analysis must not be embedded in Research Dashboard.' >&2
