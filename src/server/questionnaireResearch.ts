@@ -109,7 +109,8 @@ function gradeForClassId(classId: string): 5 | 6 | null {
 }
 
 function responseDocumentId(researchId: string, wave: QuestionnaireWave, submittedAt: string, items: QuestionnaireItemScores): string {
-  const digest = crypto.createHash('sha256').update(JSON.stringify([researchId, wave, submittedAt, items])).digest('hex').slice(0, 24);
+  const stableWaveKey = wave === 'post_pre_exchange' ? 'post_exchange' : wave;
+  const digest = crypto.createHash('sha256').update(JSON.stringify([researchId, stableWaveKey, submittedAt, items])).digest('hex').slice(0, 24);
   return `q_${digest}`;
 }
 
