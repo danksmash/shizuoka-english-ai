@@ -1,6 +1,6 @@
 import type { QuestionnaireRecord, QuestionnaireWave } from './questionnaireResearch';
 
-export type QuestionnaireLmmMetric = 'l2wtc' | 'total';
+export type QuestionnaireLmmMetric = 'l2wtc' | 'attitude';
 
 interface TrialObservation {
   researchId: string;
@@ -69,7 +69,7 @@ function normalCdf(x: number): number {
 }
 
 function metricValue(record: QuestionnaireRecord, metric: QuestionnaireLmmMetric): number {
-  return metric === 'l2wtc' ? record.l2wtcMean : record.totalMean;
+  return metric === 'l2wtc' ? record.l2wtcMean : record.attitudeMean;
 }
 
 function recordCondition(record: QuestionnaireRecord): 'intervention' | 'comparison' {
@@ -408,6 +408,6 @@ export function buildQuestionnaireLmmTrialBundle(records: QuestionnaireRecord[])
   return {
     generatedAt: new Date().toISOString(),
     primary: buildQuestionnaireLmmTrial(records, 'l2wtc'),
-    secondary: buildQuestionnaireLmmTrial(records, 'total'),
+    secondary: buildQuestionnaireLmmTrial(records, 'attitude'),
   };
 }

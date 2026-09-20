@@ -5,6 +5,7 @@ import {
   QUESTIONNAIRE_EXPORT_HEADERS,
   QUESTIONNAIRE_INSTRUMENT_VERSION,
   QUESTIONNAIRE_ITEMS,
+  QUESTIONNAIRE_SCORING_VERSION,
   buildQuestionnaireCodebookRows,
   buildQuestionnaireExportRows,
   buildQuestionnaireStatistics,
@@ -36,11 +37,19 @@ assert.equal(scoreQuestionnaireResponse(''), null);
 
 const all6 = Object.fromEntries(QUESTIONNAIRE_ITEMS.map((item) => [item.id, 6])) as QuestionnaireItemScores;
 const scored = calculateQuestionnaireScores(all6);
+assert.equal(scored.attitudeSum, 60);
+assert.equal(scored.attitudeMean, 6);
 assert.equal(scored.totalSum, 90);
 assert.equal(scored.totalMean, 6);
 assert.equal(scored.persistenceSum, 30);
 assert.equal(scored.selfRegulationSum, 30);
 assert.equal(scored.l2wtcSum, 30);
+
+const separatedItems = Object.fromEntries(QUESTIONNAIRE_ITEMS.map((item) => [item.id, item.scale === 'l2wtc' ? 6 : 1])) as QuestionnaireItemScores;
+const separatedScores = calculateQuestionnaireScores(separatedItems);
+assert.equal(separatedScores.attitudeMean, 1, 'attitude must use only the 10 attitude items');
+assert.equal(separatedScores.l2wtcMean, 6);
+assert.notEqual(separatedScores.totalMean, separatedScores.attitudeMean, 'legacy all-15 mean must not be used as attitude');
 
 const tt = pairedTTest([1,2,3,4,5], [2,3,4,5,6]);
 assert.equal(tt.n, 5);
@@ -89,6 +98,8 @@ assert.equal(stats.counts.paired,22,'legacy paired alias remains Pre/Post');
 assert.equal(stats.counts.duplicateWaveKeys,1);
 assert.equal(stats.rows.length,32,'4 metrics x 8 groups required');
 assert.ok(stats.rows.some((row) => row.groupId==='all' && row.metric==='l2wtc'));
+assert.ok(stats.rows.some((row) => row.groupId==='all' && row.metric==='attitude'));
+assert.equal(stats.rows.some((row) => String(row.metric)==='total'), false, 'legacy all-15 score must not appear as a research outcome');
 assert.ok(stats.rows.every((row) => row.tHolmP===null || (row.tHolmP>=0 && row.tHolmP<=1)));
 assert.ok(stats.rows.every((row) => row.wilcoxonHolmP===null || (row.wilcoxonHolmP>=0 && row.wilcoxonHolmP<=1)));
 
@@ -106,6 +117,10 @@ assert.ok(codebook.every((row) => row.file_name==='student_questionnaires.csv'))
 assert.ok(codebook.some((row) => row.variable==='q1_1' && String(row.definition).includes('逆転なし')));
 assert.ok(codebook.some((row) => row.variable==='survey_wave' && String(row.allowed_values).includes('mid_pre_reveal')));
 assert.ok(codebook.some((row) => row.variable==='survey_order' && String(row.allowed_values).includes('1 | 2 | 3')));
+assert.ok(codebook.some((row) => row.variable==='attitude_mean' && String(row.definition).includes('10項目')));
+assert.ok(codebook.some((row) => row.variable==='total_mean' && String(row.definition).includes('後方互換')));
+assert.ok(codebook.some((row) => row.variable==='scoring_version' && row.allowed_values===QUESTIONNAIRE_SCORING_VERSION));
+assert.ok(csv.includes('"attitude_mean"') && csv.includes('"scoring_version"'));
 
 assert.equal(researcherRouteAllowed({ path: '/questionnaire/statistics' } as any), true, 'mounted questionnaire statistics route must be researcher-accessible');
 assert.equal(researcherRouteAllowed({ path: '/questionnaire/import' } as any), true, 'mounted questionnaire import route must be researcher-accessible');
@@ -136,7 +151,7 @@ assert.equal(page.includes('Holm補正後 p &lt; .05'), false);
 assert.ok(management.includes('href="/questionnaire-analysis.html"'));
 assert.equal(management.includes('id="questionnaireSection"'), false, 'questionnaire analysis must be detached from Research Dashboard HTML');
 assert.ok(runtime.includes('student_questionnaires.csv'));
-assert.ok(runtime.includes('schema_version: 6'));
+assert.ok(runtime.includes('schema_version: 7'));
 assert.equal(runtime.includes('questionnairePromise'), false, 'Research Dashboard must not wait for questionnaire Firestore reads');
 assert.equal(runtime.includes('questionnaireRowCount'), false, 'Research Dashboard payload must not depend on questionnaire row count');
 assert.equal(runtime.includes('injectQuestionnaireUi'), false, 'questionnaire UI must live on its dedicated page');

@@ -1,6 +1,6 @@
 import type { QuestionnaireRecord, QuestionnaireWave } from './questionnaireResearch';
 
-export type QuestionnaireDescriptiveMetricKey = 'total' | 'persistence' | 'self_regulation' | 'l2wtc';
+export type QuestionnaireDescriptiveMetricKey = 'attitude' | 'persistence' | 'self_regulation' | 'l2wtc';
 
 export interface QuestionnaireDescriptiveMetricSummary {
   mean: number | null;
@@ -9,7 +9,7 @@ export interface QuestionnaireDescriptiveMetricSummary {
 
 export interface QuestionnaireDescriptiveWaveSummary {
   n: number;
-  total: QuestionnaireDescriptiveMetricSummary;
+  attitude: QuestionnaireDescriptiveMetricSummary;
   persistence: QuestionnaireDescriptiveMetricSummary;
   self_regulation: QuestionnaireDescriptiveMetricSummary;
   l2wtc: QuestionnaireDescriptiveMetricSummary;
@@ -38,7 +38,7 @@ const METRICS: Array<{
   key: QuestionnaireDescriptiveMetricKey;
   value: (record: QuestionnaireRecord) => number;
 }> = [
-  { key: 'total', value: (r) => r.totalMean },
+  { key: 'attitude', value: (r) => r.attitudeMean },
   { key: 'persistence', value: (r) => r.persistenceMean },
   { key: 'self_regulation', value: (r) => r.selfRegulationMean },
   { key: 'l2wtc', value: (r) => r.l2wtcMean },
@@ -75,7 +75,7 @@ function summarizeWave(records: QuestionnaireRecord[], wave: QuestionnaireWave):
   const unique = uniqueWaveRecords(records, wave);
   const summary: QuestionnaireDescriptiveWaveSummary = {
     n: unique.length,
-    total: { mean: null, sd: null },
+    attitude: { mean: null, sd: null },
     persistence: { mean: null, sd: null },
     self_regulation: { mean: null, sd: null },
     l2wtc: { mean: null, sd: null },

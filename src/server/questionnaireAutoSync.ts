@@ -5,6 +5,7 @@ import { STUDY1_FORMAL_PARTICIPANT_HASHES } from './study1FormalParticipantHashe
 import {
   QUESTIONNAIRE_COLLECTION,
   QUESTIONNAIRE_INSTRUMENT_VERSION,
+  QUESTIONNAIRE_SCORING_VERSION,
   QUESTIONNAIRE_ITEMS,
   calculateQuestionnaireScores,
   scoreQuestionnaireResponse,
@@ -196,6 +197,7 @@ async function persistCanonicalQuestionnaire(
     surveyDate: tokyoDate(submittedAt),
     submittedAt,
     instrumentVersion: QUESTIONNAIRE_INSTRUMENT_VERSION,
+    scoringVersion: QUESTIONNAIRE_SCORING_VERSION,
     items,
     ...scores,
     dataQualityFlag: 'complete',

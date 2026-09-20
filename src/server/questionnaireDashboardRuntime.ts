@@ -131,7 +131,7 @@ const bundleHandler: RequestHandler = async (req, res) => {
     const manifest = {
       export_id: `export_${Date.now()}`,
       exported_at: exportedAt,
-      schema_version: 6,
+      schema_version: 7,
       filters: exportQuery,
       study_phase: studyPhase || 'all',
       row_counts: rowCounts,

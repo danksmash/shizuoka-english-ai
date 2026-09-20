@@ -74,6 +74,9 @@ for (let i = 0; i < 12; i += 1) {
     record(`C-${i}`, 'post_pre_exchange', 3.3 + jitter, 'comparison', '5-2'),
   );
 }
+const attitudeTrial = buildQuestionnaireLmmTrial(interventionOnly, 'attitude');
+assert.equal(attitudeTrial.metric, 'attitude');
+assert.equal(attitudeTrial.metricLabel, '主体的に学習に取り組む態度');
 const grouped = buildQuestionnaireLmmTrial(twoGroup, 'l2wtc');
 assert.equal(grouped.mode, 'group_time');
 assert.equal(grouped.status, 'ok');
