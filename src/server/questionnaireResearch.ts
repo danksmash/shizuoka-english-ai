@@ -105,6 +105,7 @@ export interface QuestionnaireRecord extends QuestionnaireScores {
   surveyDate: string;
   submittedAt: string;
   instrumentVersion: string;
+  scoringVersion?: string;
   items: QuestionnaireItemScores;
   dataQualityFlag: 'complete';
   importedAt: string;
@@ -222,6 +223,7 @@ export async function importGoogleFormsQuestionnaireCsv(csvText: string, surveyW
         surveyDate: tokyoDate(submittedAt),
         submittedAt,
         instrumentVersion: QUESTIONNAIRE_INSTRUMENT_VERSION,
+        scoringVersion: QUESTIONNAIRE_SCORING_VERSION,
         items,
         ...scores,
         dataQualityFlag: 'complete',
@@ -250,6 +252,7 @@ function cleanRecord(raw: Record<string, any>): QuestionnaireRecord | null {
     responseId: String(raw.responseId || ''), researchId: String(raw.researchId || ''), classId: String(raw.classId || ''),
     gradeLevel: gradeLevel as 5 | 6, dataScope: 'main', surveyWave,
     surveyDate: String(raw.surveyDate || ''), submittedAt: String(raw.submittedAt || ''), instrumentVersion: String(raw.instrumentVersion || ''),
+    scoringVersion: QUESTIONNAIRE_SCORING_VERSION,
     items, ...scores,
     dataQualityFlag: 'complete', importedAt: String(raw.importedAt || ''),
   };
@@ -491,7 +494,7 @@ function classMatches(classId: string, requested: string): boolean { if (!reques
 export function buildQuestionnaireExportRows(records: QuestionnaireRecord[], query: Record<string, unknown> = {}): Record<string, unknown>[] {
   const grade = String(query.grade || 'all'); const classId = String(query.classId || 'all'); const scope = String(query.dataScope || 'main');
   return records.filter((r) => (scope === 'all' || scope === 'main') && (grade === 'all' || String(r.gradeLevel) === grade) && classMatches(r.classId, classId)).sort((a, b) => a.researchId.localeCompare(b.researchId) || questionnaireWaveOrder(a.surveyWave) - questionnaireWaveOrder(b.surveyWave)).map((r) => ({
-    research_id:r.researchId,class_id:r.classId,data_scope:r.dataScope,grade_level:r.gradeLevel,survey_wave:r.surveyWave,survey_order:questionnaireWaveOrder(r.surveyWave),survey_date:r.surveyDate,submitted_at:r.submittedAt,instrument_version:r.instrumentVersion,scoring_version:QUESTIONNAIRE_SCORING_VERSION,
+    research_id:r.researchId,class_id:r.classId,data_scope:r.dataScope,grade_level:r.gradeLevel,survey_wave:r.surveyWave,survey_order:questionnaireWaveOrder(r.surveyWave),survey_date:r.surveyDate,submitted_at:r.submittedAt,instrument_version:r.instrumentVersion,scoring_version:r.scoringVersion || QUESTIONNAIRE_SCORING_VERSION,
     ...Object.fromEntries(QUESTIONNAIRE_ITEMS.map((item) => [item.id, r.items[item.id]])),
     attitude_sum:r.attitudeSum,attitude_mean:r.attitudeMean,persistence_sum:r.persistenceSum,persistence_mean:r.persistenceMean,self_regulation_sum:r.selfRegulationSum,self_regulation_mean:r.selfRegulationMean,l2wtc_sum:r.l2wtcSum,l2wtc_mean:r.l2wtcMean,total_sum:r.totalSum,total_mean:r.totalMean,data_quality_flag:r.dataQualityFlag,response_id:r.responseId,imported_at:r.importedAt,
   }));
