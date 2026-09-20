@@ -151,7 +151,7 @@ assert.equal(page.includes('Holm補正後 p &lt; .05'), false);
 assert.ok(management.includes('href="/questionnaire-analysis.html"'));
 assert.equal(management.includes('id="questionnaireSection"'), false, 'questionnaire analysis must be detached from Research Dashboard HTML');
 assert.ok(runtime.includes('student_questionnaires.csv'));
-assert.ok(runtime.includes('schema_version: 6'));
+assert.ok(runtime.includes('schema_version: 7'));
 assert.equal(runtime.includes('questionnairePromise'), false, 'Research Dashboard must not wait for questionnaire Firestore reads');
 assert.equal(runtime.includes('questionnaireRowCount'), false, 'Research Dashboard payload must not depend on questionnaire row count');
 assert.equal(runtime.includes('injectQuestionnaireUi'), false, 'questionnaire UI must live on its dedicated page');
