@@ -37,10 +37,12 @@ jobs:
             echo 'Questionnaire analysis is still embedded in Research Dashboard.' >&2
             exit 1
           fi
-          grep -q 'Study 1 事前・事後質問紙分析' <<<"$questionnaire"
+          grep -q 'Study 1 3時点質問紙分析' <<<"$questionnaire"
           grep -q '/api/management/questionnaire/analysis' <<<"$questionnaire"
           grep -q 'student_questionnaires' <<<"$questionnaire"
-          grep -q 'Holm補正後 p &lt; .05' <<<"$questionnaire"
+          grep -q 'Mid N' <<<"$questionnaire"
+          grep -q '試験的LMM分析（研究者用）' <<<"$questionnaire"
+          grep -q '/api/management/questionnaire/lmm-trial' <<<"$questionnaire"
           grep -q 'Google Forms自動同期' <<<"$questionnaire"
           grep -q 'setInterval(pollRevision,30000)' <<<"$questionnaire"
           if grep -q 'id="qCsvFile"' <<<"$questionnaire"; then
@@ -78,6 +80,15 @@ jobs:
             --data '{}')
           test "$stats_status" = '401'
           grep -q '"error":"UNAUTHORIZED"' /tmp/questionnaire-stats.json
+
+          lmm_status=$(curl --silent --show-error --max-time 20 \
+            -o /tmp/questionnaire-lmm.json \
+            -w '%{http_code}' \
+            -X POST "$API_URL/api/management/questionnaire/lmm-trial" \
+            -H 'Content-Type: application/json' \
+            --data '{}')
+          test "$lmm_status" = '401'
+          grep -q '"error":"UNAUTHORIZED"' /tmp/questionnaire-lmm.json
 
           # Manual CSV import remains as a protected emergency fallback API, but it is
           # intentionally no longer exposed in the normal researcher dashboard UI.

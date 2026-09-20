@@ -16,6 +16,7 @@ import {
   wilcoxonSignedRank,
   type QuestionnaireItemScores,
   type QuestionnaireRecord,
+  type QuestionnaireWave,
 } from '../src/server/questionnaireResearch';
 
 assert.equal(QUESTIONNAIRE_ITEMS.length, 15, 'instrument must contain exactly 15 items');
@@ -64,20 +65,27 @@ assert.deepEqual(holmAdjust([0.01,0.02,0.2]), [0.03,0.04,0.2]);
 function itemScores(base: number): QuestionnaireItemScores {
   return Object.fromEntries(QUESTIONNAIRE_ITEMS.map((item, index) => [item.id, Math.max(1, Math.min(6, base + (index % 2)))])) as QuestionnaireItemScores;
 }
-function record(rid: string, classId: string, wave: 'pre_app'|'post_exchange', base: number, suffix = ''): QuestionnaireRecord {
+function record(rid: string, classId: string, wave: QuestionnaireWave, base: number, suffix = ''): QuestionnaireRecord {
   const items = itemScores(base); const scores = calculateQuestionnaireScores(items);
   return {
     responseId:`q-${rid}-${wave}${suffix}`,researchId:rid,classId,gradeLevel:classId.startsWith('5-')?5:6,dataScope:'main',surveyWave:wave,
-    surveyDate:wave==='pre_app'?'2026-09-16':'2026-10-20',submittedAt:wave==='pre_app'?'2026-09-16T00:00:00.000Z':'2026-10-20T00:00:00.000Z',instrumentVersion:QUESTIONNAIRE_INSTRUMENT_VERSION,
+    surveyDate:wave==='pre_app'?'2026-09-16':wave==='mid_pre_reveal'?'2026-10-01':'2026-10-20',submittedAt:wave==='pre_app'?'2026-09-16T00:00:00.000Z':wave==='mid_pre_reveal'?'2026-10-01T00:00:00.000Z':'2026-10-20T00:00:00.000Z',instrumentVersion:QUESTIONNAIRE_INSTRUMENT_VERSION,
     items,...scores,dataQualityFlag:'complete',importedAt:'2026-09-12T00:00:00.000Z',
   };
 }
 const records: QuestionnaireRecord[] = [];
-for (let i=0;i<12;i+=1) { const rid=`R5-${i}`;records.push(record(rid,'5-1','pre_app',3+(i%2)),record(rid,'5-1','post_exchange',4+(i%2))); }
-for (let i=0;i<10;i+=1) { const rid=`R6-${i}`;records.push(record(rid,'6-1','pre_app',3+(i%2)),record(rid,'6-1','post_exchange',3+(i%2))); }
-records.push(record('R-DUP','5-2','pre_app',3,'a'),record('R-DUP','5-2','pre_app',4,'b'),record('R-DUP','5-2','post_exchange',5));
+for (let i=0;i<12;i+=1) { const rid=`R5-${i}`;records.push(record(rid,'5-1','pre_app',3+(i%2)),record(rid,'5-1','mid_pre_reveal',3+(i%2)),record(rid,'5-1','post_pre_exchange',4+(i%2))); }
+for (let i=0;i<10;i+=1) { const rid=`R6-${i}`;records.push(record(rid,'6-1','pre_app',3+(i%2)),record(rid,'6-1','mid_pre_reveal',3+(i%2)),record(rid,'6-1','post_pre_exchange',3+(i%2))); }
+records.push(record('R-DUP','5-2','pre_app',3,'a'),record('R-DUP','5-2','pre_app',4,'b'),record('R-DUP','5-2','mid_pre_reveal',4),record('R-DUP','5-2','post_pre_exchange',5));
 const stats = buildQuestionnaireStatistics(records);
-assert.equal(stats.counts.paired,22,'duplicate pre wave must be excluded from paired set');
+assert.equal(stats.counts.preUnique,22);
+assert.equal(stats.counts.midUnique,23);
+assert.equal(stats.counts.postUnique,23);
+assert.equal(stats.counts.complete3,22,'duplicate pre wave must be excluded from complete three-wave set');
+assert.equal(stats.counts.preMidPaired,22);
+assert.equal(stats.counts.midPostPaired,23);
+assert.equal(stats.counts.prePostPaired,22);
+assert.equal(stats.counts.paired,22,'legacy paired alias remains Pre/Post');
 assert.equal(stats.counts.duplicateWaveKeys,1);
 assert.equal(stats.rows.length,32,'4 metrics x 8 groups required');
 assert.ok(stats.rows.some((row) => row.groupId==='all' && row.metric==='l2wtc'));
@@ -96,7 +104,8 @@ const codebook = buildQuestionnaireCodebookRows();
 assert.equal(codebook.length, QUESTIONNAIRE_EXPORT_HEADERS.length);
 assert.ok(codebook.every((row) => row.file_name==='student_questionnaires.csv'));
 assert.ok(codebook.some((row) => row.variable==='q1_1' && String(row.definition).includes('逆転なし')));
-assert.ok(codebook.some((row) => row.variable==='survey_wave' && String(row.allowed_values).includes('pre_app')));
+assert.ok(codebook.some((row) => row.variable==='survey_wave' && String(row.allowed_values).includes('mid_pre_reveal')));
+assert.ok(codebook.some((row) => row.variable==='survey_order' && String(row.allowed_values).includes('1 | 2 | 3')));
 
 assert.equal(researcherRouteAllowed({ path: '/questionnaire/statistics' } as any), true, 'mounted questionnaire statistics route must be researcher-accessible');
 assert.equal(researcherRouteAllowed({ path: '/questionnaire/import' } as any), true, 'mounted questionnaire import route must be researcher-accessible');
@@ -104,6 +113,7 @@ assert.equal(researcherRouteAllowed({ path: '/api/management/questionnaire/stati
 assert.equal(researcherRouteAllowed({ path: '/api/management/questionnaire/import' } as any), true, 'full questionnaire import route must be researcher-accessible');
 assert.equal(researcherRouteAllowed({ path: '/questionnaire/analysis' } as any), true, 'mounted questionnaire analysis route must be researcher-accessible');
 assert.equal(researcherRouteAllowed({ path: '/api/management/questionnaire/analysis' } as any), true, 'full questionnaire analysis route must be researcher-accessible');
+assert.equal(researcherRouteAllowed({ path: '/api/management/questionnaire/lmm-trial' } as any), true, 'trial LMM route must remain researcher-accessible');
 assert.equal(researcherRouteAllowed({ path: '/unrelated-sensitive-route' } as any), false, 'researcher allowlist must remain narrow');
 
 const entry = fs.readFileSync('server-entry.ts','utf8');
@@ -118,10 +128,11 @@ assert.ok(routes.includes("router.post('/questionnaire/analysis'"), 'dedicated q
 assert.ok(!routes.includes("router.get('/questionnaire/statistics'"));
 assert.ok(page.includes("api('/api/management/questionnaire/analysis'"));
 assert.ok(page.includes('/api/management/research.csv?dataset=student_questionnaires'));
-assert.ok(page.includes('Holm補正後 p &lt; .05'));
-assert.ok(page.includes('r.tSignificant'));
-assert.ok(page.includes('r.wilcoxonSignificant'));
-assert.ok(page.includes('Study 1 事前・事後質問紙分析'));
+assert.ok(page.includes('Study 1 3時点質問紙分析'));
+assert.ok(page.includes('3時点完備 N'));
+assert.ok(page.includes('試験的LMM分析（研究者用）'));
+assert.ok(page.includes('/api/management/questionnaire/lmm-trial'));
+assert.equal(page.includes('Holm補正後 p &lt; .05'), false);
 assert.ok(management.includes('href="/questionnaire-analysis.html"'));
 assert.equal(management.includes('id="questionnaireSection"'), false, 'questionnaire analysis must be detached from Research Dashboard HTML');
 assert.ok(runtime.includes('student_questionnaires.csv'));

@@ -181,7 +181,7 @@ jobs:
             fi
             sleep 2
           done
-          grep -q 'Study 1 事前・事後質問紙分析' <<<"$questionnaire_html"
+          grep -q 'Study 1 3時点質問紙分析' <<<"$questionnaire_html"
           grep -q '/api/management/questionnaire/analysis' <<<"$questionnaire_html"
           grep -q 'dataset=student_questionnaires' <<<"$questionnaire_html"
           grep -q 'Google Forms自動同期' <<<"$questionnaire_html"

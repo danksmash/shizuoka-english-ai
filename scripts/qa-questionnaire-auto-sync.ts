@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
+  QUESTIONNAIRE_MID_FORM_ID,
   QUESTIONNAIRE_POST_FORM_ID,
   QUESTIONNAIRE_PRE_FORM_ID,
   canonicalQuestionnaireAutoPayload,
@@ -19,7 +20,9 @@ import {
 } from '../src/server/study1FormalParticipantHashes';
 
 assert.equal(questionnaireWaveForFormId(QUESTIONNAIRE_PRE_FORM_ID), 'pre_app');
-assert.equal(questionnaireWaveForFormId(QUESTIONNAIRE_POST_FORM_ID), 'post_exchange');
+assert.equal(questionnaireWaveForFormId(QUESTIONNAIRE_MID_FORM_ID), 'mid_pre_reveal');
+assert.equal(questionnaireWaveForFormId(QUESTIONNAIRE_POST_FORM_ID), 'post_pre_exchange');
+assert.match(QUESTIONNAIRE_MID_FORM_ID, /^[A-Za-z0-9_-]{20,}$/);
 assert.equal(questionnaireWaveForFormId('unknown-form'), null);
 
 assert.equal(STUDY1_FORMAL_PARTICIPANT_COUNT, 145);
@@ -77,7 +80,6 @@ const entry = fs.readFileSync('server-entry.ts', 'utf8');
 const route = fs.readFileSync('src/server/questionnaireAutoSyncRoutes.ts', 'utf8');
 const manualRoute = fs.readFileSync('src/server/questionnaireRoutes.ts', 'utf8');
 const core = fs.readFileSync('src/server/questionnaireAutoSync.ts', 'utf8');
-const dashboardRuntime = fs.readFileSync('src/server/questionnaireAutoSyncDashboardRuntime.ts', 'utf8');
 const analysisPage = fs.readFileSync('public/questionnaire-analysis.html', 'utf8');
 const participantHashes = fs.readFileSync('src/server/study1FormalParticipantHashes.ts', 'utf8');
 const deployWorkflow = fs.readFileSync('.github/workflows/cloud-run-deploy.yml', 'utf8');
@@ -100,12 +102,12 @@ assert.ok(!manualRoute.includes('importGoogleFormsQuestionnaireCsv'), 'old permi
 assert.ok(manualRoute.includes("router.post('/questionnaire/revision'"));
 assert.ok(analysisPage.includes('/api/management/questionnaire/revision'));
 assert.ok(analysisPage.includes('setInterval(pollRevision,30000)'));
-assert.ok(analysisPage.includes('Pre M(SD)［paired］'));
-assert.ok(analysisPage.includes('Post M(SD)［paired］'));
+assert.ok(analysisPage.includes('Mid N'));
+assert.ok(analysisPage.includes('試験的LMM分析（研究者用）'));
+assert.ok(analysisPage.includes('/api/management/questionnaire/lmm-trial'));
 assert.ok(analysisPage.includes('/api/management/questionnaire/analysis'));
 assert.equal(analysisPage.includes('id="qCsvFile"'), false, 'manual questionnaire CSV file input must not be exposed on the dedicated page');
 assert.equal(analysisPage.includes('id="qImportBtn"'), false, 'manual questionnaire CSV import button must not be exposed on the dedicated page');
-assert.ok(dashboardRuntime.includes('removeQuestionnaireManualImportUi'), 'legacy transformation remains covered until dead runtime cleanup');
 
 // Production must fail closed if the shared ingest secret has not been provisioned.
 assert.ok(deployWorkflow.includes('gcloud secrets describe "$secret"'));

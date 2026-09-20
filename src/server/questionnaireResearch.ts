@@ -2,7 +2,20 @@ import crypto from 'node:crypto';
 import { createDocumentIfAbsent, listCollection } from './firestore';
 import { resolveStudentByCode } from './persistence';
 
-export type QuestionnaireWave = 'pre_app' | 'post_exchange';
+export type QuestionnaireWave = 'pre_app' | 'mid_pre_reveal' | 'post_pre_exchange';
+export const QUESTIONNAIRE_WAVES: QuestionnaireWave[] = ['pre_app', 'mid_pre_reveal', 'post_pre_exchange'];
+
+export function canonicalQuestionnaireWave(value: unknown): QuestionnaireWave | null {
+  const raw = String(value ?? '').trim();
+  if (raw === 'pre_app') return 'pre_app';
+  if (raw === 'mid_pre_reveal') return 'mid_pre_reveal';
+  if (raw === 'post_pre_exchange' || raw === 'post_exchange') return 'post_pre_exchange';
+  return null;
+}
+
+export function questionnaireWaveOrder(wave: QuestionnaireWave): 1 | 2 | 3 {
+  return wave === 'pre_app' ? 1 : wave === 'mid_pre_reveal' ? 2 : 3;
+}
 export type QuestionnaireMetricKey = 'total' | 'persistence' | 'self_regulation' | 'l2wtc';
 
 export const QUESTIONNAIRE_INSTRUMENT_VERSION = 'attitude-l2wtc-20260811-v1';
@@ -96,7 +109,8 @@ function gradeForClassId(classId: string): 5 | 6 | null {
 }
 
 function responseDocumentId(researchId: string, wave: QuestionnaireWave, submittedAt: string, items: QuestionnaireItemScores): string {
-  const digest = crypto.createHash('sha256').update(JSON.stringify([researchId, wave, submittedAt, items])).digest('hex').slice(0, 24);
+  const stableWaveKey = wave === 'post_pre_exchange' ? 'post_exchange' : wave;
+  const digest = crypto.createHash('sha256').update(JSON.stringify([researchId, stableWaveKey, submittedAt, items])).digest('hex').slice(0, 24);
   return `q_${digest}`;
 }
 
@@ -154,7 +168,7 @@ export interface QuestionnaireImportResult {
 }
 
 export async function importGoogleFormsQuestionnaireCsv(csvText: string, surveyWave: QuestionnaireWave): Promise<QuestionnaireImportResult> {
-  if (!['pre_app', 'post_exchange'].includes(surveyWave)) throw new Error('INVALID_SURVEY_WAVE');
+  if (!QUESTIONNAIRE_WAVES.includes(surveyWave)) throw new Error('INVALID_SURVEY_WAVE');
   const rows = parseCsv(csvText.replace(/^\uFEFF/, ''));
   if (rows.length < 2) throw new Error('QUESTIONNAIRE_CSV_EMPTY');
   const headers = rows[0].map((h) => h.trim());
@@ -221,10 +235,11 @@ function cleanRecord(raw: Record<string, any>): QuestionnaireRecord | null {
   if (!items || !QUESTIONNAIRE_ITEMS.every((item) => Number.isInteger(items[item.id]) && items[item.id] >= 1 && items[item.id] <= 6)) return null;
   const gradeLevel = Number(raw.gradeLevel);
   if (![5, 6].includes(gradeLevel)) return null;
-  if (!['pre_app', 'post_exchange'].includes(String(raw.surveyWave))) return null;
+  const surveyWave = canonicalQuestionnaireWave(raw.surveyWave);
+  if (!surveyWave) return null;
   return {
     responseId: String(raw.responseId || ''), researchId: String(raw.researchId || ''), classId: String(raw.classId || ''),
-    gradeLevel: gradeLevel as 5 | 6, dataScope: 'main', surveyWave: raw.surveyWave as QuestionnaireWave,
+    gradeLevel: gradeLevel as 5 | 6, dataScope: 'main', surveyWave,
     surveyDate: String(raw.surveyDate || ''), submittedAt: String(raw.submittedAt || ''), instrumentVersion: String(raw.instrumentVersion || ''),
     items, totalSum: Number(raw.totalSum), totalMean: Number(raw.totalMean), persistenceSum: Number(raw.persistenceSum), persistenceMean: Number(raw.persistenceMean),
     selfRegulationSum: Number(raw.selfRegulationSum), selfRegulationMean: Number(raw.selfRegulationMean), l2wtcSum: Number(raw.l2wtcSum), l2wtcMean: Number(raw.l2wtcMean),
@@ -406,7 +421,7 @@ export function buildQuestionnaireStatistics(records: QuestionnaireRecord[]) {
   const rawRows: QuestionnaireStatsRow[] = [];
   for (const metric of METRICS) {
     for (const group of GROUPS) {
-      const subset = records.filter(group.match); const preMap = uniqueWaveMap(subset, 'pre_app'); const postMap = uniqueWaveMap(subset, 'post_exchange');
+      const subset = records.filter(group.match); const preMap = uniqueWaveMap(subset, 'pre_app'); const postMap = uniqueWaveMap(subset, 'post_pre_exchange');
       const pairIds = [...preMap.keys()].filter((id) => postMap.has(id));
       const pre = pairIds.map((id) => metric.value(preMap.get(id)!)); const post = pairIds.map((id) => metric.value(postMap.get(id)!));
       const dPre = descriptive(pre), dPost = descriptive(post), tt = pairedTTest(pre, post), wx = wilcoxonSignedRank(pre, post);
@@ -432,17 +447,34 @@ export function buildQuestionnaireStatistics(records: QuestionnaireRecord[]) {
   }
   rawRows.forEach((row) => { row.tSignificant = typeof row.tHolmP === 'number' && row.tHolmP < 0.05; row.wilcoxonSignificant = typeof row.wilcoxonHolmP === 'number' && row.wilcoxonHolmP < 0.05; });
   const duplicateKeys = new Map<string, number>(); records.forEach((r) => { const key = `${r.researchId}|${r.surveyWave}`; duplicateKeys.set(key, (duplicateKeys.get(key) || 0) + 1); });
-  const preUnique = uniqueWaveMap(records, 'pre_app'); const postUnique = uniqueWaveMap(records, 'post_exchange');
+  const preUnique = uniqueWaveMap(records, 'pre_app');
+  const midUnique = uniqueWaveMap(records, 'mid_pre_reveal');
+  const postUnique = uniqueWaveMap(records, 'post_pre_exchange');
+  const preMidIds = [...preUnique.keys()].filter((id) => midUnique.has(id));
+  const midPostIds = [...midUnique.keys()].filter((id) => postUnique.has(id));
+  const prePostIds = [...preUnique.keys()].filter((id) => postUnique.has(id));
+  const complete3Ids = [...preUnique.keys()].filter((id) => midUnique.has(id) && postUnique.has(id));
   return {
     instrumentVersion: QUESTIONNAIRE_INSTRUMENT_VERSION,
-    scoring: { minimum: 1, maximum: 6, reverseItems: 0, significantThreshold: 0.05, adjustment: 'Holm' },
-    counts: { records: records.length, preUnique: preUnique.size, postUnique: postUnique.size, paired: [...preUnique.keys()].filter((id) => postUnique.has(id)).length, duplicateWaveKeys: [...duplicateKeys.values()].filter((n) => n > 1).length },
+    scoring: { minimum: 1, maximum: 6, reverseItems: 0, significantThreshold: 0.05, adjustment: 'Holm', primaryModel: 'LMM_trial_on_demand' },
+    counts: {
+      records: records.length,
+      preUnique: preUnique.size,
+      midUnique: midUnique.size,
+      postUnique: postUnique.size,
+      complete3: complete3Ids.length,
+      preMidPaired: preMidIds.length,
+      midPostPaired: midPostIds.length,
+      prePostPaired: prePostIds.length,
+      paired: prePostIds.length,
+      duplicateWaveKeys: [...duplicateKeys.values()].filter((n) => n > 1).length,
+    },
     rows: rawRows,
   };
 }
 
 export const QUESTIONNAIRE_EXPORT_HEADERS = [
-  'research_id','class_id','data_scope','grade_level','survey_wave','survey_date','submitted_at','instrument_version',
+  'research_id','class_id','data_scope','grade_level','survey_wave','survey_order','survey_date','submitted_at','instrument_version',
   ...QUESTIONNAIRE_ITEMS.map((item) => item.id),
   'total_sum','total_mean','persistence_sum','persistence_mean','self_regulation_sum','self_regulation_mean','l2wtc_sum','l2wtc_mean','data_quality_flag','response_id','imported_at',
 ] as const;
@@ -450,8 +482,8 @@ export const QUESTIONNAIRE_EXPORT_HEADERS = [
 function classMatches(classId: string, requested: string): boolean { if (!requested || requested === 'all') return true; return ['1','2','3'].includes(requested) ? classId.endsWith(`-${requested}`) : classId === requested; }
 export function buildQuestionnaireExportRows(records: QuestionnaireRecord[], query: Record<string, unknown> = {}): Record<string, unknown>[] {
   const grade = String(query.grade || 'all'); const classId = String(query.classId || 'all'); const scope = String(query.dataScope || 'main');
-  return records.filter((r) => (scope === 'all' || scope === 'main') && (grade === 'all' || String(r.gradeLevel) === grade) && classMatches(r.classId, classId)).sort((a, b) => a.researchId.localeCompare(b.researchId) || a.surveyWave.localeCompare(b.surveyWave)).map((r) => ({
-    research_id:r.researchId,class_id:r.classId,data_scope:r.dataScope,grade_level:r.gradeLevel,survey_wave:r.surveyWave,survey_date:r.surveyDate,submitted_at:r.submittedAt,instrument_version:r.instrumentVersion,
+  return records.filter((r) => (scope === 'all' || scope === 'main') && (grade === 'all' || String(r.gradeLevel) === grade) && classMatches(r.classId, classId)).sort((a, b) => a.researchId.localeCompare(b.researchId) || questionnaireWaveOrder(a.surveyWave) - questionnaireWaveOrder(b.surveyWave)).map((r) => ({
+    research_id:r.researchId,class_id:r.classId,data_scope:r.dataScope,grade_level:r.gradeLevel,survey_wave:r.surveyWave,survey_order:questionnaireWaveOrder(r.surveyWave),survey_date:r.surveyDate,submitted_at:r.submittedAt,instrument_version:r.instrumentVersion,
     ...Object.fromEntries(QUESTIONNAIRE_ITEMS.map((item) => [item.id, r.items[item.id]])),
     total_sum:r.totalSum,total_mean:r.totalMean,persistence_sum:r.persistenceSum,persistence_mean:r.persistenceMean,self_regulation_sum:r.selfRegulationSum,self_regulation_mean:r.selfRegulationMean,l2wtc_sum:r.l2wtcSum,l2wtc_mean:r.l2wtcMean,data_quality_flag:r.dataQualityFlag,response_id:r.responseId,imported_at:r.importedAt,
   }));
@@ -461,9 +493,9 @@ export function serializeQuestionnaireCsv(rows: Record<string, unknown>[]): stri
 
 export function buildQuestionnaireCodebookRows(): Record<string, unknown>[] {
   const definitions: Record<string, string> = {
-    research_id:'AI対話・授業Reflectionと共通の匿名研究ID',class_id:'匿名化された学級ID',data_scope:'研究データ区分',grade_level:'学年',survey_wave:'質問紙時点',survey_date:'回答日（日本時間）',submitted_at:'Google Forms回答タイムスタンプのUTC正規化値',instrument_version:'質問紙尺度版',
+    research_id:'AI対話・授業Reflectionと共通の匿名研究ID',class_id:'匿名化された学級ID',data_scope:'研究データ区分',grade_level:'学年',survey_wave:'質問紙時点（Pre／Mid／Post）',survey_order:'時点順（Pre=1, Mid=2, Post=3）',survey_date:'回答日（日本時間）',submitted_at:'Google Forms回答タイムスタンプのUTC正規化値',instrument_version:'質問紙尺度版',
     total_sum:'全15項目合計（15–90）',total_mean:'全15項目平均（1–6）',persistence_sum:'粘り強さ5項目合計（5–30）',persistence_mean:'粘り強さ5項目平均（1–6）',self_regulation_sum:'学習の自己調整5項目合計（5–30）',self_regulation_mean:'学習の自己調整5項目平均（1–6）',l2wtc_sum:'L2 WTC 5項目合計（5–30）',l2wtc_mean:'L2 WTC 5項目平均（1–6）',data_quality_flag:'質問紙回答品質',response_id:'匿名化された回答ID',imported_at:'研究システムへの取込日時',
   };
   for (const item of QUESTIONNAIRE_ITEMS) definitions[item.id] = `${item.sourceId} ${item.text}（1=まったくあてはまらない〜6=よくあてはまる、逆転なし）`;
-  return QUESTIONNAIRE_EXPORT_HEADERS.map((variable) => ({ file_name:'student_questionnaires.csv',variable,definition:definitions[variable] || variable.replace(/_/g,' '),data_type:['grade_level',...QUESTIONNAIRE_ITEMS.map(i=>i.id),'total_sum','total_mean','persistence_sum','persistence_mean','self_regulation_sum','self_regulation_mean','l2wtc_sum','l2wtc_mean'].includes(variable as any)?'number':'string',allowed_values:variable==='survey_wave'?'pre_app | post_exchange':QUESTIONNAIRE_ITEMS.some(i=>i.id===variable)?'1 | 2 | 3 | 4 | 5 | 6':variable==='data_scope'?'main':'',analysis_use:'事前・事後質問紙とAI対話・Reflectionをresearch_idで結合し、記述統計・対応検定・効果量を分析' }));
+  return QUESTIONNAIRE_EXPORT_HEADERS.map((variable) => ({ file_name:'student_questionnaires.csv',variable,definition:definitions[variable] || variable.replace(/_/g,' '),data_type:['grade_level','survey_order',...QUESTIONNAIRE_ITEMS.map(i=>i.id),'total_sum','total_mean','persistence_sum','persistence_mean','self_regulation_sum','self_regulation_mean','l2wtc_sum','l2wtc_mean'].includes(variable as any)?'number':'string',allowed_values:variable==='survey_wave'?'pre_app | mid_pre_reveal | post_pre_exchange':variable==='survey_order'?'1 | 2 | 3':QUESTIONNAIRE_ITEMS.some(i=>i.id===variable)?'1 | 2 | 3 | 4 | 5 | 6':variable==='data_scope'?'main':'',analysis_use:'Pre／Mid／Post質問紙をAI対話・Reflectionとresearch_idで結合し、3時点記述統計・LMM用long形式データとして分析' }));
 }

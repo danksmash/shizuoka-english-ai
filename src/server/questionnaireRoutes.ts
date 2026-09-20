@@ -2,6 +2,9 @@ import express from 'express';
 import { requireManagementRole } from './auth';
 import { getDocument } from './firestore';
 import { buildQuestionnaireDescriptiveStatistics } from './questionnaireDescriptive';
+import { buildQuestionnaireLmmTrialBundle } from './questionnaireLmmTrial';
+import { buildQuestionnaireTimingAudit } from './questionnaireTimingAudit';
+import { getAllStudySchedules } from './studySchedulePersistence';
 import {
   buildQuestionnaireStatistics,
   getAllQuestionnaireRecords,
@@ -16,7 +19,9 @@ import {
 const router = express.Router();
 
 function wave(value: unknown): QuestionnaireWave | null {
-  return value === 'pre_app' || value === 'post_exchange' ? value : null;
+  if (value === 'pre_app' || value === 'mid_pre_reveal' || value === 'post_pre_exchange') return value;
+  if (value === 'post_exchange') return 'post_pre_exchange';
+  return null;
 }
 
 router.post('/questionnaire/import', requireManagementRole(['researcher']), async (req, res) => {
@@ -48,15 +53,20 @@ router.post('/questionnaire/statistics', requireManagementRole(['researcher']), 
 
 router.post('/questionnaire/analysis', requireManagementRole(['researcher']), async (_req, res) => {
   try {
-    const [records, state] = await Promise.all([
+    const [records, state, schedules] = await Promise.all([
       getAllQuestionnaireRecords(),
       getDocument(QUESTIONNAIRE_SYNC_STATE_COLLECTION, QUESTIONNAIRE_SYNC_STATE_DOCUMENT),
+      getAllStudySchedules().catch((error: any) => {
+        console.warn('Questionnaire timing audit schedule read unavailable', { message: error?.message });
+        return [];
+      }),
     ]);
     res.setHeader('Cache-Control', 'no-store');
     return res.json({
       success: true,
       statistics: buildQuestionnaireStatistics(records),
       descriptive: buildQuestionnaireDescriptiveStatistics(records),
+      timingAudit: buildQuestionnaireTimingAudit(records, schedules),
       revision: {
         lastIngestedAt: String(state?.lastIngestedAt || ''),
         lastResponseId: String(state?.lastResponseId || ''),
@@ -66,6 +76,17 @@ router.post('/questionnaire/analysis', requireManagementRole(['researcher']), as
   } catch (error: any) {
     console.error('Questionnaire analysis failed', { message: error?.message });
     return res.status(503).json({ success: false, error: 'QUESTIONNAIRE_ANALYSIS_UNAVAILABLE' });
+  }
+});
+
+router.post('/questionnaire/lmm-trial', requireManagementRole(['researcher']), async (_req, res) => {
+  try {
+    const records = await getAllQuestionnaireRecords();
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, ...buildQuestionnaireLmmTrialBundle(records) });
+  } catch (error: any) {
+    console.error('Questionnaire LMM trial failed', { message: error?.message });
+    return res.status(503).json({ success: false, error: 'QUESTIONNAIRE_LMM_TRIAL_UNAVAILABLE' });
   }
 });
 

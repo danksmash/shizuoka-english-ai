@@ -7,6 +7,7 @@ import {
   calculateQuestionnaireScores,
   type QuestionnaireItemScores,
   type QuestionnaireRecord,
+  type QuestionnaireWave,
 } from '../src/server/questionnaireResearch';
 
 function itemScores(base: number): QuestionnaireItemScores {
@@ -15,15 +16,22 @@ function itemScores(base: number): QuestionnaireItemScores {
   ) as QuestionnaireItemScores;
 }
 
+const waveDates: Record<QuestionnaireWave, string> = {
+  pre_app: '2026-09-17',
+  mid_pre_reveal: '2026-10-01',
+  post_pre_exchange: '2026-10-20',
+};
+
 function record(
   researchId: string,
   classId: string,
-  surveyWave: 'pre_app' | 'post_exchange',
+  surveyWave: QuestionnaireWave,
   base: number,
   suffix = '',
 ): QuestionnaireRecord {
   const items = itemScores(base);
   const scores = calculateQuestionnaireScores(items);
+  const surveyDate = waveDates[surveyWave];
   return {
     responseId: `q-${researchId}-${surveyWave}${suffix}`,
     researchId,
@@ -31,8 +39,8 @@ function record(
     gradeLevel: classId.startsWith('5-') ? 5 : 6,
     dataScope: 'main',
     surveyWave,
-    surveyDate: surveyWave === 'pre_app' ? '2026-09-17' : '2026-10-20',
-    submittedAt: surveyWave === 'pre_app' ? '2026-09-17T00:00:00.000Z' : '2026-10-20T00:00:00.000Z',
+    surveyDate,
+    submittedAt: `${surveyDate}T00:00:00.000Z`,
     instrumentVersion: QUESTIONNAIRE_INSTRUMENT_VERSION,
     items,
     ...scores,
@@ -42,71 +50,63 @@ function record(
 }
 
 const records: QuestionnaireRecord[] = [];
-
-// 5-3: 24 enrolled is not assumed. If 2 pupils are absent, the current descriptive N is 22.
-for (let i = 0; i < 22; i += 1) {
-  records.push(record(`R5-3-${i}`, '5-3', 'pre_app', 3 + (i % 2)));
-}
+for (let i = 0; i < 22; i += 1) records.push(record(`R5-3-${i}`, '5-3', 'pre_app', 3 + (i % 2)));
 
 let stats = buildQuestionnaireDescriptiveStatistics(records);
 let row53 = stats.rows.find((row) => row.groupId === '5-3');
 assert.ok(row53);
-assert.equal(row53.pre.n, 22, 'current Pre N must equal currently available valid responses');
-assert.equal(row53.post.n, 0, 'missing Post responses must remain N=0');
-assert.ok(typeof row53.pre.total.mean === 'number', 'Pre mean must be available even before Post exists');
-assert.ok(typeof row53.pre.total.sd === 'number', 'Pre SD must use current valid respondents');
+assert.equal(row53.pre.n, 22);
+assert.equal(row53.mid.n, 0);
+assert.equal(row53.post.n, 0);
+assert.ok(typeof row53.pre.total.mean === 'number');
+assert.equal(row53.mid.total.mean, null);
 assert.equal(row53.post.total.mean, null);
-assert.equal(row53.post.total.sd, null);
 
-// Late responses update the descriptive N and statistics without waiting for a complete class.
 records.push(record('R5-3-22', '5-3', 'pre_app', 4));
-stats = buildQuestionnaireDescriptiveStatistics(records);
-row53 = stats.rows.find((row) => row.groupId === '5-3');
-assert.equal(row53?.pre.n, 23, 'late response must immediately increase the current Pre N');
-
-// Post may have a different current N because absences are handled independently at each wave.
-for (let i = 0; i < 20; i += 1) {
-  records.push(record(`R5-3-${i}`, '5-3', 'post_exchange', 4 + (i % 2)));
-}
+for (let i = 0; i < 21; i += 1) records.push(record(`R5-3-${i}`, '5-3', 'mid_pre_reveal', 4 + (i % 2)));
+for (let i = 0; i < 20; i += 1) records.push(record(`R5-3-${i}`, '5-3', 'post_pre_exchange', 4 + (i % 2)));
 stats = buildQuestionnaireDescriptiveStatistics(records);
 row53 = stats.rows.find((row) => row.groupId === '5-3');
 assert.equal(row53?.pre.n, 23);
+assert.equal(row53?.mid.n, 21);
 assert.equal(row53?.post.n, 20);
-assert.ok(typeof row53?.post.l2wtc.mean === 'number');
+assert.ok(typeof row53?.mid.l2wtc.mean === 'number');
 assert.ok(typeof row53?.post.l2wtc.sd === 'number');
 
-// N=1: mean is shown but sample SD is unavailable.
-records.push(record('R6-2-ONLY', '6-2', 'pre_app', 3));
+records.push(record('R6-2-ONLY', '6-2', 'mid_pre_reveal', 3));
 stats = buildQuestionnaireDescriptiveStatistics(records);
 const row62 = stats.rows.find((row) => row.groupId === '6-2');
-assert.equal(row62?.pre.n, 1);
-assert.ok(typeof row62?.pre.total.mean === 'number');
-assert.equal(row62?.pre.total.sd, null);
+assert.equal(row62?.mid.n, 1);
+assert.ok(typeof row62?.mid.total.mean === 'number');
+assert.equal(row62?.mid.total.sd, null);
 
-// Same research_id + same wave duplicates are excluded from descriptive statistics, matching current data-quality policy.
-records.push(record('R-DUP', '5-2', 'pre_app', 3, '-a'));
-records.push(record('R-DUP', '5-2', 'pre_app', 4, '-b'));
+records.push(record('R-DUP', '5-2', 'mid_pre_reveal', 3, '-a'));
+records.push(record('R-DUP', '5-2', 'mid_pre_reveal', 4, '-b'));
 stats = buildQuestionnaireDescriptiveStatistics(records);
 const row52 = stats.rows.find((row) => row.groupId === '5-2');
-assert.equal(row52?.pre.n, 0, 'duplicate same-wave responses must not be double-counted');
+assert.equal(row52?.mid.n, 0, 'duplicate same-wave responses must not be double-counted');
 
 const overall = stats.rows.find((row) => row.groupId === 'all');
 assert.ok(overall);
-assert.equal(overall.pre.n, 24, 'overall Pre N must be the current unique valid responses across classes');
-assert.equal(stats.rows.length, 8, 'five classes, two grades, and overall are required');
+assert.equal(overall.pre.n, 23);
+assert.equal(overall.mid.n, 22);
+assert.equal(overall.post.n, 20);
+assert.equal(stats.rows.length, 8);
+assert.deepEqual(stats.calculation.waveOrder, ['pre_app', 'mid_pre_reveal', 'post_pre_exchange']);
 assert.equal(stats.calculation.scaleMinimum, 1);
 assert.equal(stats.calculation.scaleMaximum, 6);
-assert.ok(stats.calculation.absenceRule.includes('current_N_mean_SD'));
 
 const routes = fs.readFileSync('src/server/questionnaireRoutes.ts', 'utf8');
 const page = fs.readFileSync('public/questionnaire-analysis.html', 'utf8');
 assert.ok(routes.includes("router.post('/questionnaire/descriptive'"));
 assert.ok(routes.includes("router.post('/questionnaire/analysis'"));
-assert.ok(page.includes('各時点で回答済みの児童に基づく N・平均値（M）・標準偏差（SD）'));
-assert.ok(page.includes("api('/api/management/questionnaire/analysis'"));
-assert.ok(page.includes('事前・事後対応分析'));
-assert.ok(page.includes('6件法平均値'));
-assert.ok(page.includes('renderDescriptive'));
-assert.ok(page.includes('renderPaired'));
+assert.ok(routes.includes("router.post('/questionnaire/lmm-trial'"));
+assert.ok(page.includes('Study 1 3時点質問紙分析'));
+assert.ok(page.includes('Mid N'));
+assert.ok(page.includes("mid=row.mid[key]"));
+assert.ok(page.includes("bar(mid,cx"));
+assert.ok(page.includes('試験的LMM分析（研究者用）'));
+assert.ok(page.includes("api('/api/management/questionnaire/lmm-trial'"));
+assert.equal(page.includes('事前・事後対応分析'), false);
 
-console.log('Questionnaire descriptive dashboard QA: PASS');
+console.log('Questionnaire three-wave descriptive dashboard QA: PASS');

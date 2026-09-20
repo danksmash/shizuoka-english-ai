@@ -19,6 +19,7 @@ export interface QuestionnaireDescriptiveRow {
   groupId: string;
   groupLabel: string;
   pre: QuestionnaireDescriptiveWaveSummary;
+  mid: QuestionnaireDescriptiveWaveSummary;
   post: QuestionnaireDescriptiveWaveSummary;
 }
 
@@ -93,7 +94,8 @@ export function buildQuestionnaireDescriptiveStatistics(records: QuestionnaireRe
       groupId: group.id,
       groupLabel: group.label,
       pre: summarizeWave(subset, 'pre_app'),
-      post: summarizeWave(subset, 'post_exchange'),
+      mid: summarizeWave(subset, 'mid_pre_reveal'),
+      post: summarizeWave(subset, 'post_pre_exchange'),
     };
   });
 
@@ -105,6 +107,7 @@ export function buildQuestionnaireDescriptiveStatistics(records: QuestionnaireRe
       sdRule: 'sample_sd; unavailable_for_N_less_than_2',
       scaleMinimum: 1,
       scaleMaximum: 6,
+      waveOrder: ['pre_app', 'mid_pre_reveal', 'post_pre_exchange'],
     },
     rows,
   };
