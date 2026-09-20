@@ -117,6 +117,7 @@ function renderChart(targetId,rows,key){
 }
 function renderTimingAudit(audit){
   if(!audit){$('timingAudit').textContent='日程監査データを読み込めません。';return;}
+  if(audit.status==='unavailable'){$('timingAudit').textContent='日程設定を取得できないため、時点整合性監査は現在利用できません。通常の質問紙集計には影響しません。';return;}
   if(audit.issueCount){$('timingAudit').innerHTML='要確認 <b>'+audit.issueCount+'</b>件。'+esc(audit.note)+'<br>'+audit.issues.slice(0,8).map(x=>esc(x.classId+' / '+x.surveyDate+' / '+x.surveyWave+'：'+x.message)).join('<br>');}
   else{$('timingAudit').textContent='明確な日程矛盾は検出されませんでした。監査可能 '+(audit.auditable??0)+'件。 '+String(audit.note||'');}
 }
