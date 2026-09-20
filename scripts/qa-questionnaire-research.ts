@@ -113,6 +113,7 @@ assert.equal(researcherRouteAllowed({ path: '/api/management/questionnaire/stati
 assert.equal(researcherRouteAllowed({ path: '/api/management/questionnaire/import' } as any), true, 'full questionnaire import route must be researcher-accessible');
 assert.equal(researcherRouteAllowed({ path: '/questionnaire/analysis' } as any), true, 'mounted questionnaire analysis route must be researcher-accessible');
 assert.equal(researcherRouteAllowed({ path: '/api/management/questionnaire/analysis' } as any), true, 'full questionnaire analysis route must be researcher-accessible');
+assert.equal(researcherRouteAllowed({ path: '/api/management/questionnaire/lmm-trial' } as any), true, 'trial LMM route must remain researcher-accessible');
 assert.equal(researcherRouteAllowed({ path: '/unrelated-sensitive-route' } as any), false, 'researcher allowlist must remain narrow');
 
 const entry = fs.readFileSync('server-entry.ts','utf8');
