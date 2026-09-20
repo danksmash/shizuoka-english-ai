@@ -59,7 +59,7 @@ export function buildQuestionnaireTimingAudit(records: QuestionnaireRecord[], sc
   }
 
   return {
-    status: issues.length ? 'review' : 'ok',
+    status: issues.length ? 'review' : auditable > 0 ? 'ok' : 'unavailable',
     auditable,
     unavailable,
     issueCount: issues.length,
