@@ -56,7 +56,10 @@ router.post('/questionnaire/analysis', requireManagementRole(['researcher']), as
     const [records, state, schedules] = await Promise.all([
       getAllQuestionnaireRecords(),
       getDocument(QUESTIONNAIRE_SYNC_STATE_COLLECTION, QUESTIONNAIRE_SYNC_STATE_DOCUMENT),
-      getAllStudySchedules(),
+      getAllStudySchedules().catch((error: any) => {
+        console.warn('Questionnaire timing audit schedule read unavailable', { message: error?.message });
+        return [];
+      }),
     ]);
     res.setHeader('Cache-Control', 'no-store');
     return res.json({
