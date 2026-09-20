@@ -99,7 +99,7 @@ assert.equal(stats.counts.duplicateWaveKeys,1);
 assert.equal(stats.rows.length,32,'4 metrics x 8 groups required');
 assert.ok(stats.rows.some((row) => row.groupId==='all' && row.metric==='l2wtc'));
 assert.ok(stats.rows.some((row) => row.groupId==='all' && row.metric==='attitude'));
-assert.equal(stats.rows.some((row) => row.metric==='total'), false, 'legacy all-15 score must not appear as a research outcome');
+assert.equal(stats.rows.some((row) => String(row.metric)==='total'), false, 'legacy all-15 score must not appear as a research outcome');
 assert.ok(stats.rows.every((row) => row.tHolmP===null || (row.tHolmP>=0 && row.tHolmP<=1)));
 assert.ok(stats.rows.every((row) => row.wilcoxonHolmP===null || (row.wilcoxonHolmP>=0 && row.wilcoxonHolmP<=1)));
 
