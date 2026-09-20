@@ -196,6 +196,7 @@ async function persistCanonicalQuestionnaire(
     surveyDate: tokyoDate(submittedAt),
     submittedAt,
     instrumentVersion: QUESTIONNAIRE_INSTRUMENT_VERSION,
+    scoringVersion: QUESTIONNAIRE_SCORING_VERSION,
     items,
     ...scores,
     dataQualityFlag: 'complete',
