@@ -60,8 +60,9 @@ function round6(value: number): number | null {
 }
 
 function normalCdf(x: number): number {
-  const sign = x < 0 ? -1 : 1;
-  const ax = Math.abs(x);
+  const z = x / Math.sqrt(2);
+  const sign = z < 0 ? -1 : 1;
+  const ax = Math.abs(z);
   const t = 1 / (1 + 0.3275911 * ax);
   const erf = sign * (1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-ax * ax));
   return 0.5 * (1 + erf);
