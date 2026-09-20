@@ -78,7 +78,7 @@ stats = buildQuestionnaireDescriptiveStatistics(records);
 const row62 = stats.rows.find((row) => row.groupId === '6-2');
 assert.equal(row62?.mid.n, 1);
 assert.ok(typeof row62?.mid.attitude.mean === 'number');
-assert.equal(row62?.mid.total.sd, null);
+assert.equal(row62?.mid.attitude.sd, null);
 
 records.push(record('R-DUP', '5-2', 'mid_pre_reveal', 3, '-a'));
 records.push(record('R-DUP', '5-2', 'mid_pre_reveal', 4, '-b'));
