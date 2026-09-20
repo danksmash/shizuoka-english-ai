@@ -81,6 +81,15 @@ jobs:
           test "$stats_status" = '401'
           grep -q '"error":"UNAUTHORIZED"' /tmp/questionnaire-stats.json
 
+          lmm_status=$(curl --silent --show-error --max-time 20 \
+            -o /tmp/questionnaire-lmm.json \
+            -w '%{http_code}' \
+            -X POST "$API_URL/api/management/questionnaire/lmm-trial" \
+            -H 'Content-Type: application/json' \
+            --data '{}')
+          test "$lmm_status" = '401'
+          grep -q '"error":"UNAUTHORIZED"' /tmp/questionnaire-lmm.json
+
           # Manual CSV import remains as a protected emergency fallback API, but it is
           # intentionally no longer exposed in the normal researcher dashboard UI.
           import_status=$(curl --silent --show-error --max-time 20 \
