@@ -97,6 +97,9 @@ const schedules: StudyScheduleRecord[] = [{
 }];
 const timingOk = buildQuestionnaireTimingAudit(interventionOnly.filter((row) => row.classId === '5-1'), schedules);
 assert.equal(timingOk.issueCount, 0);
+assert.equal(timingOk.status, 'ok');
+const timingUnavailable = buildQuestionnaireTimingAudit(interventionOnly.slice(0, 1), []);
+assert.equal(timingUnavailable.status, 'unavailable');
 const badPost = record('BAD', 'post_pre_exchange', 4, 'intervention', '5-1');
 badPost.surveyDate = '2026-10-09';
 const timingBad = buildQuestionnaireTimingAudit([badPost], schedules);
