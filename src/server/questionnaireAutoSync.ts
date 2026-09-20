@@ -14,6 +14,7 @@ import {
 } from './questionnaireResearch';
 
 export const QUESTIONNAIRE_PRE_FORM_ID = '1wI_kC4zO9fgnq0B7kfV9BVuojuGTyWJ8GDaeoMtRAuI';
+export const QUESTIONNAIRE_MID_FORM_ID = String(process.env.QUESTIONNAIRE_MID_FORM_ID || '').trim();
 export const QUESTIONNAIRE_POST_FORM_ID = '1OculFD2Ykkgj1ad3opG4I12wfal4fdhOO1dODmEwg-A';
 export const QUESTIONNAIRE_SYNC_STATE_COLLECTION = 'questionnaire_sync_state';
 export const QUESTIONNAIRE_SYNC_STATE_DOCUMENT = 'study1';
@@ -51,7 +52,8 @@ function normalizedLearningCode(value: unknown): string {
 export function questionnaireWaveForFormId(formId: unknown): QuestionnaireWave | null {
   const id = String(formId ?? '').trim();
   if (id === QUESTIONNAIRE_PRE_FORM_ID) return 'pre_app';
-  if (id === QUESTIONNAIRE_POST_FORM_ID) return 'post_exchange';
+  if (QUESTIONNAIRE_MID_FORM_ID && id === QUESTIONNAIRE_MID_FORM_ID) return 'mid_pre_reveal';
+  if (id === QUESTIONNAIRE_POST_FORM_ID) return 'post_pre_exchange';
   return null;
 }
 
@@ -153,7 +155,8 @@ export function verifyQuestionnaireAutoSignature(
 }
 
 function responseDocumentId(researchId: string, wave: QuestionnaireWave, submittedAt: string, items: QuestionnaireItemScores): string {
-  const digest = crypto.createHash('sha256').update(JSON.stringify([researchId, wave, submittedAt, items])).digest('hex').slice(0, 24);
+  const stableWaveKey = wave === 'post_pre_exchange' ? 'post_exchange' : wave;
+  const digest = crypto.createHash('sha256').update(JSON.stringify([researchId, stableWaveKey, submittedAt, items])).digest('hex').slice(0, 24);
   return `q_${digest}`;
 }
 
