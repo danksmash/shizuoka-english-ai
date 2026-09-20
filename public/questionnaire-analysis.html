@@ -98,7 +98,7 @@ function renderCounts(stats){const c=stats?.counts||{};$('mRecords').textContent
 function renderDescriptive(data){
   const rows=Array.isArray(data?.rows)?data.rows:[];
   $('descriptiveBody').innerHTML=rows.map(row=>`<tr><td>${esc(row.groupLabel)}</td><td>${row.pre.n}</td><td>${row.mid.n}</td><td>${row.post.n}</td><td>${ms(row.pre.attitude)}</td><td>${ms(row.mid.attitude)}</td><td>${ms(row.post.attitude)}</td><td>${ms(row.pre.persistence)}</td><td>${ms(row.mid.persistence)}</td><td>${ms(row.post.persistence)}</td><td>${ms(row.pre.self_regulation)}</td><td>${ms(row.mid.self_regulation)}</td><td>${ms(row.post.self_regulation)}</td><td>${ms(row.pre.l2wtc)}</td><td>${ms(row.mid.l2wtc)}</td><td>${ms(row.post.l2wtc)}</td></tr>`).join('');
-  renderChart('chartTotal',rows,'total');renderChart('chartPersistence',rows,'persistence');renderChart('chartSelfRegulation',rows,'self_regulation');renderChart('chartL2wtc',rows,'l2wtc');
+  renderChart('chartAttitude',rows,'attitude');renderChart('chartPersistence',rows,'persistence');renderChart('chartSelfRegulation',rows,'self_regulation');renderChart('chartL2wtc',rows,'l2wtc');
 }
 function renderChart(targetId,rows,key){
   const target=$(targetId);const width=760,height=276,left=42,right=12,top=20,bottom=220,plotW=width-left-right,plotH=bottom-top;
