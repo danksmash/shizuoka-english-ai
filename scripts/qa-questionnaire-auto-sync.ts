@@ -80,7 +80,6 @@ const entry = fs.readFileSync('server-entry.ts', 'utf8');
 const route = fs.readFileSync('src/server/questionnaireAutoSyncRoutes.ts', 'utf8');
 const manualRoute = fs.readFileSync('src/server/questionnaireRoutes.ts', 'utf8');
 const core = fs.readFileSync('src/server/questionnaireAutoSync.ts', 'utf8');
-const dashboardRuntime = fs.readFileSync('src/server/questionnaireAutoSyncDashboardRuntime.ts', 'utf8');
 const analysisPage = fs.readFileSync('public/questionnaire-analysis.html', 'utf8');
 const participantHashes = fs.readFileSync('src/server/study1FormalParticipantHashes.ts', 'utf8');
 const deployWorkflow = fs.readFileSync('.github/workflows/cloud-run-deploy.yml', 'utf8');
@@ -109,7 +108,6 @@ assert.ok(analysisPage.includes('/api/management/questionnaire/lmm-trial'));
 assert.ok(analysisPage.includes('/api/management/questionnaire/analysis'));
 assert.equal(analysisPage.includes('id="qCsvFile"'), false, 'manual questionnaire CSV file input must not be exposed on the dedicated page');
 assert.equal(analysisPage.includes('id="qImportBtn"'), false, 'manual questionnaire CSV import button must not be exposed on the dedicated page');
-assert.ok(dashboardRuntime.includes('removeQuestionnaireManualImportUi'), 'legacy transformation remains covered until dead runtime cleanup');
 
 // Production must fail closed if the shared ingest secret has not been provisioned.
 assert.ok(deployWorkflow.includes('gcloud secrets describe "$secret"'));
