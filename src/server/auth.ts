@@ -99,6 +99,7 @@ export function researcherRouteAllowed(req: Pick<Request, 'path'>): boolean {
   // either the router-local path or the full app path depending on call site.
   if (path.startsWith('/questionnaire/') || path.startsWith('/api/management/questionnaire/')) return true;
   if (path.startsWith('/study-schedules') || path.startsWith('/api/management/study-schedules')) return true;
+  if (path.startsWith('/study-participants') || path.startsWith('/api/management/study-participants')) return true;
   return false;
 }
 
