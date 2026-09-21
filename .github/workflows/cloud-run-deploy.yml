@@ -285,6 +285,16 @@ jobs:
           test "$payload_status" = '401'
           grep -q 'LEARNING_CODE_NOT_FOUND' /tmp/session-payload-response.json
 
+      - name: Signed Mid questionnaire ingest smoke
+        run: |
+          export QUESTIONNAIRE_INGEST_SECRET="$(gcloud secrets versions access latest \
+            --secret=QUESTIONNAIRE_INGEST_SECRET \
+            --project=shizuoka-english-ai)"
+          test -n "$QUESTIONNAIRE_INGEST_SECRET"
+          API_URL="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app" \
+            npx tsx scripts/qa-production-questionnaire-mid-signed.ts
+          unset QUESTIONNAIRE_INGEST_SECRET
+
       - name: Production Azure primary voice check
         run: |
           API_URL="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app"
