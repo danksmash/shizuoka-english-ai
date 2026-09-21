@@ -205,6 +205,7 @@ export const DEFAULT_RQ2_CODEBOOK = {
     { id: 'SACKS1974', citation: 'Sacks, H., Schegloff, E. A., & Jefferson, G. (1974). A simplest systematics for the organization of turn-taking for conversation. Language, 50(4), 696–735. https://doi.org/10.2307/412243', role: 'recipient designの基礎概念' },
     { id: 'CLARKBRENNAN1991', citation: 'Clark, H. H., & Brennan, S. E. (1991). Grounding in communication. In Perspectives on socially shared cognition (pp. 127–149). APA. https://doi.org/10.1037/10096-006', role: 'common groundとgrounding' },
     { id: 'SHAIKH2024', citation: 'Shaikh, O., Gligorić, K., Khetan, A., Gerstgrasser, M., Yang, D., & Jurafsky, D. (2024). Grounding gaps in language model generations. NAACL 2024, 6279–6296. https://doi.org/10.18653/v1/2024.naacl-long.348', role: 'human/LLM grounding acts、clarification、acknowledgement' },
+    { id: 'STORCH2002', citation: 'Storch, N. (2002). Patterns of interaction in ESL pair work. Language Learning, 52(1), 119–158. https://doi.org/10.1111/1467-9922.00179', role: '高引用の相互作用類型研究。分析単位がペア全体のため本研究の主コードには不採用。' },
     { id: 'ISO24617_2', citation: 'ISO 24617-2:2020. Language resource management—Semantic annotation framework (SemAF)—Part 2: Dialogue acts.', role: '多機能性とdialogue actの一般的分類を確認する補助的参照' },
   ],
   notes: [
