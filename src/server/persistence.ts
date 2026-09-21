@@ -134,6 +134,9 @@ export async function resolveStudentByCode(code: string): Promise<{
   schoolCondition: SchoolCondition | '';
   gradeLevel: 5 | 6 | '';
   studyStartDate: string;
+  assignedPartnerId: string;
+  assignedPartnerCountry: string;
+  assignmentAnnouncedAt: string;
 } | null> {
   const learningId = code.trim().toUpperCase();
   const key = learningCodeKey(learningId);
@@ -160,6 +163,7 @@ export async function resolveStudentByCode(code: string): Promise<{
     schoolCondition: study.schoolCondition,
     gradeLevel: study.gradeLevel,
     studyStartDate: study.studyStartDate,
+    ...researchAssignmentFromRecord(doc),
   };
 }
 
@@ -501,6 +505,7 @@ export interface SaveCanonicalSessionArgs {
   encounteredVocab: VisualVocabularyItem[]; reflection?: ReflectionAnswers; systemEvents?: ResearchSystemEvent[];
   personaLabelCondition?: PersonaLabelCondition; countryLabelVisible?: boolean; accentLabelVisible?: boolean; flagVisible?: boolean;
   studentSelectedSpeechRate?: number; effectiveTtsSpeechRate?: number;
+  assignedPartnerId?: string; assignedPartnerCountry?: string; assignmentAnnouncedAt?: string;
 }
 
 export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
@@ -509,6 +514,7 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
   const stats = calculateCanonicalStats(args.history, args.startedAt, args.endedAt, args.targetDurationMinutes, args.encounteredVocab);
   const existing = await getDocument(SESSION_COLLECTION, args.sessionId);
   if (existing && existing.studentId && existing.studentId !== args.studentId) throw new Error('SESSION_ID_CONFLICT');
+  const assignmentSnapshot = existing ? researchAssignmentFromRecord(existing) : researchAssignmentFromRecord(args as unknown as Record<string, any>);
   const studentSessions = existing ? [] : (await queryCollection(SESSION_COLLECTION, 'studentId', args.studentId, 5000)).filter((session) => isAIStudentId(session.aiStudentId));
   const lifetimeSessionNumber = existing?.lifetimeSessionNumber || studentSessions.length + 1;
   const localDate = new Date(args.startedAt).toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
@@ -533,6 +539,7 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
     appVersion: process.env.APP_VERSION || 'unknown', build: process.env.APP_BUILD || 'unknown', aiModel: latestEvent('ai_model') || process.env.ANTHROPIC_MODEL || 'unknown',
     aiInputTokens: sumEvent('ai_input_tokens'), aiOutputTokens: sumEvent('ai_output_tokens'), aiCacheReadTokens: sumEvent('ai_cache_read_tokens'), aiCacheCreationTokens: sumEvent('ai_cache_creation_tokens'),
     personaId: personaMeta.personaId, personaCountry: personaMeta.country, personaGender: personaMeta.gender, personaAccentName: personaMeta.accentName, worldEnglishesCircle: personaMeta.worldEnglishesCircle,
+    assignedPartnerId: assignmentSnapshot.assignedPartnerId, assignedPartnerCountry: assignmentSnapshot.assignedPartnerCountry, assignmentAnnouncedAt: assignmentSnapshot.assignmentAnnouncedAt,
     personaLabelCondition: args.personaLabelCondition === 'hidden' ? 'hidden' : 'shown', countryLabelVisible: args.countryLabelVisible !== false, accentLabelVisible: args.accentLabelVisible !== false, flagVisible: args.flagVisible !== false,
     ttsProvider: ttsRuntime.provider, ttsVoiceName: ttsRuntime.voiceName, ttsLanguageCode: ttsRuntime.languageCode,
     ttsTelemetryVersion: 'cors-visible-v1', ttsPrimaryProvider: 'azure-speech', ttsActualProvider, ttsProviderObserved, ttsProviderEventCount: ttsProviderEvents.length,
@@ -585,9 +592,9 @@ function managementSessionsWithAssignments(
     const student = studentById.get(String(session.studentId || ''));
     return {
       ...session,
-      assignedPartnerId: normalizeAssignmentText(session.assignedPartnerId || student?.assignedPartnerId),
-      assignedPartnerCountry: normalizeAssignmentText(session.assignedPartnerCountry || student?.assignedPartnerCountry),
-      assignmentAnnouncedAt: normalizeAssignmentAnnouncedAt(session.assignmentAnnouncedAt || student?.assignmentAnnouncedAt),
+      assignedPartnerId: normalizeAssignmentText(session.assignedPartnerId),
+      assignedPartnerCountry: normalizeAssignmentText(session.assignedPartnerCountry),
+      assignmentAnnouncedAt: normalizeAssignmentAnnouncedAt(session.assignmentAnnouncedAt),
       formalStudyParticipant: student?.formalStudyParticipant === true,
       studySiteId: student?.studySiteId || '',
       schoolCondition: student?.schoolCondition || '',

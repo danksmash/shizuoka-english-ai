@@ -57,7 +57,7 @@ export function buildQuestionnaireTimingAudit(records: QuestionnaireRecord[], sc
       else {
         if (!comparison && schedule.videoViewDate && record.surveyDate < schedule.videoViewDate) push('POST_BEFORE_VIDEO', 'Post回答日が本人動画視聴日より前です。');
         if (record.surveyDate > schedule.exchangeDate) {
-          push(comparison ? 'POST_AFTER_COMPARISON_C2' : 'POST_AFTER_EXCHANGE', comparison ? '比較校Post回答日が実践校Postに対応する相対時点（C2）より後です。' : 'Post回答日が留学生交流会実施日より後です。');
+          push(comparison ? 'POST_AFTER_COMPARISON_POST' : 'POST_AFTER_EXCHANGE', comparison ? '比較校Post回答日が実践校Postに対応する終了基準日より後です。' : 'Post回答日が留学生交流会実施日より後です。');
         }
       }
     }
@@ -69,6 +69,6 @@ export function buildQuestionnaireTimingAudit(records: QuestionnaireRecord[], sc
     unavailable,
     issueCount: issues.length,
     issues: issues.slice(0, 100),
-    note: '日付単位の監査です。実践校はPre＝開始前、Mid＝国籍告知直前、Post＝交流前を確認します。比較校は同じ相対経過時点C1/C2を日程欄の対応日として監査し、国籍告知・本人動画・交流自体は前提にしません。同日回答は許容します。',
+    note: '日付単位の監査です。実践校はPre＝開始前、Mid＝国籍告知直前、Post＝交流前を確認します。比較校はMid基準日（C1）とPost基準日を同じ相対経過時点として監査し、C2分析基準日は対話ログをperiod2/period3へ分けるためだけに使用します。国籍告知・本人動画・交流自体は前提にしません。同日回答は許容します。',
   };
 }

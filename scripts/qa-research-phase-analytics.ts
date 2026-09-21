@@ -80,14 +80,17 @@ assert.equal(augmented[1].assigned_country_persona_match, 0);
 assert.equal(augmented[2].study_phase, 'phase3');
 assert.equal(augmented[2].assigned_country_persona_eligible, 0);
 assert.equal(augmented[2].assigned_country_persona_match, '');
+assert.equal(augmented[0].analysis_period, 'period1');
+assert.equal(augmented[1].analysis_period, 'period2');
+assert.equal(augmented[2].analysis_period, 'period3');
 assert.ok(augmented.every((row) => row.research_schema_version === PHASE_RESEARCH_EXPORT_SCHEMA_VERSION));
 
-for (const field of ['study_phase', 'assigned_country_persona_eligible', 'assigned_country_persona_match']) {
+for (const field of ['study_phase', 'analysis_period', 'assigned_country_persona_eligible', 'assigned_country_persona_match']) {
   assert.ok(PHASE_SESSION_EXPORT_HEADERS.includes(field));
   assert.ok(PHASE_CODEBOOK_ROWS.some((row) => row.variable === field));
 }
-assert.equal(PHASE_RESEARCH_EXPORT_SCHEMA_VERSION, 'research-2026-v7');
-assert.equal(PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION, 8);
+assert.equal(PHASE_RESEARCH_EXPORT_SCHEMA_VERSION, 'research-2026-v8');
+assert.equal(PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION, 9);
 
 let capturedHtml = '';
 const wrapped = withResearchPhaseAnalyticsRuntime('/management', ((_req: any, res: any) => res.send(managementPageHtmlWithStudyPhase())) as any);
@@ -110,6 +113,8 @@ const source = fs.readFileSync('src/server/researchPhaseAnalyticsRuntime.ts', 'u
 assert.ok(source.includes('study_schedule_snapshot'));
 assert.ok(source.includes("phase_comparison_filter_exclusions: ['personaId', 'studyPhase']"));
 assert.ok(source.includes('assignment_country_provenance'));
+assert.ok(source.includes('analysis_period_definition_source'));
+assert.equal(source.includes('may fall back to the current student assignment record'), false);
 assert.equal(source.includes("fetch('/api/management/research.dashboard?"),false,'Phase analytics must not issue a second dashboard request');
 assert.ok(source.includes("window.__renderPhaseComparison=renderPhaseComparison"));
 assert.ok(source.includes("PHASE_ANALYTICS_LAYOUT_SLOT_MISSING"));

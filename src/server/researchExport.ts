@@ -6,6 +6,7 @@ import { maskChildMessageForResearch } from '../utils/privacy';
 
 export type ResearchDatasetName = 'sessions' | 'turns' | 'expressions' | 'system_events';
 type UsageContext = 'group_like' | 'individual_like' | 'unknown';
+type LessonContext = 'in_lesson' | 'outside_lesson' | 'unknown';
 type ContextMeta = {
   localDate: string;
   localStartTime: string;
@@ -15,10 +16,12 @@ type ContextMeta = {
   sameClassStarts5Min: number;
   sameClassStarts10Min: number;
   usageContext: UsageContext;
+  lessonContext: LessonContext;
 };
 
 const CLASS_CLUSTER_5_MIN = 8;
 const CLASS_CLUSTER_10_MIN = 12;
+const LESSON_CLUSTER_RADIUS_MINUTES = 45;
 
 function timestampMs(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -109,7 +112,27 @@ function buildContextMeta(sessions: Record<string, any>[]): Map<string, ContextM
       sameClassStarts5Min: same5,
       sameClassStarts10Min: same10,
       usageContext,
+      lessonContext: 'unknown',
     });
+  }
+
+  const lessonAnchors = new Map<string, number[]>();
+  for (const item of items) {
+    const meta = result.get(item.sessionId);
+    if (!meta || meta.usageContext !== 'group_like' || !meta.localDate || !item.classId || item.startMs <= 0) continue;
+    const key = `${item.classId}|${meta.localDate}`;
+    const anchors = lessonAnchors.get(key) || [];
+    anchors.push(item.startMs);
+    lessonAnchors.set(key, anchors);
+  }
+  const lessonRadiusMs = LESSON_CLUSTER_RADIUS_MINUTES * 60_000;
+  for (const item of items) {
+    const meta = result.get(item.sessionId);
+    if (!meta || !meta.localDate || !item.classId || item.startMs <= 0) continue;
+    const anchors = lessonAnchors.get(`${item.classId}|${meta.localDate}`) || [];
+    if (!anchors.length) continue;
+    const nearest = Math.min(...anchors.map((anchor) => Math.abs(anchor - item.startMs)));
+    meta.lessonContext = nearest <= lessonRadiusMs ? 'in_lesson' : 'outside_lesson';
   }
   return result;
 }
@@ -214,6 +237,7 @@ function commonFields(session: Record<string, any>, meta: ContextMeta) {
     local_start_time: meta.localStartTime,
     local_end_time: meta.localEndTime,
     usage_context_inferred: meta.usageContext,
+    lesson_context_inferred: meta.lessonContext,
   };
 }
 
@@ -230,7 +254,7 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
     const sessionId = String(session.sessionId || '');
     const meta = context.get(sessionId) || {
       localDate: '', localStartTime: '', localEndTime: '', localStartedAt: '', localEndedAt: '',
-      sameClassStarts5Min: 0, sameClassStarts10Min: 0, usageContext: 'unknown' as UsageContext,
+      sameClassStarts5Min: 0, sameClassStarts10Min: 0, usageContext: 'unknown' as UsageContext, lessonContext: 'unknown' as LessonContext,
     };
     const history = sessionHistory(session);
     const communication = analyzeChildCommunication(history);
@@ -245,6 +269,9 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
       ? 'missing_core'
       : !dialogueCompleted ? 'interrupted' : !hasReflection ? 'missing_reflection' : 'complete';
     const sessionStatus = dialogueCompleted ? (hasReflection ? 'complete' : 'dialogue_complete') : 'in_progress_or_interrupted';
+    const finishEvent = [...systemEvents].reverse().find((event: any) => event?.type === 'session_finish');
+    const sessionFinishReason = hasFinish ? String(finishEvent?.value || 'unspecified') : '';
+    const micErrorCount = systemEvents.filter((event: any) => event?.type === 'mic_error').length;
     const persona = getPersonaResearchMetadata(String(session.personaId || session.aiStudentId || ''));
     const ttsTelemetryVersion = String(session.ttsTelemetryVersion || '');
     const ttsTelemetryReliable = ttsTelemetryVersion === 'cors-visible-v1';
@@ -259,7 +286,7 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
       academic_year: session.academicYear || academicYearFromDate(meta.localDate), grade_level: session.gradeLevel || gradeFromClassId(session.classId),
       local_date: meta.localDate, local_start_time: meta.localStartTime, local_end_time: meta.localEndTime,
       local_started_at: meta.localStartedAt, local_ended_at: meta.localEndedAt,
-      same_class_starts_5min: meta.sameClassStarts5Min, same_class_starts_10min: meta.sameClassStarts10Min, usage_context_inferred: meta.usageContext,
+      same_class_starts_5min: meta.sameClassStarts5Min, same_class_starts_10min: meta.sameClassStarts10Min, usage_context_inferred: meta.usageContext, lesson_context_inferred: meta.lessonContext,
       lifetime_session_number: sequenceNumbers.get(sessionId)?.lifetime || 0, daily_session_number: sequenceNumbers.get(sessionId)?.daily || 0,
       source_lifetime_session_number: session.lifetimeSessionNumber || 0, source_daily_session_number: session.dailySessionNumber || 0,
       days_since_previous_session: previousDays.get(sessionId) ?? '',
@@ -291,7 +318,7 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
       reflection_scale_version: session.reflection?.scaleVersion || (session.reflection ? 'legacy-135' : ''),
       reflection_understood_partner: session.reflection?.understoodPartner ?? '', reflection_conveyed_ideas: session.reflection?.conveyedIdeas ?? '',
       reflection_noticed_language_culture: session.reflection?.noticedLanguageCulture ?? '', system_event_count: systemEvents.length,
-      session_completed: dialogueCompleted ? 1 : 0, session_status: sessionStatus, data_quality_flag: dataQuality,
+      session_completed: dialogueCompleted ? 1 : 0, session_status: sessionStatus, session_finish_reason: sessionFinishReason, mic_error_count: micErrorCount, data_quality_flag: dataQuality,
     });
 
     const speakerCounts = { child: 0, ai: 0 };

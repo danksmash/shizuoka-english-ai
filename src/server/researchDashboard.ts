@@ -18,7 +18,7 @@ export type ResearchFilterQuery = {
 type Row = Record<string, unknown>;
 type ExportDataSets = Record<ResearchExportDatasetName, Row[]>;
 
-export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v6';
+export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v7';
 
 const RESEARCH_PERSONAS = TARGET_20_AI_STUDENT_IDS.map((id) => {
   const persona = AI_STUDENTS_MASTER_LIST.find((item) => item.id === id);
@@ -45,13 +45,13 @@ export const RESEARCH_EXPORT_HEADERS: Record<ResearchExportDatasetName, string[]
     'child_repair_count','child_reason_expression_count',
     'target_duration_minutes','actual_duration_seconds',
     'reflection_scale_version','reflection_understood_partner','reflection_conveyed_ideas','reflection_noticed_language_culture',
-    'same_class_starts_5min','same_class_starts_10min','usage_context_inferred',
+    'same_class_starts_5min','same_class_starts_10min','usage_context_inferred','lesson_context_inferred',
     'persona_label_condition','country_label_visible','accent_label_visible','flag_visible',
     'help_open_count','vocab_bank_open_count',
     'speech_rate_change_count','student_selected_speech_rate',
     'tts_telemetry_version','tts_primary_provider','tts_actual_provider','tts_provider_observed','tts_provider_event_count','tts_fallback_count','tts_fallback_reason','tts_provider_deviation',
     'schema_version','research_schema_version','app_version','build',
-    'session_completed','session_status','data_quality_flag',
+    'session_completed','session_status','session_finish_reason','mic_error_count','data_quality_flag',
   ],
   utterances: [
     'research_id','site_id','school_condition','formal_study_participant','study_start_date','class_id','session_id','utterance_id','persona_id','topic',
@@ -98,9 +98,9 @@ const FIELD_DEFINITION: Record<string, string> = {
   persona_country:'選択したPersonaの国',
   persona_gender:'選択したPersonaの性別',
   ai_student_id:'アプリ内部のAI留学生ID',
-  assigned_partner_id:'実際に交流する担当留学生を識別する研究用ID',
-  assigned_partner_country:'実際に交流する担当留学生の出身国（児童マスタから研究Export・Dashboard集計時に結合）',
-  assignment_announced_at:'担当留学生の国籍が児童へ告知された日時（Study 1の国籍告知日を基準に児童マスタへ保存）',
+  assigned_partner_id:'セッション初回保存時点で児童マスタに登録されていた担当留学生の研究用ID。後日の現在値では自動補完しない',
+  assigned_partner_country:'セッション初回保存時点で児童マスタに登録されていた担当留学生の出身国。未保存の過去セッションは空欄のままとする',
+  assignment_announced_at:'セッション初回保存時点で保持していた担当留学生国籍の告知基準日時。後日の担当変更で過去セッションを書き換えない',
   topic:'児童が選択した対話テーマ',
   child_total_words:'児童英語発話の総語数',
   mean_child_words_per_turn:'児童1発話あたり平均語数',
@@ -120,6 +120,7 @@ const FIELD_DEFINITION: Record<string, string> = {
   same_class_starts_5min:'当該開始時刻の前後5分以内に開始した同学級セッション数（当該sessionを含む）',
   same_class_starts_10min:'当該開始時刻の前後10分以内に開始した同学級セッション数（当該sessionを含む）',
   usage_context_inferred:'同学級の開始時刻の集中度だけから推定した一斉利用らしさ／個別利用らしさ',
+  lesson_context_inferred:'同学級同日の一斉利用クラスターを基準に、その前後45分以内を授業内、それ以外を授業外として推定した利用文脈。クラスターを特定できない場合はunknown',
   persona_label_condition:'Personaの国等のラベル提示条件',
   country_label_visible:'国ラベル表示の有無',
   accent_label_visible:'アクセント関連ラベル表示の有無',
@@ -142,6 +143,8 @@ const FIELD_DEFINITION: Record<string, string> = {
   build:'アプリのビルド識別子',
   session_completed:'対話完了と判定された場合1',
   session_status:'セッション進行・完了状態',
+  session_finish_reason:'session_finish記録時の終了理由。タイマー終了・児童による早期終了・旧データの理由不明を区別',
+  mic_error_count:'当該セッションで記録されたマイク・音声認識エラー回数',
   data_quality_flag:'分析用データ品質区分',
   utterance_id:'発話を一意に識別する匿名ID',
   turn_sequence:'セッション内の発話順',
@@ -192,6 +195,7 @@ const ALLOWED_VALUES: Record<string, string> = {
   reflection_conveyed_ideas:'legacy-135: 1 | 3 | 5 / 4point-v1: 1 | 2 | 3 | 4',
   reflection_noticed_language_culture:'legacy-135: 1 | 3 | 5 / 4point-v1: 1 | 2 | 3 | 4',
   usage_context_inferred:'group_like | individual_like | unknown',
+  lesson_context_inferred:'in_lesson | outside_lesson | unknown',
   persona_label_condition:'shown | hidden',
   country_label_visible:'0 | 1', accent_label_visible:'0 | 1', flag_visible:'0 | 1', session_completed:'0 | 1',
   student_selected_speech_rate:'0.75–1.25',
@@ -201,6 +205,7 @@ const ALLOWED_VALUES: Record<string, string> = {
   tts_provider_observed:'0 | 1', tts_provider_deviation:'0 | 1 | blank',
   tts_fallback_reason:'timeout | http_429 | auth | azure_5xx | configuration | invalid_audio | network | unknown | cloud_unavailable | blank',
   research_schema_version:RESEARCH_EXPORT_SCHEMA_VERSION,
+  session_finish_reason:'timer | user_early | unspecified | blank',
   speaker:'child | ai',
   dictionary_source:'curriculum | persona',
   profile_field:'likes | major | city | landmark',
@@ -215,7 +220,7 @@ const NUMERIC_FIELDS = new Set([
   'dialogue_utterance_count','child_repair_count','child_reason_expression_count','target_duration_minutes','actual_duration_seconds',
   'reflection_conveyed_ideas','reflection_understood_partner','reflection_noticed_language_culture','same_class_starts_5min',
   'same_class_starts_10min','country_label_visible','accent_label_visible','flag_visible','help_open_count','vocab_bank_open_count',
-  'speech_rate_change_count','student_selected_speech_rate','tts_provider_observed','tts_provider_event_count','tts_fallback_count','tts_provider_deviation','schema_version','session_completed','turn_sequence','speaker_turn_number',
+  'speech_rate_change_count','student_selected_speech_rate','tts_provider_observed','tts_provider_event_count','tts_fallback_count','tts_provider_deviation','schema_version','session_completed','mic_error_count','turn_sequence','speaker_turn_number',
   'is_question','is_reciprocal_question','is_repair','is_reason_expression','formal_study_participant',
 ]);
 

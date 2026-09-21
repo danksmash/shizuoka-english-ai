@@ -220,7 +220,7 @@ export default function App() {
     if (phase !== 'dialogue') { if (timerRef.current) clearInterval(timerRef.current); return; }
     timerRef.current = setInterval(() => {
       setRemainingSeconds((prev) => {
-        if (prev <= 1) { clearInterval(timerRef.current!); handleFinishDialogue(); return 0; }
+        if (prev <= 1) { clearInterval(timerRef.current!); void handleFinishDialogue('timer'); return 0; }
         return prev - 1;
       });
       setElapsedSeconds((prev) => { const next = prev + 1; elapsedSecondsRef.current = next; return next; });
@@ -409,7 +409,7 @@ export default function App() {
     else { stopSpeaking(); if (farewellSafetyTimerRef.current) { clearTimeout(farewellSafetyTimerRef.current); farewellSafetyTimerRef.current=null; } setFarewellBanner(null); setPhase('reflection'); }
   }, []);
 
-  const handleFinishDialogue = async () => {
+  const handleFinishDialogue = async (reason: 'timer' | 'user_early' = 'user_early') => {
     if (phase !== 'dialogue' || !dialogueActiveRef.current) return;
     dialogueActiveRef.current=false; chatAbortControllerRef.current?.abort(); chatAbortControllerRef.current=null; setIsAiResponding(false); stopSpeaking();
     let pendingSnapshot = liveSpeechSnapshotRef.current;
@@ -430,7 +430,7 @@ export default function App() {
       const pendingChildMsg:ChatMessage={id:`child-${Date.now()}`,sender:'child',englishText:pendingText,japaneseText:'日本語に訳せませんでした。',timestamp:Date.now(),wordCount:words};
       currentHistory=[...currentHistory,pendingChildMsg]; turnCountRef.current+=1; totalChildWordsRef.current+=words; setTurnCount(turnCountRef.current); setTotalChildWords(totalChildWordsRef.current); clearSpeechDraft();
     }
-    sessionEndedAtRef.current = Date.now(); recordResearchEvent('session_finish');
+    sessionEndedAtRef.current = Date.now(); recordResearchEvent('session_finish', reason);
     const currentProf=profileRef.current; const studentObj=getAIStudentById(currentProf.selectedAiStudentId); const farewell=getStudentFarewellMessage(studentObj.id); setFarewellBanner(farewell);
     const farewellMsg:ChatMessage={id:`ai-farewell-${Date.now()}`,sender:'ai',englishText:farewell.english,japaneseText:farewell.japanese,timestamp:Date.now(),culturalNote:'時間になりました！お疲れさまでした！'};
     const finalMessages=[...currentHistory,farewellMsg]; setMessages(finalMessages); messagesRef.current=finalMessages; setIsSpeaking(true); setMood('happy'); setIsLoadingFeedback(true);
@@ -493,7 +493,7 @@ export default function App() {
       {phase==='setup' && <SetupScreen onStartDialogue={handleStartDialogue} learningDataEnabled={learningDataEnabled} onValidateLearningCode={validateLearningCode} labelCondition={PERSONA_LABEL_CONDITION}/>} 
       {phase==='dialogue' && (
         <div className="flex-1 flex flex-col min-h-[100dvh] lg:h-screen lg:overflow-hidden">
-          <Header labelCondition={PERSONA_LABEL_CONDITION} studentName={profile.name} learningId={learningCode} aiStudentName={currentAiStudent.name} aiStudentFlag={currentAiStudent.flag} remainingSeconds={remainingSeconds} totalDurationSeconds={profile.selectedDurationMinutes*60} turnCount={turnCount} wordCount={totalChildWords} soundEnabled={soundEnabled} onToggleSound={()=>{if(soundEnabled)stopSpeaking();setSoundEnabled(!soundEnabled);}} onFinishEarly={handleFinishDialogue}/>
+          <Header labelCondition={PERSONA_LABEL_CONDITION} studentName={profile.name} learningId={learningCode} aiStudentName={currentAiStudent.name} aiStudentFlag={currentAiStudent.flag} remainingSeconds={remainingSeconds} totalDurationSeconds={profile.selectedDurationMinutes*60} turnCount={turnCount} wordCount={totalChildWords} soundEnabled={soundEnabled} onToggleSound={()=>{if(soundEnabled)stopSpeaking();setSoundEnabled(!soundEnabled);}} onFinishEarly={()=>{ void handleFinishDialogue('user_early'); }}/>
           <main className="flex-1 max-w-7xl w-full mx-auto p-2.5 sm:p-4 lg:p-5 grid grid-cols-1 md:grid-cols-12 gap-3 lg:gap-5 min-h-0 lg:overflow-hidden pb-[calc(7.5rem+env(safe-area-inset-bottom))] lg:pb-5">
             <div className="hidden md:flex col-span-12 md:col-span-4 lg:col-span-3 flex-col gap-4 overflow-y-auto min-h-0">
               <AIStudentCard labelCondition={PERSONA_LABEL_CONDITION} student={currentAiStudent} mood={mood} isSpeaking={isSpeaking} isListening={isListening} speechRate={speechRate} onReplayAudio={()=>{recordResearchEvent('ai_replay','profile');const lastAi=messages.filter((m)=>m.sender==='ai').slice(-1)[0];if(lastAi)playAiVoice(lastAi.englishText);}} onChangeSpeechRate={(rate)=>{recordResearchEvent('speech_rate_change',rate.toFixed(2));setSpeechRate(rate);}}/>
