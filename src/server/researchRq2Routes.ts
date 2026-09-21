@@ -13,7 +13,7 @@ import {
   getRq2ReliabilityCodes,
   getRq2Run,
   saveRq2ReliabilityCode,
-  patchRq2ItemRecord,
+  patchRq2ItemRecords,
   updateRq2Item,
 } from './researchRq2Persistence';
 
@@ -90,7 +90,11 @@ router.get('/research-rq2/items', requireManagementRole(['researcher']), async (
     const purpose = ['codebook_development','reliability','main_other'].includes(purposeText) ? purposeText as Rq2Purpose : '';
     const rows = filterRq2Items(await getRq2Items(runId), purpose, bool(req.query.reviewOnly, false));
     const items = purpose === 'reliability'
-      ? rows.map(({ aiReferenceCodes: _a, aiFunctionCodes: _b, aiRecipientLocus: _c, aiNeedsReview: _d, aiReviewReason: _e, aiReason: _f, aiModel: _g, aiPromptVersion: _h, aiCodebookVersion: _i, aiCodedAt: _j, ...row }) => row)
+      ? rows.map((row) => {
+          const safe = { ...row };
+          for (const key of ['aiReferenceCodes','aiFunctionCodes','aiRecipientLocus','aiNeedsReview','aiReviewReason','aiReason','aiModel','aiPromptVersion','aiCodebookVersion','aiCodedAt']) delete safe[key];
+          return safe;
+        })
       : rows;
     return res.json({ success: true, items });
   } catch (error: any) {
@@ -128,10 +132,10 @@ router.post('/research-rq2/ai-code', requireManagementRole(['researcher']), asyn
     const pending = items.filter((item) => item.aiStatus !== 'coded').slice(0, batchSize);
     const coded = await codeRq2Batch(pending, codebook);
     const pendingBySequence = new Map(pending.map((item) => [String(item.sequenceId || ''), item]));
-    for (const result of coded.results) {
-      const current = pendingBySequence.get(result.sequenceId);
-      if (current) await patchRq2ItemRecord(current, result);
-    }
+    await patchRq2ItemRecords(coded.results.map((result) => ({
+      current: pendingBySequence.get(result.sequenceId),
+      patch: result,
+    })).filter((entry): entry is { current: Record<string, any>; patch: Record<string, any> } => Boolean(entry.current)));
     const remaining = Math.max(0, items.filter((item) => item.aiStatus !== 'coded').length - coded.results.length);
     return res.json({ success: true, processed: coded.results.length, remaining, model: coded.model, promptVersion: coded.promptVersion });
   } catch (error: any) {
