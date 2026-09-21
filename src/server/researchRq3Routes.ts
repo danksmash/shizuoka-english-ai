@@ -295,6 +295,7 @@ router.get('/research-rq3/context', requireManagementRole(['researcher']), async
 
 router.get('/research-rq3/analysis-spec', requireManagementRole(['researcher']), async (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Disposition', 'attachment; filename="rq3_analysis_spec.json"');
   return res.json({ success: true, spec: RQ3_ANALYSIS_SPEC });
 });
 
