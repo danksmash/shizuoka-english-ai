@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/researcher-readable.css">
+<title>RQ2 コード分析</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f7faff;color:#10224a;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}.wrap{max-width:1500px;margin:0 auto;padding:18px}.card{background:#fff;border:1px solid #d7e2f1;border-radius:14px;padding:16px;box-shadow:0 4px 14px rgba(32,73,128,.05);margin-bottom:14px}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.title{margin:0;font-size:24px}.muted{color:#64748b;font-size:12px}.note{background:#eef4ff;border:1px solid #bfd0f5;border-radius:10px;padding:11px;font-size:12px;line-height:1.65}.login{max-width:440px;margin:12vh auto}.field{margin:10px 0}.field label{display:block;font-size:12px;font-weight:800;margin-bottom:4px}input,select,button,textarea{font:inherit}input[type=text],input[type=password],input[type=number],select,textarea{width:100%;padding:9px 10px;border:1px solid #b8c7df;border-radius:8px;background:#fff}textarea{min-height:340px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.45}button{padding:9px 12px;border-radius:8px;font-weight:800;cursor:pointer}.primary{border:1px solid #1767ed;background:#1767ed;color:#fff}.secondary{border:1px solid #9ab4df;background:#fff;color:#174aa8}.danger{border:1px solid #d4dbe7;background:#fff;color:#526581}.status{font-size:12px;font-weight:800;color:#174aa8}.error{color:#b91c1c}.ok{color:#138547}.grid6{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.metric{background:#f8fbff;border:1px solid #dce7f5;border-radius:10px;padding:11px}.metric b{font-size:24px;display:block;margin-top:4px}.metric span{font-size:11px;color:#526581;font-weight:800}.controls{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;align-items:end}.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}.table-wrap{overflow:auto;border:1px solid #dce5f1;border-radius:10px}.tbl{width:100%;border-collapse:collapse;font-size:12px;min-width:1150px}.tbl th,.tbl td{border-bottom:1px solid #e5edf7;padding:7px;vertical-align:top;text-align:left}.tbl th{background:#f3f7fc;position:sticky;top:0;z-index:1}.pill{display:inline-block;padding:2px 7px;border-radius:999px;background:#eef4ff;color:#174aa8;font-weight:800;margin:1px}.warn{background:#fff7ed;color:#9a3412}.transcript{line-height:1.5;max-width:520px}.mini-input{min-width:110px}.analysis-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.analysis-card{border:1px solid #dce5f1;border-radius:10px;padding:10px}.analysis-card h3{margin:0 0 7px;font-size:14px}.code-counts{font-size:12px;line-height:1.7}.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}@media(max-width:980px){.grid6,.analysis-grid,.split{grid-template-columns:1fr}.controls{grid-template-columns:1fr 1fr}.wrap{padding:10px}}@media(max-width:560px){.controls{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div id="login" class="login card">
+  <h1 class="title" style="text-align:center">RQ2 コード分析</h1>
+  <p class="muted" style="text-align:center">研究者専用</p>
+  <div class="field"><label>研究者ID</label><input id="username" autocomplete="username"></div>
+  <div class="field"><label>パスワード</label><input id="password" type="password" autocomplete="current-password"></div>
+  <button id="loginBtn" class="primary" style="width:100%">ログイン</button>
+  <p id="loginStatus" class="status"></p>
+</div>
+
+<div id="panel" style="display:none">
+  <div class="card top">
+    <div><h1 class="title">RQ2 コード分析</h1><div class="muted">6層均等抽出 → AI一次コード化 → 人間確認 → 一致度確認 → 集計</div></div>
+    <div class="actions"><button id="reloadBtn" class="secondary">↻ 最新状態</button><a href="/management"><button class="secondary">研究ダッシュボード</button></a><a href="/study-schedule.html"><button class="secondary">Study 1 日程管理</button></a><button id="logoutBtn" class="danger">ログアウト</button></div>
+  </div>
+
+  <div class="note card">
+    実践校は Phase 1／2／3、比較校は同じ相対経過時点の対応期間1／2／3として扱います。比較校にPhase 2・3があることを意味しません。標本抽出は同一児童の影響を抑えるため各層の児童ごとの上限を設け、乱数シードを保存して再現可能にします。AIには匿名化済みの局所的対話系列だけを渡します。
+  </div>
+
+  <div class="card">
+    <div class="top"><div><h2 style="margin:0;font-size:19px">1. 候補データ</h2><div class="muted">正式研究・complete・授業内推定を既定条件として集計</div></div><label style="font-size:12px;font-weight:800"><input id="lessonOnly" type="checkbox" checked> 授業内推定のみ</label></div>
+    <div id="strataMetrics" class="grid6" style="margin-top:12px"></div>
+    <p id="candidateStatus" class="status"></p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin:0 0 10px;font-size:19px">2. 均等抽出</h2>
+    <div class="controls">
+      <div class="field"><label>乱数シード</label><input id="seed" type="text" value="RQ2-2026-v1"></div>
+      <div class="field"><label>各層の目標系列</label><input id="target" type="number" value="50" min="10" max="100"></div>
+      <div class="field"><label>1児童・1層の上限</label><input id="cap" type="number" value="2" min="1" max="5"></div>
+      <div class="field"><label>現在のrun</label><input id="runId" type="text" placeholder="抽出後に表示"></div>
+      <button id="sampleBtn" class="primary">300系列を抽出</button>
+    </div>
+    <p class="muted">50系列の場合、各層20＝コードブック開発、10＝一致度確認、20＝その他本分析に自動で分けます。</p>
+    <p id="sampleStatus" class="status"></p>
+  </div>
+
+  <div class="split">
+    <div class="card">
+      <div class="top"><div><h2 style="margin:0;font-size:19px">3. コードブック</h2><div id="codebookMeta" class="muted"></div></div><div class="actions"><button id="saveDraftBtn" class="secondary">暫定版を保存</button><button id="freezeBtn" class="primary">確定版にする</button><button id="codebookDlBtn" class="secondary">JSON</button></div></div>
+      <textarea id="codebookText"></textarea>
+      <p id="codebookStatus" class="status"></p>
+    </div>
+    <div class="card">
+      <h2 style="margin:0 0 10px;font-size:19px">4. AI一次コード化</h2>
+      <p class="muted">確定版コードブックでのみ実行できます。1回につき最大20系列を処理して保存するため、途中停止後も再開できます。</p>
+      <div class="actions"><button id="aiBtn" class="primary">次の20系列をAIコード化</button><button id="loadReviewBtn" class="secondary">要確認を表示</button><button id="loadDevBtn" class="secondary">開発用120を表示</button><button id="loadReliabilityBtn" class="secondary">一致度用60を表示</button></div>
+      <p id="aiStatus" class="status"></p>
+      <div id="runSummary" class="note" style="margin-top:10px">run未選択</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="top"><div><h2 style="margin:0;font-size:19px">5. コード確認</h2><div class="muted">一致度用データではAI判定を表示しません。</div></div><div class="actions"><input id="coderKey" type="text" placeholder="一致度用 coder ID" style="width:180px"><button id="analysisBtn" class="secondary">集計を更新</button><button id="csvBtn" class="secondary">RQ2 CSV</button></div></div>
+    <div class="table-wrap" style="margin-top:10px"><table class="tbl"><thead><tr><th>層・用途</th><th>対話系列</th><th>AI判定</th><th>人間／独立コード</th><th>操作</th></tr></thead><tbody id="itemRows"></tbody></table></div>
+    <p id="itemStatus" class="status"></p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin:0 0 10px;font-size:19px">6. 集計・一致度</h2>
+    <div id="analysisGrid" class="analysis-grid"></div>
+    <div id="reliabilityBox" class="note" style="margin-top:10px"></div>
+  </div>
+</div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);let currentItems=[];let currentCodebook=null;
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function status(id,msg,error=false){const el=$(id);el.textContent=msg||'';el.className='status '+(error?'error':msg?'ok':'');}
+async function api(path,opt={}){const r=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opt.headers||{})},...opt});const type=r.headers.get('content-type')||'';const d=type.includes('application/json')?await r.json():await r.text();if(!r.ok){const e=new Error(d?.error||('HTTP_'+r.status));e.status=r.status;throw e;}return d;}
+function runId(){return $('runId').value.trim();}
+async function showPanel(){try{await api('/api/management/me');$('login').style.display='none';$('panel').style.display='block';await Promise.all([loadStatus(),loadCodebook()]);}catch{$('login').style.display='block';$('panel').style.display='none';}}
+async function login(){try{status('loginStatus','ログイン中…');await api('/api/management/login',{method:'POST',body:JSON.stringify({username:$('username').value,password:$('password').value})});$('password').value='';await showPanel();}catch(e){status('loginStatus','ログインできません。',true);}}
+async function loadStatus(){try{status('candidateStatus','候補を集計中…');const d=await api('/api/management/research-rq2/status?lessonOnly='+($('lessonOnly').checked?'1':'0'));$('strataMetrics').innerHTML=(d.strata||[]).map(r=>'<div class="metric"><span>'+esc(r.label)+'</span><b>'+r.candidates+'</b><div class="muted">児童 '+r.participants+'名 / 授業内推定 '+r.inLesson+'</div></div>').join('');status('candidateStatus','候補系列 '+d.totalCandidates+'件。');}catch(e){status('candidateStatus','候補集計失敗: '+e.message,true);}}
+async function loadCodebook(){try{const d=await api('/api/management/research-rq2/codebook');currentCodebook=d.codebook;$('codebookText').value=JSON.stringify(d.codebook,null,2);$('codebookMeta').textContent='version '+(d.codebook.version||'draft')+' / '+(d.codebook.status||'draft');}catch(e){status('codebookStatus','読込失敗: '+e.message,true);}}
+async function saveCodebook(freeze){try{const codebook=JSON.parse($('codebookText').value);status('codebookStatus',freeze?'確定版を保存中…':'暫定版を保存中…');const d=await api('/api/management/research-rq2/codebook',{method:'PUT',body:JSON.stringify({codebook,freeze})});currentCodebook=d.codebook;$('codebookText').value=JSON.stringify(d.codebook,null,2);$('codebookMeta').textContent='version '+d.codebook.version+' / '+d.codebook.status;status('codebookStatus',freeze?'確定版として保存しました。':'暫定版を保存しました。');}catch(e){status('codebookStatus','保存失敗: '+e.message,true);}}
+async function sample(){try{status('sampleStatus','均等抽出中…');const d=await api('/api/management/research-rq2/sample',{method:'POST',body:JSON.stringify({seed:$('seed').value,targetPerStratum:Number($('target').value),maxPerParticipantPerStratum:Number($('cap').value),lessonOnly:$('lessonOnly').checked})});$('runId').value=d.run.runId;status('sampleStatus','抽出完了: '+d.selected+'系列 / run '+d.run.runId);await loadRun();}catch(e){status('sampleStatus','抽出失敗: '+e.message,true);}}
+async function loadRun(){if(!runId())return;try{const d=await api('/api/management/research-rq2/run?runId='+encodeURIComponent(runId()));$('runSummary').textContent='run '+d.run.runId+' / '+d.itemCount+'系列 / seed '+d.run.seed+' / codebook '+d.run.codebookVersion;status('sampleStatus','runを読み込みました。');}catch(e){status('sampleStatus','run読込失敗: '+e.message,true);}}
+async function aiCode(){if(!runId())return status('aiStatus','runを選択してください。',true);try{status('aiStatus','次の最大20系列をAIコード化しています…');const d=await api('/api/management/research-rq2/ai-code',{method:'POST',body:JSON.stringify({runId:runId(),batchSize:20})});status('aiStatus','処理 '+d.processed+'件 / 残り '+d.remaining+'件 / '+(d.model||''));await loadItems('','1');}catch(e){status('aiStatus','AIコード化失敗: '+e.message,true);}}
+function codeInputs(item,prefix){return '<div><label class="muted">参照基盤</label><input class="mini-input" data-'+prefix+'-ref="'+esc(item.sequenceId)+'" placeholder="B0,B3"></div><div><label class="muted">対話機能</label><input class="mini-input" data-'+prefix+'-fun="'+esc(item.sequenceId)+'" placeholder="Q,T"></div><div><label class="muted">recipient locus</label><input class="mini-input" data-'+prefix+'-loc="'+esc(item.sequenceId)+'" placeholder="RESP"></div>';}
+function splitCodes(v){return String(v||'').split(',').map(x=>x.trim()).filter(Boolean);}
+function renderItems(){const reliability=currentItems.length&&currentItems.every(x=>x.purpose==='reliability');$('itemRows').innerHTML=currentItems.map(item=>{const ai=reliability?'<span class="muted">一致度確認用のため非表示</span>':'<div>'+((item.aiReferenceCodes||[]).map(x=>'<span class="pill">'+esc(x)+'</span>').join('')||'—')+'</div><div>'+((item.aiFunctionCodes||[]).map(x=>'<span class="pill">'+esc(x)+'</span>').join('')||'—')+'</div><div>'+((item.aiRecipientLocus||[]).map(x=>'<span class="pill">'+esc(x)+'</span>').join('')||'')+'</div>'+(item.aiNeedsReview?'<span class="pill warn">要確認</span><div class="muted">'+esc(item.aiReviewReason||'')+'</div>':'')+'<div class="muted">'+esc(item.aiReason||'')+'</div>';const controls=codeInputs(item,reliability?'rel':'human');const actions=reliability?'<button class="secondary" data-rel-save="'+esc(item.sequenceId)+'">独立コード保存</button>':'<button class="secondary" data-confirm="'+esc(item.sequenceId)+'">AI判定を採用</button> <button class="primary" data-modify="'+esc(item.sequenceId)+'">入力コードで修正</button>';return '<tr><td><b>'+esc(item.stratum)+'</b><br>'+esc(item.purpose)+'<br><span class="muted">rank '+item.stratumRank+'</span></td><td class="transcript"><b>AI前:</b> '+esc(item.previousAiEnglish||'')+'<br><b>児童:</b> '+esc(item.childEnglish||'')+'<br><b>AI後:</b> '+esc(item.nextAiEnglish||'')+'</td><td>'+ai+'</td><td>'+controls+'</td><td>'+actions+'</td></tr>';}).join('')||'<tr><td colspan="5">対象データなし</td></tr>';bindRows();}
+function bindRows(){document.querySelectorAll('[data-confirm]').forEach(b=>b.onclick=()=>saveHuman(b.dataset.confirm,true));document.querySelectorAll('[data-modify]').forEach(b=>b.onclick=()=>saveHuman(b.dataset.modify,false));document.querySelectorAll('[data-rel-save]').forEach(b=>b.onclick=()=>saveReliability(b.dataset.relSave));}
+async function loadItems(purpose='',reviewOnly='0'){if(!runId())return status('itemStatus','runを選択してください。',true);try{let url='/api/management/research-rq2/items?runId='+encodeURIComponent(runId())+'&reviewOnly='+reviewOnly;if(purpose)url+='&purpose='+encodeURIComponent(purpose);const d=await api(url);currentItems=d.items||[];renderItems();status('itemStatus',currentItems.length+'系列を表示しています。');}catch(e){status('itemStatus','読込失敗: '+e.message,true);}}
+async function saveHuman(sequenceId,adoptAi){try{const item=currentItems.find(x=>x.sequenceId===sequenceId)||{};const ref=adoptAi?(item.aiReferenceCodes||[]):splitCodes(document.querySelector('[data-human-ref="'+CSS.escape(sequenceId)+'"]').value);const fun=adoptAi?(item.aiFunctionCodes||[]):splitCodes(document.querySelector('[data-human-fun="'+CSS.escape(sequenceId)+'"]').value);const loc=adoptAi?(item.aiRecipientLocus||[]):splitCodes(document.querySelector('[data-human-loc="'+CSS.escape(sequenceId)+'"]').value);await api('/api/management/research-rq2/human-code',{method:'POST',body:JSON.stringify({runId:runId(),sequenceId,referenceCodes:ref,functionCodes:fun,recipientLocus:loc,decision:adoptAi?'confirm':'modify'})});status('itemStatus','人間確認を保存しました。');}catch(e){status('itemStatus','保存失敗: '+e.message,true);}}
+async function saveReliability(sequenceId){try{const coder=$('coderKey').value.trim();if(!coder)throw new Error('coder IDを入力してください');const q=s=>document.querySelector(s).value;await api('/api/management/research-rq2/reliability-code',{method:'POST',body:JSON.stringify({runId:runId(),sequenceId,coderKey:coder,referenceCodes:splitCodes(q('[data-rel-ref="'+CSS.escape(sequenceId)+'"]')),functionCodes:splitCodes(q('[data-rel-fun="'+CSS.escape(sequenceId)+'"]')),recipientLocus:splitCodes(q('[data-rel-loc="'+CSS.escape(sequenceId)+'"]'))})});status('itemStatus','独立コードを保存しました。');}catch(e){status('itemStatus','一致度コード保存失敗: '+e.message,true);}}
+function countText(obj){return Object.entries(obj||{}).map(([k,v])=>'<span class="pill">'+esc(k)+' '+v+'</span>').join(' ')||'—';}
+async function analysis(){if(!runId())return;try{const d=await api('/api/management/research-rq2/analysis?runId='+encodeURIComponent(runId()));$('analysisGrid').innerHTML=(d.analysis.strata||[]).map(r=>'<div class="analysis-card"><h3>'+esc(r.label)+'</h3><div class="muted">n='+r.n+' / AI='+r.aiCoded+' / 人間確認='+r.humanConfirmed+' / 要確認='+r.needsReview+'</div><div class="code-counts"><b>参照基盤</b> '+countText(r.referenceCodes)+'<br><b>対話機能</b> '+countText(r.functionCodes)+'<br><b>locus</b> '+countText(r.recipientLocus)+'</div></div>').join('');const rel=d.reliability||{};$('reliabilityBox').innerHTML='<b>評定者間一致</b> coder: '+esc((rel.coders||[]).join(' / '))+' / 共通系列 '+(rel.commonItems||0)+'<br>'+((rel.codes||[]).map(x=>esc(x.code)+': 一致率 '+x.agreement+'% / κ '+(x.kappa??'—')).join('<br>')||'2名分の独立コードがそろうと表示します。');}catch(e){$('reliabilityBox').textContent='集計失敗: '+e.message;}}
+function download(url){const a=document.createElement('a');a.href=url;a.click();}
+$('loginBtn').onclick=login;$('password').onkeydown=e=>{if(e.key==='Enter')login()};$('reloadBtn').onclick=()=>Promise.all([loadStatus(),loadCodebook(),loadRun()]);$('lessonOnly').onchange=loadStatus;$('sampleBtn').onclick=sample;$('runId').onchange=loadRun;$('saveDraftBtn').onclick=()=>saveCodebook(false);$('freezeBtn').onclick=()=>saveCodebook(true);$('aiBtn').onclick=aiCode;$('loadReviewBtn').onclick=()=>loadItems('','1');$('loadDevBtn').onclick=()=>loadItems('codebook_development','0');$('loadReliabilityBtn').onclick=()=>loadItems('reliability','0');$('analysisBtn').onclick=analysis;$('csvBtn').onclick=()=>runId()&&download('/api/management/research-rq2/export.csv?runId='+encodeURIComponent(runId()));$('codebookDlBtn').onclick=()=>download('/api/management/research-rq2/codebook.json');$('logoutBtn').onclick=async()=>{await api('/api/management/logout',{method:'POST'});location.reload();};
+if(location.hostname.endsWith('github.io')){document.body.innerHTML='<div class="wrap"><div class="card"><h1>RQ2 コード分析</h1><p>この研究者用画面はCloud Run本番環境で使用してください。</p></div></div>';}else{showPanel();}
+</script>
+</body>
+</html>
