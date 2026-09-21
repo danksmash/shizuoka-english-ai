@@ -31,8 +31,8 @@ import {
   serializeQuestionnaireCsv,
 } from './questionnaireResearch';
 
-export const PHASE_RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v5';
-export const PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION = 7;
+export const PHASE_RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v7';
+export const PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION = 8;
 
 export const PHASE_IDS = ['phase1', 'phase2', 'phase3', 'phase4'] as const;
 export type PhaseId = typeof PHASE_IDS[number];
@@ -57,6 +57,7 @@ const PHASE_LABELS: Record<PhaseId, string> = {
 };
 
 function phaseIdForRow(row: Row, schedules: StudyScheduleRecord[]): PhaseId | '' {
+  if (String(row.school_condition || row.schoolCondition || '') === 'comparison') return '';
   const schedule = schedules.find((item) => item.classId === String(row.class_id || row.classId || ''));
   const localDate = String(row.local_date || row.localDate || '');
   if (!schedule || !localDate) return '';
@@ -84,7 +85,7 @@ export function normalizedResearchCountry(value: unknown): string {
 }
 
 function comparisonQuery(query: Record<string, unknown>): ResearchFilterQuery {
-  const cleaned: Record<string, unknown> = { ...query, dataScope: 'main' };
+  const cleaned: Record<string, unknown> = { ...query, dataScope: 'main', schoolCondition: 'intervention' };
   delete cleaned.personaId;
   delete cleaned.studyPhase;
   delete cleaned.dataset;
@@ -101,6 +102,24 @@ export function buildPhaseComparisonFromExportSessions(
   query: Record<string, unknown> = {},
 ) {
   const scope = requestedDataScope(query);
+  const requestedCondition = typeof query.schoolCondition === 'string' ? query.schoolCondition.trim() : '';
+  if (requestedCondition === 'comparison') {
+    return {
+      applicable: false,
+      reason: 'ResearchPhaseは国籍告知・本人動画・実在留学生交流を行う実践校のみを対象にします。比較校はPhase 1～4へ割り当てません。',
+      filterNote: '比較校は同じ相対経過時点でPre／Mid／Postを実施しますが、Phase分析には含めません。',
+      phases: PHASE_IDS.map((phase) => ({
+        phase,
+        label: PHASE_LABELS[phase],
+        sessions: 0,
+        eligibleSessions: 0,
+        matchedSessions: 0,
+        sessionSharePercent: null,
+        participantN: 0,
+        participantMeanSharePercent: null,
+      })),
+    };
+  }
   if (!['main', 'all'].includes(scope)) {
     return {
       applicable: false,
@@ -165,7 +184,7 @@ export function buildPhaseComparisonFromExportSessions(
   return {
     applicable: true,
     reason: '',
-    filterNote: 'Phase比較はPersona・研究Phaseフィルタを除外し、開始日・終了日・データ区分・学年・学級・テーマ・complete条件を反映します。',
+    filterNote: 'Phase比較は実践校のみを対象にし、Persona・研究Phaseフィルタを除外して、開始日・終了日・データ区分・学年・学級・テーマ・complete条件を反映します。',
     phase1Note: 'Phase 1は、後に担当となる国のPersonaとの一致率です。児童はこの時点では担当国を知りません。',
     phases,
   };
