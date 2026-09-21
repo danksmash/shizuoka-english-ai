@@ -8,6 +8,8 @@ import { codeRq2Batch } from './researchRq2Ai';
 import { buildRq2Analysis, buildRq2ReliabilitySummary } from './researchRq2Analysis';
 import {
   createRq2Run,
+  findActiveFormalRq2Runs,
+  invalidateRq2Run,
   filterRq2Items,
   getRq2Items,
   getRq2ReliabilityCodes,
@@ -16,6 +18,14 @@ import {
   patchRq2ItemRecords,
   updateRq2Item,
 } from './researchRq2Persistence';
+import {
+  assertRq2RunActive,
+  assertRq2SamplingConfirmation,
+  rq2FormalSamplingReady,
+  rq2OperationErrorStatus,
+  rq2RunType,
+  summarizeRq2RunProgress,
+} from './researchRq2RunGuard';
 
 const router = express.Router();
 
@@ -35,14 +45,41 @@ function canonicalCodes(codebook: Record<string, any>, dimension: 'reference' | 
   return result.valid;
 }
 
+function rq2ErrorResponse(res: express.Response, error: any, fallback: string) {
+  const message = String(error?.message || '');
+  const isKnown = message.startsWith('RQ2_');
+  return res.status(isKnown ? rq2OperationErrorStatus(message) : 503).json({
+    success: false,
+    error: isKnown ? message : fallback,
+  });
+}
+
+async function activeRq2Run(runId: string) {
+  if (!runId) throw new Error('RQ2_RUN_ID_REQUIRED');
+  return assertRq2RunActive(await getRq2Run(runId));
+}
+
 
 router.get('/research-rq2/status', requireManagementRole(['researcher']), async (req, res) => {
   try {
     const lessonOnly = bool(req.query.lessonOnly, true);
     const [sessions, schedules, codebook] = await Promise.all([getAllSessionsForManagement(), getAllStudySchedules(), getRq2Codebook()]);
     const candidates = buildRq2Candidates(sessions, schedules, { lessonOnly });
+    const defaultPreview = sampleRq2Candidates(candidates, 'RQ2-PREVIEW-ONLY', 50, 2);
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ success: true, lessonOnly, codebook, strata: summarizeRq2Candidates(candidates), totalCandidates: candidates.length });
+    return res.json({
+      success: true,
+      lessonOnly,
+      codebook,
+      strata: summarizeRq2Candidates(candidates),
+      totalCandidates: candidates.length,
+      defaultSampling: {
+        targetPerStratum: 50,
+        maxPerParticipantPerStratum: 2,
+        counts: defaultPreview.counts,
+        formalReady: rq2FormalSamplingReady(defaultPreview.counts),
+      },
+    });
   } catch (error: any) {
     console.error('RQ2 status failed', { message: error?.message });
     return res.status(503).json({ success: false, error: 'RQ2_STATUS_UNAVAILABLE' });
@@ -55,39 +92,96 @@ router.post('/research-rq2/sample', requireManagementRole(['researcher']), async
     const targetPerStratum = intValue(req.body?.targetPerStratum, 50, 10, 100);
     const maxPerParticipantPerStratum = intValue(req.body?.maxPerParticipantPerStratum, 2, 1, 5);
     const lessonOnly = bool(req.body?.lessonOnly, true);
+    const runType = rq2RunType(req.body?.runType);
     const [sessions, schedules, codebook] = await Promise.all([getAllSessionsForManagement(), getAllStudySchedules(), getRq2Codebook()]);
     const candidates = buildRq2Candidates(sessions, schedules, { lessonOnly });
     const sampled = sampleRq2Candidates(candidates, seed, targetPerStratum, maxPerParticipantPerStratum);
+
+    assertRq2SamplingConfirmation({
+      runType,
+      acknowledged: bool(req.body?.acknowledged, false),
+      confirmText: text(req.body?.confirmText, 40),
+      counts: sampled.counts,
+    });
+
+    if (runType === 'formal') {
+      const activeFormalRuns = await findActiveFormalRq2Runs();
+      if (activeFormalRuns.length) throw new Error('RQ2_ACTIVE_FORMAL_RUN_EXISTS');
+    }
+
     const run = await createRq2Run({
       seed,
       targetPerStratum,
       maxPerParticipantPerStratum,
       lessonOnly,
+      runType,
       codebookVersion: String(codebook.version || 'draft'),
       counts: sampled.counts,
       items: sampled.items,
       createdBy: req.managementUser?.username || 'researcher',
     });
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ success: true, run, counts: sampled.counts, selected: sampled.items.length });
+    return res.json({
+      success: true,
+      run,
+      counts: sampled.counts,
+      selected: sampled.items.length,
+      formalReady: rq2FormalSamplingReady(sampled.counts),
+    });
   } catch (error: any) {
     console.error('RQ2 sampling failed', { message: error?.message });
-    return res.status(503).json({ success: false, error: 'RQ2_SAMPLING_UNAVAILABLE' });
+    return rq2ErrorResponse(res, error, 'RQ2_SAMPLING_UNAVAILABLE');
   }
 });
 
 router.get('/research-rq2/run', requireManagementRole(['researcher']), async (req, res) => {
-  const runId = text(req.query.runId, 120);
-  if (!runId) return res.status(400).json({ success: false, error: 'RQ2_RUN_ID_REQUIRED' });
-  const [run, items] = await Promise.all([getRq2Run(runId), getRq2Items(runId)]);
-  if (!run) return res.status(404).json({ success: false, error: 'RQ2_RUN_NOT_FOUND' });
-  return res.json({ success: true, run, itemCount: items.length });
+  try {
+    const runId = text(req.query.runId, 120);
+    if (!runId) return res.status(400).json({ success: false, error: 'RQ2_RUN_ID_REQUIRED' });
+    const [run, items, reliability] = await Promise.all([getRq2Run(runId), getRq2Items(runId), getRq2ReliabilityCodes(runId)]);
+    if (!run) return res.status(404).json({ success: false, error: 'RQ2_RUN_NOT_FOUND' });
+    return res.json({
+      success: true,
+      run,
+      itemCount: items.length,
+      progress: summarizeRq2RunProgress(items, reliability),
+    });
+  } catch (error: any) {
+    return rq2ErrorResponse(res, error, 'RQ2_RUN_UNAVAILABLE');
+  }
+});
+
+router.post('/research-rq2/reset', requireManagementRole(['researcher']), async (req: AuthenticatedRequest, res) => {
+  try {
+    const runId = text(req.body?.runId, 120);
+    if (!runId) throw new Error('RQ2_RUN_ID_REQUIRED');
+    if (text(req.body?.confirmText, 40) !== '抽出をリセット') throw new Error('RQ2_RESET_CONFIRM_TEXT_REQUIRED');
+    const run = await getRq2Run(runId);
+    if (!run) throw new Error('RQ2_RUN_NOT_FOUND');
+    const [items, reliability] = await Promise.all([getRq2Items(runId), getRq2ReliabilityCodes(runId)]);
+    const progress = summarizeRq2RunProgress(items, reliability);
+    const invalidated = await invalidateRq2Run(
+      runId,
+      req.managementUser?.username || 'researcher',
+      text(req.body?.reason, 200) || 'manual_reset',
+      progress,
+    );
+    return res.json({
+      success: true,
+      run: invalidated,
+      progress,
+      message: 'RQ2_RUN_INVALIDATED',
+    });
+  } catch (error: any) {
+    return rq2ErrorResponse(res, error, 'RQ2_RESET_UNAVAILABLE');
+  }
 });
 
 router.get('/research-rq2/items', requireManagementRole(['researcher']), async (req, res) => {
   try {
     const runId = text(req.query.runId, 120);
     if (!runId) return res.status(400).json({ success: false, error: 'RQ2_RUN_ID_REQUIRED' });
+    await activeRq2Run(runId);
     const purposeText = text(req.query.purpose, 40);
     const purpose = ['codebook_development','reliability','main_other'].includes(purposeText) ? purposeText as Rq2Purpose : '';
     const rows = filterRq2Items(await getRq2Items(runId), purpose, bool(req.query.reviewOnly, false));
@@ -101,7 +195,7 @@ router.get('/research-rq2/items', requireManagementRole(['researcher']), async (
     return res.json({ success: true, items });
   } catch (error: any) {
     console.error('RQ2 item read failed', { message: error?.message });
-    return res.status(503).json({ success: false, error: 'RQ2_ITEMS_UNAVAILABLE' });
+    return rq2ErrorResponse(res, error, 'RQ2_ITEMS_UNAVAILABLE');
   }
 });
 
@@ -125,6 +219,7 @@ router.post('/research-rq2/ai-code', requireManagementRole(['researcher']), asyn
     const runId = text(req.body?.runId, 120);
     const batchSize = intValue(req.body?.batchSize, 20, 1, 20);
     if (!runId) return res.status(400).json({ success: false, error: 'RQ2_RUN_ID_REQUIRED' });
+    await activeRq2Run(runId);
     const [items, codebook] = await Promise.all([getRq2Items(runId), getRq2Codebook()]);
     if (String(codebook.status || '') !== 'frozen') return res.status(409).json({ success: false, error: 'RQ2_CODEBOOK_NOT_FROZEN' });
     const codedVersions = new Set(items.filter((item) => item.aiStatus === 'coded' && item.aiCodebookVersion).map((item) => String(item.aiCodebookVersion)));
@@ -142,7 +237,7 @@ router.post('/research-rq2/ai-code', requireManagementRole(['researcher']), asyn
     return res.json({ success: true, processed: coded.results.length, remaining, model: coded.model, promptVersion: coded.promptVersion });
   } catch (error: any) {
     console.error('RQ2 AI coding failed', { message: error?.message });
-    return res.status(503).json({ success: false, error: 'RQ2_AI_CODING_UNAVAILABLE' });
+    return rq2ErrorResponse(res, error, 'RQ2_AI_CODING_UNAVAILABLE');
   }
 });
 
@@ -150,6 +245,7 @@ router.post('/research-rq2/human-code', requireManagementRole(['researcher']), a
   try {
     const runId = text(req.body?.runId, 120);
     const sequenceId = text(req.body?.sequenceId, 220);
+    await activeRq2Run(runId);
     const codebook = await getRq2Codebook();
     const decision = req.body?.decision === 'modify' ? 'modified' : 'confirmed';
     const item = await updateRq2Item(runId, sequenceId, {
@@ -163,7 +259,7 @@ router.post('/research-rq2/human-code', requireManagementRole(['researcher']), a
     });
     return res.json({ success: true, item });
   } catch (error: any) {
-    return res.status(String(error?.message || '').startsWith('RQ2_') ? 400 : 503).json({ success: false, error: String(error?.message || 'RQ2_HUMAN_CODE_UNAVAILABLE') });
+    return rq2ErrorResponse(res, error, 'RQ2_HUMAN_CODE_UNAVAILABLE');
   }
 });
 
@@ -172,6 +268,7 @@ router.post('/research-rq2/reliability-code', requireManagementRole(['researcher
     const runId = text(req.body?.runId, 120);
     const sequenceId = text(req.body?.sequenceId, 220);
     const coderKey = text(req.body?.coderKey, 80);
+    await activeRq2Run(runId);
     const item = (await getRq2Items(runId)).find((row) => row.sequenceId === sequenceId && row.purpose === 'reliability');
     if (!item) return res.status(400).json({ success: false, error: 'RQ2_RELIABILITY_ITEM_REQUIRED' });
     const codebook = await getRq2Codebook();
@@ -185,17 +282,18 @@ router.post('/research-rq2/reliability-code', requireManagementRole(['researcher
     });
     return res.json({ success: true, record });
   } catch (error: any) {
-    return res.status(String(error?.message || '').startsWith('RQ2_') ? 400 : 503).json({ success: false, error: String(error?.message || 'RQ2_RELIABILITY_SAVE_UNAVAILABLE') });
+    return rq2ErrorResponse(res, error, 'RQ2_RELIABILITY_SAVE_UNAVAILABLE');
   }
 });
 
 router.get('/research-rq2/analysis', requireManagementRole(['researcher']), async (req, res) => {
   try {
     const runId = text(req.query.runId, 120);
+    await activeRq2Run(runId);
     const [items, reliability] = await Promise.all([getRq2Items(runId), getRq2ReliabilityCodes(runId)]);
     return res.json({ success: true, analysis: buildRq2Analysis(items), reliability: buildRq2ReliabilitySummary(reliability) });
   } catch (error: any) {
-    return res.status(503).json({ success: false, error: 'RQ2_ANALYSIS_UNAVAILABLE' });
+    return rq2ErrorResponse(res, error, 'RQ2_ANALYSIS_UNAVAILABLE');
   }
 });
 
@@ -209,10 +307,10 @@ router.get('/research-rq2/export.csv', requireManagementRole(['researcher']), as
   try {
     const runId = text(req.query.runId, 120);
     const [run, items] = await Promise.all([getRq2Run(runId), getRq2Items(runId)]);
-    if (!run) return res.status(404).json({ success: false, error: 'RQ2_RUN_NOT_FOUND' });
-    const headers = ['run_id','seed','target_per_stratum','max_per_participant','lesson_only','run_codebook_version','run_prompt_version','sequence_id','stratum','purpose','stratum_rank','research_id','class_id','session_id','local_date','topic','persona_id','child_utterance_id','child_turn_sequence','previous_ai_english','child_english','next_ai_english','ai_reference_codes','ai_function_codes','ai_recipient_locus','ai_needs_review','ai_review_reason','ai_reason','ai_model','ai_prompt_version','ai_codebook_version','ai_coded_at','human_reference_codes','human_function_codes','human_recipient_locus','human_status','human_coder','human_note','human_coded_at'];
+    assertRq2RunActive(run);
+    const headers = ['run_id','run_type','run_status','seed','target_per_stratum','max_per_participant','lesson_only','run_codebook_version','run_prompt_version','sequence_id','stratum','purpose','stratum_rank','research_id','class_id','session_id','local_date','topic','persona_id','child_utterance_id','child_turn_sequence','previous_ai_english','child_english','next_ai_english','ai_reference_codes','ai_function_codes','ai_recipient_locus','ai_needs_review','ai_review_reason','ai_reason','ai_model','ai_prompt_version','ai_codebook_version','ai_coded_at','human_reference_codes','human_function_codes','human_recipient_locus','human_status','human_coder','human_note','human_coded_at'];
     const rows = items.map((item) => ({
-      run_id: runId, seed: run.seed, target_per_stratum: run.targetPerStratum, max_per_participant: run.maxPerParticipantPerStratum,
+      run_id: runId, run_type: run.runType || 'legacy', run_status: run.status || 'sampled', seed: run.seed, target_per_stratum: run.targetPerStratum, max_per_participant: run.maxPerParticipantPerStratum,
       lesson_only: run.lessonOnly ? 1 : 0, run_codebook_version: run.codebookVersion, run_prompt_version: run.promptVersion,
       sequence_id: item.sequenceId, stratum: item.stratum, purpose: item.purpose, stratum_rank: item.stratumRank,
       research_id: item.researchId, class_id: item.classId, session_id: item.sessionId, local_date: item.localDate, topic: item.topic, persona_id: item.personaId,
@@ -229,7 +327,7 @@ router.get('/research-rq2/export.csv', requireManagementRole(['researcher']), as
     res.setHeader('Content-Disposition', `attachment; filename="rq2-coding-${runId}.csv"`);
     return res.send(body);
   } catch (error: any) {
-    return res.status(503).json({ success: false, error: 'RQ2_EXPORT_UNAVAILABLE' });
+    return rq2ErrorResponse(res, error, 'RQ2_EXPORT_UNAVAILABLE');
   }
 });
 
