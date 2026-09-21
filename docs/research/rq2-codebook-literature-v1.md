@@ -25,7 +25,7 @@
 4. 基盤研究については被引用実績も確認
 5. 2024–2026年のAI研究は刊行直後で被引用数が少ないため、掲載誌・方法・RQへの直接性を重視
 
-被引用数はデータベースで変動するため参考値にとどめる。確認時点の例として、Storch (2002) はWileyのCrossRef表示で約603件、Galaczi & Taylor (2018) はTaylor & FrancisのCrossRef表示で約165件、Hall (2018) は約75件、Gokturk & Chukharev (2024) は約20件、Lam (2021) は所属機関ポータルのScopus表示で42件、山口・巽 (2020) はJ-STAGE被引用文献9件であった。Su & Chen (2026) 等の最新研究は引用蓄積がまだ少ない。
+被引用数はデータベースで変動するため参考値にとどめる。確認時点の例として、Storch (2002) はWileyのCrossRef表示で約603件、Galaczi & Taylor (2018) はTaylor & FrancisのCrossRef表示で約165件、Gokturk & Chukharev (2024) は約20件、Lam (2021) は所属機関ポータルのScopus表示で42件、山口・巽 (2020) はJ-STAGE被引用文献9件であった。Su & Chen (2026) 等の最新研究は引用蓄積がまだ少ない。
 
 ## 3. 中核となる理論・実証研究
 
@@ -184,4 +184,5 @@ Child: What is your dog's name?
 - Sacks, H., Schegloff, E. A., & Jefferson, G. (1974). *Language, 50*(4), 696–735. https://doi.org/10.2307/412243
 - Clark, H. H., & Brennan, S. E. (1991). *Grounding in communication*. https://doi.org/10.1037/10096-006
 - Shaikh, O., et al. (2024). NAACL 2024, 6279–6296. https://doi.org/10.18653/v1/2024.naacl-long.348
+- Storch, N. (2002). *Language Learning, 52*(1), 119–158. https://doi.org/10.1111/1467-9922.00179
 - ISO 24617-2:2020. Semantic annotation framework—Part 2: Dialogue acts.
