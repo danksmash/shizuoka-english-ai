@@ -66,8 +66,44 @@ function sessionLocalDate(session: Record<string, any>): string {
   return parsed && Number.isFinite(parsed.getTime()) ? parsed.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }) : '';
 }
 
-function configuredFieldCount(schedule: StudyScheduleRecord): number {
-  return [schedule.appStartDate, schedule.nationalityRevealDate, schedule.videoViewDate, schedule.exchangeDate].filter(Boolean).length;
+function isComparisonClassId(classId: string): boolean {
+  return /^[56]-C[1-9]$/.test(classId);
+}
+
+function configuredFieldCount(schedule: StudyScheduleRecord, schoolCondition: 'intervention' | 'comparison'): number {
+  const fields = schoolCondition === 'comparison'
+    ? [schedule.appStartDate, schedule.nationalityRevealDate, schedule.exchangeDate]
+    : [schedule.appStartDate, schedule.nationalityRevealDate, schedule.videoViewDate, schedule.exchangeDate];
+  return fields.filter(Boolean).length;
+}
+
+function requiredConfiguredFieldCount(schoolCondition: 'intervention' | 'comparison'): number {
+  return schoolCondition === 'comparison' ? 3 : 4;
+}
+
+function blankScheduleForClass(classId: string): StudyScheduleRecord {
+  return {
+    classId,
+    revision: 0,
+    appStartDate: '',
+    nationalityRevealDate: '',
+    videoViewDate: '',
+    exchangeDate: '',
+    updatedAt: '',
+    updatedBy: '',
+    history: [],
+  };
+}
+
+function researchScopeRowForReflection(classId: string, localDate: string, student?: { formalStudyParticipant?: boolean; schoolCondition?: string; studyStartDate?: string }) {
+  const comparison = student?.schoolCondition === 'comparison' || isComparisonClassId(classId);
+  return {
+    class_id: classId,
+    local_date: localDate,
+    formal_study_participant: student?.formalStudyParticipant === true || comparison ? 1 : 0,
+    school_condition: comparison ? 'comparison' : (student?.schoolCondition || 'intervention'),
+    study_start_date: student?.studyStartDate || '',
+  };
 }
 
 async function buildLinkageAudit() {
@@ -78,7 +114,7 @@ async function buildLinkageAudit() {
     getStudentRecordsForManagement(),
   ]);
   const participants = students
-    .filter((student) => student.active && (STUDY_CLASS_IDS as readonly string[]).includes(student.classId))
+    .filter((student) => student.active && student.formalStudyParticipant && ((STUDY_CLASS_IDS as readonly string[]).includes(student.classId) || isComparisonClassId(student.classId)))
     .map((student) => ({
       researchId: student.researchId,
       classId: student.classId,
@@ -87,6 +123,10 @@ async function buildLinkageAudit() {
       assignedPartnerId: student.assignedPartnerId,
       assignmentAnnouncedAt: student.assignmentAnnouncedAt,
       updatedAt: student.updatedAt,
+      studySiteId: student.studySiteId,
+      schoolCondition: student.schoolCondition,
+      gradeLevel: student.gradeLevel,
+      studyStartDate: student.studyStartDate,
     }))
     .sort((a, b) => a.classId.localeCompare(b.classId, 'ja')
       || Number(a.attendanceNumber || 999) - Number(b.attendanceNumber || 999)
@@ -98,24 +138,41 @@ async function buildLinkageAudit() {
   }
   const countryOptions = Array.from(optionMap.values());
   const scheduleByClass = new Map(schedules.map((schedule) => [schedule.classId, schedule]));
-  const classRows = STUDY_CLASS_IDS.map((classId) => {
-    const schedule = scheduleByClass.get(classId)!;
+  const classIds = [...new Set([
+    ...STUDY_CLASS_IDS,
+    ...participants.map((participant) => participant.classId),
+  ])].sort((a, b) => a.localeCompare(b, 'ja'));
+  const studentByResearchId = new Map(students.map((student) => [student.researchId, student]));
+  const classRows = classIds.map((classId) => {
+    const schedule = scheduleByClass.get(classId) || blankScheduleForClass(classId);
+    const classCondition = participants.find((participant) => participant.classId === classId)?.schoolCondition === 'comparison' || isComparisonClassId(classId)
+      ? 'comparison'
+      : 'intervention';
     const classSessions = sessions.filter((row) => String(row.classId || '') === classId);
     const classReflections = reflections.filter((row) => row.classId === classId);
     const classParticipants = participants.filter((row) => row.classId === classId);
-    const configuredParticipants = classParticipants.filter((row) => Boolean(row.assignedPartnerCountry));
+    const configuredParticipants = classCondition === 'intervention'
+      ? classParticipants.filter((row) => Boolean(row.assignedPartnerCountry))
+      : [];
     const sessionPhases = phaseCounts();
     const reflectionPhases = phaseCounts();
     let mainSessions = 0;
     let mainReflections = 0;
     for (const session of classSessions) {
       const localDate = sessionLocalDate(session);
-      sessionPhases[phaseForLocalDate(localDate, schedule)] += 1;
-      if (researchDataScopeForRow({ class_id: classId, local_date: localDate }) === 'main') mainSessions += 1;
+      if (classCondition === 'intervention') sessionPhases[phaseForLocalDate(localDate, schedule)] += 1;
+      if (researchDataScopeForRow({
+        class_id: classId,
+        local_date: localDate,
+        formal_study_participant: session.formalStudyParticipant === true ? 1 : 0,
+        school_condition: session.schoolCondition || classCondition,
+        study_start_date: session.studyStartDate || '',
+      }) === 'main') mainSessions += 1;
     }
     for (const reflection of classReflections) {
-      reflectionPhases[phaseForLocalDate(reflection.localDate, schedule)] += 1;
-      if (researchDataScopeForRow({ class_id: classId, local_date: reflection.localDate }) === 'main') mainReflections += 1;
+      if (classCondition === 'intervention') reflectionPhases[phaseForLocalDate(reflection.localDate, schedule)] += 1;
+      const student = studentByResearchId.get(reflection.researchId);
+      if (researchDataScopeForRow(researchScopeRowForReflection(classId, reflection.localDate, student)) === 'main') mainReflections += 1;
     }
     const dialogueDayKeys = new Set(classSessions.map((row) => {
       const researchId = String(row.researchId || '');
@@ -127,16 +184,20 @@ async function buildLinkageAudit() {
     for (const key of dialogueDayKeys) if (reflectionKeys.has(key)) matchedDayKeys += 1;
     let assignedCountryComparableSessions = 0;
     let assignedCountryMatchedSessions = 0;
-    for (const session of classSessions) {
-      const assigned = normalizedCountry(session.assignedPartnerCountry);
-      const selected = normalizedCountry(session.personaCountry);
-      if (!assigned || !selected) continue;
-      assignedCountryComparableSessions += 1;
-      if (assigned === selected) assignedCountryMatchedSessions += 1;
+    if (classCondition === 'intervention') {
+      for (const session of classSessions) {
+        const assigned = normalizedCountry(session.assignedPartnerCountry);
+        const selected = normalizedCountry(session.personaCountry);
+        if (!assigned || !selected) continue;
+        assignedCountryComparableSessions += 1;
+        if (assigned === selected) assignedCountryMatchedSessions += 1;
+      }
     }
     return {
       classId,
-      configuredFields: configuredFieldCount(schedule),
+      schoolCondition: classCondition,
+      configuredFields: configuredFieldCount(schedule, classCondition),
+      requiredFields: requiredConfiguredFieldCount(classCondition),
       scheduleRevision: schedule.revision,
       schedule,
       sessions: classSessions.length,
@@ -163,7 +224,7 @@ async function buildLinkageAudit() {
       scheduleToDialogue: ['class_id', 'local_date'],
       scheduleToReflection: ['class_id', 'local_date'],
       dialogueToReflection: ['research_id', 'local_date'],
-      note: 'Phase is derived from the current official class schedule. Every saved schedule revision remains in schedule.history.',
+      note: '実践校のPhaseは正式学級日程から導出します。比較校はPhase 1～4へ割り当てず、同じ相対経過時点のPre/Mid/Post監査だけに日程を使います。保存済みrevisionはschedule.historyに保持します。',
     },
     classes: classRows,
   };
@@ -185,7 +246,7 @@ async function buildLinkageCsv(): Promise<string> {
   const scheduleByClass = new Map(schedules.map((schedule) => [schedule.classId, schedule]));
   const studentByResearchId = new Map(students.map((student) => [student.researchId, student]));
   const headers = [
-    'record_type', 'research_id', 'class_id', 'local_date', 'record_id', 'data_scope', 'study_phase', 'schedule_revision',
+    'record_type', 'research_id', 'site_id', 'school_condition', 'class_id', 'local_date', 'record_id', 'data_scope', 'study_phase', 'schedule_revision',
     'app_start_date', 'nationality_reveal_date', 'video_view_date', 'exchange_date',
     'assigned_partner_country', 'assigned_partner_id', 'assignment_announced_at', 'persona_country', 'assigned_country_persona_match',
   ];
@@ -195,10 +256,16 @@ async function buildLinkageCsv(): Promise<string> {
     const schedule = scheduleByClass.get(classId as any);
     if (!schedule) continue;
     const localDate = sessionLocalDate(session);
+    const comparison = session.schoolCondition === 'comparison' || isComparisonClassId(classId);
     rows.push({
-      record_type: 'dialogue_session', research_id: session.researchId || '', class_id: classId, local_date: localDate,
-      record_id: session.sessionId || '', data_scope: researchDataScopeForRow({ class_id: classId, local_date: localDate }),
-      study_phase: phaseForLocalDate(localDate, schedule), schedule_revision: schedule.revision,
+      record_type: 'dialogue_session', research_id: session.researchId || '', site_id: session.studySiteId || (comparison ? 'site_b' : 'site_a'), school_condition: comparison ? 'comparison' : 'intervention', class_id: classId, local_date: localDate,
+      record_id: session.sessionId || '', data_scope: researchDataScopeForRow({
+        class_id: classId, local_date: localDate,
+        formal_study_participant: session.formalStudyParticipant === true ? 1 : 0,
+        school_condition: comparison ? 'comparison' : 'intervention',
+        study_start_date: session.studyStartDate || '',
+      }),
+      study_phase: comparison ? '' : phaseForLocalDate(localDate, schedule), schedule_revision: schedule.revision,
       app_start_date: schedule.appStartDate, nationality_reveal_date: schedule.nationalityRevealDate,
       video_view_date: schedule.videoViewDate, exchange_date: schedule.exchangeDate,
       assigned_partner_country: session.assignedPartnerCountry || '',
@@ -215,10 +282,11 @@ async function buildLinkageCsv(): Promise<string> {
     const schedule = scheduleByClass.get(classId as any);
     if (!schedule) continue;
     const student = studentByResearchId.get(reflection.researchId);
+    const comparison = student?.schoolCondition === 'comparison' || isComparisonClassId(classId);
     rows.push({
-      record_type: 'lesson_reflection', research_id: reflection.researchId, class_id: classId, local_date: reflection.localDate,
-      record_id: reflection.reflectionId, data_scope: researchDataScopeForRow({ class_id: classId, local_date: reflection.localDate }),
-      study_phase: phaseForLocalDate(reflection.localDate, schedule), schedule_revision: schedule.revision,
+      record_type: 'lesson_reflection', research_id: reflection.researchId, site_id: student?.studySiteId || (comparison ? 'site_b' : 'site_a'), school_condition: comparison ? 'comparison' : 'intervention', class_id: classId, local_date: reflection.localDate,
+      record_id: reflection.reflectionId, data_scope: researchDataScopeForRow(researchScopeRowForReflection(classId, reflection.localDate, student)),
+      study_phase: comparison ? '' : phaseForLocalDate(reflection.localDate, schedule), schedule_revision: schedule.revision,
       app_start_date: schedule.appStartDate, nationality_reveal_date: schedule.nationalityRevealDate,
       video_view_date: schedule.videoViewDate, exchange_date: schedule.exchangeDate,
       assigned_partner_country: student?.assignedPartnerCountry || '',
@@ -253,8 +321,8 @@ export function createStudyScheduleRouter() {
       const actor = req.managementUser?.username || 'researcher';
       const saved = await saveStudySchedule(req.body || {}, actor);
       const students = await getStudentRecordsForManagement();
-      const classAssignments = students
-        .filter((student) => student.active && student.classId === saved.classId && Boolean(student.assignedPartnerCountry))
+      const classAssignments = isComparisonClassId(saved.classId) ? [] : students
+        .filter((student) => student.active && student.schoolCondition !== 'comparison' && student.classId === saved.classId && Boolean(student.assignedPartnerCountry))
         .map((student) => ({
           researchId: student.researchId,
           assignedPartnerCountry: student.assignedPartnerCountry,
@@ -291,7 +359,7 @@ export function createStudyScheduleRouter() {
       const [schedules, students] = await Promise.all([getAllStudySchedules(), getStudentRecordsForManagement()]);
       const scheduleByClass = new Map(schedules.map((schedule) => [schedule.classId, schedule]));
       const participantByResearchId = new Map(students
-        .filter((student) => student.active && (STUDY_CLASS_IDS as readonly string[]).includes(student.classId))
+        .filter((student) => student.active && student.formalStudyParticipant && student.schoolCondition === 'intervention' && (STUDY_CLASS_IDS as readonly string[]).includes(student.classId))
         .map((student) => [student.researchId, student]));
       const prepared = requested.map((input: any) => {
         const researchId = typeof input?.researchId === 'string' ? input.researchId.trim().toUpperCase() : '';
