@@ -75,6 +75,8 @@ export function rq2OperationErrorStatus(message: string): number {
     message === 'RQ2_SAMPLE_CONFIRMATION_REQUIRED'
     || message === 'RQ2_FORMAL_CONFIRM_TEXT_REQUIRED'
     || message === 'RQ2_RESET_CONFIRM_TEXT_REQUIRED'
+    || message === 'RQ2_RUN_ID_REQUIRED'
+    || message.startsWith('RQ2_INVALID_CODE:')
   ) return 400;
   return 503;
 }
