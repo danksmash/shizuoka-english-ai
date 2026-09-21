@@ -109,7 +109,10 @@ const reliability = buildRq2ReliabilitySummary([
   { runId:'r', sequenceId:'s2', coderKey:'B', referenceCodes:['B0'], functionCodes:['A/SD'], recipientLocus:['現在のAI'] },
 ]);
 assert.equal(reliability.commonItems, 2);
-assert.ok(reliability.codes.every((row) => row.agreement === 100));
+assert.equal(reliability.reference.agreement, 100);
+assert.equal(reliability.reference.kappa, 1);
+assert.equal(reliability.function.agreement, 100);
+assert.equal(reliability.function.kappa, 1);
 
 const analysis = buildRq2Analysis([
   { stratum:'intervention_phase1', aiStatus:'coded', aiReferenceCodes:['B3'], aiFunctionCodes:['Q'], aiRecipientLocus:[], aiNeedsReview:false, humanStatus:'pending' },
@@ -135,6 +138,9 @@ assert.ok(page.includes('比較校 対応期間1') || page.includes('比較校�
 assert.ok(page.includes('次の20系列をAI候補コード化'));
 assert.ok(page.includes('一致度用60'));
 assert.ok(page.includes('正式集計は人間確認済みコードのみ'));
+assert.ok(page.includes('参照基盤・主コード'));
+assert.ok(page.includes('対話機能・主コード'));
+assert.ok(page.includes('reliability.csv'));
 assert.ok(page.includes('AI候補（未確定）'));
 assert.ok(page.includes('抽出を無効にして再抽出'));
 assert.ok(page.includes('正式抽出'));
@@ -142,9 +148,13 @@ assert.ok(page.includes('試験抽出'));
 assert.ok(page.includes('抽出をリセット'));
 assert.ok(routes.includes('/research-rq2/sample-preview'));
 assert.ok(routes.includes('/research-rq2/reset'));
+assert.ok(routes.includes('/research-rq2/reliability.csv'));
+assert.ok(routes.includes('humanReferencePrimary'));
+assert.ok(routes.includes('humanFunctionPrimary'));
 assert.ok(routes.includes('RQ2_ACTIVE_FORMAL_RUN_EXISTS'));
 assert.ok(routes.includes('assertRq2RunActive(run)'));
 assert.ok(persistence.includes("status: 'invalidated'"));
 assert.ok(persistence.includes('runType: args.runType'));
 assert.ok(management.includes('/research-rq2.html'));
+assert.ok(management.includes('/research-rq3.html'));
 console.log('RQ2 code analysis QA: PASS');
