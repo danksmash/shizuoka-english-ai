@@ -7,7 +7,7 @@
 
 主分析は **jamovi + GAMLj3** を用いる。
 
-2026-09-22に公式GAMLj資料を再確認し、GAMLj3のGeneralized Mixed Modelsがmultinomial mixed modelを扱えることを確認した。実分析時には、論文の再現性確保のため、実際に使用したjamovi・GAMLjのバージョン番号を記録する。
+2026-09-22に公式GAMLj資料を再確認し、GAMLj3（公式R packageページ表示 3.6.7）のGeneralized Mixed Modelsがmultinomial mixed modelを扱えることを確認した。実分析時には、論文の再現性確保のため、実際に使用したjamovi・GAMLjのバージョン番号を記録する。
 
 Rは、データ点検、記述統計の再現、収束不良時の感度分析等の補助に用いる。
 
