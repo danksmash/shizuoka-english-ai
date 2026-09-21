@@ -71,7 +71,7 @@ export async function patchRq2ItemRecords(updates: Array<{ current: Record<strin
     const runId = String(current.runId || '');
     if (!itemId || !runId) throw new Error('RQ2_ITEM_ID_REQUIRED');
     const next = { ...current, ...patch, itemId, runId, updatedAt: now };
-    delete next._name;
+    delete (next as Record<string, any>)._name;
     return { id: itemId, data: next };
   });
   await setDocumentsBatch(RQ2_ITEM_COLLECTION, documents);
@@ -83,7 +83,7 @@ export async function patchRq2ItemRecord(current: Record<string, any>, patch: Re
   const runId = String(current.runId || '');
   if (!itemId || !runId) throw new Error('RQ2_ITEM_ID_REQUIRED');
   const next = { ...current, ...patch, itemId, runId, updatedAt: new Date().toISOString() };
-  delete next._name;
+  delete (next as Record<string, any>)._name;
   await setDocument(RQ2_ITEM_COLLECTION, itemId, next);
   return next;
 }
@@ -94,7 +94,7 @@ export async function updateRq2Item(runId: string, sequenceId: string, patch: Re
   if (!current) throw new Error('RQ2_ITEM_NOT_FOUND');
   const itemId = String(current.itemId || '');
   const next = { ...current, ...patch, itemId, runId, updatedAt: new Date().toISOString() };
-  delete next._name;
+  delete (next as Record<string, any>)._name;
   await setDocument(RQ2_ITEM_COLLECTION, itemId, next);
   return next;
 }
