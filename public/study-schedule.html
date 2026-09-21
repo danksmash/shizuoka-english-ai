@@ -22,17 +22,17 @@
 
 <div id="panel" style="display:none">
   <div class="card top">
-    <div><h1 class="title">Study 1 学級スケジュール管理</h1><div class="muted">本調査5学級の4つのtrigger日を変更できます</div></div>
+    <div><h1 class="title">Study 1 学級スケジュール管理</h1><div class="muted">実践校と比較校のPre／Mid／Post対応日を管理します</div></div>
     <div class="actions"><button id="reloadBtn" class="secondary">↻ 再読込</button><button id="csvBtn" class="secondary">紐付け監査CSV</button><a href="/management"><button class="secondary">研究ダッシュボード</button></a><a href="/questionnaire-analysis.html"><button class="secondary">質問紙分析</button></a><button id="logoutBtn" class="danger">ログアウト</button></div>
   </div>
 
   <div class="note card">
-    対象は <b>5-1 / 5-2 / 5-3 / 6-1 / 6-2</b> の5学級です。日付変更は既存のAI対話・Reflectionデータを書き換えません。各学級の現在値と最大100件のrevision履歴をFirestoreに保存します。Phaseは <b>class_id + local_date</b> から導出し、AI対話とReflectionは <b>research_id + local_date</b> で相互照合します。同一日内の時刻差は扱わず、日付単位です。
+    実践校は <b>5-1 / 5-2 / 5-3 / 6-1 / 6-2</b>、比較校は正式参加者を登録した学級（例: 5-C1）を表示します。実践校だけがPhase 1～4の対象です。比較校では「Mid基準日」「Post基準日」を実践校と同じ相対経過時点の照合に使い、国籍告知・本人動画・交流を実施した扱いにはしません。日付変更は既存のAI対話・Reflectionデータを書き換えません。
   </div>
 
   <div class="card">
     <div class="table-wrap"><table class="schedule">
-      <thead><tr><th>学級</th><th>アプリ使用開始日</th><th>来校留学生国籍告知日</th><th>自己紹介ビデオ視聴日</th><th>留学生交流会実施日</th><th>revision</th><th></th></tr></thead>
+      <thead><tr><th>学級</th><th>アプリ使用開始日</th><th>Mid基準日<br><span class="muted">実践校: 国籍告知</span></th><th>本人動画日<br><span class="muted">比較校: 対象外</span></th><th>Post基準日<br><span class="muted">実践校: 交流</span></th><th>revision</th><th></th></tr></thead>
       <tbody id="scheduleRows"></tbody>
     </table></div>
     <p id="scheduleStatus" class="status"></p>
@@ -74,7 +74,7 @@
 </div>
 </div>
 <script>
-const classes=['5-1','5-2','5-3','6-1','6-2'];
+let classes=['5-1','5-2','5-3','6-1','6-2'];
 const $=id=>document.getElementById(id);
 let schedules=new Map();
 let participants=[];
@@ -83,11 +83,11 @@ let csvPreviewRows=[];
 function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function setStatus(id,text,error=false){const el=$(id);el.textContent=text||'';el.className='status '+(error?'error':text?'ok':'');}
 async function api(path,options={}){const response=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const type=response.headers.get('content-type')||'';const data=type.includes('application/json')?await response.json():await response.text();if(!response.ok){const err=new Error(data?.error||`HTTP_${response.status}`);err.status=response.status;throw err;}return data;}
-function renderSchedules(list){schedules=new Map(list.map(s=>[s.classId,s]));$('scheduleRows').innerHTML=classes.map(classId=>{const s=schedules.get(classId)||{classId,revision:0,appStartDate:'',nationalityRevealDate:'',videoViewDate:'',exchangeDate:''};return `<tr data-class="${classId}"><td>${classId}</td><td><input type="date" data-key="appStartDate" value="${esc(s.appStartDate)}"></td><td><input type="date" data-key="nationalityRevealDate" value="${esc(s.nationalityRevealDate)}"></td><td><input type="date" data-key="videoViewDate" value="${esc(s.videoViewDate)}"></td><td><input type="date" data-key="exchangeDate" value="${esc(s.exchangeDate)}"></td><td data-revision>${s.revision||0}</td><td><button class="primary" data-save="${classId}">この学級を保存</button></td></tr>`;}).join('');
+function renderSchedules(list){schedules=new Map(list.map(s=>[s.classId,s]));classes=[...new Set(list.map(s=>s.classId).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ja'));$('scheduleRows').innerHTML=classes.map(classId=>{const s=schedules.get(classId)||{classId,revision:0,appStartDate:'',nationalityRevealDate:'',videoViewDate:'',exchangeDate:''};const comparison=/^[56]-C[1-9]$/.test(classId);return `<tr data-class="${classId}"><td>${esc(classId)}${comparison?'<br><span class="muted">比較校</span>':''}</td><td><input type="date" data-key="appStartDate" value="${esc(s.appStartDate)}"></td><td><input type="date" data-key="nationalityRevealDate" value="${esc(s.nationalityRevealDate)}"></td><td>${comparison?'<span class="muted">対象外</span><input type="date" data-key="videoViewDate" value="" disabled style="display:none">':`<input type="date" data-key="videoViewDate" value="${esc(s.videoViewDate)}">`}</td><td><input type="date" data-key="exchangeDate" value="${esc(s.exchangeDate)}"></td><td data-revision>${s.revision||0}</td><td><button class="primary" data-save="${classId}">この学級を保存</button></td></tr>`;}).join('');
  document.querySelectorAll('[data-save]').forEach(btn=>btn.addEventListener('click',()=>saveClass(btn.dataset.save)));
 }
 function phaseText(counts){const labels={unconfigured:'未設定',pre_start:'開始前',unknown_virtual_other:'Phase 1',anticipated_other:'Phase 2',identified_real_other:'Phase 3',exchange_or_after:'交流会当日以降'};return Object.entries(counts||{}).filter(([,v])=>v).map(([k,v])=>`${labels[k]||k}: ${v}`).join(' / ')||'データなし';}
-function renderAudit(audit){const rows=audit?.classes||[];$('auditGrid').innerHTML=rows.map(row=>`<div class="audit-item"><h3>${esc(row.classId)}</h3><p>日程設定: <b>${row.configuredFields}/4</b> ・ revision ${row.scheduleRevision}</p><p>対象児童: ${row.participantCount||0}名 / 担当国登録 <b>${row.assignedCountryConfiguredParticipants||0}</b> / 未登録 <b>${row.assignedCountryUnconfiguredParticipants||0}</b></p><p>AI対話: ${row.sessions}件（main ${row.mainSessions}）</p><p>担当国比較可能session: <b>${row.assignedCountryComparableSessions||0}</b> ・ 一致 ${row.assignedCountryMatchedSessions||0}</p><p>Reflection: ${row.reflections}件（main ${row.mainReflections}）</p><p>research_id + local_date一致: <b>${row.matchedDialogueReflectionDayKeys}/${row.dialogueDayKeys}</b></p><div class="phase">AI対話Phase: ${esc(phaseText(row.sessionPhases))}</div><div class="phase">Reflection Phase: ${esc(phaseText(row.reflectionPhases))}</div></div>`).join('');
+function renderAudit(audit){const rows=audit?.classes||[];$('auditGrid').innerHTML=rows.map(row=>{const comparison=row.schoolCondition==='comparison';return `<div class="audit-item"><h3>${esc(row.classId)} ${comparison?'<span class="muted">比較校</span>':''}</h3><p>日程設定: <b>${row.configuredFields}/${row.requiredFields||4}</b> ・ revision ${row.scheduleRevision}</p><p>対象児童: ${row.participantCount||0}名${comparison?'':' / 担当国登録 <b>'+String(row.assignedCountryConfiguredParticipants||0)+'</b> / 未登録 <b>'+String(row.assignedCountryUnconfiguredParticipants||0)+'</b>'}</p><p>AI対話: ${row.sessions}件（main ${row.mainSessions}）</p>${comparison?'<p>担当国・Phase分析: <b>対象外</b></p>':'<p>担当国比較可能session: <b>'+String(row.assignedCountryComparableSessions||0)+'</b> ・ 一致 '+String(row.assignedCountryMatchedSessions||0)+'</p>'}<p>Reflection: ${row.reflections}件（main ${row.mainReflections}）</p><p>research_id + local_date一致: <b>${row.matchedDialogueReflectionDayKeys}/${row.dialogueDayKeys}</b></p>${comparison?'<div class="phase">比較校はPhase 1～4に割り当てません。Mid/Postは相対経過時点で照合します。</div>':'<div class="phase">AI対話Phase: '+esc(phaseText(row.sessionPhases))+'</div><div class="phase">Reflection Phase: '+esc(phaseText(row.reflectionPhases))+'</div>'}</div>`;}).join('');
  setStatus('auditStatus','schedule→AI対話/Reflection: class_id + local_date、担当国→session: research_id、AI対話↔Reflection: research_id + local_date で監査済み');}
 function renderCountryOptions(){const values=new Map();for(const option of countryOptions){if(option?.value)values.set(option.value,option.label||option.value);}for(const p of participants){if(p.assignedPartnerCountry&&!values.has(p.assignedPartnerCountry))values.set(p.assignedPartnerCountry,p.assignedPartnerCountry);}$('countryDatalist').innerHTML=[...values.entries()].map(([value,label])=>`<option value="${esc(value)}">${esc(label)}</option>`).join('');}
 function participantMap(){return new Map(participants.map(p=>[p.researchId,p]));}
