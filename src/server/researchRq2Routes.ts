@@ -2,7 +2,7 @@ import express from 'express';
 import { requireManagementRole, type AuthenticatedRequest } from './auth';
 import { getAllSessionsForManagement } from './persistence';
 import { getAllStudySchedules } from './studySchedulePersistence';
-import { getRq2Codebook, saveRq2Codebook, rq2AllowedCodes } from './researchRq2Codebook';
+import { getRq2Codebook, saveRq2Codebook, rq2CanonicalizeCodes } from './researchRq2Codebook';
 import { buildRq2Candidates, sampleRq2Candidates, summarizeRq2Candidates, type Rq2Purpose } from './researchRq2Sampling';
 import { codeRq2Batch } from './researchRq2Ai';
 import { buildRq2Analysis, buildRq2ReliabilitySummary } from './researchRq2Analysis';
@@ -29,10 +29,12 @@ function bool(value: unknown, fallback = false) {
   if (value === false || value === '0' || value === 'false') return false;
   return fallback;
 }
-function codes(values: unknown, allowed: Set<string>) {
-  if (!Array.isArray(values)) return [];
-  return [...new Set(values.map((value) => String(value || '').trim()).filter((value) => allowed.has(value)))];
+function canonicalCodes(codebook: Record<string, any>, dimension: 'reference' | 'function' | 'locus', values: unknown) {
+  const result = rq2CanonicalizeCodes(codebook, dimension, values);
+  if (result.invalid.length) throw new Error(`RQ2_INVALID_CODE:${result.invalid.join(',')}`);
+  return result.valid;
 }
+
 
 router.get('/research-rq2/status', requireManagementRole(['researcher']), async (req, res) => {
   try {
@@ -149,12 +151,11 @@ router.post('/research-rq2/human-code', requireManagementRole(['researcher']), a
     const runId = text(req.body?.runId, 120);
     const sequenceId = text(req.body?.sequenceId, 220);
     const codebook = await getRq2Codebook();
-    const allowed = rq2AllowedCodes(codebook);
     const decision = req.body?.decision === 'modify' ? 'modified' : 'confirmed';
     const item = await updateRq2Item(runId, sequenceId, {
-      humanReferenceCodes: codes(req.body?.referenceCodes, allowed.reference),
-      humanFunctionCodes: codes(req.body?.functionCodes, allowed.functions),
-      humanRecipientLocus: codes(req.body?.recipientLocus, allowed.locus),
+      humanReferenceCodes: canonicalCodes(codebook, 'reference', req.body?.referenceCodes),
+      humanFunctionCodes: canonicalCodes(codebook, 'function', req.body?.functionCodes),
+      humanRecipientLocus: canonicalCodes(codebook, 'locus', req.body?.recipientLocus),
       humanStatus: decision,
       humanCoder: req.managementUser?.username || 'researcher',
       humanNote: text(req.body?.note, 500),
@@ -174,14 +175,13 @@ router.post('/research-rq2/reliability-code', requireManagementRole(['researcher
     const item = (await getRq2Items(runId)).find((row) => row.sequenceId === sequenceId && row.purpose === 'reliability');
     if (!item) return res.status(400).json({ success: false, error: 'RQ2_RELIABILITY_ITEM_REQUIRED' });
     const codebook = await getRq2Codebook();
-    const allowed = rq2AllowedCodes(codebook);
     const record = await saveRq2ReliabilityCode({
       runId,
       sequenceId,
       coderKey,
-      referenceCodes: codes(req.body?.referenceCodes, allowed.reference),
-      functionCodes: codes(req.body?.functionCodes, allowed.functions),
-      recipientLocus: codes(req.body?.recipientLocus, allowed.locus),
+      referenceCodes: canonicalCodes(codebook, 'reference', req.body?.referenceCodes),
+      functionCodes: canonicalCodes(codebook, 'function', req.body?.functionCodes),
+      recipientLocus: canonicalCodes(codebook, 'locus', req.body?.recipientLocus),
     });
     return res.json({ success: true, record });
   } catch (error: any) {
