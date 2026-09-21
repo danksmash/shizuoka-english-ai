@@ -297,6 +297,7 @@ router.post('/research-rq2/human-code', requireManagementRole(['researcher']), a
       humanFunctionCodes: [functions.primary, ...functions.aux],
       humanRecipientLocus: [],
       humanStatus: decision,
+      humanCodebookVersion: String(codebook.version || ''),
       humanCoder: req.managementUser?.username || 'researcher',
       humanNote: text(req.body?.note, 500),
       humanCodedAt: new Date().toISOString(),
@@ -326,6 +327,7 @@ router.post('/research-rq2/reliability-code', requireManagementRole(['researcher
       referenceAuxCodes: reference.aux,
       functionPrimary: functions.primary,
       functionAuxCodes: functions.aux,
+      codebookVersion: String(codebook.version || ''),
     });
     return res.json({ success: true, record });
   } catch (error: any) {
@@ -355,7 +357,7 @@ router.get('/research-rq2/export.csv', requireManagementRole(['researcher']), as
     const runId = text(req.query.runId, 120);
     const [run, items] = await Promise.all([getRq2Run(runId), getRq2Items(runId)]);
     assertRq2RunActive(run);
-    const headers = ['run_id','run_type','run_status','seed','target_per_stratum','max_per_participant','lesson_only','run_codebook_version','run_prompt_version','sequence_id','stratum','purpose','stratum_rank','research_id','class_id','session_id','local_date','topic','persona_id','child_utterance_id','child_turn_sequence','previous_ai_english','child_english','next_ai_english','ai_reference_primary','ai_reference_aux_codes','ai_function_primary','ai_function_aux_codes','ai_needs_review','ai_review_reason','ai_reason','ai_model','ai_prompt_version','ai_codebook_version','ai_coded_at','human_reference_primary','human_reference_aux_codes','human_function_primary','human_function_aux_codes','human_status','human_coder','human_note','human_coded_at'];
+    const headers = ['run_id','run_type','run_status','seed','target_per_stratum','max_per_participant','lesson_only','run_codebook_version','run_prompt_version','sequence_id','stratum','purpose','stratum_rank','research_id','class_id','session_id','local_date','topic','persona_id','child_utterance_id','child_turn_sequence','previous_ai_english','child_english','next_ai_english','ai_reference_primary','ai_reference_aux_codes','ai_function_primary','ai_function_aux_codes','ai_needs_review','ai_review_reason','ai_reason','ai_model','ai_prompt_version','ai_codebook_version','ai_coded_at','human_reference_primary','human_reference_aux_codes','human_function_primary','human_function_aux_codes','human_status','human_codebook_version','human_coder','human_note','human_coded_at'];
     const rows = items.map((item) => ({
       run_id: runId, run_type: run.runType || 'legacy', run_status: run.status || 'sampled', seed: run.seed, target_per_stratum: run.targetPerStratum, max_per_participant: run.maxPerParticipantPerStratum,
       lesson_only: run.lessonOnly ? 1 : 0, run_codebook_version: run.codebookVersion, run_prompt_version: run.promptVersion,
@@ -373,7 +375,7 @@ router.get('/research-rq2/export.csv', requireManagementRole(['researcher']), as
       human_reference_aux_codes: item.humanReferenceAuxCodes || (Array.isArray(item.humanReferenceCodes) ? item.humanReferenceCodes.slice(1) : []),
       human_function_primary: item.humanFunctionPrimary || item.humanFunctionCodes?.[0] || '',
       human_function_aux_codes: item.humanFunctionAuxCodes || (Array.isArray(item.humanFunctionCodes) ? item.humanFunctionCodes.slice(1) : []),
-      human_status: item.humanStatus || '', human_coder: item.humanCoder || '', human_note: item.humanNote || '', human_coded_at: item.humanCodedAt || '',
+      human_status: item.humanStatus || '', human_codebook_version: item.humanCodebookVersion || '', human_coder: item.humanCoder || '', human_note: item.humanNote || '', human_coded_at: item.humanCodedAt || '',
     }));
     const body = '\uFEFF' + [headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell((row as any)[header])).join(','))].join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -389,11 +391,12 @@ router.get('/research-rq2/reliability.csv', requireManagementRole(['researcher']
     const runId = text(req.query.runId, 120);
     await activeRq2Run(runId);
     const records = await getRq2ReliabilityCodes(runId);
-    const headers = ['run_id','sequence_id','coder_id','reference_primary','reference_aux_codes','function_primary','function_aux_codes','saved_at'];
+    const headers = ['run_id','sequence_id','coder_id','codebook_version','reference_primary','reference_aux_codes','function_primary','function_aux_codes','saved_at'];
     const rows = records.map((row) => ({
       run_id: runId,
       sequence_id: row.sequenceId || '',
       coder_id: row.coderKey || '',
+      codebook_version: row.codebookVersion || '',
       reference_primary: row.referencePrimary || row.referenceCodes?.[0] || '',
       reference_aux_codes: row.referenceAuxCodes || (Array.isArray(row.referenceCodes) ? row.referenceCodes.slice(1) : []),
       function_primary: row.functionPrimary || row.functionCodes?.[0] || '',

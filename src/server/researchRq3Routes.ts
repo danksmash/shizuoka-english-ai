@@ -60,7 +60,7 @@ function canonicalPrimaryAux(
 }
 function rq3StatusCode(message: string) {
   if (message === 'RQ3_RUN_NOT_FOUND') return 404;
-  if (['RQ3_ACTIVE_RUN_EXISTS','RQ3_RUN_INVALIDATED','RQ3_CODEBOOK_NOT_FROZEN','RQ3_CODEBOOK_VERSION_MISMATCH'].includes(message)) return 409;
+  if (['RQ3_ACTIVE_RUN_EXISTS','RQ3_RUN_INVALIDATED','RQ3_CODEBOOK_NOT_FROZEN','RQ3_CODEBOOK_VERSION_MISMATCH','RQ3_CODEBOOK_SCHEMA_OUTDATED'].includes(message)) return 409;
   if (message.startsWith('RQ3_INVALID_CODE:') || message.endsWith('_REQUIRED') || message === 'RQ3_CONFIRM_TEXT_REQUIRED') return 400;
   return 503;
 }
@@ -164,6 +164,7 @@ router.post('/research-rq3/create-run', requireManagementRole(['researcher']), a
     if (await findActiveRq3Run()) throw new Error('RQ3_ACTIVE_RUN_EXISTS');
     const codebook = await getRq2Codebook();
     if (String(codebook.status || '') !== 'frozen') throw new Error('RQ3_CODEBOOK_NOT_FROZEN');
+    if (Number(codebook.schemaVersion || 0) < 3) throw new Error('RQ3_CODEBOOK_SCHEMA_OUTDATED');
     const { candidates } = await baseData();
     if (!candidates.length) throw new Error('RQ3_NO_CANDIDATES');
     const run = await createRq3Run({
@@ -246,6 +247,7 @@ router.post('/research-rq3/human-code', requireManagementRole(['researcher']), a
     const run = await activeRun(text(req.body?.runId, 140));
     const sequenceId = text(req.body?.sequenceId, 240);
     const codebook = await getRq2Codebook();
+    if (String(codebook.version || '') !== String(run.codebookVersion || '')) throw new Error('RQ3_CODEBOOK_VERSION_MISMATCH');
     const reference = canonicalPrimaryAux(codebook, 'reference', req.body?.referencePrimary, req.body?.referenceAuxCodes);
     const functions = canonicalPrimaryAux(codebook, 'function', req.body?.functionPrimary, req.body?.functionAuxCodes);
     const decision = req.body?.decision === 'modify' ? 'modified' : 'confirmed';
@@ -257,6 +259,7 @@ router.post('/research-rq3/human-code', requireManagementRole(['researcher']), a
       humanFunctionAuxCodes: functions.aux,
       humanFunctionCodes: [functions.primary, ...functions.aux],
       humanStatus: decision,
+      humanCodebookVersion: String(codebook.version || ''),
       humanCoder: req.managementUser?.username || 'researcher',
       humanNote: text(req.body?.note, 500),
       humanCodedAt: new Date().toISOString(),
@@ -324,11 +327,12 @@ router.get('/research-rq3/interaction_codes.csv', requireManagementRole(['resear
 });
 
 function serializeReliabilityCsv(runId: string, records: Record<string, any>[]) {
-  const headers = ['run_id','sequence_id','coder_id','reference_primary','reference_aux_codes','function_primary','function_aux_codes','saved_at'];
+  const headers = ['run_id','sequence_id','coder_id','codebook_version','reference_primary','reference_aux_codes','function_primary','function_aux_codes','saved_at'];
   const rows = records.map((row) => ({
     run_id: runId,
     sequence_id: row.sequenceId || '',
     coder_id: row.coderKey || '',
+    codebook_version: row.codebookVersion || '',
     reference_primary: row.referencePrimary || row.referenceCodes?.[0] || '',
     reference_aux_codes: row.referenceAuxCodes || (Array.isArray(row.referenceCodes) ? row.referenceCodes.slice(1) : []),
     function_primary: row.functionPrimary || row.functionCodes?.[0] || '',
@@ -384,9 +388,22 @@ router.get('/research-rq3/analysis.bundle.zip', requireManagementRole(['research
       findActiveFormalRq2Runs(),
     ]);
     const interactionRows = buildInteractionCodeRows(items, run);
-    const matchingFormalRuns = formalRuns.filter((row) => String(row.codebookVersion || '') === String(run.codebookVersion || ''));
-    const rq2Run = [...matchingFormalRuns].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))[0] || null;
-    const reliabilityRecords = rq2Run ? await getRq2ReliabilityCodes(String(rq2Run.runId || '')) : [];
+    let rq2Run: Record<string, any> | null = null;
+    let reliabilityRecords: Record<string, any>[] = [];
+    for (const candidateRun of [...formalRuns].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))) {
+      const records = await getRq2ReliabilityCodes(String(candidateRun.runId || ''));
+      const matching = records.filter((row) => String(row.codebookVersion || '') === String(run.codebookVersion || ''));
+      if (matching.length) {
+        rq2Run = candidateRun;
+        reliabilityRecords = matching;
+        break;
+      }
+      const legacyUntagged = records.filter((row) => !String(row.codebookVersion || ''));
+      if (!rq2Run && legacyUntagged.length && String(candidateRun.codebookVersion || '') === String(run.codebookVersion || '')) {
+        rq2Run = candidateRun;
+        reliabilityRecords = legacyUntagged;
+      }
+    }
     const files = [
       { name: 'analysis_sessions.csv', content: serializeAnalysisSessionsCsv(analysisSessions) },
       { name: 'interaction_codes.csv', content: serializeInteractionCodesCsv(interactionRows) },
@@ -406,7 +423,7 @@ router.get('/research-rq3/analysis.bundle.zip', requireManagementRole(['research
       },
       reference_model_rule: 'B2a and B2b are retained in reference_primary_raw and collapsed to B2 in reference_primary_model',
       analysis_rule: 'formal RQ3 distributions use human-confirmed primary codes only',
-      warning: rq2Run ? '' : 'No active formal RQ2 sampling run with the same frozen codebook version was available; rq2_reliability.csv contains headers only.',
+      warning: rq2Run ? '' : 'No formal RQ2 reliability records coded with the same frozen codebook version were available; rq2_reliability.csv contains headers only.',
     };
     const zip = buildStoredZip([...files, { name: 'analysis_manifest.json', content: JSON.stringify(manifest, null, 2) }]);
     res.setHeader('Content-Type', 'application/zip');

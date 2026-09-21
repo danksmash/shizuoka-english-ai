@@ -138,6 +138,7 @@ export async function saveRq2ReliabilityCode(args: {
   referenceAuxCodes?: string[];
   functionPrimary: string;
   functionAuxCodes?: string[];
+  codebookVersion: string;
 }) {
   const coderKey = String(args.coderKey || '').trim().slice(0, 80);
   if (!coderKey) throw new Error('RQ2_CODER_KEY_REQUIRED');
