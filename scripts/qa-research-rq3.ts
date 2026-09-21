@@ -110,6 +110,7 @@ assert.equal(rows[1].reference_primary_raw, 'B2b');
 assert.equal(rows[1].reference_primary_model, 'B2');
 assert.equal(rows[1].reference_aux_labels, 'B3');
 assert.equal(rows[1].function_aux_labels, 'T');
+assert.equal(rows[1].human_codebook_version, 'rq2-v3');
 assert.equal(rows[2].analysis_ready, 0);
 assert.equal(rows[2].reference_primary_raw, '');
 
@@ -128,6 +129,8 @@ assert.ok(page.includes('interaction_codes.csv'));
 assert.ok(page.includes('RQ2・RQ3分析用ZIP'));
 assert.ok(page.includes('前後文脈'));
 assert.ok(routes.includes('/research-rq3/create-run'));
+assert.ok(routes.includes('RQ3_CODEBOOK_SCHEMA_OUTDATED'));
+assert.ok(routes.includes('row.codebookVersion'));
 assert.ok(routes.includes('/research-rq3/ai-code'));
 assert.ok(routes.includes('/research-rq3/human-code'));
 assert.ok(routes.includes('/research-rq3/analysis.bundle.zip'));
