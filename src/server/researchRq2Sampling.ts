@@ -1,5 +1,4 @@
 import crypto from 'node:crypto';
-import type { ChatMessage } from '../types';
 import { buildResearchExportDataSets, researchDataScopeForRow } from './researchDashboard';
 import { filterManualResearchExcludedSessions } from './researchManualExclusions';
 import { analysisPeriodForLocalDate, phaseForLocalDate, type StudyScheduleRecord } from './studySchedulePersistence';
@@ -46,11 +45,6 @@ export interface Rq2SampledItem extends Rq2Candidate {
   stratumRank: number;
 }
 
-function safeHistory(session: Record<string, any>): ChatMessage[] {
-  return Array.isArray(session.history)
-    ? session.history.filter((m): m is ChatMessage => Boolean(m && typeof m === 'object' && (m.sender === 'ai' || m.sender === 'child') && typeof m.englishText === 'string'))
-    : [];
-}
 
 function localDateOf(session: Record<string, any>): string {
   const stored = String(session.localDate || '');
