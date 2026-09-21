@@ -60,6 +60,16 @@ export async function getRq2Items(runId: string): Promise<Record<string, any>[]>
   return rows.sort((a, b) => String(a.stratum || '').localeCompare(String(b.stratum || '')) || Number(a.stratumRank || 0) - Number(b.stratumRank || 0));
 }
 
+export async function patchRq2ItemRecord(current: Record<string, any>, patch: Record<string, any>) {
+  const itemId = String(current.itemId || '');
+  const runId = String(current.runId || '');
+  if (!itemId || !runId) throw new Error('RQ2_ITEM_ID_REQUIRED');
+  const next = { ...current, ...patch, itemId, runId, updatedAt: new Date().toISOString() };
+  delete next._name;
+  await setDocument(RQ2_ITEM_COLLECTION, itemId, next);
+  return next;
+}
+
 export async function updateRq2Item(runId: string, sequenceId: string, patch: Record<string, any>) {
   const rows = await getRq2Items(runId);
   const current = rows.find((row) => String(row.sequenceId || '') === sequenceId);
