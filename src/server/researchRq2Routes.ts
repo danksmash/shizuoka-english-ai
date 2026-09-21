@@ -24,6 +24,7 @@ import {
   rq2FormalSamplingReady,
   rq2OperationErrorStatus,
   rq2RunType,
+  rq2SamplingShortfalls,
   summarizeRq2RunProgress,
 } from './researchRq2RunGuard';
 
@@ -83,6 +84,30 @@ router.get('/research-rq2/status', requireManagementRole(['researcher']), async 
   } catch (error: any) {
     console.error('RQ2 status failed', { message: error?.message });
     return res.status(503).json({ success: false, error: 'RQ2_STATUS_UNAVAILABLE' });
+  }
+});
+
+router.get('/research-rq2/sample-preview', requireManagementRole(['researcher']), async (req, res) => {
+  try {
+    const seed = text(req.query.seed, 100) || 'RQ2-2026-v1';
+    const targetPerStratum = intValue(req.query.targetPerStratum, 50, 10, 100);
+    const maxPerParticipantPerStratum = intValue(req.query.maxPerParticipantPerStratum, 2, 1, 5);
+    const lessonOnly = bool(req.query.lessonOnly, true);
+    const [sessions, schedules] = await Promise.all([getAllSessionsForManagement(), getAllStudySchedules()]);
+    const candidates = buildRq2Candidates(sessions, schedules, { lessonOnly });
+    const sampled = sampleRq2Candidates(candidates, seed, targetPerStratum, maxPerParticipantPerStratum);
+    return res.json({
+      success: true,
+      selected: sampled.items.length,
+      counts: sampled.counts,
+      formalReady: rq2FormalSamplingReady(sampled.counts),
+      shortfalls: rq2SamplingShortfalls(sampled.counts),
+      targetPerStratum,
+      maxPerParticipantPerStratum,
+      lessonOnly,
+    });
+  } catch (error: any) {
+    return rq2ErrorResponse(res, error, 'RQ2_SAMPLE_PREVIEW_UNAVAILABLE');
   }
 });
 
