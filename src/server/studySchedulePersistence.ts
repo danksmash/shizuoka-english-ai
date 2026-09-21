@@ -4,6 +4,7 @@ export const STUDY_SCHEDULE_COLLECTION = 'study_schedules';
 export const STUDY_CLASS_IDS = ['5-1', '5-2', '5-3', '6-1', '6-2'] as const;
 export type StudyClassId = string;
 export type StudyPhase = 'unconfigured' | 'pre_start' | 'unknown_virtual_other' | 'anticipated_other' | 'identified_real_other' | 'exchange_or_after';
+export type AnalysisPeriod = 'period1' | 'period2' | 'period3' | '';
 
 export interface StudyScheduleSnapshot {
   revision: number;
@@ -101,6 +102,19 @@ export function phaseForLocalDate(localDate: string, schedule: Pick<StudySchedul
   if (!schedule.videoViewDate || localDate < schedule.videoViewDate) return 'anticipated_other';
   if (!schedule.exchangeDate || localDate < schedule.exchangeDate) return 'identified_real_other';
   return 'exchange_or_after';
+}
+
+export function analysisPeriodForLocalDate(
+  localDate: string,
+  schedule: Pick<StudyScheduleSnapshot, 'appStartDate' | 'nationalityRevealDate' | 'videoViewDate' | 'exchangeDate'>,
+): AnalysisPeriod {
+  if (!isRealIsoDate(localDate)) return '';
+  const { appStartDate, nationalityRevealDate, videoViewDate, exchangeDate } = schedule;
+  if (!appStartDate || !nationalityRevealDate || !videoViewDate || !exchangeDate) return '';
+  if (localDate < appStartDate || localDate >= exchangeDate) return '';
+  if (localDate < nationalityRevealDate) return 'period1';
+  if (localDate < videoViewDate) return 'period2';
+  return 'period3';
 }
 
 export async function getStudySchedule(classId: StudyClassId): Promise<StudyScheduleRecord> {
