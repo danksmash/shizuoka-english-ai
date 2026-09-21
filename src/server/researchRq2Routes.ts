@@ -13,6 +13,7 @@ import {
   getRq2ReliabilityCodes,
   getRq2Run,
   saveRq2ReliabilityCode,
+  patchRq2ItemRecord,
   updateRq2Item,
 } from './researchRq2Persistence';
 
@@ -88,7 +89,10 @@ router.get('/research-rq2/items', requireManagementRole(['researcher']), async (
     const purposeText = text(req.query.purpose, 40);
     const purpose = ['codebook_development','reliability','main_other'].includes(purposeText) ? purposeText as Rq2Purpose : '';
     const rows = filterRq2Items(await getRq2Items(runId), purpose, bool(req.query.reviewOnly, false));
-    return res.json({ success: true, items: rows });
+    const items = purpose === 'reliability'
+      ? rows.map(({ aiReferenceCodes: _a, aiFunctionCodes: _b, aiRecipientLocus: _c, aiNeedsReview: _d, aiReviewReason: _e, aiReason: _f, aiModel: _g, aiPromptVersion: _h, aiCodebookVersion: _i, aiCodedAt: _j, ...row }) => row)
+      : rows;
+    return res.json({ success: true, items });
   } catch (error: any) {
     console.error('RQ2 item read failed', { message: error?.message });
     return res.status(503).json({ success: false, error: 'RQ2_ITEMS_UNAVAILABLE' });
@@ -117,9 +121,17 @@ router.post('/research-rq2/ai-code', requireManagementRole(['researcher']), asyn
     if (!runId) return res.status(400).json({ success: false, error: 'RQ2_RUN_ID_REQUIRED' });
     const [items, codebook] = await Promise.all([getRq2Items(runId), getRq2Codebook()]);
     if (String(codebook.status || '') !== 'frozen') return res.status(409).json({ success: false, error: 'RQ2_CODEBOOK_NOT_FROZEN' });
+    const codedVersions = new Set(items.filter((item) => item.aiStatus === 'coded' && item.aiCodebookVersion).map((item) => String(item.aiCodebookVersion)));
+    if (codedVersions.size && (!codedVersions.has(String(codebook.version || '')) || codedVersions.size > 1)) {
+      return res.status(409).json({ success: false, error: 'RQ2_CODEBOOK_VERSION_MISMATCH' });
+    }
     const pending = items.filter((item) => item.aiStatus !== 'coded').slice(0, batchSize);
     const coded = await codeRq2Batch(pending, codebook);
-    for (const result of coded.results) await updateRq2Item(runId, result.sequenceId, result);
+    const pendingBySequence = new Map(pending.map((item) => [String(item.sequenceId || ''), item]));
+    for (const result of coded.results) {
+      const current = pendingBySequence.get(result.sequenceId);
+      if (current) await patchRq2ItemRecord(current, result);
+    }
     const remaining = Math.max(0, items.filter((item) => item.aiStatus !== 'coded').length - coded.results.length);
     return res.json({ success: true, processed: coded.results.length, remaining, model: coded.model, promptVersion: coded.promptVersion });
   } catch (error: any) {
@@ -194,7 +206,7 @@ router.get('/research-rq2/export.csv', requireManagementRole(['researcher']), as
     const runId = text(req.query.runId, 120);
     const [run, items] = await Promise.all([getRq2Run(runId), getRq2Items(runId)]);
     if (!run) return res.status(404).json({ success: false, error: 'RQ2_RUN_NOT_FOUND' });
-    const headers = ['run_id','seed','target_per_stratum','max_per_participant','lesson_only','run_codebook_version','run_prompt_version','sequence_id','stratum','purpose','stratum_rank','research_id','class_id','session_id','local_date','topic','persona_id','child_utterance_id','child_turn_sequence','previous_ai_english','child_english','next_ai_english','ai_reference_codes','ai_function_codes','ai_recipient_locus','ai_needs_review','ai_review_reason','ai_reason','ai_model','ai_prompt_version','ai_coded_at','human_reference_codes','human_function_codes','human_recipient_locus','human_status','human_coder','human_note','human_coded_at'];
+    const headers = ['run_id','seed','target_per_stratum','max_per_participant','lesson_only','run_codebook_version','run_prompt_version','sequence_id','stratum','purpose','stratum_rank','research_id','class_id','session_id','local_date','topic','persona_id','child_utterance_id','child_turn_sequence','previous_ai_english','child_english','next_ai_english','ai_reference_codes','ai_function_codes','ai_recipient_locus','ai_needs_review','ai_review_reason','ai_reason','ai_model','ai_prompt_version','ai_codebook_version','ai_coded_at','human_reference_codes','human_function_codes','human_recipient_locus','human_status','human_coder','human_note','human_coded_at'];
     const rows = items.map((item) => ({
       run_id: runId, seed: run.seed, target_per_stratum: run.targetPerStratum, max_per_participant: run.maxPerParticipantPerStratum,
       lesson_only: run.lessonOnly ? 1 : 0, run_codebook_version: run.codebookVersion, run_prompt_version: run.promptVersion,
@@ -204,7 +216,7 @@ router.get('/research-rq2/export.csv', requireManagementRole(['researcher']), as
       previous_ai_english: item.previousAiEnglish, child_english: item.childEnglish, next_ai_english: item.nextAiEnglish,
       ai_reference_codes: item.aiReferenceCodes || [], ai_function_codes: item.aiFunctionCodes || [], ai_recipient_locus: item.aiRecipientLocus || [],
       ai_needs_review: item.aiNeedsReview ? 1 : 0, ai_review_reason: item.aiReviewReason || '', ai_reason: item.aiReason || '',
-      ai_model: item.aiModel || '', ai_prompt_version: item.aiPromptVersion || '', ai_coded_at: item.aiCodedAt || '',
+      ai_model: item.aiModel || '', ai_prompt_version: item.aiPromptVersion || '', ai_codebook_version: item.aiCodebookVersion || '', ai_coded_at: item.aiCodedAt || '',
       human_reference_codes: item.humanReferenceCodes || [], human_function_codes: item.humanFunctionCodes || [], human_recipient_locus: item.humanRecipientLocus || [],
       human_status: item.humanStatus || '', human_coder: item.humanCoder || '', human_note: item.humanNote || '', human_coded_at: item.humanCodedAt || '',
     }));
