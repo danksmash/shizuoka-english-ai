@@ -149,12 +149,16 @@ export function managementPageHtmlWithStudyPhase(): string {
       "setOptions('studyPhase',f.studyPhases||['phase1','phase2','phase3','phase4'],function(v){return studyPhaseLabels[v]||v});",
     ],
     [
+      "$('labelCondition').value=p.get('labelCondition')||'all';",
+      "$('studyPhase').value=p.get('studyPhase')||'all';",
+    ],
+    [
       "['grade','classId','personaId','labelCondition','topic'].forEach(function(id){$(id).value='all'})",
       "['grade','classId','personaId','studyPhase','topic'].forEach(function(id){$(id).value='all'})",
     ],
     [
-      "['start','end','dataScope','grade','classId','personaId','labelCondition','topic','completeOnly']",
-      "['start','end','dataScope','grade','classId','personaId','studyPhase','topic','completeOnly']",
+      "['start','end','dataScope','schoolCondition','grade','classId','personaId','labelCondition','topic','completeOnly']",
+      "['start','end','dataScope','schoolCondition','grade','classId','personaId','studyPhase','topic','completeOnly']",
     ],
     [
       'lesson_reflections.csv は授業日単位のため、開始日・終了日・データ区分・学年・学級を反映し、Persona・ラベル・テーマ・completeのみは適用しません。',
