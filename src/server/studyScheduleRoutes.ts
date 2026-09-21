@@ -11,6 +11,7 @@ import { researchDataScopeForRow } from './researchDashboard';
 import {
   STUDY_CLASS_IDS,
   getAllStudySchedules,
+  analysisPeriodForLocalDate,
   phaseForLocalDate,
   saveStudySchedule,
   type StudyPhase,
@@ -70,15 +71,12 @@ function isComparisonClassId(classId: string): boolean {
   return /^[56]-C[1-9]$/.test(classId);
 }
 
-function configuredFieldCount(schedule: StudyScheduleRecord, schoolCondition: 'intervention' | 'comparison'): number {
-  const fields = schoolCondition === 'comparison'
-    ? [schedule.appStartDate, schedule.nationalityRevealDate, schedule.exchangeDate]
-    : [schedule.appStartDate, schedule.nationalityRevealDate, schedule.videoViewDate, schedule.exchangeDate];
-  return fields.filter(Boolean).length;
+function configuredFieldCount(schedule: StudyScheduleRecord, _schoolCondition: 'intervention' | 'comparison'): number {
+  return [schedule.appStartDate, schedule.nationalityRevealDate, schedule.videoViewDate, schedule.exchangeDate].filter(Boolean).length;
 }
 
-function requiredConfiguredFieldCount(schoolCondition: 'intervention' | 'comparison'): number {
-  return schoolCondition === 'comparison' ? 3 : 4;
+function requiredConfiguredFieldCount(_schoolCondition: 'intervention' | 'comparison'): number {
+  return 4;
 }
 
 function blankScheduleForClass(classId: string): StudyScheduleRecord {
@@ -224,7 +222,7 @@ async function buildLinkageAudit() {
       scheduleToDialogue: ['class_id', 'local_date'],
       scheduleToReflection: ['class_id', 'local_date'],
       dialogueToReflection: ['research_id', 'local_date'],
-      note: '実践校のPhaseは正式学級日程から導出します。比較校はPhase 1～4へ割り当てず、同じ相対経過時点のPre/Mid/Post監査だけに日程を使います。保存済みrevisionはschedule.historyに保持します。',
+      note: '実践校のPhaseは正式学級日程から導出します。共通分析期間period1～3は両校とも4つの基準日から導出します。比較校のnationalityRevealDate/videoViewDate/exchangeDateはC1/C2/Postの分析基準日であり、国籍告知・本人動画・交流を実施したことを意味しません。保存済みrevisionはschedule.historyに保持します。',
     },
     classes: classRows,
   };
@@ -246,7 +244,7 @@ async function buildLinkageCsv(): Promise<string> {
   const scheduleByClass = new Map(schedules.map((schedule) => [schedule.classId, schedule]));
   const studentByResearchId = new Map(students.map((student) => [student.researchId, student]));
   const headers = [
-    'record_type', 'research_id', 'site_id', 'school_condition', 'class_id', 'local_date', 'record_id', 'data_scope', 'study_phase', 'schedule_revision',
+    'record_type', 'research_id', 'site_id', 'school_condition', 'class_id', 'local_date', 'record_id', 'data_scope', 'study_phase', 'analysis_period', 'schedule_revision',
     'app_start_date', 'nationality_reveal_date', 'video_view_date', 'exchange_date',
     'assigned_partner_country', 'assigned_partner_id', 'assignment_announced_at', 'persona_country', 'assigned_country_persona_match',
   ];
@@ -265,7 +263,7 @@ async function buildLinkageCsv(): Promise<string> {
         school_condition: comparison ? 'comparison' : 'intervention',
         study_start_date: session.studyStartDate || '',
       }),
-      study_phase: comparison ? '' : phaseForLocalDate(localDate, schedule), schedule_revision: schedule.revision,
+      study_phase: comparison ? '' : phaseForLocalDate(localDate, schedule), analysis_period: analysisPeriodForLocalDate(localDate, schedule), schedule_revision: schedule.revision,
       app_start_date: schedule.appStartDate, nationality_reveal_date: schedule.nationalityRevealDate,
       video_view_date: schedule.videoViewDate, exchange_date: schedule.exchangeDate,
       assigned_partner_country: session.assignedPartnerCountry || '',
@@ -286,7 +284,7 @@ async function buildLinkageCsv(): Promise<string> {
     rows.push({
       record_type: 'lesson_reflection', research_id: reflection.researchId, site_id: student?.studySiteId || (comparison ? 'site_b' : 'site_a'), school_condition: comparison ? 'comparison' : 'intervention', class_id: classId, local_date: reflection.localDate,
       record_id: reflection.reflectionId, data_scope: researchDataScopeForRow(researchScopeRowForReflection(classId, reflection.localDate, student)),
-      study_phase: comparison ? '' : phaseForLocalDate(reflection.localDate, schedule), schedule_revision: schedule.revision,
+      study_phase: comparison ? '' : phaseForLocalDate(reflection.localDate, schedule), analysis_period: analysisPeriodForLocalDate(reflection.localDate, schedule), schedule_revision: schedule.revision,
       app_start_date: schedule.appStartDate, nationality_reveal_date: schedule.nationalityRevealDate,
       video_view_date: schedule.videoViewDate, exchange_date: schedule.exchangeDate,
       assigned_partner_country: student?.assignedPartnerCountry || '',
