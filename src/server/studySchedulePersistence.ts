@@ -2,7 +2,7 @@ import { getDocument, listCollection, setDocument } from './firestore';
 
 export const STUDY_SCHEDULE_COLLECTION = 'study_schedules';
 export const STUDY_CLASS_IDS = ['5-1', '5-2', '5-3', '6-1', '6-2'] as const;
-export type StudyClassId = typeof STUDY_CLASS_IDS[number];
+export type StudyClassId = string;
 export type StudyPhase = 'unconfigured' | 'pre_start' | 'unknown_virtual_other' | 'anticipated_other' | 'identified_real_other' | 'exchange_or_after';
 
 export interface StudyScheduleSnapshot {
@@ -30,7 +30,8 @@ export interface StudyScheduleInput {
 }
 
 export function isStudyClassId(value: unknown): value is StudyClassId {
-  return typeof value === 'string' && (STUDY_CLASS_IDS as readonly string[]).includes(value);
+  return typeof value === 'string'
+    && ((STUDY_CLASS_IDS as readonly string[]).includes(value) || /^[56]-C[1-9]$/.test(value));
 }
 
 function isRealIsoDate(value: string): boolean {
@@ -113,7 +114,11 @@ export async function getAllStudySchedules(): Promise<StudyScheduleRecord[]> {
     const classId = typeof row.classId === 'string' ? row.classId : String(row._name || '').split('/').pop() || '';
     if (isStudyClassId(classId)) byClass.set(classId, row);
   }
-  return STUDY_CLASS_IDS.map((classId) => normalizeRecord(byClass.get(classId) || null, classId));
+  const classIds = [...new Set([
+    ...STUDY_CLASS_IDS,
+    ...[...byClass.keys()].filter((classId) => /^[56]-C[1-9]$/.test(classId)),
+  ])].sort((a, b) => a.localeCompare(b, 'ja'));
+  return classIds.map((classId) => normalizeRecord(byClass.get(classId) || null, classId));
 }
 
 export async function saveStudySchedule(input: StudyScheduleInput, updatedBy: string): Promise<StudyScheduleRecord> {
