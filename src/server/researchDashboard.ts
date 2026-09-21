@@ -383,6 +383,14 @@ function dataScopeMatches(row: Row, scope: string): boolean {
   if (!scope || scope === 'all') return true;
   return researchDataScopeForRow(row) === scope;
 }
+function schoolConditionForRow(row: Row): 'intervention' | 'comparison' | '' {
+  const explicit = String(row.school_condition || '');
+  if (explicit === 'intervention' || explicit === 'comparison') return explicit;
+  const classId = String(row.class_id || '');
+  if (/^[56]-C[1-9]$/.test(classId)) return 'comparison';
+  if (/^[56]-[123]$/.test(classId)) return 'intervention';
+  return '';
+}
 export function normalizeFormalResearchExportQuery(query: ResearchFilterQuery): ResearchFilterQuery {
   const scope = textQuery(query.dataScope);
   const condition = textQuery(query.schoolCondition);
@@ -417,7 +425,7 @@ function filterSessions(rows: Row[], query: ResearchFilterQuery): Row[] {
     const date = String(row.local_date || '');
     return (!start || date >= start) && (!end || date <= end)
       && dataScopeMatches(row, dataScope) && classMatches(row, classId) && gradeMatches(row, grade)
-      && (researchDataScopeForRow(row) !== 'main' || !schoolCondition || schoolCondition === 'all' || String(row.school_condition || '') === schoolCondition)
+      && (researchDataScopeForRow(row) !== 'main' || !schoolCondition || schoolCondition === 'all' || schoolConditionForRow(row) === schoolCondition)
       && (!personaId || personaId === 'all' || String(row.persona_id || '') === personaId)
       && (!label || label === 'all' || String(row.persona_label_condition || '') === label)
       && (!topic || topic === 'all' || String(row.topic || '') === topic)
