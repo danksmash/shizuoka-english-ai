@@ -415,12 +415,14 @@ router.get('/research-rq3/analysis.bundle.zip', requireManagementRole(['research
       { name: 'analysis_sessions.csv', content: serializeAnalysisSessionsCsv(analysisSessions) },
       { name: 'interaction_codes.csv', content: serializeInteractionCodesCsv(interactionRows) },
       { name: 'rq2_reliability.csv', content: serializeReliabilityCsv(String(rq2Run?.runId || ''), reliabilityRecords) },
+      { name: 'rq3_analysis_spec.json', content: JSON.stringify(RQ3_ANALYSIS_SPEC, null, 2) },
     ];
     const manifest = {
       export_id: `rq3_export_${Date.now()}`,
       exported_at: new Date().toISOString(),
       rq3_run_id: run.runId,
       rq3_codebook_version: run.codebookVersion,
+      rq3_analysis_spec_version: RQ3_ANALYSIS_SPEC.version,
       rq2_reliability_run_id: rq2Run?.runId || '',
       row_counts: {
         analysis_sessions: analysisSessions.length,
