@@ -130,7 +130,7 @@ assert.ok(page.includes('RQ2・RQ3分析用ZIP'));
 assert.ok(page.includes('前後文脈'));
 assert.ok(routes.includes('/research-rq3/create-run'));
 assert.ok(routes.includes('RQ3_CODEBOOK_SCHEMA_OUTDATED'));
-assert.ok(routes.includes('schemaVersion || 0) < 4');
+assert.ok(routes.includes('schemaVersion || 0) < 4'));
 assert.ok(routes.includes('row.codebookVersion'));
 assert.ok(routes.includes('/research-rq3/ai-code'));
 assert.ok(routes.includes('/research-rq3/human-code'));
