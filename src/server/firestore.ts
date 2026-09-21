@@ -130,6 +130,25 @@ export async function setDocument(collection: string, id: string, data: Record<s
   if (!response.ok) throw new Error(`FIRESTORE_SET_${response.status}:${(await response.text()).slice(0, 500)}`);
 }
 
+export async function setDocumentsBatch(
+  collection: string,
+  documents: Array<{ id: string; data: Record<string, unknown> }>,
+): Promise<void> {
+  if (!documents.length) return;
+  if (documents.length > 500) throw new Error('FIRESTORE_BATCH_TOO_LARGE');
+  const writes = documents.map(({ id, data }) => ({
+    update: {
+      name: `${baseUrl()}/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`,
+      fields: Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined).map(([key, value]) => [key, toFirestoreValue(value)])),
+    },
+  }));
+  const response = await firestoreFetch(':commit', {
+    method: 'POST',
+    body: JSON.stringify({ writes }),
+  });
+  if (!response.ok) throw new Error(`FIRESTORE_BATCH_SET_${response.status}:${(await response.text()).slice(0, 500)}`);
+}
+
 export async function queryCollection(collection: string, field: string, value: string, limit = 50): Promise<Record<string, any>[]> {
   return runStructuredQuery({
     from: [{ collectionId: collection }],
