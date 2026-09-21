@@ -33,8 +33,12 @@ function conditionLabel(condition: QuestionnaireRecord['schoolCondition']): stri
   return condition === 'comparison' ? '比較校' : '実践校';
 }
 
+function recordCondition(record: QuestionnaireRecord): 'intervention' | 'comparison' {
+  return record.schoolCondition === 'comparison' ? 'comparison' : 'intervention';
+}
+
 function groupsForRecords(records: QuestionnaireRecord[]): QuestionnaireDescriptiveGroup[] {
-  const conditions = (['intervention', 'comparison'] as const).filter((condition) => records.some((record) => record.schoolCondition === condition));
+  const conditions = (['intervention', 'comparison'] as const).filter((condition) => records.some((record) => recordCondition(record) === condition));
   const hasComparison = conditions.includes('comparison');
   const groups: QuestionnaireDescriptiveGroup[] = [];
 
@@ -49,13 +53,13 @@ function groupsForRecords(records: QuestionnaireRecord[]): QuestionnaireDescript
 
   for (const condition of conditions) {
     const prefix = conditionLabel(condition);
-    const conditionRecords = records.filter((record) => record.schoolCondition === condition);
+    const conditionRecords = records.filter((record) => recordCondition(record) === condition);
     const classIds = [...new Set(conditionRecords.map((record) => record.classId).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ja'));
     for (const classId of classIds) {
       groups.push({
         id: `${condition}:${classId}`,
         label: `${prefix} ${classId}`,
-        match: (record) => record.schoolCondition === condition && record.classId === classId,
+        match: (record) => recordCondition(record) === condition && record.classId === classId,
       });
     }
     for (const grade of [5, 6] as const) {
@@ -63,13 +67,13 @@ function groupsForRecords(records: QuestionnaireRecord[]): QuestionnaireDescript
       groups.push({
         id: `${condition}:grade${grade}`,
         label: `${prefix} ${grade}年`,
-        match: (record) => record.schoolCondition === condition && record.gradeLevel === grade,
+        match: (record) => recordCondition(record) === condition && record.gradeLevel === grade,
       });
     }
     groups.push({
       id: `${condition}:all`,
       label: `${prefix} 全体`,
-      match: (record) => record.schoolCondition === condition,
+      match: (record) => recordCondition(record) === condition,
     });
   }
   groups.push({ id: 'all', label: '両校 全体', match: () => true });
