@@ -3,7 +3,7 @@ import { requireManagementRole, type AuthenticatedRequest } from './auth';
 import { getAllSessionsForManagement } from './persistence';
 import { getAllStudySchedules } from './studySchedulePersistence';
 import { getRq2Codebook, saveRq2Codebook, rq2AllowedCodes } from './researchRq2Codebook';
-import { buildRq2Candidates, filterRq2Items as _unused, sampleRq2Candidates, summarizeRq2Candidates, type Rq2Purpose } from './researchRq2Sampling';
+import { buildRq2Candidates, sampleRq2Candidates, summarizeRq2Candidates, type Rq2Purpose } from './researchRq2Sampling';
 import { codeRq2Batch } from './researchRq2Ai';
 import { buildRq2Analysis, buildRq2ReliabilitySummary } from './researchRq2Analysis';
 import {
