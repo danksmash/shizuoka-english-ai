@@ -62,6 +62,7 @@ export function filterSessionsForStudyPhase(
   const byClass = scheduleMap(schedules);
   const target = PHASE_TARGET[phase];
   return sessions.filter((session) => {
+    if (String(session.schoolCondition || '') === 'comparison' || /^[56]-C[1-9]$/.test(String(session.classId || ''))) return false;
     const schedule = byClass.get(String(session.classId || ''));
     const localDate = sessionLocalDate(session);
     return Boolean(schedule && localDate && phaseForLocalDate(localDate, schedule) === target);
@@ -78,6 +79,7 @@ export function filterReflectionsForStudyPhase(
   const byClass = scheduleMap(schedules);
   const target = PHASE_TARGET[phase];
   return records.filter((record) => {
+    if (/^[56]-C[1-9]$/.test(record.classId)) return false;
     const schedule = byClass.get(record.classId);
     return Boolean(schedule && record.localDate && phaseForLocalDate(record.localDate, schedule) === target);
   });
