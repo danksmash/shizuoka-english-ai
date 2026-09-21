@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { phaseForLocalDate, validateStudyScheduleOrder, normalizeStudyDate, STUDY_CLASS_IDS, isStudyClassId } from '../src/server/studySchedulePersistence';
+import { analysisPeriodForLocalDate, phaseForLocalDate, validateStudyScheduleOrder, normalizeStudyDate, STUDY_CLASS_IDS, isStudyClassId } from '../src/server/studySchedulePersistence';
 
 assert.deepEqual(STUDY_CLASS_IDS, ['5-1','5-2','5-3','6-1','6-2']);
 assert.equal(isStudyClassId('5-C1'), true);
@@ -18,6 +18,11 @@ assert.equal(phaseForLocalDate('2026-10-01',schedule),'anticipated_other');
 assert.equal(phaseForLocalDate('2026-10-08',schedule),'identified_real_other');
 assert.equal(phaseForLocalDate('2026-10-15',schedule),'exchange_or_after');
 assert.equal(phaseForLocalDate('2026-09-17',{...schedule,appStartDate:''}),'unconfigured');
+assert.equal(analysisPeriodForLocalDate('2026-09-17',schedule),'period1');
+assert.equal(analysisPeriodForLocalDate('2026-10-01',schedule),'period2');
+assert.equal(analysisPeriodForLocalDate('2026-10-08',schedule),'period3');
+assert.equal(analysisPeriodForLocalDate('2026-10-15',schedule),'');
+assert.equal(analysisPeriodForLocalDate('2026-10-08',{...schedule,videoViewDate:''}),'');
 
 const entry=fs.readFileSync('server-entry.ts','utf8');
 const auth=fs.readFileSync('src/server/auth.ts','utf8');
@@ -63,7 +68,9 @@ assert.ok(!page.includes("'6-3'"));
 assert.ok(page.includes('実践校と比較校'));
 assert.ok(page.includes('アプリ使用開始日'));
 assert.ok(page.includes('Mid基準日'));
-assert.ok(page.includes('本人動画日'));
+assert.ok(page.includes('本人動画日 / C2分析基準日'));
+assert.ok(page.includes('C2（動画提示なし）'));
+assert.ok(routes.includes("'analysis_period'"));
 assert.ok(page.includes('Post基準日'));
 assert.ok(page.includes('比較校はPhase 1～4に割り当てません'));
 assert.ok(page.includes('research_id + local_date'));
