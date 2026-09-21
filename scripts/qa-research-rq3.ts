@@ -34,7 +34,7 @@ const items = [
     humanStatus: 'confirmed',
     humanReferencePrimary: 'B2a',
     humanReferenceAuxCodes: [],
-    humanFunctionPrimary: 'A/SD',
+    humanFunctionPrimary: 'RES',
     humanFunctionAuxCodes: [],
     humanCoder: 'A',
     humanCodedAt: '2026-09-21T00:00:00.000Z',
@@ -63,7 +63,7 @@ const items = [
     humanReferencePrimary: 'B2b',
     humanReferenceAuxCodes: ['B3'],
     humanFunctionPrimary: 'Q',
-    humanFunctionAuxCodes: ['T'],
+    humanFunctionAuxCodes: ['TOP'],
     humanCoder: 'A',
     humanCodedAt: '2026-09-21T00:00:00.000Z',
   },
@@ -102,15 +102,15 @@ assert.equal(interventionP2.referenceRaw.counts.B2b, 1);
 assert.equal(interventionP2.referenceModel.counts.B2, 1);
 assert.equal(interventionP2.functions.counts.Q, 1);
 
-const rows = buildInteractionCodeRows(items, { runId: 'rq3-test', codebookVersion: 'rq2-v3' });
+const rows = buildInteractionCodeRows(items, { runId: 'rq3-test', codebookVersion: 'rq2-v4' });
 assert.equal(rows.length, 3);
 assert.equal(rows[0].reference_primary_raw, 'B2a');
 assert.equal(rows[0].reference_primary_model, 'B2');
 assert.equal(rows[1].reference_primary_raw, 'B2b');
 assert.equal(rows[1].reference_primary_model, 'B2');
 assert.equal(rows[1].reference_aux_labels, 'B3');
-assert.equal(rows[1].function_aux_labels, 'T');
-assert.equal(rows[1].human_codebook_version, 'rq2-v3');
+assert.equal(rows[1].function_aux_labels, 'TOP');
+assert.equal(rows[1].human_codebook_version, 'rq2-v4');
 assert.equal(rows[2].analysis_ready, 0);
 assert.equal(rows[2].reference_primary_raw, '');
 
@@ -130,6 +130,7 @@ assert.ok(page.includes('RQ2・RQ3分析用ZIP'));
 assert.ok(page.includes('前後文脈'));
 assert.ok(routes.includes('/research-rq3/create-run'));
 assert.ok(routes.includes('RQ3_CODEBOOK_SCHEMA_OUTDATED'));
+assert.ok(routes.includes('schemaVersion || 0) < 4'));
 assert.ok(routes.includes('row.codebookVersion'));
 assert.ok(routes.includes('/research-rq3/ai-code'));
 assert.ok(routes.includes('/research-rq3/human-code'));
@@ -138,7 +139,9 @@ assert.ok(routes.includes('rq2_reliability.csv'));
 assert.ok(analysisSessions.includes('analysis_included_default'));
 assert.ok(analysisSessions.includes('analysis_decision_source'));
 assert.ok(analysisSessions.includes('hardExclusionReason'));
-assert.ok(rq2Ai.includes("promptVersion = 'rq2-coding-prompt-v3'"));
+assert.ok(rq2Ai.includes("promptVersion = 'rq2-coding-prompt-v4'"));
+assert.ok(rq2Ai.includes('referencePriorityRule'));
+assert.ok(rq2Ai.includes('functionBoundaryRule'));
 assert.equal(rq2Ai.includes('stratum: String(item.stratum'), false, 'AI coding must not receive study stratum/Phase');
 
 console.log('RQ3 typology analysis QA: PASS');

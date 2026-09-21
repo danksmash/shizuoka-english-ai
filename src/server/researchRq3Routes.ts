@@ -164,7 +164,7 @@ router.post('/research-rq3/create-run', requireManagementRole(['researcher']), a
     if (await findActiveRq3Run()) throw new Error('RQ3_ACTIVE_RUN_EXISTS');
     const codebook = await getRq2Codebook();
     if (String(codebook.status || '') !== 'frozen') throw new Error('RQ3_CODEBOOK_NOT_FROZEN');
-    if (Number(codebook.schemaVersion || 0) < 3) throw new Error('RQ3_CODEBOOK_SCHEMA_OUTDATED');
+    if (Number(codebook.schemaVersion || 0) < 4) throw new Error('RQ3_CODEBOOK_SCHEMA_OUTDATED');
     const { candidates } = await baseData();
     if (!candidates.length) throw new Error('RQ3_NO_CANDIDATES');
     const run = await createRq3Run({

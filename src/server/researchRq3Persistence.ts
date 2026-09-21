@@ -26,7 +26,7 @@ export async function createRq3Run(args: {
     createdAt: now,
     createdBy: String(args.createdBy || 'researcher').slice(0, 100),
     codebookVersion: args.codebookVersion,
-    promptVersion: 'rq2-coding-prompt-v3',
+    promptVersion: 'rq2-coding-prompt-v4',
     itemCount: args.items.length,
     status: 'active',
   };

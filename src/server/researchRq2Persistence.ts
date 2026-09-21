@@ -34,7 +34,7 @@ export async function createRq2Run(args: {
     maxPerParticipantPerStratum: args.maxPerParticipantPerStratum,
     lessonOnly: args.lessonOnly,
     codebookVersion: args.codebookVersion,
-    promptVersion: 'rq2-coding-prompt-v3',
+    promptVersion: 'rq2-coding-prompt-v4',
     counts: args.counts,
     itemCount: args.items.length,
     status: 'sampled',
