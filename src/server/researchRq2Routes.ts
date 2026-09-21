@@ -2,7 +2,7 @@ import express from 'express';
 import { requireManagementRole, type AuthenticatedRequest } from './auth';
 import { getAllSessionsForManagement } from './persistence';
 import { getAllStudySchedules } from './studySchedulePersistence';
-import { getRq2Codebook, saveRq2Codebook, rq2CanonicalizeCodes } from './researchRq2Codebook';
+import { getRq2Codebook, saveRq2Codebook, rq2CanonicalizeCodes, rq2CanonicalPrimaryAndAux } from './researchRq2Codebook';
 import { buildRq2Candidates, sampleRq2Candidates, summarizeRq2Candidates, type Rq2Purpose } from './researchRq2Sampling';
 import { codeRq2Batch } from './researchRq2Ai';
 import { buildRq2Analysis, buildRq2ReliabilitySummary } from './researchRq2Analysis';
@@ -44,6 +44,25 @@ function canonicalCodes(codebook: Record<string, any>, dimension: 'reference' | 
   const result = rq2CanonicalizeCodes(codebook, dimension, values);
   if (result.invalid.length) throw new Error(`RQ2_INVALID_CODE:${result.invalid.join(',')}`);
   return result.valid;
+}
+
+function canonicalPrimaryAux(
+  codebook: Record<string, any>,
+  dimension: 'reference' | 'function',
+  primary: unknown,
+  aux: unknown,
+  legacyValues: unknown,
+) {
+  const legacy = Array.isArray(legacyValues) ? legacyValues : [];
+  const result = rq2CanonicalPrimaryAndAux(
+    codebook,
+    dimension,
+    primary || legacy[0] || '',
+    Array.isArray(aux) ? aux : legacy.slice(1),
+  );
+  if (result.invalid.length) throw new Error(`RQ2_INVALID_CODE:${result.invalid.join(',')}`);
+  if (!result.primary) throw new Error('RQ2_INVALID_CODE:PRIMARY_REQUIRED');
+  return result;
 }
 
 function rq2ErrorResponse(res: express.Response, error: any, fallback: string) {
@@ -213,7 +232,7 @@ router.get('/research-rq2/items', requireManagementRole(['researcher']), async (
     const items = purpose === 'reliability'
       ? rows.map((row) => {
           const safe = { ...row };
-          for (const key of ['aiReferenceCodes','aiFunctionCodes','aiRecipientLocus','aiNeedsReview','aiReviewReason','aiReason','aiModel','aiPromptVersion','aiCodebookVersion','aiCodedAt']) delete safe[key];
+          for (const key of ['aiReferencePrimary','aiReferenceAuxCodes','aiReferenceCodes','aiFunctionPrimary','aiFunctionAuxCodes','aiFunctionCodes','aiRecipientLocus','aiNeedsReview','aiReviewReason','aiReason','aiModel','aiPromptVersion','aiCodebookVersion','aiCodedAt']) delete safe[key];
           return safe;
         })
       : rows;
@@ -273,10 +292,16 @@ router.post('/research-rq2/human-code', requireManagementRole(['researcher']), a
     await activeRq2Run(runId);
     const codebook = await getRq2Codebook();
     const decision = req.body?.decision === 'modify' ? 'modified' : 'confirmed';
+    const reference = canonicalPrimaryAux(codebook, 'reference', req.body?.referencePrimary, req.body?.referenceAuxCodes, req.body?.referenceCodes);
+    const functions = canonicalPrimaryAux(codebook, 'function', req.body?.functionPrimary, req.body?.functionAuxCodes, req.body?.functionCodes);
     const item = await updateRq2Item(runId, sequenceId, {
-      humanReferenceCodes: canonicalCodes(codebook, 'reference', req.body?.referenceCodes),
-      humanFunctionCodes: canonicalCodes(codebook, 'function', req.body?.functionCodes),
-      humanRecipientLocus: canonicalCodes(codebook, 'locus', req.body?.recipientLocus),
+      humanReferencePrimary: reference.primary,
+      humanReferenceAuxCodes: reference.aux,
+      humanReferenceCodes: [reference.primary, ...reference.aux],
+      humanFunctionPrimary: functions.primary,
+      humanFunctionAuxCodes: functions.aux,
+      humanFunctionCodes: [functions.primary, ...functions.aux],
+      humanRecipientLocus: [],
       humanStatus: decision,
       humanCoder: req.managementUser?.username || 'researcher',
       humanNote: text(req.body?.note, 500),
@@ -297,13 +322,16 @@ router.post('/research-rq2/reliability-code', requireManagementRole(['researcher
     const item = (await getRq2Items(runId)).find((row) => row.sequenceId === sequenceId && row.purpose === 'reliability');
     if (!item) return res.status(400).json({ success: false, error: 'RQ2_RELIABILITY_ITEM_REQUIRED' });
     const codebook = await getRq2Codebook();
+    const reference = canonicalPrimaryAux(codebook, 'reference', req.body?.referencePrimary, req.body?.referenceAuxCodes, req.body?.referenceCodes);
+    const functions = canonicalPrimaryAux(codebook, 'function', req.body?.functionPrimary, req.body?.functionAuxCodes, req.body?.functionCodes);
     const record = await saveRq2ReliabilityCode({
       runId,
       sequenceId,
       coderKey,
-      referenceCodes: canonicalCodes(codebook, 'reference', req.body?.referenceCodes),
-      functionCodes: canonicalCodes(codebook, 'function', req.body?.functionCodes),
-      recipientLocus: canonicalCodes(codebook, 'locus', req.body?.recipientLocus),
+      referencePrimary: reference.primary,
+      referenceAuxCodes: reference.aux,
+      functionPrimary: functions.primary,
+      functionAuxCodes: functions.aux,
     });
     return res.json({ success: true, record });
   } catch (error: any) {
@@ -333,7 +361,7 @@ router.get('/research-rq2/export.csv', requireManagementRole(['researcher']), as
     const runId = text(req.query.runId, 120);
     const [run, items] = await Promise.all([getRq2Run(runId), getRq2Items(runId)]);
     assertRq2RunActive(run);
-    const headers = ['run_id','run_type','run_status','seed','target_per_stratum','max_per_participant','lesson_only','run_codebook_version','run_prompt_version','sequence_id','stratum','purpose','stratum_rank','research_id','class_id','session_id','local_date','topic','persona_id','child_utterance_id','child_turn_sequence','previous_ai_english','child_english','next_ai_english','ai_reference_codes','ai_function_codes','ai_recipient_locus','ai_needs_review','ai_review_reason','ai_reason','ai_model','ai_prompt_version','ai_codebook_version','ai_coded_at','human_reference_codes','human_function_codes','human_recipient_locus','human_status','human_coder','human_note','human_coded_at'];
+    const headers = ['run_id','run_type','run_status','seed','target_per_stratum','max_per_participant','lesson_only','run_codebook_version','run_prompt_version','sequence_id','stratum','purpose','stratum_rank','research_id','class_id','session_id','local_date','topic','persona_id','child_utterance_id','child_turn_sequence','previous_ai_english','child_english','next_ai_english','ai_reference_primary','ai_reference_aux_codes','ai_function_primary','ai_function_aux_codes','ai_needs_review','ai_review_reason','ai_reason','ai_model','ai_prompt_version','ai_codebook_version','ai_coded_at','human_reference_primary','human_reference_aux_codes','human_function_primary','human_function_aux_codes','human_status','human_coder','human_note','human_coded_at'];
     const rows = items.map((item) => ({
       run_id: runId, run_type: run.runType || 'legacy', run_status: run.status || 'sampled', seed: run.seed, target_per_stratum: run.targetPerStratum, max_per_participant: run.maxPerParticipantPerStratum,
       lesson_only: run.lessonOnly ? 1 : 0, run_codebook_version: run.codebookVersion, run_prompt_version: run.promptVersion,
@@ -341,10 +369,16 @@ router.get('/research-rq2/export.csv', requireManagementRole(['researcher']), as
       research_id: item.researchId, class_id: item.classId, session_id: item.sessionId, local_date: item.localDate, topic: item.topic, persona_id: item.personaId,
       child_utterance_id: item.childUtteranceId, child_turn_sequence: item.childTurnSequence,
       previous_ai_english: item.previousAiEnglish, child_english: item.childEnglish, next_ai_english: item.nextAiEnglish,
-      ai_reference_codes: item.aiReferenceCodes || [], ai_function_codes: item.aiFunctionCodes || [], ai_recipient_locus: item.aiRecipientLocus || [],
+      ai_reference_primary: item.aiReferencePrimary || item.aiReferenceCodes?.[0] || '',
+      ai_reference_aux_codes: item.aiReferenceAuxCodes || (Array.isArray(item.aiReferenceCodes) ? item.aiReferenceCodes.slice(1) : []),
+      ai_function_primary: item.aiFunctionPrimary || item.aiFunctionCodes?.[0] || '',
+      ai_function_aux_codes: item.aiFunctionAuxCodes || (Array.isArray(item.aiFunctionCodes) ? item.aiFunctionCodes.slice(1) : []),
       ai_needs_review: item.aiNeedsReview ? 1 : 0, ai_review_reason: item.aiReviewReason || '', ai_reason: item.aiReason || '',
       ai_model: item.aiModel || '', ai_prompt_version: item.aiPromptVersion || '', ai_codebook_version: item.aiCodebookVersion || '', ai_coded_at: item.aiCodedAt || '',
-      human_reference_codes: item.humanReferenceCodes || [], human_function_codes: item.humanFunctionCodes || [], human_recipient_locus: item.humanRecipientLocus || [],
+      human_reference_primary: item.humanReferencePrimary || item.humanReferenceCodes?.[0] || '',
+      human_reference_aux_codes: item.humanReferenceAuxCodes || (Array.isArray(item.humanReferenceCodes) ? item.humanReferenceCodes.slice(1) : []),
+      human_function_primary: item.humanFunctionPrimary || item.humanFunctionCodes?.[0] || '',
+      human_function_aux_codes: item.humanFunctionAuxCodes || (Array.isArray(item.humanFunctionCodes) ? item.humanFunctionCodes.slice(1) : []),
       human_status: item.humanStatus || '', human_coder: item.humanCoder || '', human_note: item.humanNote || '', human_coded_at: item.humanCodedAt || '',
     }));
     const body = '\uFEFF' + [headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell((row as any)[header])).join(','))].join('\n');
@@ -353,6 +387,31 @@ router.get('/research-rq2/export.csv', requireManagementRole(['researcher']), as
     return res.send(body);
   } catch (error: any) {
     return rq2ErrorResponse(res, error, 'RQ2_EXPORT_UNAVAILABLE');
+  }
+});
+
+router.get('/research-rq2/reliability.csv', requireManagementRole(['researcher']), async (req, res) => {
+  try {
+    const runId = text(req.query.runId, 120);
+    await activeRq2Run(runId);
+    const records = await getRq2ReliabilityCodes(runId);
+    const headers = ['run_id','sequence_id','coder_id','reference_primary','reference_aux_codes','function_primary','function_aux_codes','saved_at'];
+    const rows = records.map((row) => ({
+      run_id: runId,
+      sequence_id: row.sequenceId || '',
+      coder_id: row.coderKey || '',
+      reference_primary: row.referencePrimary || row.referenceCodes?.[0] || '',
+      reference_aux_codes: row.referenceAuxCodes || (Array.isArray(row.referenceCodes) ? row.referenceCodes.slice(1) : []),
+      function_primary: row.functionPrimary || row.functionCodes?.[0] || '',
+      function_aux_codes: row.functionAuxCodes || (Array.isArray(row.functionCodes) ? row.functionCodes.slice(1) : []),
+      saved_at: row.savedAt || '',
+    }));
+    const body = '\uFEFF' + [headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell((row as any)[header])).join(','))].join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="rq2_reliability_${runId}.csv"`);
+    return res.send(body);
+  } catch (error: any) {
+    return rq2ErrorResponse(res, error, 'RQ2_RELIABILITY_EXPORT_UNAVAILABLE');
   }
 });
 
