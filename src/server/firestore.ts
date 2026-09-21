@@ -26,6 +26,7 @@ async function getAccessToken(): Promise<string> {
 }
 
 const baseUrl = () => `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(PROJECT_ID)}/databases/${encodeURIComponent(DATABASE_ID)}/documents`;
+const documentResourceName = (collection: string, id: string) => `projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${id}`;
 
 function toFirestoreValue(value: unknown): any {
   if (value === null || value === undefined) return { nullValue: null };
@@ -138,7 +139,7 @@ export async function setDocumentsBatch(
   if (documents.length > 500) throw new Error('FIRESTORE_BATCH_TOO_LARGE');
   const writes = documents.map(({ id, data }) => ({
     update: {
-      name: `${baseUrl()}/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`,
+      name: documentResourceName(collection, id),
       fields: Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined).map(([key, value]) => [key, toFirestoreValue(value)])),
     },
   }));
