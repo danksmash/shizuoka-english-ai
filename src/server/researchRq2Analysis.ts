@@ -1,34 +1,47 @@
 import { RQ2_STRATA, RQ2_STRATUM_LABELS } from './researchRq2Sampling';
 
-function codeSet(row: Record<string, any>, dimension: 'reference' | 'function' | 'locus'): string[] {
-  const humanKey = dimension === 'reference' ? 'humanReferenceCodes' : dimension === 'function' ? 'humanFunctionCodes' : 'humanRecipientLocus';
-  const aiKey = dimension === 'reference' ? 'aiReferenceCodes' : dimension === 'function' ? 'aiFunctionCodes' : 'aiRecipientLocus';
-  const human = Array.isArray(row[humanKey]) ? row[humanKey] : [];
-  return human.length ? human.map(String) : (Array.isArray(row[aiKey]) ? row[aiKey].map(String) : []);
+type Dimension = 'reference' | 'function' | 'locus';
+type CodingSource = 'ai' | 'human';
+
+function codeSet(row: Record<string, any>, dimension: Dimension, source: CodingSource): string[] {
+  const key = source === 'human'
+    ? (dimension === 'reference' ? 'humanReferenceCodes' : dimension === 'function' ? 'humanFunctionCodes' : 'humanRecipientLocus')
+    : (dimension === 'reference' ? 'aiReferenceCodes' : dimension === 'function' ? 'aiFunctionCodes' : 'aiRecipientLocus');
+  return Array.isArray(row[key]) ? row[key].map(String) : [];
 }
 
-function countsByCode(rows: Record<string, any>[], dimension: 'reference' | 'function' | 'locus') {
+function countsByCode(rows: Record<string, any>[], dimension: Dimension, source: CodingSource) {
   const out: Record<string, number> = {};
   for (const row of rows) {
-    for (const code of codeSet(row, dimension)) out[code] = (out[code] || 0) + 1;
+    for (const code of codeSet(row, dimension, source)) out[code] = (out[code] || 0) + 1;
   }
   return out;
 }
 
+function humanFinalRows(rows: Record<string, any>[]) {
+  return rows.filter((row) => row.humanStatus === 'confirmed' || row.humanStatus === 'modified');
+}
+
 export function buildRq2Analysis(items: Record<string, any>[]) {
   return {
+    codingRule: 'AIは候補コード、人間確認済みコードだけを正式集計として扱う。',
     strata: RQ2_STRATA.map((stratum) => {
       const rows = items.filter((row) => row.stratum === stratum);
+      const finalRows = humanFinalRows(rows);
       return {
         stratum,
         label: RQ2_STRATUM_LABELS[stratum],
         n: rows.length,
         aiCoded: rows.filter((row) => row.aiStatus === 'coded').length,
-        humanConfirmed: rows.filter((row) => row.humanStatus === 'confirmed' || row.humanStatus === 'modified').length,
+        humanConfirmed: finalRows.length,
+        finalPending: rows.length - finalRows.length,
         needsReview: rows.filter((row) => row.aiNeedsReview === true).length,
-        referenceCodes: countsByCode(rows, 'reference'),
-        functionCodes: countsByCode(rows, 'function'),
-        recipientLocus: countsByCode(rows, 'locus'),
+        aiCandidateReferenceCodes: countsByCode(rows, 'reference', 'ai'),
+        aiCandidateFunctionCodes: countsByCode(rows, 'function', 'ai'),
+        aiCandidateRecipientLocus: countsByCode(rows, 'locus', 'ai'),
+        finalReferenceCodes: countsByCode(finalRows, 'reference', 'human'),
+        finalFunctionCodes: countsByCode(finalRows, 'function', 'human'),
+        finalRecipientLocus: countsByCode(finalRows, 'locus', 'human'),
       };
     }),
   };
