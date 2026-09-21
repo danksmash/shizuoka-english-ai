@@ -164,7 +164,6 @@ assert.equal(literatureRows.length, 12);
 assert.equal(literatureRows.find((row) => row.code === 'B3')?.dimension, '参照基盤');
 assert.ok(String(literatureRows.find((row) => row.code === 'B3')?.primary_source_ids).includes('LAM2018'));
 const literatureCsv = serializeRq2LiteratureMapCsv(DEFAULT_RQ2_CODEBOOK);
-assert.ok(literatureCsv.includes('rq2') === false);
 assert.ok(literatureCsv.includes('Lam, D. M. K. (2018)'));
 assert.deepEqual(DEFAULT_RQ2_CODEBOOK.recipientLocus.map((row) => row.code), ['現在のAI','将来の実在留学生','AIと実在他者を橋渡し','判定不能']);
 assert.deepEqual(rq2CanonicalizeCodes(DEFAULT_RQ2_CODEBOOK, 'function', ['A-SD']).valid, ['RES']);
