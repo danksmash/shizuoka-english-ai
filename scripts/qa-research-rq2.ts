@@ -6,7 +6,7 @@ import {
   type Rq2Candidate,
 } from '../src/server/researchRq2Sampling';
 import { buildRq2Analysis, buildRq2ReliabilitySummary } from '../src/server/researchRq2Analysis';
-import { DEFAULT_RQ2_CODEBOOK, rq2CanonicalizeCodes } from '../src/server/researchRq2Codebook';
+import { DEFAULT_RQ2_CODEBOOK, RQ2_CODEBOOK_SCHEMA_VERSION, rq2CanonicalizeCodes } from '../src/server/researchRq2Codebook';
 import {
   assertRq2RunActive,
   assertRq2SamplingConfirmation,
@@ -98,15 +98,25 @@ assert.deepEqual(summarizeRq2RunProgress([
 
 const referenceCodes = DEFAULT_RQ2_CODEBOOK.referenceBasis.map((row) => row.code);
 assert.deepEqual(referenceCodes, ['B0','B1','B2a','B2b','B3','B4']);
-assert.equal(DEFAULT_RQ2_CODEBOOK.interactionFunction.find((row) => row.code === 'A/SD')?.label, '応答・自己開示');
+assert.equal(RQ2_CODEBOOK_SCHEMA_VERSION, 4);
+assert.equal(DEFAULT_RQ2_CODEBOOK.developmentStatus, 'literature_draft');
+assert.deepEqual(DEFAULT_RQ2_CODEBOOK.interactionFunction.map((row) => row.code), ['ACK','RES','Q','TOP','COMP','REP']);
+assert.equal(DEFAULT_RQ2_CODEBOOK.interactionFunction.find((row) => row.code === 'ACK')?.label, '反応・傾聴表示');
+assert.ok(DEFAULT_RQ2_CODEBOOK.referenceBasis.find((row) => row.code === 'B3')?.boundaryRule.includes('直前ターンが存在する'));
+assert.ok(DEFAULT_RQ2_CODEBOOK.references.some((row) => row.id === 'LAM2018'));
+assert.ok(DEFAULT_RQ2_CODEBOOK.references.some((row) => row.id === 'YAMAGUCHIYOSHIZAWA2023'));
 assert.deepEqual(DEFAULT_RQ2_CODEBOOK.recipientLocus.map((row) => row.code), ['現在のAI','将来の実在留学生','AIと実在他者を橋渡し','判定不能']);
-assert.deepEqual(rq2CanonicalizeCodes(DEFAULT_RQ2_CODEBOOK, 'function', ['A-SD']).valid, ['A/SD']);
+assert.deepEqual(rq2CanonicalizeCodes(DEFAULT_RQ2_CODEBOOK, 'function', ['A-SD']).valid, ['RES']);
+assert.deepEqual(rq2CanonicalizeCodes(DEFAULT_RQ2_CODEBOOK, 'function', ['T']).valid, ['TOP']);
+assert.deepEqual(rq2CanonicalizeCodes(DEFAULT_RQ2_CODEBOOK, 'function', ['U']).valid, ['COMP']);
+assert.deepEqual(rq2CanonicalizeCodes(DEFAULT_RQ2_CODEBOOK, 'function', ['R']).valid, ['REP']);
+assert.deepEqual(rq2CanonicalizeCodes(DEFAULT_RQ2_CODEBOOK, 'function', ['E']).valid, []);
 
 const reliability = buildRq2ReliabilitySummary([
   { runId:'r', sequenceId:'s1', coderKey:'A', referenceCodes:['B3'], functionCodes:['Q'], recipientLocus:['現在のAI'] },
   { runId:'r', sequenceId:'s1', coderKey:'B', referenceCodes:['B3'], functionCodes:['Q'], recipientLocus:['現在のAI'] },
-  { runId:'r', sequenceId:'s2', coderKey:'A', referenceCodes:['B0'], functionCodes:['A/SD'], recipientLocus:['現在のAI'] },
-  { runId:'r', sequenceId:'s2', coderKey:'B', referenceCodes:['B0'], functionCodes:['A/SD'], recipientLocus:['現在のAI'] },
+  { runId:'r', sequenceId:'s2', coderKey:'A', referenceCodes:['B0'], functionCodes:['RES'], recipientLocus:['現在のAI'] },
+  { runId:'r', sequenceId:'s2', coderKey:'B', referenceCodes:['B0'], functionCodes:['RES'], recipientLocus:['現在のAI'] },
 ]);
 assert.equal(reliability.commonItems, 2);
 assert.equal(reliability.reference.agreement, 100);
@@ -116,7 +126,7 @@ assert.equal(reliability.function.kappa, 1);
 
 const analysis = buildRq2Analysis([
   { stratum:'intervention_phase1', aiStatus:'coded', aiReferenceCodes:['B3'], aiFunctionCodes:['Q'], aiRecipientLocus:[], aiNeedsReview:false, humanStatus:'pending' },
-  { stratum:'intervention_phase1', aiStatus:'coded', aiReferenceCodes:['B2a'], aiFunctionCodes:['A/SD'], aiRecipientLocus:['現在のAI'], aiNeedsReview:false, humanStatus:'modified', humanReferenceCodes:['B1'], humanFunctionCodes:['Q'], humanRecipientLocus:[] },
+  { stratum:'intervention_phase1', aiStatus:'coded', aiReferenceCodes:['B2a'], aiFunctionCodes:['RES'], aiRecipientLocus:['現在のAI'], aiNeedsReview:false, humanStatus:'modified', humanReferenceCodes:['B1'], humanFunctionCodes:['Q'], humanRecipientLocus:[] },
 ]);
 const interventionPhase1 = analysis.strata.find((row) => row.stratum === 'intervention_phase1')!;
 assert.equal(interventionPhase1.aiCandidateReferenceCodes.B3, 1);
@@ -139,6 +149,10 @@ assert.ok(page.includes('次の20系列をAI候補コード化'));
 assert.ok(page.includes('一致度用60'));
 assert.ok(page.includes('正式集計は人間確認済みコードのみ'));
 assert.ok(page.includes('参照基盤・主コード'));
+assert.ok(page.includes('文献根拠型コードブック v1'));
+assert.ok(page.includes('開発用120系列'));
+assert.ok(page.includes('一致度用60系列'));
+assert.ok(page.includes('ACK / RES / Q / TOP / COMP / REP'));
 assert.ok(page.includes('対話機能・主コード'));
 assert.ok(page.includes('reliability.csv'));
 assert.ok(page.includes('AI候補（未確定）'));
@@ -157,6 +171,12 @@ assert.ok(routes.includes('RQ2_ACTIVE_FORMAL_RUN_EXISTS'));
 assert.ok(routes.includes('assertRq2RunActive(run)'));
 assert.ok(persistence.includes("status: 'invalidated'"));
 assert.ok(persistence.includes('runType: args.runType'));
+assert.ok(persistence.includes("promptVersion: 'rq2-coding-prompt-v4'"));
+const codebookDoc = fs.readFileSync('docs/research/rq2-codebook-literature-v1.md','utf8');
+assert.ok(codebookDoc.includes('演繹的手続き'));
+assert.ok(codebookDoc.includes('Lam (2018)'));
+assert.ok(codebookDoc.includes('B3の重要な限定'));
+assert.ok(codebookDoc.includes('ACK | 反応・傾聴表示'));
 assert.ok(management.includes('/research-rq2.html'));
 assert.ok(management.includes('/research-rq3.html'));
 console.log('RQ2 code analysis QA: PASS');
