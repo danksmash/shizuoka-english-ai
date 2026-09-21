@@ -151,6 +151,8 @@ assert.ok(routes.includes('/research-rq2/reset'));
 assert.ok(routes.includes('/research-rq2/reliability.csv'));
 assert.ok(routes.includes('humanReferencePrimary'));
 assert.ok(routes.includes('humanFunctionPrimary'));
+assert.ok(routes.includes('humanCodebookVersion'));
+assert.ok(routes.includes('codebook_version'));
 assert.ok(routes.includes('RQ2_ACTIVE_FORMAL_RUN_EXISTS'));
 assert.ok(routes.includes('assertRq2RunActive(run)'));
 assert.ok(persistence.includes("status: 'invalidated'"));
