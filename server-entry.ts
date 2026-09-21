@@ -21,6 +21,7 @@ import {
   withResearchSessionHistoryManagementPage,
 } from './src/server/researchSessionHistoryRuntime';
 import { createResearchSessionAuditRouter } from './src/server/researchSessionAuditRoutes';
+import { createResearchRq2Router } from './src/server/researchRq2Routes';
 import { manualResearchExclusionGetHandler } from './src/server/researchManualExclusionRuntime';
 
 const application = express.application as any;
@@ -75,6 +76,10 @@ application.listen = function reflectionAwareListen(this: any, ...args: any[]) {
   if (!this.__researchSessionAuditRoutesMounted) {
     this.use('/api/management', createResearchSessionAuditRouter());
     this.__researchSessionAuditRoutesMounted = true;
+  }
+  if (!this.__researchRq2RoutesMounted) {
+    this.use('/api/management', createResearchRq2Router());
+    this.__researchRq2RoutesMounted = true;
   }
   return originalListen.apply(this, args);
 };
