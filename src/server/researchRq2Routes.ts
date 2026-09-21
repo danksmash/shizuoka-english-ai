@@ -6,6 +6,8 @@ import { getRq2Codebook, saveRq2Codebook, rq2CanonicalPrimaryAndAux } from './re
 import { buildRq2Candidates, sampleRq2Candidates, summarizeRq2Candidates, type Rq2Purpose } from './researchRq2Sampling';
 import { codeRq2Batch } from './researchRq2Ai';
 import { buildRq2Analysis, buildRq2ReliabilitySummary } from './researchRq2Analysis';
+import { buildRq2PreflightAudit } from './researchRq2Preflight';
+import { serializeRq2LiteratureMapCsv } from './researchRq2LiteratureMap';
 import {
   createRq2Run,
   findActiveFormalRq2Runs,
@@ -100,6 +102,37 @@ router.get('/research-rq2/status', requireManagementRole(['researcher']), async 
   }
 });
 
+router.get('/research-rq2/preflight-audit', requireManagementRole(['researcher']), async (req, res) => {
+  try {
+    const seed = text(req.query.seed, 100) || 'RQ2-2026-v1';
+    const targetPerStratum = intValue(req.query.targetPerStratum, 50, 10, 100);
+    const maxPerParticipantPerStratum = intValue(req.query.maxPerParticipantPerStratum, 2, 1, 5);
+    const lessonOnly = bool(req.query.lessonOnly, true);
+    const [sessions, schedules, codebook, activeFormalRuns] = await Promise.all([
+      getAllSessionsForManagement(),
+      getAllStudySchedules(),
+      getRq2Codebook(),
+      findActiveFormalRq2Runs(),
+    ]);
+    const candidates = buildRq2Candidates(sessions, schedules, { lessonOnly });
+    const sampled = sampleRq2Candidates(candidates, seed, targetPerStratum, maxPerParticipantPerStratum);
+    const audit = buildRq2PreflightAudit({
+      candidates,
+      sampledItems: sampled.items,
+      counts: sampled.counts,
+      codebook,
+      activeFormalRuns,
+      targetPerStratum,
+      maxPerParticipantPerStratum,
+      lessonOnly,
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, audit });
+  } catch (error: any) {
+    return rq2ErrorResponse(res, error, 'RQ2_PREFLIGHT_UNAVAILABLE');
+  }
+});
+
 router.get('/research-rq2/sample-preview', requireManagementRole(['researcher']), async (req, res) => {
   try {
     const seed = text(req.query.seed, 100) || 'RQ2-2026-v1';
@@ -145,6 +178,17 @@ router.post('/research-rq2/sample', requireManagementRole(['researcher']), async
     if (runType === 'formal') {
       const activeFormalRuns = await findActiveFormalRq2Runs();
       if (activeFormalRuns.length) throw new Error('RQ2_ACTIVE_FORMAL_RUN_EXISTS');
+      const audit = buildRq2PreflightAudit({
+        candidates,
+        sampledItems: sampled.items,
+        counts: sampled.counts,
+        codebook,
+        activeFormalRuns,
+        targetPerStratum,
+        maxPerParticipantPerStratum,
+        lessonOnly,
+      });
+      if (!audit.overallReady) throw new Error('RQ2_FORMAL_PREFLIGHT_REQUIRED');
     }
 
     const run = await createRq2Run({
@@ -239,6 +283,17 @@ router.get('/research-rq2/items', requireManagementRole(['researcher']), async (
 
 router.get('/research-rq2/codebook', requireManagementRole(['researcher']), async (_req, res) => {
   return res.json({ success: true, codebook: await getRq2Codebook() });
+});
+
+router.get('/research-rq2/literature-map.csv', requireManagementRole(['researcher']), async (_req, res) => {
+  try {
+    const codebook = await getRq2Codebook();
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="rq2_literature_code_mapping.csv"');
+    return res.send(serializeRq2LiteratureMapCsv(codebook));
+  } catch (error: any) {
+    return rq2ErrorResponse(res, error, 'RQ2_LITERATURE_MAP_UNAVAILABLE');
+  }
 });
 
 router.put('/research-rq2/codebook', requireManagementRole(['researcher']), async (req: AuthenticatedRequest, res) => {

@@ -70,6 +70,7 @@ export function rq2OperationErrorStatus(message: string): number {
     message === 'RQ2_RUN_INVALIDATED'
     || message === 'RQ2_FORMAL_SAMPLE_INCOMPLETE'
     || message === 'RQ2_ACTIVE_FORMAL_RUN_EXISTS'
+    || message === 'RQ2_FORMAL_PREFLIGHT_REQUIRED'
   ) return 409;
   if (
     message === 'RQ2_SAMPLE_CONFIRMATION_REQUIRED'

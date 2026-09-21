@@ -1,0 +1,57 @@
+export const RQ3_ANALYSIS_SPEC = {
+  version: 'rq3-analysis-plan-2026-v1',
+  status: 'template_only_not_executed',
+  dataFile: 'interaction_codes.csv',
+  inclusionRule: 'analysis_ready == 1',
+  unit: '児童の1発話系列',
+  descriptive: {
+    grouping: ['school_condition', 'analysis_period'],
+    report: ['n', 'participants', 'count', 'percentage'],
+    referenceRaw: 'reference_primary_raw（B2a/B2bを保持した記述用）',
+    referenceModel: 'reference_primary_model（B2a/B2bをB2へ統合したモデル用）',
+    function: 'function_primary',
+  },
+  models: [
+    {
+      id: 'reference_basis',
+      dependent: 'reference_primary_model',
+      expectedLevels: ['B0','B1','B2','B3','B4'],
+      referenceLevel: 'B0',
+      family: 'multinomial',
+      fixedEffects: ['school_condition', 'analysis_period', 'school_condition:analysis_period'],
+      cluster: 'participant_key',
+      randomEffects: ['1|participant_key'],
+      primaryInterpretation: '学校条件×時期の交互作用と推定確率（95%信頼区間）',
+    },
+    {
+      id: 'interaction_function',
+      dependent: 'function_primary',
+      expectedLevels: ['ACK','RES','Q','TOP','COMP','REP'],
+      referenceLevel: 'RES',
+      family: 'multinomial',
+      fixedEffects: ['school_condition', 'analysis_period', 'school_condition:analysis_period'],
+      cluster: 'participant_key',
+      randomEffects: ['1|participant_key'],
+      primaryInterpretation: '学校条件×時期の交互作用と推定確率（95%信頼区間）',
+    },
+  ],
+  factorReferenceLevels: {
+    school_condition: 'comparison',
+    analysis_period: 'period1',
+  },
+  software: {
+    primary: 'jamovi + GAMLj3 Generalized Mixed Models',
+    verifiedCapability: 'multinomial mixed model',
+    fallback: 'Rで再現・感度分析。主分析の仕様を変えずに使用する。',
+  },
+  sensitivityChecks: [
+    '各学校条件×時期×アウトカムのゼロセル・極端な疎セルを確認する。',
+    '収束しない場合は、結果を無理に解釈せず記述統計へ戻り、理論的に妥当な統合の可否を共同研究者と検討する。',
+    '必要に応じ、session_idのランダム切片を追加した感度分析を行い、児童ランダム切片のみの主分析と比較する。',
+  ],
+  interpretationLimits: [
+    '実践校1校・比較校1校の場合、学校条件の差は観察された2校の差として記述し、学校一般への因果効果として一般化しない。',
+    'B2a/B2bは記述では分離するが、学校間の主モデルではB2に統合する。',
+    'AI/ASRに誘発された修復があり得るため、REPの増加を能力向上と自動的に同一視しない。',
+  ],
+} as const;

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { RQ3_ANALYSIS_SPEC } from '../src/server/researchRq3AnalysisSpec';
 import {
   buildInteractionCodeRows,
   buildRq3Distribution,
@@ -9,6 +10,14 @@ import {
 assert.equal(referenceModelCode('B2a'), 'B2');
 assert.equal(referenceModelCode('B2b'), 'B2');
 assert.equal(referenceModelCode('B3'), 'B3');
+
+assert.equal(RQ3_ANALYSIS_SPEC.status, 'template_only_not_executed');
+assert.equal(RQ3_ANALYSIS_SPEC.models.length, 2);
+assert.equal(RQ3_ANALYSIS_SPEC.models[0].dependent, 'reference_primary_model');
+assert.equal(RQ3_ANALYSIS_SPEC.models[0].family, 'multinomial');
+assert.deepEqual(RQ3_ANALYSIS_SPEC.models[0].randomEffects, ['1|participant_key']);
+assert.equal(RQ3_ANALYSIS_SPEC.models[1].dependent, 'function_primary');
+assert.equal(RQ3_ANALYSIS_SPEC.factorReferenceLevels.analysis_period, 'period1');
 
 const items = [
   {
@@ -127,6 +136,9 @@ assert.ok(page.includes('RQ3 類型分布分析'));
 assert.ok(page.includes('analysis_sessions.csv'));
 assert.ok(page.includes('interaction_codes.csv'));
 assert.ok(page.includes('RQ2・RQ3分析用ZIP'));
+assert.ok(page.includes('分析仕様JSON'));
+assert.ok(page.includes('R準備テンプレート'));
+assert.ok(page.includes('多項ロジスティック混合モデル'));
 assert.ok(page.includes('前後文脈'));
 assert.ok(routes.includes('/research-rq3/create-run'));
 assert.ok(routes.includes('RQ3_CODEBOOK_SCHEMA_OUTDATED'));
@@ -135,7 +147,11 @@ assert.ok(routes.includes('row.codebookVersion'));
 assert.ok(routes.includes('/research-rq3/ai-code'));
 assert.ok(routes.includes('/research-rq3/human-code'));
 assert.ok(routes.includes('/research-rq3/analysis.bundle.zip'));
+assert.ok(routes.includes('/research-rq3/analysis-spec'));
+assert.ok(routes.includes('RQ3_ANALYSIS_SPEC'));
 assert.ok(routes.includes('rq2_reliability.csv'));
+assert.ok(routes.includes("name: 'rq3_analysis_spec.json'"));
+assert.ok(page.includes('rq3_analysis_spec.json'));
 assert.ok(analysisSessions.includes('analysis_included_default'));
 assert.ok(analysisSessions.includes('analysis_decision_source'));
 assert.ok(analysisSessions.includes('hardExclusionReason'));
@@ -143,5 +159,16 @@ assert.ok(rq2Ai.includes("promptVersion = 'rq2-coding-prompt-v4'"));
 assert.ok(rq2Ai.includes('referencePriorityRule'));
 assert.ok(rq2Ai.includes('functionBoundaryRule'));
 assert.equal(rq2Ai.includes('stratum: String(item.stratum'), false, 'AI coding must not receive study stratum/Phase');
+
+const statsDoc = fs.readFileSync('docs/research/rq3-statistical-analysis-template.md','utf8');
+const prepareR = fs.readFileSync('public/rq3_typology_prepare.R','utf8');
+const firestore = fs.readFileSync('src/server/firestore.ts','utf8');
+assert.ok(statsDoc.includes('Generalized Mixed Models'));
+assert.ok(statsDoc.includes('school_condition * analysis_period'));
+assert.ok(statsDoc.includes('(1 | participant_key)'));
+assert.ok(statsDoc.includes('推定確率'));
+assert.ok(prepareR.includes('rq3_gamlj_ready.csv'));
+assert.ok(prepareR.includes('rq3_sparse_cell_diagnostics.csv'));
+assert.ok(firestore.includes('while (pageToken)'), 'Firestore listCollection must paginate beyond 1000 documents');
 
 console.log('RQ3 typology analysis QA: PASS');
