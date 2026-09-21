@@ -326,12 +326,12 @@ function buildStoredZip(files: Array<{ name: string; content: string }>): Buffer
 
 function injectPhaseAnalyticsUi(html: string): string {
   const oldIndicators = '<div class="research-indicators section"><div class="card indicator"><h3>告知前／告知後セッション</h3><b><span id="iBefore">-</span> / <span id="iAfter">-</span></b><p>担当留学生の告知日時が登録されている児童のみを集計</p></div><div class="card indicator"><h3>告知後・担当国Persona選択率</h3><b id="iCountryShare">-</b><p id="iCountryDetail">対象データなし</p></div><div class="card indicator"><h3>個別利用らしいセッション</h3><b id="iIndividual">-</b><p id="iIndividualDetail">対象データなし</p></div></div>';
-  const newIndicators = '<div class="research-indicators section"><div class="card indicator"><h3>Phase別セッション数</h3><div id="iPhaseCounts" class="phase-mini">読み込み中…</div><p id="iPhaseCountNote">Phase 1〜4をStudy 1日程から判定</p></div><div class="card indicator"><h3>担当国Persona選択率（Phase別）</h3><b id="iPhaseCountryHeadline">-</b><p id="iPhaseCountryDetail">児童平均を主指標として表示</p></div><div class="card indicator"><h3>個別利用らしいセッション（推定）</h3><b id="iIndividual">-</b><p id="iIndividualDetail">対象データなし</p><p>同学級の開始時刻集中度から推定。家庭利用を直接示すものではありません。</p></div><span id="iBefore" hidden></span><span id="iAfter" hidden></span><span id="iCountryShare" hidden></span><span id="iCountryDetail" hidden></span></div>';
+  const newIndicators = '<div class="research-indicators section"><div class="card indicator"><h3>実践進行確認：Phase別セッション数</h3><div id="iPhaseCounts" class="phase-mini">読み込み中…</div><p id="iPhaseCountNote">Phase 1〜4をStudy 1日程から判定</p></div><div class="card indicator"><h3>過程指標：担当国Persona選択率（Phase別）</h3><b id="iPhaseCountryHeadline">-</b><p id="iPhaseCountryDetail">児童平均を表示。RQ3の正式な類型分布分析は専用ページで実施</p></div><div class="card indicator"><h3>個別利用らしいセッション（推定）</h3><b id="iIndividual">-</b><p id="iIndividualDetail">対象データなし</p><p>同学級の開始時刻集中度から推定。家庭利用を直接示すものではありません。</p></div><span id="iBefore" hidden></span><span id="iAfter" hidden></span><span id="iCountryShare" hidden></span><span id="iCountryDetail" hidden></span></div>';
   if (!html.includes(oldIndicators)) throw new Error('PHASE_ANALYTICS_INDICATOR_ANCHOR_MISSING');
   let out = html.replace(oldIndicators, newIndicators);
 
   const phaseSlot = '<div id="phaseCountryPanelSlot" class="phase-country-slot"></div>';
-  const phaseCard = '<div class="card chart-card phase-country-card"><h3>担当国Persona選択率のPhase別変化</h3><div id="chartPhaseCountry" class="chart"></div><p id="chartPhaseNote" class="muted" style="font-size:11px"></p></div>';
+  const phaseCard = '<div class="card chart-card phase-country-card"><h3>過程指標：担当国Persona選択率のPhase別変化</h3><div id="chartPhaseCountry" class="chart"></div><p id="chartPhaseNote" class="muted" style="font-size:11px"></p></div>';
   if (!out.includes(phaseSlot)) throw new Error('PHASE_ANALYTICS_LAYOUT_SLOT_MISSING');
   out = out.replace(phaseSlot, '<div id="phaseCountryPanelSlot" class="phase-country-slot">' + phaseCard + '</div>');
 
