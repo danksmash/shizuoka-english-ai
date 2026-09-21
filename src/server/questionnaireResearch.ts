@@ -106,6 +106,7 @@ export interface QuestionnaireRecord extends QuestionnaireScores {
   submittedAt: string;
   instrumentVersion: string;
   scoringVersion?: string;
+  schoolCondition?: 'intervention' | 'comparison';
   items: QuestionnaireItemScores;
   dataQualityFlag: 'complete';
   importedAt: string;
@@ -253,6 +254,7 @@ function cleanRecord(raw: Record<string, any>): QuestionnaireRecord | null {
     gradeLevel: gradeLevel as 5 | 6, dataScope: 'main', surveyWave,
     surveyDate: String(raw.surveyDate || ''), submittedAt: String(raw.submittedAt || ''), instrumentVersion: String(raw.instrumentVersion || ''),
     scoringVersion: QUESTIONNAIRE_SCORING_VERSION,
+    ...(raw.schoolCondition === 'intervention' || raw.schoolCondition === 'comparison' ? { schoolCondition: raw.schoolCondition } : {}),
     items, ...scores,
     dataQualityFlag: 'complete', importedAt: String(raw.importedAt || ''),
   };

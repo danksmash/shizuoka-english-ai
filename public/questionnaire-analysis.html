@@ -73,7 +73,7 @@
       <div><h2 class="section-title" style="margin:0">試験的LMM分析（研究者用）</h2><div class="muted">通常表示とは分離し、ボタンを押した時だけ計算します。</div></div>
       <button id="lmmBtn" class="primary">試験分析を実行</button>
     </div>
-    <p class="muted">主要成果はL2 WTC、主要contrastは比較校導入後のMid→Post学校間変化差です。比較校データがない間は、実践校内の3時点変化のみ参考表示します。p値はWald z近似で、論文用最終分析ではR等で再検証します。</p>
+    <p class="muted">主要成果はL2 WTC、主要contrastは比較校導入後のMid→Post学校間変化差です。比較校データがない間は、実践校内の3時点変化のみ参考表示します。試験モデルは児童ランダム切片のREMLで、p値はWald z近似です。学級・学校クラスタは未調整で、各条件が1校ずつの場合は学校固有差と条件差を分離できないため、学校間p値は探索的に扱い、論文用最終分析ではR等で再検証します。</p>
     <p id="lmmStatus" class="status"></p>
     <div id="lmmResults"></div>
   </div>
@@ -126,7 +126,7 @@ function renderLmmMetric(result){
   const note=esc(result?.note||'');
   const rows=Array.isArray(result?.contrasts)?result.contrasts:[];
   const body=rows.map(row=>`<tr><td>${esc(row.label)}</td><td>${fmt(row.estimate,3)}</td><td>${fmt(row.se,3)}</td><td>${row.ciLow===null?'—':fmt(row.ciLow,3)+' ～ '+fmt(row.ciHigh,3)}</td><td>${fmt(row.z,2)}</td><td>${pfmt(row.p)}</td></tr>`).join('');
-  return `<div class="scale"><h3>${esc(result?.metricLabel||'')}</h3><p class="muted">mode: ${esc(result?.mode||'')} / 児童 ${result?.nParticipants??0} / 観測 ${result?.nObservations??0} / 3時点完備 ${result?.complete3??0}</p><div class="table-wrap"><table class="stats"><thead><tr><th>contrast</th><th>推定値</th><th>SE</th><th>95% CI</th><th>z</th><th>p</th></tr></thead><tbody>${body}</tbody></table></div><p class="muted">${note}</p>${status==='ok'?'':'<p class="status error">現時点では安定した試験推定を表示できません。</p>'}</div>`;
+  return `<div class="scale"><h3>${esc(result?.metricLabel||'')}</h3><p class="muted">mode: ${esc(result?.mode||'')} / 児童 ${result?.nParticipants??0} / 観測 ${result?.nObservations??0} / 3時点完備 ${result?.complete3??0} / 3時点未完備 ${result?.partialParticipants??0} / 重複wave除外 ${result?.duplicateWaveKeys??0}</p><p class="muted">推定: ${esc(result?.estimationMethod||'')} / 推論: ${esc(result?.inferenceMethod||'')}</p><div class="table-wrap"><table class="stats"><thead><tr><th>contrast</th><th>推定値</th><th>SE</th><th>95% CI</th><th>z</th><th>p</th></tr></thead><tbody>${body}</tbody></table></div><p class="muted">${note}</p>${status==='ok'?'':'<p class="status error">データ条件または推定条件を満たさないため、試験推定を表示しません。</p>'}</div>`;
 }
 async function runLmmTrial(){
   const btn=$('lmmBtn');btn.disabled=true;setStatus('lmmStatus','試験的LMMを計算しています…');
