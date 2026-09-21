@@ -276,6 +276,21 @@ function personaRows(): Row[] {
   }));
 }
 
+function exportStudyMetadata(row: Row): Row {
+  const classId = String(row.class_id || '');
+  const explicitCondition = String(row.school_condition || '');
+  const condition = explicitCondition === 'comparison' || explicitCondition === 'intervention'
+    ? explicitCondition
+    : (/^[56]-[123]$/.test(classId) ? 'intervention' : '');
+  const siteId = String(row.site_id || '') || (condition === 'comparison' ? 'site_b' : condition === 'intervention' ? 'site_a' : '');
+  return {
+    site_id: siteId,
+    school_condition: condition,
+    formal_study_participant: row.formal_study_participant ?? '',
+    study_start_date: row.study_start_date ?? '',
+  };
+}
+
 function buildResearchExportDataSetsFromTechnical(raw: ReturnType<typeof buildResearchDataSets>): ExportDataSets {
   const eventCounts = eventCountMap(raw.system_events);
   const turnCounts = new Map<string, { child: number; ai: number }>();
@@ -293,6 +308,7 @@ function buildResearchExportDataSetsFromTechnical(raw: ReturnType<typeof buildRe
     const events = eventCounts.get(sessionId) || new Map<string, number>();
     const copy: Row = {
       ...row,
+      ...exportStudyMetadata(row),
       research_schema_version: RESEARCH_EXPORT_SCHEMA_VERSION,
       ai_turn_count: counts.ai,
       dialogue_utterance_count: counts.child + counts.ai,
@@ -308,6 +324,10 @@ function buildResearchExportDataSetsFromTechnical(raw: ReturnType<typeof buildRe
     const session = sessionById.get(String(row.session_id || '')) || {};
     const copy: Row = {
       ...row,
+      site_id: session.site_id || row.site_id || '',
+      school_condition: session.school_condition || row.school_condition || '',
+      formal_study_participant: session.formal_study_participant ?? row.formal_study_participant ?? '',
+      study_start_date: session.study_start_date || row.study_start_date || '',
       utterance_id: `u_${String(row.session_id || '')}_${String(row.turn_sequence || '')}`,
       persona_id: session.persona_id || '',
       topic: session.topic || '',
@@ -316,8 +336,13 @@ function buildResearchExportDataSetsFromTechnical(raw: ReturnType<typeof buildRe
   });
 
   const expressions = raw.expressions.map((row) => {
+    const session = sessionById.get(String(row.session_id || '')) || {};
     const copy: Row = {
       ...row,
+      site_id: session.site_id || row.site_id || '',
+      school_condition: session.school_condition || row.school_condition || '',
+      formal_study_participant: session.formal_study_participant ?? row.formal_study_participant ?? '',
+      study_start_date: session.study_start_date || row.study_start_date || '',
       utterance_id: `u_${String(row.session_id || '')}_${String(row.turn_sequence || '')}`,
     };
     return Object.fromEntries(RESEARCH_EXPORT_HEADERS.expressions.map((key) => [key, copy[key] ?? '']));
