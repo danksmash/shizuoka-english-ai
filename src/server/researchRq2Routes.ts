@@ -2,7 +2,7 @@ import express from 'express';
 import { requireManagementRole, type AuthenticatedRequest } from './auth';
 import { getAllSessionsForManagement } from './persistence';
 import { getAllStudySchedules } from './studySchedulePersistence';
-import { getRq2Codebook, saveRq2Codebook, rq2CanonicalizeCodes, rq2CanonicalPrimaryAndAux } from './researchRq2Codebook';
+import { getRq2Codebook, saveRq2Codebook, rq2CanonicalPrimaryAndAux } from './researchRq2Codebook';
 import { buildRq2Candidates, sampleRq2Candidates, summarizeRq2Candidates, type Rq2Purpose } from './researchRq2Sampling';
 import { codeRq2Batch } from './researchRq2Ai';
 import { buildRq2Analysis, buildRq2ReliabilitySummary } from './researchRq2Analysis';
@@ -40,12 +40,6 @@ function bool(value: unknown, fallback = false) {
   if (value === false || value === '0' || value === 'false') return false;
   return fallback;
 }
-function canonicalCodes(codebook: Record<string, any>, dimension: 'reference' | 'function' | 'locus', values: unknown) {
-  const result = rq2CanonicalizeCodes(codebook, dimension, values);
-  if (result.invalid.length) throw new Error(`RQ2_INVALID_CODE:${result.invalid.join(',')}`);
-  return result.valid;
-}
-
 function canonicalPrimaryAux(
   codebook: Record<string, any>,
   dimension: 'reference' | 'function',
