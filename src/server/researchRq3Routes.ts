@@ -135,7 +135,7 @@ router.get('/research-rq3/analysis-sessions', requireManagementRole(['researcher
     const reviewOnly = bool(req.query.reviewOnly, true);
     const limit = intValue(req.query.limit, 200, 20, 500);
     const rows = analysisSessions
-      .filter((row) => !reviewOnly || row.exclusion_reason === 'lesson_context_not_confirmed' || row.analysis_decision_source === 'manual_override')
+      .filter((row) => !reviewOnly || ['lesson_context_not_confirmed','outside_lesson'].includes(String(row.exclusion_reason || '')) || row.analysis_decision_source === 'manual_override')
       .slice(0, limit);
     return res.json({ success: true, rows, total: rows.length });
   } catch (error: any) {
@@ -384,7 +384,8 @@ router.get('/research-rq3/analysis.bundle.zip', requireManagementRole(['research
       findActiveFormalRq2Runs(),
     ]);
     const interactionRows = buildInteractionCodeRows(items, run);
-    const rq2Run = [...formalRuns].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))[0] || null;
+    const matchingFormalRuns = formalRuns.filter((row) => String(row.codebookVersion || '') === String(run.codebookVersion || ''));
+    const rq2Run = [...matchingFormalRuns].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))[0] || null;
     const reliabilityRecords = rq2Run ? await getRq2ReliabilityCodes(String(rq2Run.runId || '')) : [];
     const files = [
       { name: 'analysis_sessions.csv', content: serializeAnalysisSessionsCsv(analysisSessions) },
@@ -405,7 +406,7 @@ router.get('/research-rq3/analysis.bundle.zip', requireManagementRole(['research
       },
       reference_model_rule: 'B2a and B2b are retained in reference_primary_raw and collapsed to B2 in reference_primary_model',
       analysis_rule: 'formal RQ3 distributions use human-confirmed primary codes only',
-      warning: rq2Run ? '' : 'No active formal RQ2 sampling run was available; rq2_reliability.csv contains headers only.',
+      warning: rq2Run ? '' : 'No active formal RQ2 sampling run with the same frozen codebook version was available; rq2_reliability.csv contains headers only.',
     };
     const zip = buildStoredZip([...files, { name: 'analysis_manifest.json', content: JSON.stringify(manifest, null, 2) }]);
     res.setHeader('Content-Type', 'application/zip');
