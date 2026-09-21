@@ -214,7 +214,7 @@ const bothPhase = buildPhaseComparisonFromExportSessions(exportData.sessions, [i
   schoolCondition: 'all',
 });
 assert.equal(bothPhase.applicable, true);
-assert.equal(bothPhase.phases.reduce((sum, phase) => sum + phase.sessions, 0), 1, 'phase analysis must exclude comparison sessions');
+assert.equal((bothPhase.phases as Array<{ sessions: number }>).reduce((sum: number, phase) => sum + phase.sessions, 0), 1, 'phase analysis must exclude comparison sessions');
 
 const html = managementPageHtmlWithStudyPhase();
 assert.ok(html.includes('id="schoolCondition"'));
