@@ -16,6 +16,7 @@ import {
 } from './researchLessonReflectionExport';
 import {
   getAllStudySchedules,
+  analysisPeriodForLocalDate,
   phaseForLocalDate,
   type StudyScheduleRecord,
 } from './studySchedulePersistence';
@@ -31,8 +32,8 @@ import {
   serializeQuestionnaireCsv,
 } from './questionnaireResearch';
 
-export const PHASE_RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v7';
-export const PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION = 8;
+export const PHASE_RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v8';
+export const PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION = 9;
 
 export const PHASE_IDS = ['phase1', 'phase2', 'phase3', 'phase4'] as const;
 export type PhaseId = typeof PHASE_IDS[number];
@@ -204,7 +205,10 @@ export function buildPhaseComparison(
 
 export function augmentSessionRowsWithPhase(rows: Row[], schedules: StudyScheduleRecord[]): Row[] {
   return rows.map((row) => {
+    const schedule = schedules.find((item) => item.classId === String(row.class_id || row.classId || ''));
+    const localDate = String(row.local_date || row.localDate || '');
     const studyPhase = phaseIdForRow(row, schedules);
+    const analysisPeriod = schedule ? analysisPeriodForLocalDate(localDate, schedule) : '';
     const assigned = normalizedResearchCountry(row.assigned_partner_country);
     const selected = normalizedResearchCountry(row.persona_country);
     const eligible = Boolean(studyPhase && assigned && selected);
@@ -212,6 +216,7 @@ export function augmentSessionRowsWithPhase(rows: Row[], schedules: StudySchedul
       ...row,
       research_schema_version: PHASE_RESEARCH_EXPORT_SCHEMA_VERSION,
       study_phase: studyPhase,
+      analysis_period: analysisPeriod,
       assigned_country_persona_eligible: eligible ? 1 : 0,
       assigned_country_persona_match: eligible ? (assigned === selected ? 1 : 0) : '',
     };
@@ -221,7 +226,7 @@ export function augmentSessionRowsWithPhase(rows: Row[], schedules: StudySchedul
 export const PHASE_SESSION_EXPORT_HEADERS = (() => {
   const headers = [...RESEARCH_EXPORT_HEADERS.sessions];
   const insertAt = Math.max(0, headers.indexOf('assignment_announced_at') + 1);
-  headers.splice(insertAt, 0, 'study_phase', 'assigned_country_persona_eligible', 'assigned_country_persona_match');
+  headers.splice(insertAt, 0, 'study_phase', 'analysis_period', 'assigned_country_persona_eligible', 'assigned_country_persona_match');
   return headers;
 })();
 
@@ -231,6 +236,12 @@ export const PHASE_CODEBOOK_ROWS = [
     definition: 'Study Scheduleの学級別日程とlocal_dateからphaseForLocalDateで算出した研究Phase',
     data_type: 'string', allowed_values: 'phase1 | phase2 | phase3 | phase4 | blank',
     analysis_use: '対話相手の段階的具体化に伴う縦断比較',
+  },
+  {
+    file_name: 'sessions.csv', variable: 'analysis_period',
+    definition: '学級別の4基準日から両校共通に算出する主要分析期間。実践校はPhase 1～3に対応し、比較校は同じ相対経過期間に対応する',
+    data_type: 'string', allowed_values: 'period1 | period2 | period3 | blank',
+    analysis_use: '実践校・比較校の共通時間軸による縦断比較',
   },
   {
     file_name: 'sessions.csv', variable: 'assigned_country_persona_eligible',
@@ -458,9 +469,10 @@ const bundleHandler: RequestHandler = async (req, res) => {
       study_phase: studyPhase || 'all',
       study_schedule_snapshot: scheduleSnapshot(schedules),
       phase_definition_source: 'study_schedules + phaseForLocalDate(local_date)',
+      analysis_period_definition_source: 'study_schedules + analysisPeriodForLocalDate(local_date); comparison C1/C2/Post are analysis boundaries only',
       phase_comparison_filter_exclusions: ['personaId', 'studyPhase'],
       assigned_country_persona_definition: 'assigned_partner_country compared with persona_country after country normalization',
-      assignment_country_provenance: 'session assignment when stored; management retrieval may fall back to the current student assignment record',
+      assignment_country_provenance: 'immutable session-time snapshot when present; blank remains blank and is never silently backfilled from the current student assignment record',
       row_counts: rowCounts,
       lesson_reflection_join_key: ['research_id', 'local_date'],
       questionnaire_join_key: ['research_id', 'survey_wave'],
