@@ -43,10 +43,10 @@ function groupsForRecords(records: QuestionnaireRecord[]): QuestionnaireDescript
   const groups: QuestionnaireDescriptiveGroup[] = [];
 
   if (!hasComparison) {
-    const classIds = [...new Set(records.map((record) => record.classId).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ja'));
+    const classIds = ['5-1', '5-2', '5-3', '6-1', '6-2'];
     for (const classId of classIds) groups.push({ id: classId, label: classId, match: (record) => record.classId === classId });
-    if (records.some((record) => record.gradeLevel === 5)) groups.push({ id: 'grade5', label: '5年', match: (record) => record.gradeLevel === 5 });
-    if (records.some((record) => record.gradeLevel === 6)) groups.push({ id: 'grade6', label: '6年', match: (record) => record.gradeLevel === 6 });
+    groups.push({ id: 'grade5', label: '5年', match: (record) => record.gradeLevel === 5 });
+    groups.push({ id: 'grade6', label: '6年', match: (record) => record.gradeLevel === 6 });
     groups.push({ id: 'all', label: '全体', match: () => true });
     return groups;
   }
@@ -54,7 +54,9 @@ function groupsForRecords(records: QuestionnaireRecord[]): QuestionnaireDescript
   for (const condition of conditions) {
     const prefix = conditionLabel(condition);
     const conditionRecords = records.filter((record) => recordCondition(record) === condition);
-    const classIds = [...new Set(conditionRecords.map((record) => record.classId).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ja'));
+    const classIds = condition === 'intervention'
+      ? ['5-1', '5-2', '5-3', '6-1', '6-2']
+      : [...new Set(conditionRecords.map((record) => record.classId).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ja'));
     for (const classId of classIds) {
       groups.push({
         id: `${condition}:${classId}`,
