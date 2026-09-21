@@ -7,10 +7,13 @@ import {
 } from '../src/server/researchRq2Sampling';
 import { buildRq2Analysis, buildRq2ReliabilitySummary } from '../src/server/researchRq2Analysis';
 import { DEFAULT_RQ2_CODEBOOK, RQ2_CODEBOOK_SCHEMA_VERSION, rq2CanonicalizeCodes } from '../src/server/researchRq2Codebook';
+import { buildRq2PreflightAudit } from '../src/server/researchRq2Preflight';
+import { buildRq2LiteratureMapRows, serializeRq2LiteratureMapCsv } from '../src/server/researchRq2LiteratureMap';
 import {
   assertRq2RunActive,
   assertRq2SamplingConfirmation,
   rq2FormalSamplingReady,
+  rq2OperationErrorStatus,
   rq2SamplingShortfalls,
   summarizeRq2RunProgress,
 } from '../src/server/researchRq2RunGuard';
@@ -56,6 +59,56 @@ for (const stratum of RQ2_STRATA) {
 assert.equal(first.items.filter((x) => x.purpose === 'codebook_development').length, 120);
 assert.equal(first.items.filter((x) => x.purpose === 'reliability').length, 60);
 assert.equal(first.items.filter((x) => x.purpose === 'main_other').length, 120);
+
+const preflight = buildRq2PreflightAudit({
+  candidates,
+  sampledItems: first.items,
+  counts: first.counts,
+  codebook: DEFAULT_RQ2_CODEBOOK,
+  activeFormalRuns: [],
+  targetPerStratum: 50,
+  maxPerParticipantPerStratum: 2,
+  lessonOnly: true,
+});
+assert.equal(preflight.overallReady, true);
+assert.equal(preflight.selectedTotal, 300);
+assert.deepEqual(preflight.purposeCounts, {
+  codebook_development: 120,
+  reliability: 60,
+  main_other: 120,
+});
+assert.ok(preflight.strata.every((row) => row.effectiveCapacity >= 50));
+assert.ok(preflight.strata.every((row) => row.requiredParticipantsLowerBound === 25));
+assert.equal(preflight.candidateDuplicateSequenceIds.length, 0);
+assert.equal(preflight.selectedDuplicateSequenceIds.length, 0);
+
+const blockedByExistingRun = buildRq2PreflightAudit({
+  candidates,
+  sampledItems: first.items,
+  counts: first.counts,
+  codebook: DEFAULT_RQ2_CODEBOOK,
+  activeFormalRuns: [{ runId: 'rq2_existing' }],
+  targetPerStratum: 50,
+  maxPerParticipantPerStratum: 2,
+  lessonOnly: true,
+});
+assert.equal(blockedByExistingRun.overallReady, false);
+assert.equal(blockedByExistingRun.gates.find((g) => g.id === 'no_active_formal_run')?.passed, false);
+
+const wrongDesign = sampleRq2Candidates(candidates, 'RQ2-2026-v1', 40, 2);
+const blockedByDesign = buildRq2PreflightAudit({
+  candidates,
+  sampledItems: wrongDesign.items,
+  counts: wrongDesign.counts,
+  codebook: DEFAULT_RQ2_CODEBOOK,
+  activeFormalRuns: [],
+  targetPerStratum: 40,
+  maxPerParticipantPerStratum: 2,
+  lessonOnly: true,
+});
+assert.equal(blockedByDesign.overallReady, false);
+assert.equal(blockedByDesign.gates.find((g) => g.id === 'standard_sampling_design')?.passed, false);
+assert.equal(rq2OperationErrorStatus('RQ2_FORMAL_PREFLIGHT_REQUIRED'), 409);
 
 assert.equal(rq2FormalSamplingReady(first.counts), true);
 assert.deepEqual(rq2SamplingShortfalls(first.counts), []);
@@ -105,6 +158,14 @@ assert.equal(DEFAULT_RQ2_CODEBOOK.interactionFunction.find((row) => row.code ===
 assert.ok(DEFAULT_RQ2_CODEBOOK.referenceBasis.find((row) => row.code === 'B3')?.boundaryRule.includes('直前ターンが存在する'));
 assert.ok(DEFAULT_RQ2_CODEBOOK.references.some((row) => row.id === 'LAM2018'));
 assert.ok(DEFAULT_RQ2_CODEBOOK.references.some((row) => row.id === 'YAMAGUCHIYOSHIZAWA2023'));
+
+const literatureRows = buildRq2LiteratureMapRows(DEFAULT_RQ2_CODEBOOK);
+assert.equal(literatureRows.length, 12);
+assert.equal(literatureRows.find((row) => row.code === 'B3')?.dimension, '参照基盤');
+assert.ok(String(literatureRows.find((row) => row.code === 'B3')?.primary_source_ids).includes('LAM2018'));
+const literatureCsv = serializeRq2LiteratureMapCsv(DEFAULT_RQ2_CODEBOOK);
+assert.ok(literatureCsv.includes('rq2') === false);
+assert.ok(literatureCsv.includes('Lam, D. M. K. (2018)'));
 assert.deepEqual(DEFAULT_RQ2_CODEBOOK.recipientLocus.map((row) => row.code), ['現在のAI','将来の実在留学生','AIと実在他者を橋渡し','判定不能']);
 assert.deepEqual(rq2CanonicalizeCodes(DEFAULT_RQ2_CODEBOOK, 'function', ['A-SD']).valid, ['RES']);
 assert.deepEqual(rq2CanonicalizeCodes(DEFAULT_RQ2_CODEBOOK, 'function', ['T']).valid, ['TOP']);
@@ -159,8 +220,14 @@ assert.ok(page.includes('AI候補（未確定）'));
 assert.ok(page.includes('抽出を無効にして再抽出'));
 assert.ok(page.includes('正式抽出'));
 assert.ok(page.includes('試験抽出'));
+assert.ok(page.includes('正式抽出前監査'));
+assert.ok(page.includes('先行研究→コード対応表CSV'));
+assert.ok(page.includes('正式300系列を抽出'));
 assert.ok(page.includes('抽出をリセット'));
 assert.ok(routes.includes('/research-rq2/sample-preview'));
+assert.ok(routes.includes('/research-rq2/preflight-audit'));
+assert.ok(routes.includes('/research-rq2/literature-map.csv'));
+assert.ok(routes.includes('RQ2_FORMAL_PREFLIGHT_REQUIRED'));
 assert.ok(routes.includes('/research-rq2/reset'));
 assert.ok(routes.includes('/research-rq2/reliability.csv'));
 assert.ok(routes.includes('humanReferencePrimary'));
@@ -177,6 +244,9 @@ assert.ok(codebookDoc.includes('演繹的手続き'));
 assert.ok(codebookDoc.includes('Lam (2018)'));
 assert.ok(codebookDoc.includes('B3の重要な限定'));
 assert.ok(codebookDoc.includes('ACK | 反応・傾聴表示'));
+const mappingDoc = fs.readFileSync('docs/research/rq2-literature-code-mapping-table.md','utf8');
+assert.ok(mappingDoc.includes('論文掲載用対応表'));
+assert.ok(mappingDoc.includes('方法節に使用できる記述案'));
 assert.ok(management.includes('/research-rq2.html'));
 assert.ok(management.includes('/research-rq3.html'));
 console.log('RQ2 code analysis QA: PASS');
