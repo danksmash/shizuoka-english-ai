@@ -139,6 +139,8 @@ jobs:
           done
           grep -q '7 CSVを一括ZIP' <<<"$management_html"
           grep -q 'questionnaire-analysis.html' <<<"$management_html"
+          grep -q 'research-rq2.html' <<<"$management_html"
+          grep -q 'research-rq3.html' <<<"$management_html"
           grep -q 'restoreManagementSession' <<<"$management_html"
           grep -q 'DASHBOARD_SESSION_CACHE_PREFIX' <<<"$management_html"
           grep -q 'analysis-session-layout' <<<"$management_html"
@@ -169,6 +171,11 @@ jobs:
           fi
           dashboard_ref_count=$(printf '%s' "$management_html" | grep -o '/api/management/research.dashboard' | wc -l | tr -d ' ')
           test "$dashboard_ref_count" = '1'
+
+          rq3_html=$(curl --fail --silent --show-error --max-time 20 "$API_URL/research-rq3.html")
+          grep -q 'RQ3 類型分布分析' <<<"$rq3_html"
+          grep -q 'interaction_codes.csv' <<<"$rq3_html"
+          grep -q 'analysis_sessions.csv' <<<"$rq3_html"
 
           readable_css=$(curl --fail --silent --show-error --max-time 20 "$API_URL/researcher-readable.css")
           grep -q '.export-card p{font-size:15px!important' <<<"$readable_css"
