@@ -57,11 +57,22 @@ function codebookLooksLegacy(codebook: Record<string, any>): boolean {
 export async function getRq2Codebook() {
   const stored = await getDocument(RQ2_CODEBOOK_COLLECTION, RQ2_DEFAULT_CODEBOOK_ID);
   if (!stored) return DEFAULT_RQ2_CODEBOOK;
-  if (String(stored.status || '') === 'draft' && codebookLooksLegacy(stored)) {
+  if (codebookLooksLegacy(stored)) {
     return {
       ...DEFAULT_RQ2_CODEBOOK,
+      ...stored,
+      schemaVersion: RQ2_CODEBOOK_SCHEMA_VERSION,
+      status: 'draft',
+      analysisDimensions: ['referenceBasis', 'interactionFunction'],
+      referenceBasisRule: DEFAULT_RQ2_CODEBOOK.referenceBasisRule,
+      interactionFunctionRule: DEFAULT_RQ2_CODEBOOK.interactionFunctionRule,
+      legacyRecipientLocusRule: DEFAULT_RQ2_CODEBOOK.legacyRecipientLocusRule,
+      recipientLocus: Array.isArray(stored.recipientLocus) && stored.recipientLocus.length
+        ? stored.recipientLocus
+        : DEFAULT_RQ2_CODEBOOK.recipientLocus,
       migratedFromRevision: Number(stored.revision || 0),
-      migrationNote: '旧コードブックをRQ3類型分布分析に合わせたv3形式へ自動更新した未保存プレビューです。保存するとv3形式になります。',
+      migratedFromStatus: String(stored.status || ''),
+      migrationNote: '旧コードブックをRQ3類型分布分析に合わせたv3形式へ移行した未保存プレビューです。既存のコード定義を引き継ぎ、主コード規則をv3へ更新しています。保存・確認後に確定版へしてください。',
     };
   }
   return stored;
@@ -98,6 +109,7 @@ export async function saveRq2Codebook(input: Record<string, any>, updatedBy: str
   };
   delete (record as Record<string, any>).migratedFromRevision;
   delete (record as Record<string, any>).migrationNote;
+  delete (record as Record<string, any>).migratedFromStatus;
   await setDocument(RQ2_CODEBOOK_COLLECTION, RQ2_DEFAULT_CODEBOOK_ID, record);
   if (freeze) await setDocument(RQ2_CODEBOOK_COLLECTION, version, record);
   return record;
