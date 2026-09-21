@@ -82,6 +82,7 @@ const manualRoute = fs.readFileSync('src/server/questionnaireRoutes.ts', 'utf8')
 const core = fs.readFileSync('src/server/questionnaireAutoSync.ts', 'utf8');
 const analysisPage = fs.readFileSync('public/questionnaire-analysis.html', 'utf8');
 const participantHashes = fs.readFileSync('src/server/study1FormalParticipantHashes.ts', 'utf8');
+const participantMetadata = fs.readFileSync('src/server/studyParticipantMetadata.ts', 'utf8');
 const deployWorkflow = fs.readFileSync('.github/workflows/cloud-run-deploy.yml', 'utf8');
 const productionSmoke = fs.readFileSync('.github/workflows/questionnaire-production-smoke.yml', 'utf8');
 assert.ok(entry.includes("this.use('/api/questionnaire-auto', createQuestionnaireAutoSyncRouter())"));
@@ -92,7 +93,10 @@ assert.ok(route.includes("String(process.env.QUESTIONNAIRE_INGEST_SECRET || '').
 assert.ok(route.includes('X-Questionnaire-Timestamp'));
 assert.ok(route.includes('X-Questionnaire-Signature'));
 assert.ok(core.includes('NOT_FORMAL_STUDY1_PARTICIPANT'));
-assert.ok(core.includes('STUDY1_FORMAL_PARTICIPANT_HASHES'));
+assert.ok(core.includes('student.formalStudyParticipant'), 'questionnaire ingest must gate on normalized formal-study metadata');
+assert.ok(participantMetadata.includes('STUDY1_FORMAL_PARTICIPANT_HASHES'), 'legacy 145-person allowlist must remain the intervention fallback inside the shared metadata layer');
+assert.ok(participantMetadata.includes("studySiteId: 'site_a'"));
+assert.ok(participantMetadata.includes("schoolCondition: 'intervention'"));
 assert.ok(core.includes('createDocumentIfAbsent'));
 assert.ok(core.includes('QUESTIONNAIRE_SYNC_STATE_COLLECTION'));
 assert.equal((participantHashes.match(/[0-9a-f]{64}/g) || []).length, 145, 'allowlist file must contain exactly 145 irreversible hashes');
