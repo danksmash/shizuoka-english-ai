@@ -185,7 +185,7 @@ const comparisonSchedule: StudyScheduleRecord = {
   revision: 1,
   appStartDate: '2026-10-01',
   nationalityRevealDate: '2026-10-15',
-  videoViewDate: '',
+  videoViewDate: '2026-10-22',
   exchangeDate: '2026-10-29',
   updatedAt: '',
   updatedBy: '',
