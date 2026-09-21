@@ -150,6 +150,8 @@ assert.ok(routes.includes('/research-rq3/analysis.bundle.zip'));
 assert.ok(routes.includes('/research-rq3/analysis-spec'));
 assert.ok(routes.includes('RQ3_ANALYSIS_SPEC'));
 assert.ok(routes.includes('rq2_reliability.csv'));
+assert.ok(routes.includes("name: 'rq3_analysis_spec.json'"));
+assert.ok(page.includes('rq3_analysis_spec.json'));
 assert.ok(analysisSessions.includes('analysis_included_default'));
 assert.ok(analysisSessions.includes('analysis_decision_source'));
 assert.ok(analysisSessions.includes('hardExclusionReason'));
