@@ -369,7 +369,7 @@ export function buildQuestionnaireLmmTrial(records: QuestionnaireRecord[], metri
   const duplicateWaveKeys = duplicateWaveKeyCount(records);
   const observations = uniqueObservations(records, metric);
   const counts = participantCounts(observations);
-  const comparisonStarted = counts.comparisonParticipants > 0;
+  const comparisonStarted = observations.some((observation) => observation.condition === 'comparison');
   const groupMode = counts.interventionParticipants >= 2 && counts.comparisonParticipants >= 2;
   const mode: QuestionnaireLmmTrialMetricResult['mode'] = (groupMode || comparisonStarted) ? 'group_time' : 'intervention_time_only';
   const common = {
