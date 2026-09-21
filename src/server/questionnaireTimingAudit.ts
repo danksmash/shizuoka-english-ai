@@ -40,6 +40,7 @@ export function buildQuestionnaireTimingAudit(records: QuestionnaireRecord[], sc
       code,
       message,
     });
+    const comparison = record.schoolCondition === 'comparison';
     if (record.surveyWave === 'pre_app') {
       if (!schedule.appStartDate) unavailable += 1;
       else if (record.surveyDate > schedule.appStartDate) push('PRE_AFTER_APP_START', 'Pre回答日がアプリ使用開始日より後です。');
@@ -47,13 +48,17 @@ export function buildQuestionnaireTimingAudit(records: QuestionnaireRecord[], sc
       if (!schedule.nationalityRevealDate) unavailable += 1;
       else {
         if (schedule.appStartDate && record.surveyDate < schedule.appStartDate) push('MID_BEFORE_APP_START', 'Mid回答日がアプリ使用開始日より前です。');
-        if (record.surveyDate > schedule.nationalityRevealDate) push('MID_AFTER_REVEAL', 'Mid回答日が国籍告知日より後です。');
+        if (record.surveyDate > schedule.nationalityRevealDate) {
+          push(comparison ? 'MID_AFTER_COMPARISON_C1' : 'MID_AFTER_REVEAL', comparison ? '比較校Mid回答日が実践校Midに対応する相対時点（C1）より後です。' : 'Mid回答日が国籍告知日より後です。');
+        }
       }
     } else if (record.surveyWave === 'post_pre_exchange') {
       if (!schedule.exchangeDate) unavailable += 1;
       else {
-        if (schedule.videoViewDate && record.surveyDate < schedule.videoViewDate) push('POST_BEFORE_VIDEO', 'Post回答日が本人動画視聴日より前です。');
-        if (record.surveyDate > schedule.exchangeDate) push('POST_AFTER_EXCHANGE', 'Post回答日が留学生交流会実施日より後です。');
+        if (!comparison && schedule.videoViewDate && record.surveyDate < schedule.videoViewDate) push('POST_BEFORE_VIDEO', 'Post回答日が本人動画視聴日より前です。');
+        if (record.surveyDate > schedule.exchangeDate) {
+          push(comparison ? 'POST_AFTER_COMPARISON_C2' : 'POST_AFTER_EXCHANGE', comparison ? '比較校Post回答日が実践校Postに対応する相対時点（C2）より後です。' : 'Post回答日が留学生交流会実施日より後です。');
+        }
       }
     }
   }
@@ -64,6 +69,6 @@ export function buildQuestionnaireTimingAudit(records: QuestionnaireRecord[], sc
     unavailable,
     issueCount: issues.length,
     issues: issues.slice(0, 100),
-    note: '日付単位の監査です。同一日に質問紙→国籍告知／交流会を行った場合の時刻順までは判定しないため、同日回答は許容します。',
+    note: '日付単位の監査です。実践校はPre＝開始前、Mid＝国籍告知直前、Post＝交流前を確認します。比較校は同じ相対経過時点C1/C2を日程欄の対応日として監査し、国籍告知・本人動画・交流自体は前提にしません。同日回答は許容します。',
   };
 }

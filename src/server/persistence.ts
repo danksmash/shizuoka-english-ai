@@ -4,6 +4,14 @@ import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, 
 import { getPersonaResearchMetadata } from '../data/personaResearch';
 import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, queryCollectionByStringRange, setDocument } from './firestore';
 import { resolveTtsRuntimeMetadata } from './ttsRuntimeMetadata';
+import {
+  normalizeSchoolCondition,
+  normalizeStudyGradeLevel,
+  normalizeStudyParticipantMetadata,
+  normalizeStudySiteId,
+  type SchoolCondition,
+  type StudySiteId,
+} from './studyParticipantMetadata';
 
 const STUDENT_COLLECTION = 'students';
 const SESSION_COLLECTION = 'sessions';
@@ -31,6 +39,23 @@ export type ResearchAssignmentUpdateResult = {
   assignedPartnerCountry: string;
   assignmentAnnouncedAt: string;
   changed: boolean;
+};
+
+export type ResearchStudyMetadata = {
+  formalStudyParticipant: boolean;
+  studySiteId: StudySiteId;
+  schoolCondition: SchoolCondition;
+  studyGradeLevel: 5 | 6;
+  studyStartDate?: string;
+};
+
+export type ResearchStudyMetadataUpdateInput = {
+  researchId: unknown;
+  formalStudyParticipant?: unknown;
+  studySiteId?: unknown;
+  schoolCondition?: unknown;
+  studyGradeLevel?: unknown;
+  studyStartDate?: unknown;
 };
 
 function retentionDays(): number {
@@ -67,6 +92,16 @@ function normalizeAssignmentAnnouncedAt(value: unknown): string {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : '';
 }
+function normalizeStudyStartDate(value: unknown): string {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+}
+function researchStudyMetadataFromRecord(
+  record: Record<string, any> | undefined,
+  fallback: { studentId?: string; classId?: string; attendanceNumber?: number | '' } = {},
+) {
+  return normalizeStudyParticipantMetadata(record, fallback);
+}
 function researchAssignmentFromRecord(record: Record<string, any> | undefined): ResearchAssignmentMetadata {
   return {
     assignedPartnerId: normalizeAssignmentText(record?.assignedPartnerId),
@@ -87,7 +122,19 @@ async function generateUniqueResearchId(studentId: string): Promise<string> {
   throw new Error('RESEARCH_ID_EXHAUSTED');
 }
 
-export async function resolveStudentByCode(code: string): Promise<{ studentId: string; researchId: string; classId: string; active: boolean; learningId: string; attendanceNumber: number | '' } | null> {
+export async function resolveStudentByCode(code: string): Promise<{
+  studentId: string;
+  researchId: string;
+  classId: string;
+  active: boolean;
+  learningId: string;
+  attendanceNumber: number | '';
+  formalStudyParticipant: boolean;
+  studySiteId: StudySiteId | '';
+  schoolCondition: SchoolCondition | '';
+  gradeLevel: 5 | 6 | '';
+  studyStartDate: string;
+} | null> {
   const learningId = code.trim().toUpperCase();
   const key = learningCodeKey(learningId);
   const doc = await getDocument(STUDENT_COLLECTION, key);
@@ -98,7 +145,22 @@ export async function resolveStudentByCode(code: string): Promise<{ studentId: s
   if (String(doc.learningId || '') !== learningId) {
     await setDocument(STUDENT_COLLECTION, key, { ...withoutInternal(doc), learningId, updatedAt: new Date().toISOString() });
   }
-  return { studentId, researchId, classId: normalizeClassId(doc.classId), active: true, learningId, attendanceNumber: normalizeAttendanceNumber(doc.attendanceNumber) };
+  const classId = normalizeClassId(doc.classId);
+  const attendanceNumber = normalizeAttendanceNumber(doc.attendanceNumber);
+  const study = researchStudyMetadataFromRecord(doc, { studentId, classId, attendanceNumber });
+  return {
+    studentId,
+    researchId,
+    classId,
+    active: true,
+    learningId,
+    attendanceNumber,
+    formalStudyParticipant: study.formalStudyParticipant,
+    studySiteId: study.studySiteId,
+    schoolCondition: study.schoolCondition,
+    gradeLevel: study.gradeLevel,
+    studyStartDate: study.studyStartDate,
+  };
 }
 
 export async function createStudentCode(
@@ -109,6 +171,7 @@ export async function createStudentCode(
   teacherId?: string,
   attendanceNumber?: unknown,
   researchAssignment?: Partial<ResearchAssignmentMetadata>,
+  researchStudy?: Partial<ResearchStudyMetadata>,
 ): Promise<{ studentId: string; researchId: string; classId: string; teacherStudentId: string; learningId: string; attendanceNumber: number | '' }> {
   const normalized = code.trim().toUpperCase();
   const key = learningCodeKey(normalized);
@@ -120,6 +183,12 @@ export async function createStudentCode(
   const tid = validTeacherStudentId(teacherId);
   const attendance = normalizeAttendanceNumber(attendanceNumber);
   const assignment = researchAssignmentFromRecord(researchAssignment || {});
+  const explicitSite = normalizeStudySiteId(researchStudy?.studySiteId);
+  const explicitCondition = normalizeSchoolCondition(researchStudy?.schoolCondition);
+  const explicitGrade = normalizeStudyGradeLevel(researchStudy?.studyGradeLevel);
+  const explicitStartDate = normalizeStudyStartDate(researchStudy?.studyStartDate);
+  const explicitFormal = researchStudy?.formalStudyParticipant === true;
+  if (explicitFormal && (!explicitSite || !explicitCondition || !explicitGrade)) throw new Error('INVALID_RESEARCH_STUDY_METADATA');
   const now = new Date().toISOString();
   const created = await createDocumentIfAbsent(STUDENT_COLLECTION, key, {
     studentId: sid,
@@ -132,6 +201,13 @@ export async function createStudentCode(
     ...(assignment.assignedPartnerId ? { assignedPartnerId: assignment.assignedPartnerId } : {}),
     ...(assignment.assignedPartnerCountry ? { assignedPartnerCountry: assignment.assignedPartnerCountry } : {}),
     ...(assignment.assignmentAnnouncedAt ? { assignmentAnnouncedAt: assignment.assignmentAnnouncedAt } : {}),
+    ...(explicitFormal ? {
+      formalStudyParticipant: true,
+      studySiteId: explicitSite,
+      schoolCondition: explicitCondition,
+      studyGradeLevel: explicitGrade,
+      ...(explicitStartDate ? { studyStartDate: explicitStartDate } : {}),
+    } : {}),
     createdAt: now,
     updatedAt: now,
   });
@@ -151,6 +227,11 @@ export async function getStudentRecordsForManagement(): Promise<Array<{
   assignedPartnerId: string;
   assignedPartnerCountry: string;
   assignmentAnnouncedAt: string;
+  formalStudyParticipant: boolean;
+  studySiteId: StudySiteId | '';
+  schoolCondition: SchoolCondition | '';
+  gradeLevel: 5 | 6 | '';
+  studyStartDate: string;
 }>> {
   const records = await listCollection(STUDENT_COLLECTION, 1000);
   const grouped = new Map<string, Record<string, any>[]>();
@@ -162,12 +243,18 @@ export async function getStudentRecordsForManagement(): Promise<Array<{
   const result: Array<{
     studentId: string; researchId: string; learningId: string; classId: string; attendanceNumber: number | ''; active: boolean;
     createdAt: string; updatedAt: string; assignedPartnerId: string; assignedPartnerCountry: string; assignmentAnnouncedAt: string;
+    formalStudyParticipant: boolean; studySiteId: StudySiteId | ''; schoolCondition: SchoolCondition | ''; gradeLevel: 5 | 6 | ''; studyStartDate: string;
   }> = [];
   for (const [studentId, list] of grouped.entries()) {
     const sorted = list.slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
     const activeRecord = sorted.find((row) => row.active !== false) || sorted[0] || {};
     const assignmentRecord = sorted.find((row) => row.assignedPartnerId || row.assignedPartnerCountry || row.assignmentAnnouncedAt) || activeRecord;
     const assignment = researchAssignmentFromRecord(assignmentRecord);
+    const study = researchStudyMetadataFromRecord(activeRecord, {
+      studentId,
+      classId: normalizeClassId(activeRecord.classId),
+      attendanceNumber: normalizeAttendanceNumber(activeRecord.attendanceNumber),
+    });
     result.push({
       studentId,
       researchId: String(activeRecord.researchId || assignmentRecord.researchId || ''),
@@ -178,9 +265,83 @@ export async function getStudentRecordsForManagement(): Promise<Array<{
       createdAt: String(activeRecord.createdAt || ''),
       updatedAt: String(activeRecord.updatedAt || ''),
       ...assignment,
+      formalStudyParticipant: study.formalStudyParticipant,
+      studySiteId: study.studySiteId,
+      schoolCondition: study.schoolCondition,
+      gradeLevel: study.gradeLevel,
+      studyStartDate: study.studyStartDate,
     });
   }
   return result.sort((a, b) => a.classId.localeCompare(b.classId, 'ja') || (Number(a.attendanceNumber || 999) - Number(b.attendanceNumber || 999)) || a.learningId.localeCompare(b.learningId));
+}
+
+export async function updateStudentStudyMetadata(
+  inputs: ResearchStudyMetadataUpdateInput[],
+  updatedBy: string,
+): Promise<Array<{ researchId: string; changed: boolean; formalStudyParticipant: boolean; studySiteId: StudySiteId; schoolCondition: SchoolCondition; studyGradeLevel: 5 | 6; studyStartDate: string }>> {
+  if (!Array.isArray(inputs) || inputs.length < 1 || inputs.length > 250) throw new Error('INVALID_RESEARCH_STUDY_METADATA_BATCH');
+  const allRecords = await listCollection(STUDENT_COLLECTION, 1000);
+  const byResearchId = new Map<string, Record<string, any>[]>();
+  for (const record of allRecords) {
+    const researchId = String(record.researchId || '').trim().toUpperCase();
+    if (!researchId) continue;
+    const list = byResearchId.get(researchId) || [];
+    list.push(record);
+    byResearchId.set(researchId, list);
+  }
+
+  const now = new Date().toISOString();
+  const actor = String(updatedBy || 'researcher').slice(0, 100);
+  const results = [];
+  for (const input of inputs) {
+    const researchId = typeof input?.researchId === 'string' ? input.researchId.trim().toUpperCase() : '';
+    if (!/^R-[A-Z2-9]{8,20}$/.test(researchId)) throw new Error('INVALID_RESEARCH_ID');
+    if (input.formalStudyParticipant !== true) throw new Error('FORMAL_STUDY_PARTICIPANT_REQUIRED');
+    const studySiteId = normalizeStudySiteId(input.studySiteId);
+    const schoolCondition = normalizeSchoolCondition(input.schoolCondition);
+    const studyGradeLevel = normalizeStudyGradeLevel(input.studyGradeLevel);
+    const studyStartDate = normalizeStudyStartDate(input.studyStartDate);
+    if (!studySiteId || !schoolCondition || !studyGradeLevel) throw new Error('INVALID_RESEARCH_STUDY_METADATA');
+    if (schoolCondition === 'comparison' && studySiteId !== 'site_b') throw new Error('COMPARISON_SITE_MISMATCH');
+    if (schoolCondition === 'intervention' && studySiteId !== 'site_a') throw new Error('INTERVENTION_SITE_MISMATCH');
+    const records = byResearchId.get(researchId) || [];
+    if (!records.length) throw new Error('RESEARCH_PARTICIPANT_NOT_FOUND');
+    let changed = false;
+    for (const record of records) {
+      const id = documentId(record);
+      if (!id) continue;
+      const current = researchStudyMetadataFromRecord(record, {
+        studentId: String(record.studentId || ''),
+        classId: normalizeClassId(record.classId),
+        attendanceNumber: normalizeAttendanceNumber(record.attendanceNumber),
+      });
+      const differs = !current.formalStudyParticipant
+        || current.studySiteId !== studySiteId
+        || current.schoolCondition !== schoolCondition
+        || current.gradeLevel !== studyGradeLevel
+        || current.studyStartDate !== studyStartDate;
+      if (!differs) continue;
+      changed = true;
+      const history = Array.isArray(record.researchStudyMetadataHistory) ? record.researchStudyMetadataHistory.slice(-99) : [];
+      await setDocument(STUDENT_COLLECTION, id, {
+        ...withoutInternal(record),
+        formalStudyParticipant: true,
+        studySiteId,
+        schoolCondition,
+        studyGradeLevel,
+        ...(studyStartDate ? { studyStartDate } : {}),
+        researchStudyMetadataHistory: [...history, {
+          previous: current,
+          next: { formalStudyParticipant: true, studySiteId, schoolCondition, gradeLevel: studyGradeLevel, studyStartDate },
+          updatedAt: now,
+          updatedBy: actor,
+        }],
+        updatedAt: now,
+      });
+    }
+    results.push({ researchId, changed, formalStudyParticipant: true, studySiteId, schoolCondition, studyGradeLevel, studyStartDate });
+  }
+  return results;
 }
 
 export async function updateStudentResearchAssignments(
@@ -292,7 +453,7 @@ export async function setStudentActive(studentId: string, active: boolean): Prom
 
 export async function updateStudentClass(studentId: string, classId: string, attendanceNumber?: unknown): Promise<void> {
   const cid = normalizeClassId(classId);
-  if (!/^(?:5-[123]|6-[123]|5-PB|6-PB|テスト|予備)$/.test(cid)) throw new Error('INVALID_CLASS_ID');
+  if (!/^(?:[56]-(?:[123]|C[1-9]|PB)|テスト|予備)$/.test(cid)) throw new Error('INVALID_CLASS_ID');
   const records = (await listCollection(STUDENT_COLLECTION, 1000)).filter((row) => row.studentId === studentId);
   const attendance = normalizeAttendanceNumber(attendanceNumber);
   if (!records.length) throw new Error('STUDENT_NOT_FOUND');
@@ -427,6 +588,11 @@ function managementSessionsWithAssignments(
       assignedPartnerId: normalizeAssignmentText(session.assignedPartnerId || student?.assignedPartnerId),
       assignedPartnerCountry: normalizeAssignmentText(session.assignedPartnerCountry || student?.assignedPartnerCountry),
       assignmentAnnouncedAt: normalizeAssignmentAnnouncedAt(session.assignmentAnnouncedAt || student?.assignmentAnnouncedAt),
+      formalStudyParticipant: student?.formalStudyParticipant === true,
+      studySiteId: student?.studySiteId || '',
+      schoolCondition: student?.schoolCondition || '',
+      studyGradeLevel: student?.gradeLevel || '',
+      studyStartDate: student?.studyStartDate || '',
     };
   });
 }

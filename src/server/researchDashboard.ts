@@ -8,6 +8,7 @@ export type ResearchFilterQuery = {
   classId?: unknown;
   grade?: unknown;
   dataScope?: unknown;
+  schoolCondition?: unknown;
   personaId?: unknown;
   labelCondition?: unknown;
   topic?: unknown;
@@ -17,7 +18,7 @@ export type ResearchFilterQuery = {
 type Row = Record<string, unknown>;
 type ExportDataSets = Record<ResearchExportDatasetName, Row[]>;
 
-export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v4';
+export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v6';
 
 const RESEARCH_PERSONAS = TARGET_20_AI_STUDENT_IDS.map((id) => {
   const persona = AI_STUDENTS_MASTER_LIST.find((item) => item.id === id);
@@ -33,7 +34,7 @@ function isResearchTargetSession(session: Record<string, any>): boolean {
 
 export const RESEARCH_EXPORT_HEADERS: Record<ResearchExportDatasetName, string[]> = {
   sessions: [
-    'research_id','class_id','session_id','grade_level',
+    'research_id','site_id','school_condition','formal_study_participant','study_start_date','class_id','session_id','grade_level',
     'local_date','local_start_time','local_end_time','local_started_at','local_ended_at',
     'lifetime_session_number','daily_session_number','days_since_previous_session',
     'persona_id','persona_country','persona_gender','ai_student_id',
@@ -53,13 +54,13 @@ export const RESEARCH_EXPORT_HEADERS: Record<ResearchExportDatasetName, string[]
     'session_completed','session_status','data_quality_flag',
   ],
   utterances: [
-    'research_id','class_id','session_id','utterance_id','persona_id','topic',
+    'research_id','site_id','school_condition','formal_study_participant','study_start_date','class_id','session_id','utterance_id','persona_id','topic',
     'turn_sequence','speaker_turn_number','speaker','local_timestamp',
     'english_text_anonymized','japanese_translation',
     'is_question','question_type','is_reciprocal_question','is_repair','is_reason_expression',
   ],
   expressions: [
-    'research_id','class_id','session_id','utterance_id','dictionary_source','expression_id','expression',
+    'research_id','site_id','school_condition','formal_study_participant','study_start_date','class_id','session_id','utterance_id','dictionary_source','expression_id','expression',
     'persona_id','profile_field','persona_category','curriculum_grade','curriculum_unit',
   ],
   personas: [
@@ -78,6 +79,10 @@ const FILE_ANALYSIS_USE: Record<ResearchExportDatasetName, string> = {
 
 const FIELD_DEFINITION: Record<string, string> = {
   research_id:'児童を直接特定しない研究用匿名ID',
+  site_id:'研究上の匿名実施校ID。実際の学校名は出力しない',
+  school_condition:'研究条件。実践校はintervention、比較校はcomparison',
+  formal_study_participant:'正式研究参加者として登録されている場合1',
+  study_start_date:'当該児童の正式研究データ開始日。比較校の事前テスト混入防止にも使用',
   class_id:'匿名化された学級ID',
   session_id:'1対話ごとの一意なセッションID',
   grade_level:'学年',
@@ -175,6 +180,10 @@ const FIELD_DEFINITION: Record<string, string> = {
 
 const ALLOWED_VALUES: Record<string, string> = {
   grade_level:'5 | 6',
+  site_id:'site_a | site_b',
+  school_condition:'intervention | comparison',
+  formal_study_participant:'0 | 1',
+  study_start_date:'YYYY-MM-DD | blank',
   persona_gender:'male | female', gender:'male | female',
   target_duration_minutes:'1 | 2 | 3 | 5',
   topic:'intro | favorites | shizuoka_culture | talents | daily_routine | free',
@@ -207,7 +216,7 @@ const NUMERIC_FIELDS = new Set([
   'reflection_conveyed_ideas','reflection_understood_partner','reflection_noticed_language_culture','same_class_starts_5min',
   'same_class_starts_10min','country_label_visible','accent_label_visible','flag_visible','help_open_count','vocab_bank_open_count',
   'speech_rate_change_count','student_selected_speech_rate','tts_provider_observed','tts_provider_event_count','tts_fallback_count','tts_provider_deviation','schema_version','session_completed','turn_sequence','speaker_turn_number',
-  'is_question','is_reciprocal_question','is_repair','is_reason_expression',
+  'is_question','is_reciprocal_question','is_repair','is_reason_expression','formal_study_participant',
 ]);
 
 function metaFor(file: ResearchExportDatasetName, variable: string) {
@@ -267,6 +276,21 @@ function personaRows(): Row[] {
   }));
 }
 
+function exportStudyMetadata(row: Row): Row {
+  const classId = String(row.class_id || '');
+  const explicitCondition = String(row.school_condition || '');
+  const condition = explicitCondition === 'comparison' || explicitCondition === 'intervention'
+    ? explicitCondition
+    : (/^[56]-[123]$/.test(classId) ? 'intervention' : '');
+  const siteId = String(row.site_id || '') || (condition === 'comparison' ? 'site_b' : condition === 'intervention' ? 'site_a' : '');
+  return {
+    site_id: siteId,
+    school_condition: condition,
+    formal_study_participant: row.formal_study_participant ?? '',
+    study_start_date: row.study_start_date ?? '',
+  };
+}
+
 function buildResearchExportDataSetsFromTechnical(raw: ReturnType<typeof buildResearchDataSets>): ExportDataSets {
   const eventCounts = eventCountMap(raw.system_events);
   const turnCounts = new Map<string, { child: number; ai: number }>();
@@ -284,6 +308,7 @@ function buildResearchExportDataSetsFromTechnical(raw: ReturnType<typeof buildRe
     const events = eventCounts.get(sessionId) || new Map<string, number>();
     const copy: Row = {
       ...row,
+      ...exportStudyMetadata(row),
       research_schema_version: RESEARCH_EXPORT_SCHEMA_VERSION,
       ai_turn_count: counts.ai,
       dialogue_utterance_count: counts.child + counts.ai,
@@ -299,6 +324,10 @@ function buildResearchExportDataSetsFromTechnical(raw: ReturnType<typeof buildRe
     const session = sessionById.get(String(row.session_id || '')) || {};
     const copy: Row = {
       ...row,
+      site_id: session.site_id || row.site_id || '',
+      school_condition: session.school_condition || row.school_condition || '',
+      formal_study_participant: session.formal_study_participant ?? row.formal_study_participant ?? '',
+      study_start_date: session.study_start_date || row.study_start_date || '',
       utterance_id: `u_${String(row.session_id || '')}_${String(row.turn_sequence || '')}`,
       persona_id: session.persona_id || '',
       topic: session.topic || '',
@@ -307,8 +336,13 @@ function buildResearchExportDataSetsFromTechnical(raw: ReturnType<typeof buildRe
   });
 
   const expressions = raw.expressions.map((row) => {
+    const session = sessionById.get(String(row.session_id || '')) || {};
     const copy: Row = {
       ...row,
+      site_id: session.site_id || row.site_id || '',
+      school_condition: session.school_condition || row.school_condition || '',
+      formal_study_participant: session.formal_study_participant ?? row.formal_study_participant ?? '',
+      study_start_date: session.study_start_date || row.study_start_date || '',
       utterance_id: `u_${String(row.session_id || '')}_${String(row.turn_sequence || '')}`,
     };
     return Object.fromEntries(RESEARCH_EXPORT_HEADERS.expressions.map((key) => [key, copy[key] ?? '']));
@@ -335,9 +369,13 @@ const PILOT_B_OFFICIAL_DATES = new Set(['2026-09-09']);
 export function researchDataScopeForRow(row: Record<string, unknown>): ResearchDataScope {
   const storedClass = String(row.class_id || '');
   const localDate = String(row.local_date || '');
+  const formal = Number(row.formal_study_participant || 0) === 1;
+  const condition = String(row.school_condition || '');
+  const studyStartDate = String(row.study_start_date || '');
   if (storedClass === 'テスト') return 'test';
   if (storedClass === '予備') return 'reserve';
   if (storedClass === '5-PB' || storedClass === '6-PB') return PILOT_B_OFFICIAL_DATES.has(localDate) ? 'pilot_b' : 'test';
+  if (formal && condition === 'comparison') return (!studyStartDate || localDate >= studyStartDate) ? 'main' : 'test';
   if (/^[56]-[123]$/.test(storedClass)) return localDate >= MAIN_RESEARCH_START_DATE ? 'main' : 'test';
   return 'test';
 }
@@ -345,9 +383,22 @@ function dataScopeMatches(row: Row, scope: string): boolean {
   if (!scope || scope === 'all') return true;
   return researchDataScopeForRow(row) === scope;
 }
+function schoolConditionForRow(row: Row): 'intervention' | 'comparison' | '' {
+  const explicit = String(row.school_condition || '');
+  if (explicit === 'intervention' || explicit === 'comparison') return explicit;
+  const classId = String(row.class_id || '');
+  if (/^[56]-C[1-9]$/.test(classId)) return 'comparison';
+  if (/^[56]-[123]$/.test(classId)) return 'intervention';
+  return '';
+}
 export function normalizeFormalResearchExportQuery(query: ResearchFilterQuery): ResearchFilterQuery {
   const scope = textQuery(query.dataScope);
-  return { ...query, dataScope: (!scope || scope === 'all') ? 'main' : scope };
+  const condition = textQuery(query.schoolCondition);
+  return {
+    ...query,
+    dataScope: (!scope || scope === 'all') ? 'main' : scope,
+    schoolCondition: condition || 'intervention',
+  };
 }
 function gradeMatches(row: Row, grade: string): boolean {
   if (!grade || grade === 'all') return true;
@@ -365,6 +416,7 @@ function filterSessions(rows: Row[], query: ResearchFilterQuery): Row[] {
   const classId = textQuery(query.classId);
   const grade = textQuery(query.grade);
   const dataScope = textQuery(query.dataScope);
+  const schoolCondition = textQuery(query.schoolCondition) || ((!dataScope || dataScope === 'main') ? 'intervention' : 'all');
   const personaId = textQuery(query.personaId);
   const label = textQuery(query.labelCondition);
   const topic = textQuery(query.topic);
@@ -373,6 +425,7 @@ function filterSessions(rows: Row[], query: ResearchFilterQuery): Row[] {
     const date = String(row.local_date || '');
     return (!start || date >= start) && (!end || date <= end)
       && dataScopeMatches(row, dataScope) && classMatches(row, classId) && gradeMatches(row, grade)
+      && (researchDataScopeForRow(row) !== 'main' || !schoolCondition || schoolCondition === 'all' || schoolConditionForRow(row) === schoolCondition)
       && (!personaId || personaId === 'all' || String(row.persona_id || '') === personaId)
       && (!label || label === 'all' || String(row.persona_label_condition || '') === label)
       && (!topic || topic === 'all' || String(row.topic || '') === topic)
@@ -671,7 +724,8 @@ export function buildResearchDashboardData(
     },
     filters:{
       dataScopes:['main','pilot_b','test','reserve'],
-      classes:['1','2','3'],
+      schoolConditions:['intervention','comparison'],
+      classes:[...new Set(data.sessions.map((row) => String(row.class_id || '')).filter(Boolean))].sort((a,b) => a.localeCompare(b,'ja')),
       grades:['5','6'],
       personas:RESEARCH_PERSONAS.map((persona) => persona.id),
       labelConditions:['shown','hidden'],

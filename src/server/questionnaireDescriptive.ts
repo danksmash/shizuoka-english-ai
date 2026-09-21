@@ -23,16 +23,64 @@ export interface QuestionnaireDescriptiveRow {
   post: QuestionnaireDescriptiveWaveSummary;
 }
 
-const GROUPS = [
-  { id: '5-1', label: '5-1', match: (r: QuestionnaireRecord) => r.classId === '5-1' },
-  { id: '5-2', label: '5-2', match: (r: QuestionnaireRecord) => r.classId === '5-2' },
-  { id: '5-3', label: '5-3', match: (r: QuestionnaireRecord) => r.classId === '5-3' },
-  { id: '6-1', label: '6-1', match: (r: QuestionnaireRecord) => r.classId === '6-1' },
-  { id: '6-2', label: '6-2', match: (r: QuestionnaireRecord) => r.classId === '6-2' },
-  { id: 'grade5', label: '5年', match: (r: QuestionnaireRecord) => r.gradeLevel === 5 },
-  { id: 'grade6', label: '6年', match: (r: QuestionnaireRecord) => r.gradeLevel === 6 },
-  { id: 'all', label: '全体', match: (_r: QuestionnaireRecord) => true },
-] as const;
+type QuestionnaireDescriptiveGroup = {
+  id: string;
+  label: string;
+  match: (record: QuestionnaireRecord) => boolean;
+};
+
+function conditionLabel(condition: QuestionnaireRecord['schoolCondition']): string {
+  return condition === 'comparison' ? '比較校' : '実践校';
+}
+
+function recordCondition(record: QuestionnaireRecord): 'intervention' | 'comparison' {
+  return record.schoolCondition === 'comparison' ? 'comparison' : 'intervention';
+}
+
+function groupsForRecords(records: QuestionnaireRecord[]): QuestionnaireDescriptiveGroup[] {
+  const conditions = (['intervention', 'comparison'] as const).filter((condition) => records.some((record) => recordCondition(record) === condition));
+  const hasComparison = conditions.includes('comparison');
+  const groups: QuestionnaireDescriptiveGroup[] = [];
+
+  if (!hasComparison) {
+    const classIds = ['5-1', '5-2', '5-3', '6-1', '6-2'];
+    for (const classId of classIds) groups.push({ id: classId, label: classId, match: (record) => record.classId === classId });
+    groups.push({ id: 'grade5', label: '5年', match: (record) => record.gradeLevel === 5 });
+    groups.push({ id: 'grade6', label: '6年', match: (record) => record.gradeLevel === 6 });
+    groups.push({ id: 'all', label: '全体', match: () => true });
+    return groups;
+  }
+
+  for (const condition of conditions) {
+    const prefix = conditionLabel(condition);
+    const conditionRecords = records.filter((record) => recordCondition(record) === condition);
+    const classIds = condition === 'intervention'
+      ? ['5-1', '5-2', '5-3', '6-1', '6-2']
+      : [...new Set(conditionRecords.map((record) => record.classId).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ja'));
+    for (const classId of classIds) {
+      groups.push({
+        id: `${condition}:${classId}`,
+        label: `${prefix} ${classId}`,
+        match: (record) => recordCondition(record) === condition && record.classId === classId,
+      });
+    }
+    for (const grade of [5, 6] as const) {
+      if (!conditionRecords.some((record) => record.gradeLevel === grade)) continue;
+      groups.push({
+        id: `${condition}:grade${grade}`,
+        label: `${prefix} ${grade}年`,
+        match: (record) => recordCondition(record) === condition && record.gradeLevel === grade,
+      });
+    }
+    groups.push({
+      id: `${condition}:all`,
+      label: `${prefix} 全体`,
+      match: (record) => recordCondition(record) === condition,
+    });
+  }
+  groups.push({ id: 'all', label: '両校 全体', match: () => true });
+  return groups;
+}
 
 const METRICS: Array<{
   key: QuestionnaireDescriptiveMetricKey;
@@ -88,7 +136,7 @@ function summarizeWave(records: QuestionnaireRecord[], wave: QuestionnaireWave):
 }
 
 export function buildQuestionnaireDescriptiveStatistics(records: QuestionnaireRecord[]) {
-  const rows: QuestionnaireDescriptiveRow[] = GROUPS.map((group) => {
+  const rows: QuestionnaireDescriptiveRow[] = groupsForRecords(records).map((group) => {
     const subset = records.filter(group.match);
     return {
       groupId: group.id,

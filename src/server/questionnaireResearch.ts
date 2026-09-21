@@ -106,6 +106,7 @@ export interface QuestionnaireRecord extends QuestionnaireScores {
   submittedAt: string;
   instrumentVersion: string;
   scoringVersion?: string;
+  siteId?: 'site_a' | 'site_b';
   schoolCondition?: 'intervention' | 'comparison';
   items: QuestionnaireItemScores;
   dataQualityFlag: 'complete';
@@ -201,7 +202,8 @@ export async function importGoogleFormsQuestionnaireCsv(csvText: string, surveyW
       if (!/^[A-HJ-NP-Z2-9]{4}$/.test(code)) throw new Error('INVALID_LEARNING_CODE');
       const student = await resolveStudentByCode(code);
       if (!student) throw new Error('LEARNING_CODE_NOT_FOUND');
-      const gradeLevel = gradeForClassId(student.classId);
+      if (!student.formalStudyParticipant) throw new Error('NOT_FORMAL_STUDY1_PARTICIPANT');
+      const gradeLevel = student.gradeLevel || gradeForClassId(student.classId);
       if (!gradeLevel) throw new Error('NOT_MAIN_STUDY_CLASS');
       const items = {} as QuestionnaireItemScores;
       for (const item of QUESTIONNAIRE_ITEMS) {
@@ -220,6 +222,8 @@ export async function importGoogleFormsQuestionnaireCsv(csvText: string, surveyW
         classId: student.classId,
         gradeLevel,
         dataScope: 'main',
+        siteId: student.studySiteId || 'site_a',
+        schoolCondition: student.schoolCondition || 'intervention',
         surveyWave,
         surveyDate: tokyoDate(submittedAt),
         submittedAt,
@@ -254,7 +258,8 @@ function cleanRecord(raw: Record<string, any>): QuestionnaireRecord | null {
     gradeLevel: gradeLevel as 5 | 6, dataScope: 'main', surveyWave,
     surveyDate: String(raw.surveyDate || ''), submittedAt: String(raw.submittedAt || ''), instrumentVersion: String(raw.instrumentVersion || ''),
     scoringVersion: QUESTIONNAIRE_SCORING_VERSION,
-    ...(raw.schoolCondition === 'intervention' || raw.schoolCondition === 'comparison' ? { schoolCondition: raw.schoolCondition } : {}),
+    siteId: raw.siteId === 'site_b' ? 'site_b' : 'site_a',
+    schoolCondition: raw.schoolCondition === 'comparison' ? 'comparison' : 'intervention',
     items, ...scores,
     dataQualityFlag: 'complete', importedAt: String(raw.importedAt || ''),
   };
@@ -487,16 +492,16 @@ export function buildQuestionnaireStatistics(records: QuestionnaireRecord[]) {
 }
 
 export const QUESTIONNAIRE_EXPORT_HEADERS = [
-  'research_id','class_id','data_scope','grade_level','survey_wave','survey_order','survey_date','submitted_at','instrument_version','scoring_version',
+  'research_id','site_id','school_condition','formal_study_participant','class_id','data_scope','grade_level','survey_wave','survey_order','survey_date','submitted_at','instrument_version','scoring_version',
   ...QUESTIONNAIRE_ITEMS.map((item) => item.id),
   'attitude_sum','attitude_mean','persistence_sum','persistence_mean','self_regulation_sum','self_regulation_mean','l2wtc_sum','l2wtc_mean','total_sum','total_mean','data_quality_flag','response_id','imported_at',
 ] as const;
 
 function classMatches(classId: string, requested: string): boolean { if (!requested || requested === 'all') return true; return ['1','2','3'].includes(requested) ? classId.endsWith(`-${requested}`) : classId === requested; }
 export function buildQuestionnaireExportRows(records: QuestionnaireRecord[], query: Record<string, unknown> = {}): Record<string, unknown>[] {
-  const grade = String(query.grade || 'all'); const classId = String(query.classId || 'all'); const scope = String(query.dataScope || 'main');
-  return records.filter((r) => (scope === 'all' || scope === 'main') && (grade === 'all' || String(r.gradeLevel) === grade) && classMatches(r.classId, classId)).sort((a, b) => a.researchId.localeCompare(b.researchId) || questionnaireWaveOrder(a.surveyWave) - questionnaireWaveOrder(b.surveyWave)).map((r) => ({
-    research_id:r.researchId,class_id:r.classId,data_scope:r.dataScope,grade_level:r.gradeLevel,survey_wave:r.surveyWave,survey_order:questionnaireWaveOrder(r.surveyWave),survey_date:r.surveyDate,submitted_at:r.submittedAt,instrument_version:r.instrumentVersion,scoring_version:r.scoringVersion || QUESTIONNAIRE_SCORING_VERSION,
+  const grade = String(query.grade || 'all'); const classId = String(query.classId || 'all'); const scope = String(query.dataScope || 'main'); const schoolCondition = String(query.schoolCondition || 'all');
+  return records.filter((r) => (scope === 'all' || scope === 'main') && (schoolCondition === 'all' || r.schoolCondition === schoolCondition) && (grade === 'all' || String(r.gradeLevel) === grade) && classMatches(r.classId, classId)).sort((a, b) => a.researchId.localeCompare(b.researchId) || questionnaireWaveOrder(a.surveyWave) - questionnaireWaveOrder(b.surveyWave)).map((r) => ({
+    research_id:r.researchId,site_id:r.siteId || (r.schoolCondition === 'comparison' ? 'site_b' : 'site_a'),school_condition:r.schoolCondition === 'comparison' ? 'comparison' : 'intervention',formal_study_participant:1,class_id:r.classId,data_scope:r.dataScope,grade_level:r.gradeLevel,survey_wave:r.surveyWave,survey_order:questionnaireWaveOrder(r.surveyWave),survey_date:r.surveyDate,submitted_at:r.submittedAt,instrument_version:r.instrumentVersion,scoring_version:r.scoringVersion || QUESTIONNAIRE_SCORING_VERSION,
     ...Object.fromEntries(QUESTIONNAIRE_ITEMS.map((item) => [item.id, r.items[item.id]])),
     attitude_sum:r.attitudeSum,attitude_mean:r.attitudeMean,persistence_sum:r.persistenceSum,persistence_mean:r.persistenceMean,self_regulation_sum:r.selfRegulationSum,self_regulation_mean:r.selfRegulationMean,l2wtc_sum:r.l2wtcSum,l2wtc_mean:r.l2wtcMean,total_sum:r.totalSum,total_mean:r.totalMean,data_quality_flag:r.dataQualityFlag,response_id:r.responseId,imported_at:r.importedAt,
   }));
@@ -506,9 +511,9 @@ export function serializeQuestionnaireCsv(rows: Record<string, unknown>[]): stri
 
 export function buildQuestionnaireCodebookRows(): Record<string, unknown>[] {
   const definitions: Record<string, string> = {
-    research_id:'AI対話・授業Reflectionと共通の匿名研究ID',class_id:'匿名化された学級ID',data_scope:'研究データ区分',grade_level:'学年',survey_wave:'質問紙時点（Pre／Mid／Post）',survey_order:'時点順（Pre=1, Mid=2, Post=3）',survey_date:'回答日（日本時間）',submitted_at:'Google Forms回答タイムスタンプのUTC正規化値',instrument_version:'質問紙尺度版',scoring_version:'採点規則版',
+    research_id:'AI対話・授業Reflectionと共通の匿名研究ID',site_id:'研究上の匿名実施校ID（学校名は出力しない）',school_condition:'研究条件（実践校／比較校）',formal_study_participant:'正式研究参加者なら1',class_id:'匿名化された学級ID',data_scope:'研究データ区分',grade_level:'学年',survey_wave:'質問紙時点（Pre／Mid／Post）',survey_order:'時点順（Pre=1, Mid=2, Post=3）',survey_date:'回答日（日本時間）',submitted_at:'Google Forms回答タイムスタンプのUTC正規化値',instrument_version:'質問紙尺度版',scoring_version:'採点規則版',
     attitude_sum:'主体的に学習に取り組む態度10項目合計（10–60：粘り強さ5項目＋学習の自己調整5項目）',attitude_mean:'主体的に学習に取り組む態度10項目平均（1–6）',persistence_sum:'粘り強さ5項目合計（5–30）',persistence_mean:'粘り強さ5項目平均（1–6）',self_regulation_sum:'学習の自己調整5項目合計（5–30）',self_regulation_mean:'学習の自己調整5項目平均（1–6）',l2wtc_sum:'L2 WTC 5項目合計（5–30）',l2wtc_mean:'L2 WTC 5項目平均（1–6）',total_sum:'全15項目合計（15–90、後方互換用参考値。主体的態度としては使用しない）',total_mean:'全15項目平均（1–6、後方互換用参考値。主体的態度としては使用しない）',data_quality_flag:'質問紙回答品質',response_id:'匿名化された回答ID',imported_at:'研究システムへの取込日時',
   };
   for (const item of QUESTIONNAIRE_ITEMS) definitions[item.id] = `${item.sourceId} ${item.text}（1=まったくあてはまらない〜6=よくあてはまる、逆転なし）`;
-  return QUESTIONNAIRE_EXPORT_HEADERS.map((variable) => ({ file_name:'student_questionnaires.csv',variable,definition:definitions[variable] || variable.replace(/_/g,' '),data_type:['grade_level','survey_order',...QUESTIONNAIRE_ITEMS.map(i=>i.id),'attitude_sum','attitude_mean','total_sum','total_mean','persistence_sum','persistence_mean','self_regulation_sum','self_regulation_mean','l2wtc_sum','l2wtc_mean'].includes(variable as any)?'number':'string',allowed_values:variable==='survey_wave'?'pre_app | mid_pre_reveal | post_pre_exchange':variable==='survey_order'?'1 | 2 | 3':variable==='scoring_version'?QUESTIONNAIRE_SCORING_VERSION:QUESTIONNAIRE_ITEMS.some(i=>i.id===variable)?'1 | 2 | 3 | 4 | 5 | 6':variable==='data_scope'?'main':'',analysis_use:variable==='total_sum'||variable==='total_mean'?'後方互換用参考値。主要・副次成果の推論分析には使用しない':'Pre／Mid／Post質問紙をAI対話・Reflectionとresearch_idで結合し、3時点記述統計・LMM用long形式データとして分析' }));
+  return QUESTIONNAIRE_EXPORT_HEADERS.map((variable) => ({ file_name:'student_questionnaires.csv',variable,definition:definitions[variable] || variable.replace(/_/g,' '),data_type:['formal_study_participant','grade_level','survey_order',...QUESTIONNAIRE_ITEMS.map(i=>i.id),'attitude_sum','attitude_mean','total_sum','total_mean','persistence_sum','persistence_mean','self_regulation_sum','self_regulation_mean','l2wtc_sum','l2wtc_mean'].includes(variable as any)?'number':'string',allowed_values:variable==='site_id'?'site_a | site_b':variable==='school_condition'?'intervention | comparison':variable==='formal_study_participant'?'1':variable==='survey_wave'?'pre_app | mid_pre_reveal | post_pre_exchange':variable==='survey_order'?'1 | 2 | 3':variable==='scoring_version'?QUESTIONNAIRE_SCORING_VERSION:QUESTIONNAIRE_ITEMS.some(i=>i.id===variable)?'1 | 2 | 3 | 4 | 5 | 6':variable==='data_scope'?'main':'',analysis_use:variable==='total_sum'||variable==='total_mean'?'後方互換用参考値。主要・副次成果の推論分析には使用しない':'Pre／Mid／Post質問紙をAI対話・Reflectionとresearch_idで結合し、3時点記述統計・LMM用long形式データとして分析' }));
 }

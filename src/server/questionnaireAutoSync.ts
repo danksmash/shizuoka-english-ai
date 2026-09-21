@@ -1,7 +1,11 @@
 import crypto from 'node:crypto';
 import { createDocumentIfAbsent, setDocument } from './firestore';
 import { resolveStudentByCode } from './persistence';
-import { STUDY1_FORMAL_PARTICIPANT_HASHES } from './study1FormalParticipantHashes';
+import {
+  formalStudy1ParticipantHash as legacyFormalStudy1ParticipantHash,
+  isLegacyFormalStudy1Participant,
+  isLegacyFormalStudy1ParticipantHash,
+} from './studyParticipantMetadata';
 import {
   QUESTIONNAIRE_COLLECTION,
   QUESTIONNAIRE_INSTRUMENT_VERSION,
@@ -21,13 +25,6 @@ export const QUESTIONNAIRE_SYNC_STATE_COLLECTION = 'questionnaire_sync_state';
 export const QUESTIONNAIRE_SYNC_STATE_DOCUMENT = 'study1';
 export const QUESTIONNAIRE_SIGNATURE_MAX_AGE_SECONDS = 300;
 
-const FORMAL_CLASS_SIZES: Record<string, number> = {
-  '5-1': 26,
-  '5-2': 25,
-  '5-3': 25,
-  '6-1': 34,
-  '6-2': 35,
-};
 
 export interface QuestionnaireAutoIngestPayload {
   formId: string;
@@ -82,7 +79,7 @@ function gradeForClassId(classId: string): 5 | 6 | null {
 }
 
 export function formalStudy1ParticipantHash(studentId: string): string {
-  return crypto.createHash('sha256').update(`study1-formal-v1|${String(studentId || '').trim()}`).digest('hex');
+  return legacyFormalStudy1ParticipantHash(studentId);
 }
 
 export function isFormalStudy1ParticipantHash(
@@ -90,21 +87,11 @@ export function isFormalStudy1ParticipantHash(
   classId: string,
   attendanceNumber: number | '',
 ): boolean {
-  const max = FORMAL_CLASS_SIZES[classId];
-  const attendance = Number(attendanceNumber);
-  return STUDY1_FORMAL_PARTICIPANT_HASHES.has(studentIdHash)
-    && Boolean(max)
-    && Number.isInteger(attendance)
-    && attendance >= 1
-    && attendance <= max;
+  return isLegacyFormalStudy1ParticipantHash(studentIdHash, classId, attendanceNumber);
 }
 
 export function isFormalStudy1Participant(student: { studentId: string; classId: string; attendanceNumber: number | '' }): boolean {
-  return isFormalStudy1ParticipantHash(
-    formalStudy1ParticipantHash(student.studentId),
-    student.classId,
-    student.attendanceNumber,
-  );
+  return isLegacyFormalStudy1Participant(student);
 }
 
 function itemScoresFromAnswers(answers: Record<string, unknown>): QuestionnaireItemScores {
@@ -177,9 +164,9 @@ async function persistCanonicalQuestionnaire(
 
   const student = await resolveStudentByCode(code);
   if (!student) throw new Error('LEARNING_CODE_NOT_FOUND');
-  if (!isFormalStudy1Participant(student)) throw new Error('NOT_FORMAL_STUDY1_PARTICIPANT');
+  if (!student.formalStudyParticipant) throw new Error('NOT_FORMAL_STUDY1_PARTICIPANT');
 
-  const gradeLevel = gradeForClassId(student.classId);
+  const gradeLevel = student.gradeLevel || gradeForClassId(student.classId);
   if (!gradeLevel) throw new Error('NOT_MAIN_STUDY_CLASS');
   const submittedAt = normalizeQuestionnaireSubmittedAt(submittedAtInput);
   if (!submittedAt) throw new Error('INVALID_TIMESTAMP');
@@ -193,6 +180,8 @@ async function persistCanonicalQuestionnaire(
     classId: student.classId,
     gradeLevel,
     dataScope: 'main',
+    siteId: student.studySiteId || 'site_a',
+    schoolCondition: student.schoolCondition || 'intervention',
     surveyWave: wave,
     surveyDate: tokyoDate(submittedAt),
     submittedAt,

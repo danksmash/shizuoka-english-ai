@@ -1,6 +1,7 @@
 import express from 'express';
 import { createReflectionRouter } from './src/server/reflectionRoutes';
 import { createStudyScheduleRouter } from './src/server/studyScheduleRoutes';
+import { createStudyParticipantRouter } from './src/server/studyParticipantRoutes';
 import { createQuestionnaireRouter } from './src/server/questionnaireRoutes';
 import { createQuestionnaireAutoSyncRouter } from './src/server/questionnaireAutoSyncRoutes';
 import { phaseAwareGetHandler } from './src/server/researchPhaseRuntime';
@@ -54,6 +55,10 @@ application.listen = function reflectionAwareListen(this: any, ...args: any[]) {
   if (!this.__studyScheduleRoutesMounted) {
     this.use('/api/management', createStudyScheduleRouter());
     this.__studyScheduleRoutesMounted = true;
+  }
+  if (!this.__studyParticipantRoutesMounted) {
+    this.use('/api/management', createStudyParticipantRouter());
+    this.__studyParticipantRoutesMounted = true;
   }
   if (!this.__questionnaireRoutesMounted) {
     this.use('/api/management', createQuestionnaireRouter());

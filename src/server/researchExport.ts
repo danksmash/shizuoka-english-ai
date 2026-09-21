@@ -202,6 +202,10 @@ function gradeFromClassId(classId: unknown): number | '' {
 function commonFields(session: Record<string, any>, meta: ContextMeta) {
   return {
     research_id: session.researchId || '',
+    site_id: session.studySiteId || '',
+    school_condition: session.schoolCondition || '',
+    formal_study_participant: session.formalStudyParticipant === true ? 1 : 0,
+    study_start_date: session.studyStartDate || '',
     class_id: session.classId || '',
     session_id: session.sessionId || '',
     academic_year: session.academicYear || academicYearFromDate(meta.localDate),
@@ -246,7 +250,9 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
     const ttsTelemetryReliable = ttsTelemetryVersion === 'cors-visible-v1';
 
     sessionRows.push({
-      research_id: session.researchId || '', class_id: session.classId || '', session_id: sessionId,
+      research_id: session.researchId || '', site_id: session.studySiteId || '', school_condition: session.schoolCondition || '',
+      formal_study_participant: session.formalStudyParticipant === true ? 1 : 0, study_start_date: session.studyStartDate || '',
+      class_id: session.classId || '', session_id: sessionId,
       schema_version: session.schemaVersion || 2, research_schema_version: session.researchSchemaVersion || '', app_version: session.appVersion || '', build: session.build || '',
       ai_model: session.aiModel || '', ai_input_tokens: session.aiInputTokens || 0, ai_output_tokens: session.aiOutputTokens || 0,
       ai_cache_read_tokens: session.aiCacheReadTokens || 0, ai_cache_creation_tokens: session.aiCacheCreationTokens || 0,
