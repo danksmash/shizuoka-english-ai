@@ -11,6 +11,7 @@ import {
   saveAnalysisSessionOverride,
   serializeAnalysisSessionsCsv,
 } from './researchAnalysisSessions';
+import { RQ3_ANALYSIS_SPEC } from './researchRq3AnalysisSpec';
 import {
   buildInteractionCodeRows,
   buildRq3Candidates,
@@ -290,6 +291,11 @@ router.get('/research-rq3/context', requireManagementRole(['researcher']), async
   } catch (error: any) {
     return rq3Error(res, error, 'RQ3_CONTEXT_UNAVAILABLE');
   }
+});
+
+router.get('/research-rq3/analysis-spec', requireManagementRole(['researcher']), async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ success: true, spec: RQ3_ANALYSIS_SPEC });
 });
 
 router.get('/research-rq3/analysis', requireManagementRole(['researcher']), async (req, res) => {
