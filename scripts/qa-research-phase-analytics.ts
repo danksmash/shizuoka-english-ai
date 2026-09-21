@@ -63,6 +63,10 @@ const notApplicable = buildPhaseComparison(raw as any, [schedule], { dataScope: 
 assert.equal(notApplicable.applicable, false);
 assert.ok(notApplicable.reason.includes('本研究'));
 
+const comparisonNotApplicable = buildPhaseComparison(raw as any, [schedule], { dataScope: 'main', schoolCondition: 'comparison' });
+assert.equal(comparisonNotApplicable.applicable, false);
+assert.ok(comparisonNotApplicable.reason.includes('比較校'));
+
 const augmented = augmentSessionRowsWithPhase([
   { class_id: '5-1', local_date: '2026-09-17', persona_country: 'United States', assigned_partner_country: 'USA', research_schema_version: 'research-2026-v4' },
   { class_id: '5-1', local_date: '2026-10-01', persona_country: 'Bangladesh', assigned_partner_country: 'United States', research_schema_version: 'research-2026-v4' },
@@ -82,8 +86,8 @@ for (const field of ['study_phase', 'assigned_country_persona_eligible', 'assign
   assert.ok(PHASE_SESSION_EXPORT_HEADERS.includes(field));
   assert.ok(PHASE_CODEBOOK_ROWS.some((row) => row.variable === field));
 }
-assert.equal(PHASE_RESEARCH_EXPORT_SCHEMA_VERSION, 'research-2026-v5');
-assert.equal(PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION, 7);
+assert.equal(PHASE_RESEARCH_EXPORT_SCHEMA_VERSION, 'research-2026-v7');
+assert.equal(PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION, 8);
 
 let capturedHtml = '';
 const wrapped = withResearchPhaseAnalyticsRuntime('/management', ((_req: any, res: any) => res.send(managementPageHtmlWithStudyPhase())) as any);
