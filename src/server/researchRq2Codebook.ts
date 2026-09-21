@@ -2,17 +2,18 @@ import { getDocument, setDocument } from './firestore';
 
 export const RQ2_CODEBOOK_COLLECTION = 'research_rq2_codebooks';
 export const RQ2_DEFAULT_CODEBOOK_ID = 'draft-current';
-export const RQ2_CODEBOOK_SCHEMA_VERSION = 2;
+export const RQ2_CODEBOOK_SCHEMA_VERSION = 3;
 
 export const DEFAULT_RQ2_CODEBOOK = {
   schemaVersion: RQ2_CODEBOOK_SCHEMA_VERSION,
-  version: 'draft-2026-09-21-v2',
+  version: 'draft-2026-09-21-v3',
   status: 'draft',
-  title: 'RQ2 暫定コードブック',
+  title: 'RQ2/RQ3 暫定コードブック',
   codingUnit: 'AI前ターン→児童ターン→必要に応じAI後ターン',
-  referenceBasisRule: '参照基盤は原則として主要な1コードを付与する。併用が必要な境界事例は、コードブック開発段階で判断規則を明記してから扱う。',
-  interactionFunctionRule: '対話機能は、1つの発話に複数の機能が明確に認められる場合は複数コードを付与できる。',
-  recipientLocusRule: 'recipient locus は補助欄であり、発話中の明示的な手掛かりから判断できる場合にのみ記録する。児童の意図を推測して付与しない。',
+  analysisDimensions: ['referenceBasis', 'interactionFunction'],
+  referenceBasisRule: 'RQ3分析では参照基盤の主コードを必ず1つ付与する。必要な場合のみ補助ラベルを付ける。B2a/B2bは記述では区別し、学校間の多項モデルではB2へ統合する。',
+  interactionFunctionRule: 'RQ3分析では対話機能の主コードを必ず1つ付与する。複数機能が明確な場合は、中心機能を主コード、その他を補助ラベルとして記録する。',
+  legacyRecipientLocusRule: 'recipient locus は過去データとの互換性のため定義を保持するが、本共同研究のRQ2/RQ3正式分析には使用しない。',
   referenceBasis: [
     { code: 'B0', label: '一般・非特定', definition: '相手固有の情報を用いず、一般的な質問・応答を行う。' },
     { code: 'B1', label: 'カテゴリー情報', definition: '国籍、国・文化、地域等のカテゴリー情報を手掛かりとする。' },
@@ -30,16 +31,17 @@ export const DEFAULT_RQ2_CODEBOOK = {
     { code: 'R', label: '修復', definition: '聞き返し、言い換え、再説明等で理解上の問題を処理する。' },
   ],
   recipientLocus: [
-    { code: '現在のAI', label: '現在のAI', definition: '発話中の明示的な手掛かりから、現在対話しているAIを受け手としていることが確認できる場合。' },
-    { code: '将来の実在留学生', label: '将来の実在留学生', definition: '発話中の明示的な手掛かりから、将来交流する実在留学生を受け手としていることが確認できる場合。' },
-    { code: 'AIと実在他者を橋渡し', label: 'AIと実在他者を橋渡し', definition: '発話中の明示的な手掛かりから、現在のAI対話と将来の実在他者との交流を結び付けていることが確認できる場合。' },
-    { code: '判定不能', label: '判定不能', definition: '局所的対話系列だけではrecipient locusを根拠をもって判定できない場合。' },
+    { code: '現在のAI', label: '現在のAI', definition: '過去データ互換用。今回の共同研究RQ2/RQ3正式分析には使用しない。' },
+    { code: '将来の実在留学生', label: '将来の実在留学生', definition: '過去データ互換用。今回の共同研究RQ2/RQ3正式分析には使用しない。' },
+    { code: 'AIと実在他者を橋渡し', label: 'AIと実在他者を橋渡し', definition: '過去データ互換用。今回の共同研究RQ2/RQ3正式分析には使用しない。' },
+    { code: '判定不能', label: '判定不能', definition: '過去データ互換用。今回の共同研究RQ2/RQ3正式分析には使用しない。' },
   ],
   notes: [
     '本コードブックは実データから作成した暫定版であり、Phase 1〜3および比較校対応期間1〜3を含む開発用標本で境界事例を確認してから確定版へ移行する。',
-    '正式化前に、各コードについて「含む例／含まない例」「境界事例」「必要な前後ターン」「多重ラベル規則」を追記する。',
-    '予備分析で抽出された generic response、specific self-disclosure、reciprocal move、prior-turn follow-up、persona/category reference 等は、参照基盤×対話機能の組合せとして再整理し、コード体系を必要以上に細分化しない。',
+    '正式化前に、各コードについて「含む例／含まない例」「境界事例」「必要な前後ターン」「主コードと補助ラベルの判断規則」を追記する。',
+    'RQ3では参照基盤主コードと対話機能主コードを別々の多項モデルに用いる。参照基盤のB2a/B2bは原コードを保持し、モデル用列ではB2へ統合する。',
     'AIの出力は候補コードであり、正式コード、児童意図、因果解釈、研究結論をAIだけで確定しない。',
+    'recipient locus は博士研究等への将来拡張用にデータ互換性だけを残し、本共同研究の正式分析からは除外する。',
   ],
 };
 
@@ -48,21 +50,18 @@ function rowsForDimension(codebook: Record<string, any>, dimension: 'reference' 
   return Array.isArray(codebook[key]) ? codebook[key] : [];
 }
 
-function codebookLooksLikeLegacyDefault(codebook: Record<string, any>): boolean {
-  if (Number(codebook.schemaVersion || 0) >= RQ2_CODEBOOK_SCHEMA_VERSION) return false;
-  const refs = rowsForDimension(codebook, 'reference').map((row: any) => String(row?.code || ''));
-  const locus = rowsForDimension(codebook, 'locus').map((row: any) => String(row?.code || ''));
-  return refs.includes('B2') && !refs.includes('B2a') && locus.includes('INIT') && locus.includes('RESP');
+function codebookLooksLegacy(codebook: Record<string, any>): boolean {
+  return Number(codebook.schemaVersion || 0) < RQ2_CODEBOOK_SCHEMA_VERSION;
 }
 
 export async function getRq2Codebook() {
   const stored = await getDocument(RQ2_CODEBOOK_COLLECTION, RQ2_DEFAULT_CODEBOOK_ID);
   if (!stored) return DEFAULT_RQ2_CODEBOOK;
-  if (String(stored.status || '') === 'draft' && codebookLooksLikeLegacyDefault(stored)) {
+  if (String(stored.status || '') === 'draft' && codebookLooksLegacy(stored)) {
     return {
       ...DEFAULT_RQ2_CODEBOOK,
       migratedFromRevision: Number(stored.revision || 0),
-      migrationNote: '旧初期コードブックを共同研究提案書の暫定定義へ自動更新した未保存プレビューです。保存するとv2形式になります。',
+      migrationNote: '旧コードブックをRQ3類型分布分析に合わせたv3形式へ自動更新した未保存プレビューです。保存するとv3形式になります。',
     };
   }
   return stored;
@@ -71,12 +70,12 @@ export async function getRq2Codebook() {
 export async function saveRq2Codebook(input: Record<string, any>, updatedBy: string, freeze = false) {
   const referenceBasis = Array.isArray(input.referenceBasis) ? input.referenceBasis : [];
   const interactionFunction = Array.isArray(input.interactionFunction) ? input.interactionFunction : [];
-  const recipientLocus = Array.isArray(input.recipientLocus) ? input.recipientLocus : [];
-  if (!referenceBasis.length || !interactionFunction.length || !recipientLocus.length) throw new Error('RQ2_CODEBOOK_REQUIRED_DIMENSIONS');
+  const recipientLocus = Array.isArray(input.recipientLocus) ? input.recipientLocus : DEFAULT_RQ2_CODEBOOK.recipientLocus;
+  if (!referenceBasis.length || !interactionFunction.length) throw new Error('RQ2_CODEBOOK_REQUIRED_DIMENSIONS');
   const allCodes = [...referenceBasis, ...interactionFunction, ...recipientLocus].map((row: any) => String(row?.code || '').trim()).filter(Boolean);
   if (new Set(allCodes).size !== allCodes.length) throw new Error('RQ2_CODEBOOK_DUPLICATE_CODE');
   if (freeze) {
-    const incomplete = [...referenceBasis, ...interactionFunction, ...recipientLocus]
+    const incomplete = [...referenceBasis, ...interactionFunction]
       .some((row: any) => !String(row?.code || '').trim() || !String(row?.definition || '').trim());
     if (incomplete) throw new Error('RQ2_CODEBOOK_INCOMPLETE');
   }
@@ -89,6 +88,8 @@ export async function saveRq2Codebook(input: Record<string, any>, updatedBy: str
   const record = {
     ...input,
     schemaVersion: RQ2_CODEBOOK_SCHEMA_VERSION,
+    analysisDimensions: ['referenceBasis', 'interactionFunction'],
+    recipientLocus,
     version,
     status: freeze ? 'frozen' : 'draft',
     revision,
@@ -127,6 +128,23 @@ export function rq2CanonicalizeCodes(
   return {
     valid: [...new Set(valid)],
     invalid: raw.filter((value) => !map.has(value)),
+  };
+}
+
+export function rq2CanonicalPrimaryAndAux(
+  codebook: Record<string, any>,
+  dimension: 'reference' | 'function',
+  primary: unknown,
+  aux: unknown,
+) {
+  const primaryResult = rq2CanonicalizeCodes(codebook, dimension, primary ? [primary] : []);
+  const auxResult = rq2CanonicalizeCodes(codebook, dimension, aux);
+  const primaryCode = primaryResult.valid[0] || '';
+  const auxCodes = auxResult.valid.filter((code) => code !== primaryCode);
+  return {
+    primary: primaryCode,
+    aux: [...new Set(auxCodes)],
+    invalid: [...primaryResult.invalid, ...auxResult.invalid],
   };
 }
 
