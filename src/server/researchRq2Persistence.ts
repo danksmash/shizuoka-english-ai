@@ -34,7 +34,7 @@ export async function createRq2Run(args: {
     maxPerParticipantPerStratum: args.maxPerParticipantPerStratum,
     lessonOnly: args.lessonOnly,
     codebookVersion: args.codebookVersion,
-    promptVersion: 'rq2-coding-prompt-v2',
+    promptVersion: 'rq2-coding-prompt-v3',
     counts: args.counts,
     itemCount: args.items.length,
     status: 'sampled',
@@ -134,15 +134,22 @@ export async function saveRq2ReliabilityCode(args: {
   runId: string;
   sequenceId: string;
   coderKey: string;
-  referenceCodes: string[];
-  functionCodes: string[];
-  recipientLocus: string[];
+  referencePrimary: string;
+  referenceAuxCodes?: string[];
+  functionPrimary: string;
+  functionAuxCodes?: string[];
 }) {
   const coderKey = String(args.coderKey || '').trim().slice(0, 80);
   if (!coderKey) throw new Error('RQ2_CODER_KEY_REQUIRED');
   const id = `${args.runId}_${safeKey(args.sequenceId)}_${safeKey(coderKey)}`;
+  const referenceAuxCodes = Array.isArray(args.referenceAuxCodes) ? args.referenceAuxCodes : [];
+  const functionAuxCodes = Array.isArray(args.functionAuxCodes) ? args.functionAuxCodes : [];
   const record = {
     ...args,
+    referenceAuxCodes,
+    functionAuxCodes,
+    referenceCodes: args.referencePrimary ? [args.referencePrimary, ...referenceAuxCodes] : [],
+    functionCodes: args.functionPrimary ? [args.functionPrimary, ...functionAuxCodes] : [],
     coderKey,
     savedAt: new Date().toISOString(),
   };
