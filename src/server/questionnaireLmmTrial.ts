@@ -40,13 +40,18 @@ export interface QuestionnaireLmmContrast {
 export interface QuestionnaireLmmTrialMetricResult {
   metric: QuestionnaireLmmMetric;
   metricLabel: string;
-  status: 'ok' | 'insufficient_data' | 'model_failed';
+  status: 'ok' | 'insufficient_data' | 'model_failed' | 'invalid_data';
   mode: 'intervention_time_only' | 'group_time';
   nParticipants: number;
   nObservations: number;
   complete3: number;
+  partialParticipants: number;
   interventionParticipants: number;
   comparisonParticipants: number;
+  conditionConflictParticipants: number;
+  duplicateWaveKeys: number;
+  estimationMethod: 'REML_random_intercept';
+  inferenceMethod: 'Wald_z_approximation';
   randomInterceptVariance: number | null;
   residualVariance: number | null;
   contrasts: QuestionnaireLmmContrast[];
@@ -73,7 +78,16 @@ function metricValue(record: QuestionnaireRecord, metric: QuestionnaireLmmMetric
 }
 
 function recordCondition(record: QuestionnaireRecord): 'intervention' | 'comparison' {
-  return (record as QuestionnaireRecord & { schoolCondition?: unknown }).schoolCondition === 'comparison' ? 'comparison' : 'intervention';
+  return record.schoolCondition === 'comparison' ? 'comparison' : 'intervention';
+}
+
+function duplicateWaveKeyCount(records: QuestionnaireRecord[]): number {
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    const key = `${record.researchId}|${record.surveyWave}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return [...counts.values()].filter((count) => count > 1).length;
 }
 
 function uniqueObservations(records: QuestionnaireRecord[], metric: QuestionnaireLmmMetric): TrialObservation[] {
@@ -301,17 +315,45 @@ function buildBlocks(observations: TrialObservation[], groupMode: boolean): Subj
 
 function participantCounts(observations: TrialObservation[]) {
   const wavesBySubject = new Map<string, Set<QuestionnaireWave>>();
-  const conditionBySubject = new Map<string, 'intervention' | 'comparison'>();
+  const conditionsBySubject = new Map<string, Set<'intervention' | 'comparison'>>();
   for (const observation of observations) {
-    const set = wavesBySubject.get(observation.researchId) || new Set<QuestionnaireWave>();
-    set.add(observation.wave);
-    wavesBySubject.set(observation.researchId, set);
-    conditionBySubject.set(observation.researchId, observation.condition);
+    const waves = wavesBySubject.get(observation.researchId) || new Set<QuestionnaireWave>();
+    waves.add(observation.wave);
+    wavesBySubject.set(observation.researchId, waves);
+    const conditions = conditionsBySubject.get(observation.researchId) || new Set<'intervention' | 'comparison'>();
+    conditions.add(observation.condition);
+    conditionsBySubject.set(observation.researchId, conditions);
   }
   const complete3 = [...wavesBySubject.values()].filter((set) => WAVES.every((wave) => set.has(wave))).length;
-  const interventionParticipants = [...conditionBySubject.values()].filter((condition) => condition === 'intervention').length;
-  const comparisonParticipants = [...conditionBySubject.values()].filter((condition) => condition === 'comparison').length;
-  return { complete3, interventionParticipants, comparisonParticipants, nParticipants: wavesBySubject.size };
+  const nParticipants = wavesBySubject.size;
+  const partialParticipants = nParticipants - complete3;
+  const interventionParticipants = [...conditionsBySubject.values()].filter((conditions) => conditions.size === 1 && conditions.has('intervention')).length;
+  const comparisonParticipants = [...conditionsBySubject.values()].filter((conditions) => conditions.size === 1 && conditions.has('comparison')).length;
+  const conditionConflictParticipants = [...conditionsBySubject.values()].filter((conditions) => conditions.size > 1).length;
+  return {
+    complete3,
+    partialParticipants,
+    interventionParticipants,
+    comparisonParticipants,
+    conditionConflictParticipants,
+    nParticipants,
+  };
+}
+
+function analysisCaveat(
+  counts: ReturnType<typeof participantCounts>,
+  duplicateWaveKeys: number,
+  groupMode: boolean,
+): string {
+  const notes = [
+    '欠測値の補完は行わず、取得できている反復観測を使用します。',
+    `3時点未完備 ${counts.partialParticipants}人、重複wave除外 ${duplicateWaveKeys}件です。`,
+    '推論はWald z近似による試験値で、最終分析ではR等の標準統計ソフトで再検証します。',
+  ];
+  if (groupMode) {
+    notes.push('この試験モデルは児童ランダム切片のみで、学級・学校クラスタは調整していません。各条件が1校ずつの場合、学校固有差と学校条件差を分離できないため、学校間p値は探索的に扱います。');
+  }
+  return notes.join(' ');
 }
 
 function emptyContrasts(groupMode: boolean): QuestionnaireLmmContrast[] {
@@ -324,10 +366,51 @@ function emptyContrasts(groupMode: boolean): QuestionnaireLmmContrast[] {
 }
 
 export function buildQuestionnaireLmmTrial(records: QuestionnaireRecord[], metric: QuestionnaireLmmMetric): QuestionnaireLmmTrialMetricResult {
+  const duplicateWaveKeys = duplicateWaveKeyCount(records);
   const observations = uniqueObservations(records, metric);
   const counts = participantCounts(observations);
+  const comparisonStarted = counts.comparisonParticipants > 0;
   const groupMode = counts.interventionParticipants >= 2 && counts.comparisonParticipants >= 2;
-  const mode: QuestionnaireLmmTrialMetricResult['mode'] = groupMode ? 'group_time' : 'intervention_time_only';
+  const mode: QuestionnaireLmmTrialMetricResult['mode'] = (groupMode || comparisonStarted) ? 'group_time' : 'intervention_time_only';
+  const common = {
+    metric,
+    metricLabel: metric === 'l2wtc' ? 'L2 WTC' : '主体的に学習に取り組む態度',
+    mode,
+    nParticipants: counts.nParticipants,
+    complete3: counts.complete3,
+    partialParticipants: counts.partialParticipants,
+    interventionParticipants: counts.interventionParticipants,
+    comparisonParticipants: counts.comparisonParticipants,
+    conditionConflictParticipants: counts.conditionConflictParticipants,
+    duplicateWaveKeys,
+    estimationMethod: 'REML_random_intercept' as const,
+    inferenceMethod: 'Wald_z_approximation' as const,
+  };
+
+  if (counts.conditionConflictParticipants > 0) {
+    return {
+      ...common,
+      status: 'invalid_data',
+      nObservations: observations.length,
+      randomInterceptVariance: null,
+      residualVariance: null,
+      contrasts: emptyContrasts(mode === 'group_time'),
+      note: `同一research_idで学校条件が時点間に矛盾している児童が ${counts.conditionConflictParticipants}人いるため、試験分析を停止しました。通常の質問紙集計には影響しません。`,
+    };
+  }
+
+  if (comparisonStarted && !groupMode) {
+    return {
+      ...common,
+      status: 'insufficient_data',
+      nObservations: observations.length,
+      randomInterceptVariance: null,
+      residualVariance: null,
+      contrasts: emptyContrasts(true),
+      note: `比較校データの導入を検出しましたが、学校間LMMには各条件2人以上の有効児童が必要です。現在は実践校 ${counts.interventionParticipants}人、比較校 ${counts.comparisonParticipants}人です。実践校内分析へ自動的に戻らず、学校間分析を保留します。 ${analysisCaveat(counts, duplicateWaveKeys, true)}`,
+    };
+  }
+
   const modelObservations = groupMode ? observations : observations.filter((observation) => observation.condition === 'intervention');
   const blocks = buildBlocks(modelObservations, groupMode);
   const parameterCount = groupMode ? 6 : 3;
@@ -336,40 +419,28 @@ export function buildQuestionnaireLmmTrial(records: QuestionnaireRecord[], metri
 
   if (nObservations < minimumObservations || blocks.length < 3) {
     return {
-      metric,
-      metricLabel: metric === 'l2wtc' ? 'L2 WTC' : '主体的に学習に取り組む態度',
+      ...common,
       status: 'insufficient_data',
-      mode,
-      nParticipants: counts.nParticipants,
       nObservations,
-      complete3: counts.complete3,
-      interventionParticipants: counts.interventionParticipants,
-      comparisonParticipants: counts.comparisonParticipants,
       randomInterceptVariance: null,
       residualVariance: null,
       contrasts: emptyContrasts(groupMode),
-      note: groupMode
+      note: `${groupMode
         ? '両校データはありますが、試験的LMMを安定して推定するには観測数が不足しています。'
-        : '現在は実践校データのみのため、学校間の主要仮説はまだ検定しません。3時点データが蓄積すると実践校内の参考LMMを表示します。',
+        : '現在は実践校データのみです。3時点データが蓄積すると実践校内の参考LMMを表示します。'} ${analysisCaveat(counts, duplicateWaveKeys, groupMode)}`,
     };
   }
 
   const fit = fitRandomInterceptLmm(blocks, parameterCount);
   if (!fit) {
     return {
-      metric,
-      metricLabel: metric === 'l2wtc' ? 'L2 WTC' : '主体的に学習に取り組む態度',
+      ...common,
       status: 'model_failed',
-      mode,
-      nParticipants: counts.nParticipants,
       nObservations,
-      complete3: counts.complete3,
-      interventionParticipants: counts.interventionParticipants,
-      comparisonParticipants: counts.comparisonParticipants,
       randomInterceptVariance: null,
       residualVariance: null,
       contrasts: emptyContrasts(groupMode),
-      note: '試験的LMMが収束しませんでした。通常の質問紙集計には影響しません。最終分析はR等で再検証してください。',
+      note: `試験的LMMが収束しませんでした。通常の質問紙集計には影響しません。 ${analysisCaveat(counts, duplicateWaveKeys, groupMode)}`,
     };
   }
 
@@ -386,21 +457,15 @@ export function buildQuestionnaireLmmTrial(records: QuestionnaireRecord[], metri
       ];
 
   return {
-    metric,
-    metricLabel: metric === 'l2wtc' ? 'L2 WTC' : '主体的に学習に取り組む態度',
+    ...common,
     status: 'ok',
-    mode,
-    nParticipants: counts.nParticipants,
     nObservations,
-    complete3: counts.complete3,
-    interventionParticipants: counts.interventionParticipants,
-    comparisonParticipants: counts.comparisonParticipants,
     randomInterceptVariance: round6(fit.randomInterceptVariance),
     residualVariance: round6(fit.residualVariance),
     contrasts,
-    note: groupMode
-      ? 'ランダム切片LMMによるオンデマンド試験分析です。主要contrastはMid→Postの学校間変化差です。p値はWald z近似で、論文用最終分析ではR等で再検証します。'
-      : '比較校データ未導入のため、実践校内の時期変化だけを参考表示しています。学校間の主要仮説は比較校データ導入後に表示します。p値はWald z近似で、論文用最終分析ではR等で再検証します。',
+    note: `${groupMode
+      ? 'ランダム切片LMMによるオンデマンド試験分析です。主要contrastはMid→Postの学校間変化差です。'
+      : '比較校データ未導入のため、実践校内の時期変化だけを参考表示しています。学校間の主要仮説は比較校データ導入後に表示します。'} ${analysisCaveat(counts, duplicateWaveKeys, groupMode)}`,
   };
 }
 
