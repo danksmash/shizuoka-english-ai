@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { getDocument, queryCollection, setDocument } from './firestore';
+import { getDocument, queryCollection, setDocument, setDocumentsBatch } from './firestore';
 import type { Rq2SampledItem, Rq2Purpose } from './researchRq2Sampling';
 
 export const RQ2_RUN_COLLECTION = 'research_rq2_runs';
@@ -37,17 +37,20 @@ export async function createRq2Run(args: {
     status: 'sampled',
   };
   await setDocument(RQ2_RUN_COLLECTION, runId, run);
-  for (const item of args.items) {
+  await setDocumentsBatch(RQ2_ITEM_COLLECTION, args.items.map((item) => {
     const itemId = `${runId}_${safeKey(item.sequenceId)}`;
-    await setDocument(RQ2_ITEM_COLLECTION, itemId, {
-      ...item,
-      itemId,
-      runId,
-      sampledAt: now,
-      aiStatus: 'pending',
-      humanStatus: 'pending',
-    });
-  }
+    return {
+      id: itemId,
+      data: {
+        ...item,
+        itemId,
+        runId,
+        sampledAt: now,
+        aiStatus: 'pending',
+        humanStatus: 'pending',
+      },
+    };
+  }));
   return run;
 }
 
@@ -58,6 +61,21 @@ export async function getRq2Run(runId: string) {
 export async function getRq2Items(runId: string): Promise<Record<string, any>[]> {
   const rows = await queryCollection(RQ2_ITEM_COLLECTION, 'runId', runId, 1000);
   return rows.sort((a, b) => String(a.stratum || '').localeCompare(String(b.stratum || '')) || Number(a.stratumRank || 0) - Number(b.stratumRank || 0));
+}
+
+export async function patchRq2ItemRecords(updates: Array<{ current: Record<string, any>; patch: Record<string, any> }>) {
+  if (!updates.length) return [];
+  const now = new Date().toISOString();
+  const documents = updates.map(({ current, patch }) => {
+    const itemId = String(current.itemId || '');
+    const runId = String(current.runId || '');
+    if (!itemId || !runId) throw new Error('RQ2_ITEM_ID_REQUIRED');
+    const next = { ...current, ...patch, itemId, runId, updatedAt: now };
+    delete next._name;
+    return { id: itemId, data: next };
+  });
+  await setDocumentsBatch(RQ2_ITEM_COLLECTION, documents);
+  return documents.map((document) => document.data);
 }
 
 export async function patchRq2ItemRecord(current: Record<string, any>, patch: Record<string, any>) {
