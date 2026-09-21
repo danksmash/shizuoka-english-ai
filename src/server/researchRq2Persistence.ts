@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { getDocument, queryCollection, setDocument, setDocumentsBatch } from './firestore';
 import type { Rq2SampledItem, Rq2Purpose } from './researchRq2Sampling';
+import type { Rq2RunType } from './researchRq2RunGuard';
 
 export const RQ2_RUN_COLLECTION = 'research_rq2_runs';
 export const RQ2_ITEM_COLLECTION = 'research_rq2_items';
@@ -19,6 +20,7 @@ export async function createRq2Run(args: {
   counts: Record<string, any>;
   items: Rq2SampledItem[];
   createdBy: string;
+  runType: Rq2RunType;
 }) {
   const runId = `rq2_${Date.now()}_${safeKey(args.seed).slice(0, 8)}`;
   const now = new Date().toISOString();
@@ -26,12 +28,13 @@ export async function createRq2Run(args: {
     runId,
     createdAt: now,
     createdBy: args.createdBy,
+    runType: args.runType,
     seed: args.seed,
     targetPerStratum: args.targetPerStratum,
     maxPerParticipantPerStratum: args.maxPerParticipantPerStratum,
     lessonOnly: args.lessonOnly,
     codebookVersion: args.codebookVersion,
-    promptVersion: 'rq2-coding-prompt-v1',
+    promptVersion: 'rq2-coding-prompt-v2',
     counts: args.counts,
     itemCount: args.items.length,
     status: 'sampled',
@@ -56,6 +59,34 @@ export async function createRq2Run(args: {
 
 export async function getRq2Run(runId: string) {
   return getDocument(RQ2_RUN_COLLECTION, runId);
+}
+
+export async function findActiveFormalRq2Runs() {
+  const rows = await queryCollection(RQ2_RUN_COLLECTION, 'runType', 'formal', 100);
+  return rows.filter((row) => String(row.status || '') !== 'invalidated');
+}
+
+export async function invalidateRq2Run(
+  runId: string,
+  invalidatedBy: string,
+  reason: string,
+  progress: Record<string, any>,
+) {
+  const current = await getRq2Run(runId);
+  if (!current) throw new Error('RQ2_RUN_NOT_FOUND');
+  if (String(current.status || '') === 'invalidated') return current;
+  const next = {
+    ...current,
+    previousStatus: String(current.status || 'sampled'),
+    status: 'invalidated',
+    invalidatedAt: new Date().toISOString(),
+    invalidatedBy: String(invalidatedBy || 'researcher').slice(0, 100),
+    invalidationReason: String(reason || 'manual_reset').slice(0, 200),
+    invalidatedProgress: progress,
+  };
+  delete (next as Record<string, any>)._name;
+  await setDocument(RQ2_RUN_COLLECTION, runId, next);
+  return next;
 }
 
 export async function getRq2Items(runId: string): Promise<Record<string, any>[]> {
