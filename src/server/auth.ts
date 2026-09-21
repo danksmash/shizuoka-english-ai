@@ -100,6 +100,7 @@ export function researcherRouteAllowed(req: Pick<Request, 'path'>): boolean {
   if (path.startsWith('/questionnaire/') || path.startsWith('/api/management/questionnaire/')) return true;
   if (path.startsWith('/study-schedules') || path.startsWith('/api/management/study-schedules')) return true;
   if (path.startsWith('/study-participants') || path.startsWith('/api/management/study-participants')) return true;
+  if (path.startsWith('/research-rq2') || path.startsWith('/api/management/research-rq2')) return true;
   return false;
 }
 
