@@ -4,7 +4,7 @@ import { researchDataScopeForRow, type ResearchFilterQuery } from './researchDas
 type Row = Record<string, unknown>;
 
 export const RESEARCH_LESSON_REFLECTION_HEADERS = [
-  'research_id', 'class_id', 'data_scope', 'grade_level', 'class_number', 'local_date', 'status', 'today_goal',
+  'research_id', 'site_id', 'school_condition', 'class_id', 'data_scope', 'grade_level', 'class_number', 'local_date', 'status', 'today_goal',
   'goal_rating', 'communication_rating', 'rating_scale_min', 'rating_scale_max', 'rating_item_1', 'rating_item_2',
   'reflection_text', 'reflection_char_count', 'revision', 'created_at', 'updated_at', 'submitted_at',
 ] as const;
@@ -22,6 +22,29 @@ function gradeForClassId(classId: string): string {
   if (classId.startsWith('5-')) return '5';
   if (classId.startsWith('6-')) return '6';
   return '';
+}
+
+function conditionForClassId(classId: string): 'intervention' | 'comparison' | '' {
+  if (/^[56]-C[1-9]$/.test(classId)) return 'comparison';
+  if (/^[56]-[123]$/.test(classId)) return 'intervention';
+  return '';
+}
+
+function siteForClassId(classId: string): 'site_a' | 'site_b' | '' {
+  const condition = conditionForClassId(classId);
+  return condition === 'comparison' ? 'site_b' : condition === 'intervention' ? 'site_a' : '';
+}
+
+function scopeRowForReflection(record: ReflectionRecord): Record<string, unknown> {
+  const condition = conditionForClassId(record.classId);
+  return {
+    class_id: record.classId,
+    local_date: record.localDate,
+    ...(condition === 'comparison' ? {
+      formal_study_participant: 1,
+      school_condition: 'comparison',
+    } : {}),
+  };
 }
 
 function classNumberForClassId(classId: string): string {
@@ -49,21 +72,26 @@ export function buildResearchLessonReflectionRows(
   const classId = textQuery(query.classId);
   const grade = textQuery(query.grade);
   const dataScope = textQuery(query.dataScope);
+  const schoolCondition = textQuery(query.schoolCondition) || ((!dataScope || dataScope === 'main') ? 'intervention' : 'all');
 
   return records
     .filter((record) => {
-      const scope = researchDataScopeForRow({ class_id: record.classId, local_date: record.localDate });
+      const scope = researchDataScopeForRow(scopeRowForReflection(record));
+      const condition = conditionForClassId(record.classId);
       return (!start || record.localDate >= start)
         && (!end || record.localDate <= end)
         && (!dataScope || dataScope === 'all' || scope === dataScope)
+        && (scope !== 'main' || !schoolCondition || schoolCondition === 'all' || condition === schoolCondition)
         && classMatches(record.classId, classId)
         && gradeMatches(record.classId, grade);
     })
     .sort((a, b) => a.localDate.localeCompare(b.localDate) || a.classId.localeCompare(b.classId, 'ja') || a.researchId.localeCompare(b.researchId))
     .map((record) => ({
       research_id: record.researchId,
+      site_id: siteForClassId(record.classId),
+      school_condition: conditionForClassId(record.classId),
       class_id: record.classId,
-      data_scope: researchDataScopeForRow({ class_id: record.classId, local_date: record.localDate }),
+      data_scope: researchDataScopeForRow(scopeRowForReflection(record)),
       grade_level: gradeForClassId(record.classId),
       class_number: classNumberForClassId(record.classId),
       local_date: record.localDate,
@@ -100,6 +128,8 @@ export function serializeResearchLessonReflectionCsv(rows: Row[]): string {
 
 const FIELD_META: Record<string, { definition: string; dataType: 'string' | 'number'; allowedValues?: string }> = {
   research_id: { definition: 'AI対話研究データと共通の、児童を直接特定しない研究用匿名ID', dataType: 'string' },
+  site_id: { definition: '研究上の匿名実施校ID。学校名は出力しない', dataType: 'string', allowedValues: 'site_a | site_b | blank' },
+  school_condition: { definition: '研究条件', dataType: 'string', allowedValues: 'intervention | comparison | blank' },
   class_id: { definition: '匿名化された学級ID', dataType: 'string' },
   data_scope: { definition: '本研究・Pilot B・テスト・予備を分離する研究データ区分', dataType: 'string', allowedValues: 'main | pilot_b | test | reserve' },
   grade_level: { definition: '学年', dataType: 'number', allowedValues: '5 | 6 | blank' },
