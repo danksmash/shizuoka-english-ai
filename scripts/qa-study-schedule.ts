@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { phaseForLocalDate, validateStudyScheduleOrder, normalizeStudyDate, STUDY_CLASS_IDS } from '../src/server/studySchedulePersistence';
+import { phaseForLocalDate, validateStudyScheduleOrder, normalizeStudyDate, STUDY_CLASS_IDS, isStudyClassId } from '../src/server/studySchedulePersistence';
 
 assert.deepEqual(STUDY_CLASS_IDS, ['5-1','5-2','5-3','6-1','6-2']);
+assert.equal(isStudyClassId('5-C1'), true);
+assert.equal(isStudyClassId('6-C9'), true);
+assert.equal(isStudyClassId('5-C0'), false);
 assert.equal(normalizeStudyDate('2026-09-17'), '2026-09-17');
 assert.equal(normalizeStudyDate(''), '');
 assert.throws(() => normalizeStudyDate('2026-02-30'), /INVALID_STUDY_DATE/);
@@ -51,13 +54,18 @@ assert.ok(studentPersistence.includes('export async function updateStudentResear
 assert.ok(studentPersistence.includes('researchAssignmentHistory'));
 assert.ok(studentPersistence.includes('RESEARCH_ASSIGNMENT_CONFLICT'));
 assert.ok(studentPersistence.includes('expectedAssignedPartnerCountry'));
-assert.ok(page.includes("const classes=['5-1','5-2','5-3','6-1','6-2'];"));
+assert.ok(studentPersistence.includes('export async function updateStudentStudyMetadata'));
+assert.ok(studentPersistence.includes('schoolCondition'));
+assert.ok(entry.includes('createStudyParticipantRouter'));
+assert.ok(auth.includes("path.startsWith('/study-participants')"));
+assert.ok(page.includes("let classes=['5-1','5-2','5-3','6-1','6-2'];"));
 assert.ok(!page.includes("'6-3'"));
-assert.ok(page.includes('本調査5学級'));
+assert.ok(page.includes('実践校と比較校'));
 assert.ok(page.includes('アプリ使用開始日'));
-assert.ok(page.includes('来校留学生国籍告知日'));
-assert.ok(page.includes('自己紹介ビデオ視聴日'));
-assert.ok(page.includes('留学生交流会実施日'));
+assert.ok(page.includes('Mid基準日'));
+assert.ok(page.includes('本人動画日'));
+assert.ok(page.includes('Post基準日'));
+assert.ok(page.includes('比較校はPhase 1～4に割り当てません'));
 assert.ok(page.includes('research_id + local_date'));
 assert.ok(page.includes('class_id + local_date'));
 assert.ok(page.includes('担当留学生設定'));
