@@ -18,7 +18,7 @@ export type ResearchFilterQuery = {
 type Row = Record<string, unknown>;
 type ExportDataSets = Record<ResearchExportDatasetName, Row[]>;
 
-export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v6';
+export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v7';
 
 const RESEARCH_PERSONAS = TARGET_20_AI_STUDENT_IDS.map((id) => {
   const persona = AI_STUDENTS_MASTER_LIST.find((item) => item.id === id);
@@ -98,9 +98,9 @@ const FIELD_DEFINITION: Record<string, string> = {
   persona_country:'選択したPersonaの国',
   persona_gender:'選択したPersonaの性別',
   ai_student_id:'アプリ内部のAI留学生ID',
-  assigned_partner_id:'実際に交流する担当留学生を識別する研究用ID',
-  assigned_partner_country:'実際に交流する担当留学生の出身国（児童マスタから研究Export・Dashboard集計時に結合）',
-  assignment_announced_at:'担当留学生の国籍が児童へ告知された日時（Study 1の国籍告知日を基準に児童マスタへ保存）',
+  assigned_partner_id:'セッション初回保存時点で児童マスタに登録されていた担当留学生の研究用ID。後日の現在値では自動補完しない',
+  assigned_partner_country:'セッション初回保存時点で児童マスタに登録されていた担当留学生の出身国。未保存の過去セッションは空欄のままとする',
+  assignment_announced_at:'セッション初回保存時点で保持していた担当留学生国籍の告知基準日時。後日の担当変更で過去セッションを書き換えない',
   topic:'児童が選択した対話テーマ',
   child_total_words:'児童英語発話の総語数',
   mean_child_words_per_turn:'児童1発話あたり平均語数',
