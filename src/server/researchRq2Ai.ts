@@ -85,6 +85,7 @@ ${JSON.stringify(compactItems)}
         aiStatus: 'coded',
         aiModel: model,
         aiPromptVersion: promptVersion,
+        aiCodebookVersion: String(codebook.version || ''),
         aiCodedAt: new Date().toISOString(),
       };
     }),
