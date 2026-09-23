@@ -21,6 +21,9 @@ import {
   withResearchSessionHistoryManagementPage,
 } from './src/server/researchSessionHistoryRuntime';
 import { createResearchSessionAuditRouter } from './src/server/researchSessionAuditRoutes';
+import { createResearchRq1Router } from './src/server/researchRq1Routes';
+import { withResearchRq1DashboardLink } from './src/server/researchRq1DashboardRuntime';
+import { createResearchRq2FormalAlignmentRouter } from './src/server/researchRq2FormalAlignmentRoutes';
 import { createResearchRq2Router } from './src/server/researchRq2Routes';
 import { createResearchRq3Router } from './src/server/researchRq3Routes';
 import { manualResearchExclusionGetHandler } from './src/server/researchManualExclusionRuntime';
@@ -38,6 +41,7 @@ application.get = function researchPhaseAwareGet(this: any, path: any, ...handle
     handlers[handlers.length - 1] = withResearchSessionAuditManagementPage(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withResearchSessionHistoryManagementPage(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withResearchReflectionChartPolish(path, handlers[handlers.length - 1]);
+    handlers[handlers.length - 1] = withResearchRq1DashboardLink(path, handlers[handlers.length - 1]);
     if (path === '/api/management/research.dashboard') {
       handlers[handlers.length - 1] = withResilientResearchPhaseDashboard(path, handlers[handlers.length - 1]);
     } else {
@@ -77,6 +81,14 @@ application.listen = function reflectionAwareListen(this: any, ...args: any[]) {
   if (!this.__researchSessionAuditRoutesMounted) {
     this.use('/api/management', createResearchSessionAuditRouter());
     this.__researchSessionAuditRoutesMounted = true;
+  }
+  if (!this.__researchRq1RoutesMounted) {
+    this.use('/api/management', createResearchRq1Router());
+    this.__researchRq1RoutesMounted = true;
+  }
+  if (!this.__researchRq2FormalAlignmentRoutesMounted) {
+    this.use('/api/management', createResearchRq2FormalAlignmentRouter());
+    this.__researchRq2FormalAlignmentRoutesMounted = true;
   }
   if (!this.__researchRq2RoutesMounted) {
     this.use('/api/management', createResearchRq2Router());
