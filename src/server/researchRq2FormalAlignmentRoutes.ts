@@ -42,7 +42,7 @@ function errorResponse(res: express.Response, error: any, fallback: string) {
   });
 }
 
-async function candidateSource(lessonOnly: boolean) {
+async function loadCandidateSource(lessonOnly: boolean) {
   const [sessions, schedules] = await Promise.all([getAllSessionsForManagement(), getAllStudySchedules()]);
   if (!lessonOnly) {
     return {
@@ -74,7 +74,7 @@ router.get('/research-rq2/status', requireManagementRole(['researcher']), async 
   try {
     const lessonOnly = bool(req.query.lessonOnly, true);
     const [{ candidates, candidateSource, finalIncludedSessionCount }, codebook] = await Promise.all([
-      candidateSource(lessonOnly),
+      loadCandidateSource(lessonOnly),
       getRq2Codebook(),
     ]);
     const defaultPreview = sampleRq2Candidates(candidates, 'RQ2-PREVIEW-ONLY', 50, 2);
@@ -106,7 +106,7 @@ router.get('/research-rq2/preflight-audit', requireManagementRole(['researcher']
     const maxPerParticipantPerStratum = intValue(req.query.maxPerParticipantPerStratum, 2, 1, 5);
     const lessonOnly = bool(req.query.lessonOnly, true);
     const [{ candidates, candidateSource, finalIncludedSessionCount }, codebook, activeFormalRuns] = await Promise.all([
-      candidateSource(lessonOnly),
+      loadCandidateSource(lessonOnly),
       getRq2Codebook(),
       findActiveFormalRq2Runs(),
     ]);
@@ -151,7 +151,7 @@ router.get('/research-rq2/sample-preview', requireManagementRole(['researcher'])
     const targetPerStratum = intValue(req.query.targetPerStratum, 50, 10, 100);
     const maxPerParticipantPerStratum = intValue(req.query.maxPerParticipantPerStratum, 2, 1, 5);
     const lessonOnly = bool(req.query.lessonOnly, true);
-    const { candidates, candidateSource, finalIncludedSessionCount } = await candidateSource(lessonOnly);
+    const { candidates, candidateSource, finalIncludedSessionCount } = await loadCandidateSource(lessonOnly);
     const sampled = sampleRq2Candidates(candidates, seed, targetPerStratum, maxPerParticipantPerStratum);
     return res.json({
       success: true,
@@ -180,7 +180,7 @@ router.post('/research-rq2/sample', requireManagementRole(['researcher']), async
     if (runType === 'formal' && !lessonOnly) throw new Error('RQ2_FORMAL_FINAL_INCLUSION_REQUIRED');
 
     const [{ candidates, candidateSource, finalIncludedSessionCount }, codebook] = await Promise.all([
-      candidateSource(lessonOnly),
+      loadCandidateSource(lessonOnly),
       getRq2Codebook(),
     ]);
     if (runType === 'formal' && candidateSource !== 'analysis_included_final') throw new Error('RQ2_FORMAL_FINAL_INCLUSION_REQUIRED');
