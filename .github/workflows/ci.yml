@@ -30,5 +30,8 @@ jobs:
       - name: Full contract QA
         run: npm run qa
 
+      - name: Daily class stack QA
+        run: npx tsx scripts/qa-research-daily-class-stack.ts
+
       - name: Production build
         run: npm run build
