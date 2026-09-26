@@ -17,6 +17,7 @@ import {
 import { withResearchSessionAuditManagementPage } from './src/server/researchSessionAuditManagementRuntime';
 import { withResearchReflectionChartPolish } from './src/server/researchReflectionChartPolishRuntime';
 import { withResearchDailyClassStack } from './src/server/researchDailyClassStackRuntime';
+import { withResearchWordsByClassRuntime } from './src/server/researchWordsByClassRuntime';
 import {
   createResearchSessionHistoryRouter,
   withResearchSessionHistoryManagementPage,
@@ -51,6 +52,7 @@ application.get = function researchPhaseAwareGet(this: any, path: any, ...handle
       handlers[handlers.length - 1] = withResearchPhaseDashboardConsistency(path, handlers[handlers.length - 1]);
     }
     handlers[handlers.length - 1] = withResearchDailyClassStack(path, handlers[handlers.length - 1]);
+    handlers[handlers.length - 1] = withResearchWordsByClassRuntime(path, handlers[handlers.length - 1]);
   }
   return originalGet.call(this, path, ...handlers);
 };
