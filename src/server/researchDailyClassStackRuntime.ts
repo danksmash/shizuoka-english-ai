@@ -199,7 +199,7 @@ function injectResearchDailyClassStack(html: string): string {
     var hash=0;for(var i=0;i<id.length;i+=1)hash=((hash*31)+id.charCodeAt(i))>>>0;
     return fallbackColors[hash%fallbackColors.length];
   }
-  function h(value){return String(value==null?'':value).replace(/[&<>\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot',"'":'&#39;'}[ch]})}
+  function h(value){return String(value==null?'':value).replace(/[&<>\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]})}
   function stackedClassBars(rows,legend){
     var items=Array.isArray(rows)?rows.slice():[];
     if(!items.length)return '<div class="muted daily-class-empty">データなし</div>';
