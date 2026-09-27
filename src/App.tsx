@@ -21,7 +21,6 @@ import { getAIStudentById } from './data/curriculum';
 import { detectVocabularyInText } from './data/vocabulary56';
 import { getContextualAsrBiasPhrases } from './utils/contextualAsr';
 import { interpretContextualAsrWithAlternatives } from './utils/contextualAsrAlternatives';
-import { guardNameTurnAiReply, prepareNameTurnForAi } from './utils/nameTurnGuard';
 import {
   createStableSpeechRecognitionSession,
   type StableSpeechRecognitionSession,
@@ -256,16 +255,17 @@ export default function App() {
     const trimmed = text.trim();
     if (trimmed.length > MAX_CHILD_UTTERANCE_CHARS) { setMicHintMessage('一度に話せる長さを少し超えました。少し短く分けて話してみてね。'); setTimeout(() => setMicHintMessage(''), 4000); return; }
     setMicHintMessage('');
-    const previousMessages = messagesRef.current;
-    const previousAiText = [...previousMessages].reverse().find((message) => message.sender === 'ai')?.englishText || '';
-    const nameTurn = prepareNameTurnForAi(previousAiText, trimmed);
+    const spokenNameMatch = trimmed.match(/\b(?:my name is|i'm|i am|call me)\s+([A-Za-z]{2,15})\b/i);
+    if (spokenNameMatch) {
+      const candidate = spokenNameMatch[1].trim();
+      const capitalized = candidate.charAt(0).toUpperCase() + candidate.slice(1).toLowerCase();
+      const nonNameWords = ['in','from','ten','eleven','twelve','fine','good','happy','ready','fifth','sixth','student','boy','girl','japanese','japan','not','very'];
+      if (!nonNameWords.includes(candidate.toLowerCase())) { setProfile((prev) => ({ ...prev, name: capitalized })); profileRef.current = { ...profileRef.current, name: capitalized }; }
+    }
     extractAndAddVocab(trimmed);
     const words = countEnglishWords(trimmed);
     const childMsg: ChatMessage = { id: `child-${Date.now()}`, sender: 'child', englishText: trimmed, japaneseText: '', timestamp: Date.now(), wordCount: words };
-    const newHistory = [...previousMessages, childMsg]; setMessages(newHistory); messagesRef.current = newHistory;
-    const aiHistory = nameTurn.isNameAnswerTurn
-      ? [...previousMessages, { ...childMsg, englishText: nameTurn.aiText, wordCount: countEnglishWords(nameTurn.aiText) }]
-      : newHistory;
+    const newHistory = [...messagesRef.current, childMsg]; setMessages(newHistory); messagesRef.current = newHistory;
     const nextTurnCount = turnCountRef.current + 1; turnCountRef.current = nextTurnCount; setTurnCount(nextTurnCount);
     const nextTotalWords = totalChildWordsRef.current + words; totalChildWordsRef.current = nextTotalWords; setTotalChildWords(nextTotalWords);
     clearSpeechDraft(); setIsAiResponding(true); setMood('thinking');
@@ -273,7 +273,7 @@ export default function App() {
     const aiRequestStartedAt = Date.now();
     try {
       const currentProf = profileRef.current;
-      const response = await fetch(apiUrl('/api/chat'), { method:'POST', headers:{'Content-Type':'application/json'}, signal:controller.signal, body:JSON.stringify({ message:nameTurn.aiText, history:aiHistory, topic:currentProf.selectedTopic, studentName:currentProf.name, aiStudentId:currentProf.selectedAiStudentId }) });
+      const response = await fetch(apiUrl('/api/chat'), { method:'POST', headers:{'Content-Type':'application/json'}, signal:controller.signal, body:JSON.stringify({ message:trimmed, history:newHistory, topic:currentProf.selectedTopic, studentName:currentProf.name, aiStudentId:currentProf.selectedAiStudentId }) });
       const resData = await response.json();
       recordResearchEvent('ai_response_latency_ms', String(Math.max(0, Date.now() - aiRequestStartedAt)));
       if (resData?._diagnostics?.model) recordResearchEvent('ai_model', String(resData._diagnostics.model));
@@ -285,14 +285,8 @@ export default function App() {
       if (!dialogueActiveRef.current || controller.signal.aborted || chatAbortControllerRef.current !== controller) return;
       if (resData.success && resData.data) {
         const { reply, japaneseTranslation, studentJapaneseTranslation, studentTranslationStatus, mood: aiMood, culturalNote } = resData.data;
-        const guardedReply = nameTurn.isNameAnswerTurn
-          ? guardNameTurnAiReply(reply, japaneseTranslation, nameTurn.candidateTokens)
-          : { reply, japaneseTranslation, replaced: false as const };
-        if (guardedReply.replaced) console.warn('Name-turn guard replaced an unsafe name-focused AI reply.');
-        const finalReply = guardedReply.reply;
-        const finalJapaneseTranslation = guardedReply.japaneseTranslation;
-        extractAndAddVocab(finalReply);
-        const aiMsg: ChatMessage = { id:`ai-${Date.now()}`, sender:'ai', englishText:finalReply, japaneseText:finalJapaneseTranslation, timestamp:Date.now(), culturalNote:culturalNote || undefined };
+        extractAndAddVocab(reply);
+        const aiMsg: ChatMessage = { id:`ai-${Date.now()}`, sender:'ai', englishText:reply, japaneseText:japaneseTranslation, timestamp:Date.now(), culturalNote:culturalNote || undefined };
         const translatedHistory = messagesRef.current.map((message) => {
           if (message.id !== childMsg.id) return message;
           if (studentTranslationStatus === 'incomplete') return { ...message, japaneseText:'日本語に訳せませんでした。' };
@@ -303,7 +297,7 @@ export default function App() {
         if (learningDataEnabled && learningCode && sessionId) {
           void enqueueSessionSnapshot({ sessionId, learningCode, aiStudentId: currentProf.selectedAiStudentId, topic: currentProf.selectedTopic, targetDurationMinutes: currentProf.selectedDurationMinutes, startedAt: sessionStartedAtRef.current, endedAt: Date.now(), history: updatedHistory, encounteredVocab: encounteredVocabRef.current, systemEvents: systemEventsRef.current, personaLabelCondition: PERSONA_LABEL_CONDITION, countryLabelVisible: LABELS_VISIBLE, accentLabelVisible: LABELS_VISIBLE, flagVisible: LABELS_VISIBLE, studentSelectedSpeechRate: speechRateRef.current, effectiveTtsSpeechRate: effectiveTtsRateRef.current }).catch(() => undefined);
         }
-        setMood((aiMood as CharacterMood) || 'speaking'); playAiVoice(finalReply);
+        setMood((aiMood as CharacterMood) || 'speaking'); playAiVoice(reply);
       } else throw new Error('API response unsuccessful');
     } catch (e) {
       const wasAborted = (e as {name?:string})?.name === 'AbortError' || controller.signal.aborted;
