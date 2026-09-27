@@ -31,6 +31,18 @@ export type DailyClassLegendItem = {
   label: string;
 };
 
+export type ClassTurnsPoint = {
+  date: string;
+  value: number | null;
+  n: number;
+};
+
+export type ClassTurnsSeries = {
+  class_id: string;
+  label: string;
+  points: ClassTurnsPoint[];
+};
+
 function weekStart(date: string): string {
   const parsed = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return date;
@@ -112,6 +124,69 @@ export function buildDailyClassStackRows(
   };
 }
 
+function sessionDialogueTurns(row: Row): number | null {
+  const utteranceCount = Number(row.dialogue_utterance_count);
+  if (Number.isFinite(utteranceCount) && utteranceCount > 0) return utteranceCount;
+
+  const childTurns = Number(row.child_turn_count);
+  const aiTurns = Number(row.ai_turn_count);
+  if (
+    Number.isFinite(childTurns)
+    && childTurns >= 0
+    && Number.isFinite(aiTurns)
+    && aiTurns >= 0
+    && childTurns + aiTurns > 0
+  ) {
+    return childTurns + aiTurns;
+  }
+  return null;
+}
+
+function sessionTurnsPerMinute(row: Row): number | null {
+  const turns = sessionDialogueTurns(row);
+  const seconds = Number(row.actual_duration_seconds);
+  if (turns === null) return null;
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  return turns * 60 / seconds;
+}
+
+export function buildCumulativeTurnsByClass(sessions: Row[]): ClassTurnsSeries[] {
+  const validSessions = sessions
+    .map((row) => ({
+      row,
+      classId: String(row.class_id || '').trim() || 'unknown',
+      date: String(row.local_date || '').trim(),
+      turnsPerMinute: sessionTurnsPerMinute(row),
+    }))
+    .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.date) && item.turnsPerMinute !== null);
+
+  const dates = [...new Set(validSessions.map((item) => item.date))].sort();
+  const classIds = [...new Set(validSessions.map((item) => item.classId))].sort(compareClassIds);
+
+  return classIds.map((classId) => {
+    const classRows = validSessions.filter((item) => item.classId === classId);
+    let sum = 0;
+    let n = 0;
+    const points = dates.map((date) => {
+      for (const item of classRows) {
+        if (item.date !== date || item.turnsPerMinute === null) continue;
+        sum += item.turnsPerMinute;
+        n += 1;
+      }
+      return {
+        date,
+        value: n > 0 ? Math.round((sum / n) * 100) / 100 : null,
+        n,
+      };
+    });
+    return {
+      class_id: classId,
+      label: researchClassLabel(classId),
+      points,
+    };
+  });
+}
+
 function totalsMatchExistingChart(stackRows: DailyClassStackRow[], existingRows: any[]): boolean {
   const expected = new Map<string, number>();
   for (const row of existingRows || []) {
@@ -147,24 +222,27 @@ function enhanceDashboardJson(req: any, res: any, body: any): any {
   const filteredSessions = dashboardFilteredExportSessions(req, res);
   if (!filteredSessions) return body;
 
-  const aggregation: Aggregation = body.charts.aggregation === 'weekly' ? 'weekly' : 'daily';
-  const stack = buildDailyClassStackRows(filteredSessions, aggregation);
-  const existingRows = Array.isArray(body.charts.daily) ? body.charts.daily : [];
-  const totalsMatch = totalsMatchExistingChart(stack.rows, existingRows);
+  // This combined card is deliberately daily even when other dashboard charts
+  // switch to weekly aggregation for a long date span.
+  const stack = buildDailyClassStackRows(filteredSessions, 'daily');
+  const dashboardAggregation: Aggregation = body.charts.aggregation === 'weekly' ? 'weekly' : 'daily';
 
-  if (!totalsMatch) {
-    console.error('Research daily class stack total mismatch', {
-      aggregation,
-      stackRows: stack.rows.map((row) => ({ date: row.date, sessions: row.sessions })),
-      dashboardRows: existingRows.map((row: any) => ({ date: row?.date, sessions: row?.sessions })),
-    });
-    return {
-      ...body,
-      dashboardWarnings: [
-        ...(Array.isArray(body.dashboardWarnings) ? body.dashboardWarnings : []),
-        'daily_class_stack_total_mismatch',
-      ],
-    };
+  if (dashboardAggregation === 'daily') {
+    const existingRows = Array.isArray(body.charts.daily) ? body.charts.daily : [];
+    const totalsMatch = totalsMatchExistingChart(stack.rows, existingRows);
+    if (!totalsMatch) {
+      console.error('Research daily class stack total mismatch', {
+        stackRows: stack.rows.map((row) => ({ date: row.date, sessions: row.sessions })),
+        dashboardRows: existingRows.map((row: any) => ({ date: row?.date, sessions: row?.sessions })),
+      });
+      return {
+        ...body,
+        dashboardWarnings: [
+          ...(Array.isArray(body.dashboardWarnings) ? body.dashboardWarnings : []),
+          'daily_class_stack_total_mismatch',
+        ],
+      };
+    }
   }
 
   return {
@@ -173,7 +251,8 @@ function enhanceDashboardJson(req: any, res: any, body: any): any {
       ...body.charts,
       dailyClassStack: stack.rows,
       dailyClassLegend: stack.legend,
-      dailyClassStackMatchesTotal: true,
+      cumulativeTurnsByClass: buildCumulativeTurnsByClass(filteredSessions),
+      dailyClassStackMatchesTotal: dashboardAggregation === 'daily' ? true : null,
     },
   };
 }
@@ -181,8 +260,20 @@ function enhanceDashboardJson(req: any, res: any, body: any): any {
 function injectResearchDailyClassStack(html: string): string {
   if (!html.includes('id="chartDaily"') || html.includes('researchDailyClassStack')) return html;
 
+  const chartDailyMarkup = '<div id="chartDaily" class="chart"></div>';
+  const combinedMarkup = `<div id="dailySessionRangeControls" class="daily-range-controls" role="group" aria-label="日別表示期間">
+<button type="button" data-daily-range="7">7日</button>
+<button type="button" data-daily-range="14" class="is-active">14日</button>
+<button type="button" data-daily-range="30">30日</button>
+<button type="button" data-daily-range="all">全期間</button>
+</div>
+<div id="chartDaily" class="chart"></div>
+<div class="daily-turn-divider" aria-hidden="true"></div>
+<h3 id="chartTurnsTitle" class="daily-turn-title">1分あたり平均ターン数（学級別・累積平均・日別）</h3>
+<div id="chartTurns" class="chart"></div>`;
+
   const style = `<style id="researchDailyClassStackStyle">
-.daily-class-stack-card{display:flex;flex-direction:column;min-height:390px}.daily-class-stack-card #chartDaily{height:auto;flex:1 1 auto;min-height:0;overflow:hidden}.daily-class-stack-chart{height:100%;min-height:0;display:flex;flex-direction:column;gap:8px;padding:2px 0}.daily-class-legend{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:5px 12px;align-items:center;padding:0 2px 4px;font-size:12px;font-weight:800;color:#425878}.daily-class-legend-item{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}.daily-class-swatch{width:11px;height:11px;border-radius:3px;display:inline-block;box-shadow:inset 0 0 0 1px rgba(15,35,70,.08)}.daily-class-stack-rows{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:2px 3px 4px 0;scrollbar-gutter:stable}.daily-class-row{display:grid;grid-template-columns:minmax(116px,27%) minmax(110px,1fr) 40px;align-items:center;gap:9px;min-height:28px}.daily-class-date{font-size:15px;font-weight:750;line-height:1.2;color:#425878;white-space:nowrap}.daily-class-scale{height:21px;background:#edf3ff;border-radius:999px;overflow:hidden}.daily-class-bar{height:100%;display:flex;border-radius:999px;overflow:hidden}.daily-class-segment{height:100%;min-width:1px;box-shadow:inset -1px 0 rgba(255,255,255,.5)}.daily-class-total{font-size:16px;font-weight:900;color:#173461;text-align:left}.daily-class-empty{padding:90px 8px;text-align:center}.daily-class-note{flex:0 0 auto;font-size:10px;color:#64748b;font-weight:700;padding:0 2px}.daily-class-segment:focus{outline:2px solid #10224a;outline-offset:-2px}@media(max-width:760px){.daily-class-stack-card #chartDaily{min-height:330px}.daily-class-row{grid-template-columns:minmax(104px,31%) minmax(78px,1fr) 36px;gap:7px}.daily-class-date,.daily-class-total{font-size:14px}.daily-class-legend{font-size:11px;gap:4px 9px}}
+.daily-class-stack-card{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto auto minmax(0,1fr);gap:5px;min-height:390px;height:100%;align-self:stretch}.daily-class-stack-card #chartDaily,.daily-class-stack-card #chartTurns{height:auto;min-height:0;overflow:hidden}.daily-range-controls{display:flex;justify-content:flex-end;align-items:center;gap:4px;min-height:27px}.daily-range-controls button{padding:4px 8px;border:1px solid #c7d5e8;border-radius:7px;background:#fff;color:#425878;font-size:11px;line-height:1.2;font-weight:800}.daily-range-controls button:hover{border-color:#7fa5df}.daily-range-controls button.is-active{border-color:#1767ed;background:#1767ed;color:#fff}.daily-class-stack-chart{height:100%;min-height:0;display:flex;flex-direction:column;gap:5px;padding:1px 0}.daily-class-legend{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:4px 11px;align-items:center;padding:0 2px 2px;font-size:11px;font-weight:800;color:#425878}.daily-class-legend-item{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}.daily-class-swatch{width:10px;height:10px;border-radius:3px;display:inline-block;box-shadow:inset 0 0 0 1px rgba(15,35,70,.08)}.daily-class-stack-rows{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;padding:1px 3px 3px 0;scrollbar-gutter:stable}.daily-density-comfortable .daily-class-stack-rows{gap:8px}.daily-density-compact .daily-class-stack-rows{gap:5px}.daily-density-dense .daily-class-stack-rows{gap:3px}.daily-class-row{display:grid;grid-template-columns:minmax(108px,27%) minmax(100px,1fr) 38px;align-items:center;gap:8px}.daily-density-comfortable .daily-class-row{min-height:28px}.daily-density-compact .daily-class-row{min-height:24px}.daily-density-dense .daily-class-row{min-height:21px}.daily-class-date{font-size:14px;font-weight:750;line-height:1.15;color:#425878;white-space:nowrap}.daily-class-scale{background:#edf3ff;border-radius:999px;overflow:hidden}.daily-density-comfortable .daily-class-scale{height:19px}.daily-density-compact .daily-class-scale{height:16px}.daily-density-dense .daily-class-scale{height:14px}.daily-class-bar{height:100%;display:flex;border-radius:999px;overflow:hidden}.daily-class-segment{height:100%;min-width:1px;box-shadow:inset -1px 0 rgba(255,255,255,.5)}.daily-class-total{font-size:15px;font-weight:900;color:#173461;text-align:left}.daily-class-empty{padding:35px 8px;text-align:center}.daily-class-note{flex:0 0 auto;font-size:9px;color:#64748b;font-weight:700;padding:0 2px;line-height:1.3}.daily-class-segment:focus{outline:2px solid #10224a;outline-offset:-2px}.daily-turn-divider{border-top:1px solid #e2eaf5;margin:4px 0 3px}.daily-class-stack-card .daily-turn-title{font-size:16px;margin:0 0 3px;line-height:1.25}.daily-class-stack-card #chartTurns svg{display:block;min-width:0;width:100%;height:100%}@media(max-width:760px){.daily-class-stack-card{grid-template-rows:auto auto minmax(210px,1fr) auto auto minmax(220px,1fr);height:auto}.daily-class-row{grid-template-columns:minmax(100px,31%) minmax(72px,1fr) 34px;gap:6px}.daily-class-date,.daily-class-total{font-size:13px}.daily-class-legend{font-size:10px;gap:3px 8px}.daily-range-controls{justify-content:flex-start}.daily-class-stack-card .daily-turn-title{font-size:15px}}
 </style>`;
 
   const script = `<script id="researchDailyClassStack">
@@ -193,6 +284,9 @@ function injectResearchDailyClassStack(html: string): string {
     'unknown':'#94a3b8'
   };
   var fallbackColors=['#0f766e','#9333ea','#be123c','#4f46e5','#15803d','#c2410c','#0369a1','#a16207','#6d28d9','#047857'];
+  var selectedRange='14';
+  var latestCharts=null;
+
   function classColor(classId){
     var id=String(classId||'unknown');
     if(fixedColors[id])return fixedColors[id];
@@ -200,9 +294,36 @@ function injectResearchDailyClassStack(html: string): string {
     return fallbackColors[hash%fallbackColors.length];
   }
   function h(value){return String(value==null?'':value).replace(/[&<>\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]})}
+  function valid(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))}
+  function parseDate(date){var parsed=new Date(String(date||'')+'T00:00:00Z');return Number.isNaN(parsed.getTime())?null:parsed}
+  function cutoffForRange(latestDate,range){
+    if(range==='all')return null;
+    var days=Number(range),latest=parseDate(latestDate);
+    if(!latest||!Number.isFinite(days)||days<1)return null;
+    latest.setUTCDate(latest.getUTCDate()-(days-1));
+    return latest.toISOString().slice(0,10);
+  }
+  function latestDateFromRows(rows){
+    var dates=(Array.isArray(rows)?rows:[]).map(function(row){return String(row&&row.date||'')}).filter(function(date){return /^\\d{4}-\\d{2}-\\d{2}$/.test(date)}).sort();
+    return dates.length?dates[dates.length-1]:'';
+  }
+  function filterRowsByRange(rows,range){
+    var items=Array.isArray(rows)?rows.slice():[];
+    var latest=latestDateFromRows(items),cutoff=cutoffForRange(latest,range);
+    if(!cutoff)return items;
+    return items.filter(function(row){return String(row&&row.date||'')>=cutoff});
+  }
+  function filterSeriesByRange(series,range,latestDate){
+    var cutoff=cutoffForRange(latestDate,range);
+    return (Array.isArray(series)?series:[]).map(function(item){
+      var points=Array.isArray(item&&item.points)?item.points:[];
+      return Object.assign({},item,{points:cutoff?points.filter(function(point){return String(point&&point.date||'')>=cutoff}):points.slice()});
+    });
+  }
   function stackedClassBars(rows,legend){
     var items=Array.isArray(rows)?rows.slice():[];
     if(!items.length)return '<div class="muted daily-class-empty">データなし</div>';
+    var density=items.length<=7?'comfortable':items.length<=14?'compact':'dense';
     var max=Math.max.apply(null,[1].concat(items.map(function(row){return Number(row.sessions||0)})));
     var active={};items.forEach(function(row){(row.by_class||[]).forEach(function(item){if(Number(item.sessions||0)>0)active[String(item.class_id||'unknown')]=true})});
     var legendItems=(Array.isArray(legend)?legend:[]).filter(function(item){return active[String(item.class_id||'unknown')]});
@@ -218,35 +339,109 @@ function injectResearchDailyClassStack(html: string): string {
       }).join('');
       return '<div class="daily-class-row"><div class="daily-class-date">'+h(row.date||'')+'</div><div class="daily-class-scale"><div class="daily-class-bar" style="width:'+width+'%">'+segments+'</div></div><div class="daily-class-total">'+h(total)+'</div></div>';
     }).join('');
-    return '<div class="daily-class-stack-chart">'+legendHtml+'<div class="daily-class-stack-rows">'+rowsHtml+'</div><div class="daily-class-note">棒全体＝その日の総セッション数｜色＝学級別内訳（色部分に合わせると件数・割合を表示）</div></div>';
+    return '<div class="daily-class-stack-chart daily-density-'+density+'">'+legendHtml+'<div class="daily-class-stack-rows">'+rowsHtml+'</div><div class="daily-class-note">棒全体＝その日の総セッション数｜色＝学級別内訳（スクロールで全表示日を確認）</div></div>';
   }
+  function niceStep(range){
+    var target=Math.max(.1,range/4),power=Math.pow(10,Math.floor(Math.log10(target))),scaled=target/power;
+    var factor=scaled<=1?1:scaled<=2?2:scaled<=2.5?2.5:scaled<=5?5:10;
+    return factor*power;
+  }
+  function turnsByClassSvg(series){
+    var list=(Array.isArray(series)?series:[]).filter(function(item){return Array.isArray(item.points)&&item.points.some(function(point){return valid(point.value)})});
+    var w=460,hgt=245,left=56,right=15,bottom=43;
+    if(!list.length)return '<svg viewBox="0 0 '+w+' '+hgt+'" role="img" aria-label="1分あたり平均ターン数学級別累積平均"><text x="230" y="122" text-anchor="middle" class="svg-label">データなし</text></svg>';
+    var dates=[];list.forEach(function(item){item.points.forEach(function(point){if(dates.indexOf(point.date)<0)dates.push(point.date)})});dates.sort();
+    var values=[];list.forEach(function(item){item.points.forEach(function(point){if(valid(point.value))values.push(Number(point.value))})});
+    var rawMin=Math.min.apply(null,values),rawMax=Math.max.apply(null,values),rawRange=Math.max(0,rawMax-rawMin);
+    var desiredSpan=Math.max(1,rawRange*1.3),center=(rawMin+rawMax)/2,axisMin=Math.max(0,center-desiredSpan/2),axisMax=axisMin+desiredSpan;
+    if(axisMax<rawMax){axisMax=rawMax;axisMin=Math.max(0,axisMax-desiredSpan)}
+    var step=niceStep(axisMax-axisMin),pad=Math.max(step*.5,(axisMax-axisMin)*.05);
+    axisMin=Math.max(0,Math.floor((axisMin-pad)/step)*step);axisMax=Math.ceil((axisMax+pad)/step)*step;
+    if(axisMax<=axisMin)axisMax=axisMin+step;
+    var legendRows=Math.ceil(list.length/3),top=18+legendRows*18,plotH=hgt-top-bottom,plotW=w-left-right;
+    var x=function(date){var i=dates.indexOf(date);return left+(dates.length<=1?plotW/2:i*plotW/(dates.length-1))};
+    var y=function(value){return top+plotH-(Number(value)-axisMin)*plotH/(axisMax-axisMin||1)};
+    var fmt=function(value){return Math.abs(value-Math.round(value))<1e-9?String(Math.round(value)):String(Math.round(value*10)/10)};
+    var out='<svg viewBox="0 0 '+w+' '+hgt+'" role="img" aria-label="1分あたり平均ターン数学級別累積平均">';
+    for(var tick=axisMin,guard=0;tick<=axisMax+step*.001&&guard<10;tick+=step,guard+=1){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="svg-label" style="font-size:10px">'+h(fmt(tick))+'</text>'}
+    var every=Math.max(1,Math.ceil(dates.length/7));dates.forEach(function(date,index){if(index%every===0||index===dates.length-1)out+='<text x="'+x(date)+'" y="'+(hgt-19)+'" text-anchor="middle" class="svg-label" style="font-size:10px">'+h(String(date).slice(5))+'</text>'});
+    list.forEach(function(item,index){
+      var color=classColor(item.class_id),points=[];
+      (item.points||[]).forEach(function(point){if(valid(point.value))points.push(x(point.date)+','+y(Number(point.value)))});
+      if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+      (item.points||[]).forEach(function(point){if(!valid(point.value))return;var title=String(point.date||'')+' '+String(item.label||item.class_id||'')+': '+fmt(Number(point.value))+' ターン/分 (n='+Number(point.n||0)+')';out+='<circle cx="'+x(point.date)+'" cy="'+y(Number(point.value))+'" r="3.2" fill="#fff" stroke="'+color+'" stroke-width="1.8"><title>'+h(title)+'</title></circle>'});
+      var col=index%3,row=Math.floor(index/3),lx=left+col*132,ly=12+row*18;
+      out+='<line x1="'+lx+'" y1="'+ly+'" x2="'+(lx+16)+'" y2="'+ly+'" stroke="'+color+'" stroke-width="2"/><circle cx="'+(lx+8)+'" cy="'+ly+'" r="2.8" fill="#fff" stroke="'+color+'" stroke-width="1.5"/><text x="'+(lx+21)+'" y="'+(ly+4)+'" class="svg-label" style="font-size:10px;fill:#10224a">'+h(item.label||item.class_id||'')+'</text>';
+    });
+    out+='<text x="'+left+'" y="'+(hgt-3)+'" class="svg-label" style="font-size:9px;fill:#64748b">各点＝当日までの有効セッション累積平均｜ターン＝児童＋AI発話</text>';
+    return out+'</svg>';
+  }
+  function updateRangeButtons(){
+    var controls=document.getElementById('dailySessionRangeControls');
+    if(!controls)return;
+    Array.prototype.forEach.call(controls.querySelectorAll('[data-daily-range]'),function(button){
+      var active=String(button.getAttribute('data-daily-range')||'')===selectedRange;
+      button.classList.toggle('is-active',active);
+      button.setAttribute('aria-pressed',active?'true':'false');
+    });
+  }
+  function renderCombinedCharts(charts){
+    latestCharts=charts||latestCharts;
+    if(!latestCharts)return;
+    var rows=Array.isArray(latestCharts.dailyClassStack)?latestCharts.dailyClassStack:[];
+    var latestDate=latestDateFromRows(rows);
+    var visibleRows=filterRowsByRange(rows,selectedRange);
+    var visibleTurns=filterSeriesByRange(latestCharts.cumulativeTurnsByClass||[],selectedRange,latestDate);
+    var title=document.getElementById('chartDailyTitle');
+    var chart=document.getElementById('chartDaily');
+    var turns=document.getElementById('chartTurns');
+    if(title)title.textContent='日別セッション数（学級別内訳）';
+    if(chart)chart.innerHTML=stackedClassBars(visibleRows,latestCharts.dailyClassLegend||[]);
+    if(turns)turns.innerHTML=turnsByClassSvg(visibleTurns);
+    updateRangeButtons();
+  }
+  function bindRangeControls(){
+    var controls=document.getElementById('dailySessionRangeControls');
+    if(!controls||controls.getAttribute('data-bound')==='1')return;
+    controls.setAttribute('data-bound','1');
+    controls.addEventListener('click',function(event){
+      var target=event.target&&event.target.closest?event.target.closest('[data-daily-range]'):null;
+      if(!target)return;
+      var range=String(target.getAttribute('data-daily-range')||'14');
+      if(['7','14','30','all'].indexOf(range)<0)return;
+      selectedRange=range;
+      renderCombinedCharts(latestCharts);
+    });
+  }
+
   var originalRenderDashboard=renderDashboard;
   renderDashboard=function(d,appliedQuery){
     originalRenderDashboard(d,appliedQuery);
-    var charts=(d&&d.charts)||{},rows=charts.dailyClassStack;
-    if(!Array.isArray(rows))return;
-    var aggregation=charts.aggregation==='weekly'?'weekly':'daily';
-    var title=document.getElementById('chartDailyTitle');
+    var charts=(d&&d.charts)||{};
+    if(!Array.isArray(charts.dailyClassStack))return;
     var chart=document.getElementById('chartDaily');
-    if(title)title.textContent=aggregation==='weekly'?'週別セッション数（学級別内訳）':'日別セッション数（学級別内訳）';
     if(chart){
       var card=chart.closest&&chart.closest('.chart-card');
       if(card)card.classList.add('daily-class-stack-card');
-      chart.innerHTML=stackedClassBars(rows,charts.dailyClassLegend||[]);
     }
+    bindRangeControls();
+    renderCombinedCharts(charts);
   };
   window.renderDashboard=renderDashboard;
 })();
 </script>`;
 
-  return html.replace('</head>', `${style}</head>`).replace('</body>', `${script}</body>`);
+  const withCombinedMarkup = html.replace(chartDailyMarkup, combinedMarkup);
+  return withCombinedMarkup.replace('</head>', `${style}</head>`).replace('</body>', `${script}</body>`);
 }
 
 export function withResearchDailyClassStack(path: string, handler: RequestHandler): RequestHandler {
   if (path === '/management') {
     return (req, res, next) => {
       const originalSend = res.send.bind(res);
-      (res as any).send = (body: any) => originalSend(typeof body === 'string' ? injectResearchDailyClassStack(body) : body);
+      (res as any).send = (body: any) => originalSend(
+        typeof body === 'string' ? injectResearchDailyClassStack(body) : body,
+      );
       return handler(req, res, next);
     };
   }
