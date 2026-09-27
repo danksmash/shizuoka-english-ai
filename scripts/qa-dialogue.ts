@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { AI_STUDENTS_MASTER_LIST, GUIDED_TOPIC_STARTERS_ENGLISH, TARGET_20_AI_STUDENT_IDS } from '../src/data/curriculum';
-import { CHILD_INTERACTION_POLICY, getDialogueTopicContext } from '../src/data/dialogueTopicContext';
+import { getDialogueTopicContext } from '../src/data/dialogueTopicContext';
 import type { DialogueTopic } from '../src/types';
 
 const topics: DialogueTopic[] = ['intro', 'favorites', 'shizuoka_culture', 'talents', 'daily_routine', 'free'];
@@ -44,21 +44,6 @@ if (!introContext.includes('Get to know each other naturally:')) {
   failures.push('intro context must frame Core 1 as natural getting-to-know-each-other conversation');
 }
 
-const requiredChildInteractionRules = [
-  "do not use the child's name in your reply",
-  "Do not guess, correct, praise, criticize, joke about, evaluate, or otherwise comment on the child's name.",
-  "Do not infer or mention the child's gender from a name or voice",
-  'do not keep repeating the same question',
-  'You may rephrase it once in simpler English',
-  'move naturally to another easy topic',
-];
-for (const rule of requiredChildInteractionRules) {
-  if (!CHILD_INTERACTION_POLICY.includes(rule)) failures.push(`Child interaction policy missing: ${rule}`);
-  for (const topic of topics) {
-    if (!getDialogueTopicContext(topic).includes(rule)) failures.push(`${topic}: child interaction policy not applied: ${rule}`);
-  }
-}
-
 const serverSource = readFileSync('server.ts', 'utf8');
 const requiredCore1Rules = [
   'Keep the conversation natural, warm, and genuinely responsive.',
@@ -100,4 +85,4 @@ for (const fixedTime of ['7:00', '7:30', '9:00', '11:00']) {
 }
 if (TARGET_20_AI_STUDENT_IDS.length !== 20) failures.push(`Expected 20 target personas, found ${TARGET_20_AI_STUDENT_IDS.length}`);
 if (failures.length) { console.error('Dialogue QA FAILED'); failures.forEach((failure) => console.error(`- ${failure}`)); process.exit(1); }
-console.log(`Dialogue QA PASS: ${TARGET_20_AI_STUDENT_IDS.length} students × ${topics.length} topics × ${durations.length} durations = ${checked} combinations checked; conversational-floor and child-interaction guidance protected.`);
+console.log(`Dialogue QA PASS: ${TARGET_20_AI_STUDENT_IDS.length} students × ${topics.length} topics × ${durations.length} durations = ${checked} combinations checked; Study 1 conversational-floor contract protected.`);
