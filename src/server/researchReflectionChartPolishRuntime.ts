@@ -16,22 +16,22 @@ function injectReflectionChartPolish(html: string): string {
       if(order[stroke]===undefined)return;
       var box=shape.getBBox();
       var cx=box.x+box.width/2,cy=box.y+box.height/2;
-      if(cy<55)return;
+      if(cy<48)return;
       g.setAttribute('transform','translate(0 0)');
-      shape.setAttribute('stroke-width','2');
+      shape.setAttribute('stroke-width','1.8');
       if(shape.tagName.toLowerCase()==='circle'){
-        shape.setAttribute('r','3.4');
+        shape.setAttribute('r','3.2');
       }else if(shape.tagName.toLowerCase()==='rect'){
-        shape.setAttribute('x',String(cx-3.5));shape.setAttribute('y',String(cy-3.5));
-        shape.setAttribute('width','7');shape.setAttribute('height','7');shape.setAttribute('rx','1');
+        shape.setAttribute('x',String(cx-3.2));shape.setAttribute('y',String(cy-3.2));
+        shape.setAttribute('width','6.4');shape.setAttribute('height','6.4');shape.setAttribute('rx','0.8');
       }else{
-        shape.setAttribute('points',cx+','+(cy-4.3)+' '+(cx+4.3)+','+cy+' '+cx+','+(cy+4.3)+' '+(cx-4.3)+','+cy);
+        shape.setAttribute('points',cx+','+(cy-4)+' '+(cx+4)+','+cy+' '+cx+','+(cy+4)+' '+(cx-4)+','+cy);
       }
       markers.push({g:g,cx:cx,cy:cy,order:order[stroke]});
     });
     Array.prototype.forEach.call(svg.querySelectorAll('polyline'),function(line){
       var stroke=String(line.getAttribute('stroke')||'').toLowerCase();
-      if(order[stroke]!==undefined)line.setAttribute('stroke-width','2.25');
+      if(order[stroke]!==undefined)line.setAttribute('stroke-width','1.6');
     });
     var groups={};
     markers.forEach(function(item){var key=String(Math.round(item.cx));(groups[key]||(groups[key]=[])).push(item)});
@@ -41,7 +41,7 @@ function injectReflectionChartPolish(html: string): string {
       for(var i=0;i<group.length;i+=1){for(var j=i+1;j<group.length;j+=1){if(Math.abs(group[i].cy-group[j].cy)<10)crowded=true}}
       if(!crowded)return;
       group.sort(function(a,b){return a.order-b.order});
-      var offsets=group.length>=3?[-5,0,5]:[-3.5,3.5];
+      var offsets=group.length>=3?[-4,0,4]:[-3,3];
       group.forEach(function(item,index){item.g.setAttribute('transform','translate('+(offsets[index]||0)+' 0)')});
     });
   }
