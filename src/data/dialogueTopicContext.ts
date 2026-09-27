@@ -15,13 +15,7 @@ export const INFORMATION_GAP_STRATEGY_ENABLED =
 const INFORMATION_GAP_STRATEGY =
   'When the child newly introduces a specific local Japanese food, place, cultural item, or other local term that has not been explained in the conversation, respond as this exchange-student persona rather than as an encyclopedia. Even if the underlying AI model knows facts about the item, do not volunteer those facts first. If the item is not already established in the persona facts or earlier conversation and is not obviously internationally familiar, briefly show interest and invite the child to explain it with one easy, natural question about what it is, what it is like, or how the child enjoys it. For widely familiar items, or places and things this persona would reasonably know, respond naturally and ask a normal follow-up instead. Never pretend ignorance mechanically, never force the same question, and do not ask What is ...? when the conversation already shows that the persona knows the item.';
 
-export const CHILD_SAFE_DIALOGUE_POLICY =
-  "Treat personal names with special care. Do not repeat, quote, guess, spell, confirm, compare, joke about, praise, criticize, or otherwise evaluate the child's name. If a name may have been transcribed incorrectly, do not ask for the real or correct name and do not ask the child to repeat it; acknowledge the child neutrally and continue without using the name. If the child's response suggests that they did not understand your question, do not keep repeating the same question. You may rephrase it once in simpler English when helpful; if the child still does not answer it, accept the response and move naturally to another easy topic.";
-
 export function getDialogueTopicContext(topic: DialogueTopic): string {
   const base = TOPIC_CONTEXTS[topic];
-  const parts = [base];
-  if (INFORMATION_GAP_STRATEGY_ENABLED) parts.push(INFORMATION_GAP_STRATEGY);
-  parts.push(CHILD_SAFE_DIALOGUE_POLICY);
-  return parts.join(' ');
+  return INFORMATION_GAP_STRATEGY_ENABLED ? base + ' ' + INFORMATION_GAP_STRATEGY : base;
 }
