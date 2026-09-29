@@ -95,11 +95,12 @@ export function researcherRouteAllowed(req: Pick<Request, 'path'>): boolean {
   if (path === '/research.session-history' || path === '/api/management/research.session-history') return true;
   if (path === '/research.session-detail' || path === '/api/management/research.session-detail') return true;
   if (path === '/research.session-audit' || path === '/api/management/research.session-audit') return true;
-  // questionnaireRoutes is mounted at /api/management, so Express can expose
-  // either the router-local path or the full app path depending on call site.
+  // questionnaireRoutes and comparison setup routes are mounted at /api/management,
+  // so Express can expose either the router-local path or the full app path depending on call site.
   if (path.startsWith('/questionnaire/') || path.startsWith('/api/management/questionnaire/')) return true;
   if (path.startsWith('/study-schedules') || path.startsWith('/api/management/study-schedules')) return true;
   if (path.startsWith('/study-participants') || path.startsWith('/api/management/study-participants')) return true;
+  if (path.startsWith('/comparison-participants') || path.startsWith('/api/management/comparison-participants')) return true;
   if (path.startsWith('/research-rq1') || path.startsWith('/api/management/research-rq1')) return true;
   if (path.startsWith('/research-rq2') || path.startsWith('/api/management/research-rq2')) return true;
   if (path.startsWith('/research-rq3') || path.startsWith('/api/management/research-rq3')) return true;
