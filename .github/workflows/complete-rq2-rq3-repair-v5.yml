@@ -1,0 +1,45 @@
+name: Complete RQ2 RQ3 repair v5
+
+on:
+  push:
+    branches:
+      - feature/rq2-repair-v5-20260929b
+    paths:
+      - '.github/workflows/complete-rq2-rq3-repair-v5.yml'
+      - '.github/scripts/complete-rq2-rq3-repair-v5.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  complete:
+    if: ${{ !contains(github.event.head_commit.message, '[repair-done]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/rq2-repair-v5-20260929b
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Apply consistency patch
+        run: python3 .github/scripts/complete-rq2-rq3-repair-v5.py
+      - name: RQ2 QA
+        run: npm run qa:research-rq2
+      - name: RQ3 QA
+        run: npm run qa:research-rq3
+      - name: TypeScript check
+        run: npm run lint
+      - name: Production build
+        run: npm run build
+      - name: Commit final implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server public/research-rq3.html scripts
+          git commit -m "feat: complete repair-v5 RQ2/RQ3 consistency [repair-done]"
+          git push origin HEAD:feature/rq2-repair-v5-20260929b
