@@ -215,6 +215,7 @@ assert.ok(page.includes('third-position'));
 assert.ok(routes.includes('/research-rq2/repair-audit'));
 assert.ok(routes.includes('/research-rq2/repair-candidates.csv'));
 assert.ok(routes.includes('humanRepairSubtype'));
+assert.ok(routes.includes("Number(codebook.schemaVersion || 0) >= 5"), 'schema-4 frozen RQ2 runs must not be forced to supply repair attributes');
 assert.ok(routes.includes('technology_involvement'));
 assert.ok(page.includes('開発用120系列'));
 assert.ok(page.includes('一致度用60系列'));

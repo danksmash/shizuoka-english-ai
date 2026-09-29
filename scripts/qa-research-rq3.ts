@@ -73,6 +73,9 @@ const items = [
     humanReferenceAuxCodes: ['B3'],
     humanFunctionPrimary: 'Q',
     humanFunctionAuxCodes: ['TOP'],
+    humanRepairSubtype: '',
+    humanRepairOutcome: '',
+    humanTechnologyInvolvement: '',
     humanCoder: 'A',
     humanCodedAt: '2026-09-21T00:00:00.000Z',
   },
@@ -119,6 +122,8 @@ assert.equal(rows[1].reference_primary_raw, 'B2b');
 assert.equal(rows[1].reference_primary_model, 'B2');
 assert.equal(rows[1].reference_aux_labels, 'B3');
 assert.equal(rows[1].function_aux_labels, 'TOP');
+assert.equal(rows[1].repair_subtype, '');
+assert.equal(rows[1].technology_involvement, '');
 assert.equal(rows[1].human_codebook_version, 'rq2-v4');
 assert.equal(rows[2].analysis_ready, 0);
 assert.equal(rows[2].reference_primary_raw, '');
@@ -126,6 +131,7 @@ assert.equal(rows[2].reference_primary_raw, '');
 const entry = fs.readFileSync('server-entry.ts', 'utf8');
 const auth = fs.readFileSync('src/server/auth.ts', 'utf8');
 const page = fs.readFileSync('public/research-rq3.html', 'utf8');
+const rq3Analysis = fs.readFileSync('src/server/researchRq3Analysis.ts', 'utf8');
 const routes = fs.readFileSync('src/server/researchRq3Routes.ts', 'utf8');
 const analysisSessions = fs.readFileSync('src/server/researchAnalysisSessions.ts', 'utf8');
 const rq2Ai = fs.readFileSync('src/server/researchRq2Ai.ts', 'utf8');
@@ -142,12 +148,16 @@ assert.ok(page.includes('分析仕様JSON'));
 assert.ok(page.includes('R準備テンプレート'));
 assert.ok(page.includes('多項ロジスティック混合モデル'));
 assert.ok(page.includes('前後文脈'));
+assert.ok(page.includes('AI誤理解への第三位置修復'));
+assert.ok(page.includes('schemaVersion||0)>=5'));
 assert.ok(routes.includes('/research-rq3/create-run'));
 assert.ok(routes.includes('RQ3_CODEBOOK_SCHEMA_OUTDATED'));
 assert.ok(routes.includes('schemaVersion || 0) < 5'));
 assert.ok(routes.includes('row.codebookVersion'));
 assert.ok(routes.includes('/research-rq3/ai-code'));
 assert.ok(routes.includes('/research-rq3/human-code'));
+assert.ok(routes.includes('humanRepairSubtype'));
+assert.ok(routes.includes('technologyInvolvement'));
 assert.ok(routes.includes('/research-rq3/analysis.bundle.zip'));
 assert.ok(routes.includes('/research-rq3/analysis-spec'));
 assert.ok(routes.includes('RQ3_ANALYSIS_SPEC'));
@@ -160,6 +170,9 @@ assert.ok(analysisSessions.includes('hardExclusionReason'));
 assert.ok(rq2Ai.includes("'rq2-coding-prompt-v5'"));
 assert.ok(rq2Ai.includes("'rq2-coding-prompt-v4'"), 'schema-4 prompt path must remain available for frozen legacy runs');
 assert.ok(rq3Persistence.includes("promptVersion: 'rq2-coding-prompt-v5'"));
+assert.ok(rq3Analysis.includes("INTERACTION_CODES_SCHEMA_VERSION = 'interaction-codes-2026-v2'"));
+assert.ok(rq3Analysis.includes('repair_subtype'));
+assert.ok(rq3Analysis.includes('technology_involvement'));
 assert.ok(rq2Codebook.includes("codebookLooksLegacy(stored) && String(stored.status || '') === 'frozen'"));
 assert.ok(rq2Ai.includes('referencePriorityRule'));
 assert.ok(rq2Ai.includes('functionBoundaryRule'));

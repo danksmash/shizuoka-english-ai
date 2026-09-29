@@ -344,7 +344,9 @@ router.post('/research-rq2/human-code', requireManagementRole(['researcher']), a
     const decision = req.body?.decision === 'modify' ? 'modified' : 'confirmed';
     const reference = canonicalPrimaryAux(codebook, 'reference', req.body?.referencePrimary, req.body?.referenceAuxCodes, req.body?.referenceCodes);
     const functions = canonicalPrimaryAux(codebook, 'function', req.body?.functionPrimary, req.body?.functionAuxCodes, req.body?.functionCodes);
-    const repair = canonicalRepairAttributes(functions.primary, req.body || {}, true);
+    const repair = Number(codebook.schemaVersion || 0) >= 5
+      ? canonicalRepairAttributes(functions.primary, req.body || {}, true)
+      : { repairSubtype: '', repairOutcome: '', technologyInvolvement: '' };
     const item = await updateRq2Item(runId, sequenceId, {
       humanReferencePrimary: reference.primary,
       humanReferenceAuxCodes: reference.aux,
@@ -379,7 +381,9 @@ router.post('/research-rq2/reliability-code', requireManagementRole(['researcher
     const codebook = await getRq2Codebook();
     const reference = canonicalPrimaryAux(codebook, 'reference', req.body?.referencePrimary, req.body?.referenceAuxCodes, req.body?.referenceCodes);
     const functions = canonicalPrimaryAux(codebook, 'function', req.body?.functionPrimary, req.body?.functionAuxCodes, req.body?.functionCodes);
-    const repair = canonicalRepairAttributes(functions.primary, req.body || {}, true);
+    const repair = Number(codebook.schemaVersion || 0) >= 5
+      ? canonicalRepairAttributes(functions.primary, req.body || {}, true)
+      : { repairSubtype: '', repairOutcome: '', technologyInvolvement: '' };
     const record = await saveRq2ReliabilityCode({
       runId,
       sequenceId,
