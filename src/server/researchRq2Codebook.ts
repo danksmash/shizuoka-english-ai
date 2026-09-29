@@ -250,6 +250,9 @@ function codebookLooksLegacy(codebook: Record<string, any>): boolean {
 export async function getRq2Codebook() {
   const stored = await getDocument(RQ2_CODEBOOK_COLLECTION, RQ2_DEFAULT_CODEBOOK_ID);
   if (!stored) return DEFAULT_RQ2_CODEBOOK;
+  // Preserve an already-frozen legacy codebook so in-progress formal runs remain reproducible.
+  // Draft legacy codebooks are shown as an unsaved schema-5 migration preview.
+  if (codebookLooksLegacy(stored) && String(stored.status || '') === 'frozen') return stored;
   if (codebookLooksLegacy(stored)) {
     return {
       ...DEFAULT_RQ2_CODEBOOK,
