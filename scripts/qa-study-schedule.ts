@@ -31,7 +31,8 @@ const page=fs.readFileSync('public/study-schedule.html','utf8');
 const persistence=fs.readFileSync('src/server/studySchedulePersistence.ts','utf8');
 const studentPersistence=fs.readFileSync('src/server/persistence.ts','utf8');
 
-assert.ok(entry.includes("this.use('/api/management', createStudyScheduleRouter())"));
+assert.ok(entry.includes("app.use('/api/management', createStudyScheduleRouter())"));
+assert.ok(entry.includes("if (path === '*') ensureExtensionRoutesMounted(this)"));
 assert.ok(auth.includes("path.startsWith('/study-schedules')"));
 assert.ok(routes.includes("router.post('/study-schedules/query'"));
 assert.ok(routes.includes("router.put('/study-schedules'"));
