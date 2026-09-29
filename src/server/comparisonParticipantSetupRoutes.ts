@@ -59,7 +59,6 @@ function operationalRow(student: Awaited<ReturnType<typeof getStudentRecordsForM
   return {
     learningCode: student.learningId,
     researchId: student.researchId,
-    studentId: student.studentId,
     classId: student.classId,
     attendanceNumber: student.attendanceNumber,
     active: student.active,
@@ -118,7 +117,6 @@ router.post('/comparison-participants/bootstrap', requireManagementRole(['resear
       created.push({
         learningCode: student.learningId,
         researchId: student.researchId,
-        studentId: student.studentId,
         classId: student.classId,
         attendanceNumber: student.attendanceNumber,
         active: true,
@@ -139,7 +137,6 @@ router.post('/comparison-participants/bootstrap', requireManagementRole(['resear
       created.push({
         learningCode: student.learningId,
         researchId: student.researchId,
-        studentId: student.studentId,
         classId: reserveId,
         attendanceNumber: student.attendanceNumber,
         active: false,
