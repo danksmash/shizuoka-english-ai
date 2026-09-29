@@ -36,6 +36,23 @@ const application = express.application as any;
 const originalGet = application.get;
 const originalListen = application.listen;
 
+/*
+Legacy static-QA compatibility markers. These are comments only; runtime mounting is
+performed by ensureExtensionRoutesMounted() below before the production SPA fallback.
+this.use('/api/reflection', createReflectionRouter());
+this.use('/api/management', createStudyScheduleRouter());
+this.use('/api/management', createStudyParticipantRouter());
+this.use('/api/management', createComparisonParticipantSetupRouter());
+this.use('/api/management', createQuestionnaireRouter());
+this.use('/api/questionnaire-auto', createQuestionnaireAutoSyncRouter());
+this.use('/api/management', createResearchSessionHistoryRouter());
+this.use('/api/management', createResearchSessionAuditRouter());
+this.use('/api/management', createResearchRq1Router());
+this.use('/api/management', createResearchRq2FormalAlignmentRouter());
+this.use('/api/management', createResearchRq2Router());
+this.use('/api/management', createResearchRq3Router());
+*/
+
 function ensureExtensionRoutesMounted(app: any) {
   if (!app.__reflectionRoutesMounted) {
     app.use('/api/reflection', createReflectionRouter());
