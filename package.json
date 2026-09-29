@@ -61,7 +61,7 @@
     "qa:full": "npm run qa:foundation && npm run qa:experience && npm run qa:research-stack && npm run qa:persona-stack && npm run qa:voice-stack && npm run lint",
     "qa:suggest": "tsx scripts/qa-suggest.ts",
     "qa:research-rq1-rq2-alignment": "tsx scripts/qa-research-rq1-rq2-alignment.ts",
-    "qa:research-rq2": "tsx scripts/qa-research-rq2.ts",
+    "qa:research-rq2": "tsx scripts/qa-research-rq2.ts && tsx scripts/qa-rq2-repair.ts",
     "qa:research-rq3": "tsx scripts/qa-research-rq3.ts"
   },
   "dependencies": {

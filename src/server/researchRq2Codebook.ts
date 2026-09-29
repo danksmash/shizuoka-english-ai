@@ -2,14 +2,14 @@ import { getDocument, setDocument } from './firestore';
 
 export const RQ2_CODEBOOK_COLLECTION = 'research_rq2_codebooks';
 export const RQ2_DEFAULT_CODEBOOK_ID = 'draft-current';
-export const RQ2_CODEBOOK_SCHEMA_VERSION = 4;
+export const RQ2_CODEBOOK_SCHEMA_VERSION = 5;
 
 export const DEFAULT_RQ2_CODEBOOK = {
   schemaVersion: RQ2_CODEBOOK_SCHEMA_VERSION,
-  version: 'literature-v1-2026-09-22',
+  version: 'literature-v2-2026-09-29',
   status: 'draft',
   developmentStatus: 'literature_draft',
-  title: 'RQ2 文献根拠型コードブック v1',
+  title: 'RQ2 文献根拠型コードブック v2',
   methodologicalPosition: '国内外のL2相互行為能力、interactive listening、Small Talk、AI対話・grounding研究を理論的出発点とし、実データによる帰納的精緻化を組み合わせる演繹的＋帰納的方式。',
   codingUnit: 'AI前ターン→児童ターン→必要に応じAI後ターン。B2a/B2b判定では、必要に応じて同一セッション以前の保存ログ、Persona資料、実在留学生動画資料を確認する。',
   analysisDimensions: ['referenceBasis', 'interactionFunction'],
@@ -17,6 +17,25 @@ export const DEFAULT_RQ2_CODEBOOK = {
   referencePriorityRule: '主コードが競合する場合は、原則 B4（相手の理解・トラブル状態）→B3（直前ターンで新たに提示された内容）→B2b（実在留学生本人の既知情報）→B2a（AI Personaの既知情報）→B1（カテゴリー情報）→B0 の順に検討する。B3は「直前ターンで新たに提示された内容」の取り上げに限定し、以前から既知の人物情報はB2a/B2bを優先する。副次的根拠は補助ラベルに残す。',
   interactionFunctionRule: '児童発話が対話の中で主に「何をしているか」を1つの主コードで表す。複数機能が明確な場合は、その局所系列で中心となる機能を主コードとし、その他を補助ラベルに残す。形式（疑問文、説明文）ではなく対話上の働きで判定する。',
   functionBoundaryRule: 'ACKは傾聴・反応の表示、RESは質問への直接応答や自己開示、Qは相手の直前内容に依存しない情報要求、TOPは相手が提示した内容を受けた関連質問・関連コメント・話題の深掘り、COMPは理解を確認・要求・交渉する行動、REPは理解上の問題を解消するために自分の発話を訂正・反復・言い換える行動とする。',
+  repairTaxonomy: {
+    rule: '対話機能の主コードがREPの場合のみ付与する補助属性。旧childRepairCountとは別物で、正式REPは局所系列をAI候補＋人間確認で判定する。',
+    subtypes: [
+      { code: 'self_initiated', label: '自己開始修復', definition: '相手から明示的な修復要求が出る前に、児童が自分の発話を自発的に訂正・言い換える。' },
+      { code: 'response_to_trouble', label: '相手の理解困難への応答', definition: 'AIの聞き返し・理解困難表明・確認要求を受け、児童が自分の発話を修正する。' },
+      { code: 'third_position', label: 'AIの誤理解への第三位置修復', definition: 'AIの応答から自分の意図が誤解されたことを児童が検知し、次の児童ターンで先行発話を訂正・言い換える。' },
+    ],
+    outcomes: [
+      { code: 'resolved', label: '解決', definition: '修復後のAI応答から修正された意味の受容が確認できる。' },
+      { code: 'unresolved', label: '未解決', definition: '修復後も誤解・理解困難が継続している。' },
+      { code: 'unclear', label: '判定不能', definition: '後続ターン不足等により解決の成否を判定できない。' },
+    ],
+    technologyInvolvement: [
+      { code: 'probable', label: '技術要因の関与が強く疑われる', definition: '保存文字列や連続的な再試行等からASR等の技術要因が強く疑われるが、録音がないため原因を断定しない。' },
+      { code: 'possible', label: '技術要因の可能性あり', definition: '技術要因の可能性はあるが、児童の表現・発音等との切り分けができない。' },
+      { code: 'not_evident', label: '技術要因を示す証拠なし', definition: '局所系列から技術要因を示す明確な証拠が見られない。' },
+      { code: 'unclear', label: '判定不能', definition: '保存ログだけでは技術要因の関与を判断できない。' },
+    ],
+  },
   excludedConstructs: [
     'turn-taking timing/overlap：本アプリは押して話す方式であり、システム側のターン制御の影響が大きいため、今回の主コードから除外する。',
     'prosody：研究ログに音響信号を分析可能な形で保存していないため、今回の主コードから除外する。',
@@ -99,10 +118,10 @@ export const DEFAULT_RQ2_CODEBOOK = {
       definition: '相手が聞き取れない、意味が分からない、誤解している等の理解・コミュニケーション上の状態を手掛かりに児童が発話を調整する。',
       theoreticalBasis: 'comprehension management、repair management、grounding／clarification研究を本研究用に操作化。',
       sourceRefs: ['GALACZITAYLOR2018','SUCHEN2026','CLARKBRENNAN1991','SHAIKH2024'],
-      include: ['AIのI do not understand等に応じた言い換え・説明', '相手の誤解を受けた訂正'],
+      include: ['AIのI do not understand等に応じた言い換え・説明', '相手の誤解を受けた訂正', 'AIの応答で誤理解を検知し次ターンで先行発話を修正する第三位置修復'],
       exclude: ['児童自身が理解できず確認するだけで、相手の理解状態を根拠にしていない場合は参照基盤B3/B0等を検討し、機能COMPを付与'],
       boundaryRule: '相手側の理解・知覚・解釈上の問題が局所系列に明示され、それへの適応が児童発話に観察できる場合に付与する。',
-      examples: ['AI: I do not understand “ekiben.” / Child: Ekiben is a lunch box at a station.'],
+      examples: ['AI: I do not understand “ekiben.” / Child: Ekiben is a lunch box at a station.', 'Child: I play for tonight. / AI: Okay, have fun playing tonight! / Child: No no. I play Fortnite.'],
     },
   ],
   interactionFunction: [
@@ -177,10 +196,10 @@ export const DEFAULT_RQ2_CODEBOOK = {
       definition: '理解上の問題や自分の誤りを解消するために、自分の発話を訂正、反復、言い換え、簡略化する。',
       theoreticalBasis: 'repair managementおよびgrounding研究に基づく。AI/ASRが引き起こした修復も起こり得るため、原因と能力を同一視しない。',
       sourceRefs: ['GALACZITAYLOR2018','SUCHEN2026','GOKTURK2024','SHAIKH2024'],
-      include: ['自分の言い間違いを即時訂正', '相手の理解困難を受けて同じ内容をより簡単に言い換える'],
+      include: ['自分の言い間違いを即時訂正', '相手の理解困難を受けて同じ内容をより簡単に言い換える', 'AIの誤理解を児童が検知し、No / I mean等を用いて先行発話の意味を訂正する'],
       exclude: ['理解できないことを尋ねるだけならCOMP', '単なる詳しい説明で理解問題がない場合はRES/TOP'],
-      boundaryRule: 'トラブル源となった自分の先行発話を置き換える／修正する働きが観察できる場合にREP。AI/ASR由来のトラブルかどうかはhumanNote等に記録し、REP出現を能力向上と直結させない。',
-      examples: ['Child: I like baseball—sorry, I like basketball.'],
+      boundaryRule: 'トラブル源となった自分の先行発話を置き換える／修正する働きが観察できる場合にREP。単なるNoや聞き返しだけではREPとしない。AIの誤理解が応答に表れ、それを受けて児童が先行発話を修正する場合はB4＋REPのthird_positionとする。AI/ASR由来かはtechnologyInvolvementで確率的に記録し、REP出現を能力向上と直結させない。',
+      examples: ['Child: I like baseball—sorry, I like basketball.', 'Child: I play for tonight. / AI: Okay, have fun playing tonight! / Child: No no. I play Fortnite. / AI: Oh, Fortnite!'],
     },
   ],
   recipientLocus: [
@@ -209,7 +228,8 @@ export const DEFAULT_RQ2_CODEBOOK = {
     { id: 'ISO24617_2', citation: 'ISO 24617-2:2020. Language resource management—Semantic annotation framework (SemAF)—Part 2: Dialogue acts.', role: '多機能性とdialogue actの一般的分類を確認する補助的参照' },
   ],
   notes: [
-    '本v1は「文献による演繹的出発点」であり、最終コードブックではない。300系列のうちコードブック開発用120系列で境界事例・未分類行動を確認して精緻化する。',
+    '本v2は「文献による演繹的出発点＋実データで確認されたrepair境界事例」を反映した開発版である。300系列のうちコードブック開発用120系列で境界事例・未分類行動を確認して精緻化する。',
+    '旧childRepairCountはPardon等の表層的キーワード集計であり、RQ2の正式REPとは同一視しない。正式REPはB4等の参照基盤と局所系列を確認し、人間確定コードとして扱う。',
     '開発用120系列は6区分×20系列、一致度確認用60系列は6区分×10系列で、両者を混用しない。',
     'コードブックを確定（freeze）する前に、developmentStatusをvalidated_with_development_sampleへ変更し、開発用標本での検討を完了したことを明示する。',
     '確定後の一致度確認用60系列は独立二重コードとし、参照基盤主コード・対話機能主コードそれぞれでCohenのκ係数を算出する。出現率の偏りが大きい場合はGwet AC1/AC2を補助確認する。',
@@ -237,7 +257,7 @@ export async function getRq2Codebook() {
       migratedFromRevision: Number(stored.revision || 0),
       migratedFromVersion: String(stored.version || ''),
       migratedFromStatus: String(stored.status || ''),
-      migrationNote: '旧コードブックを、国内外の相互行為能力・Small Talk・AI対話研究を根拠とした文献根拠型v1（schema 4）へ移行する未保存プレビューです。旧定義を自動流用せず、新v1を開発用120系列で検証してから確定してください。',
+      migrationNote: '旧コードブックを、第三位置修復を含むrepair補助属性を追加した文献根拠型v2（schema 5）へ移行する未保存プレビューです。旧定義を自動流用せず、新v2を開発用120系列で検証してから確定してください。',
     };
   }
   return stored;
@@ -258,6 +278,7 @@ export async function saveRq2Codebook(input: Record<string, any>, updatedBy: str
   const referenceBasis = Array.isArray(input.referenceBasis) ? input.referenceBasis : [];
   const interactionFunction = Array.isArray(input.interactionFunction) ? input.interactionFunction : [];
   const recipientLocus = Array.isArray(input.recipientLocus) ? input.recipientLocus : DEFAULT_RQ2_CODEBOOK.recipientLocus;
+  const repairTaxonomy = input.repairTaxonomy && typeof input.repairTaxonomy === 'object' ? input.repairTaxonomy : DEFAULT_RQ2_CODEBOOK.repairTaxonomy;
   if (!referenceBasis.length || !interactionFunction.length) throw new Error('RQ2_CODEBOOK_REQUIRED_DIMENSIONS');
   const allCodes = [...referenceBasis, ...interactionFunction, ...recipientLocus].map((row: any) => String(row?.code || '').trim()).filter(Boolean);
   if (new Set(allCodes).size !== allCodes.length) throw new Error('RQ2_CODEBOOK_DUPLICATE_CODE');
@@ -267,6 +288,11 @@ export async function saveRq2Codebook(input: Record<string, any>, updatedBy: str
     }
     if ([...referenceBasis, ...interactionFunction].some(freezeRowIncomplete)) {
       throw new Error('RQ2_CODEBOOK_INCOMPLETE');
+    }
+    if (!Array.isArray(repairTaxonomy?.subtypes) || repairTaxonomy.subtypes.length < 3
+      || !Array.isArray(repairTaxonomy?.outcomes) || repairTaxonomy.outcomes.length < 3
+      || !Array.isArray(repairTaxonomy?.technologyInvolvement) || repairTaxonomy.technologyInvolvement.length < 4) {
+      throw new Error('RQ2_CODEBOOK_REPAIR_TAXONOMY_INCOMPLETE');
     }
   }
   const now = new Date().toISOString();
@@ -280,6 +306,7 @@ export async function saveRq2Codebook(input: Record<string, any>, updatedBy: str
     schemaVersion: RQ2_CODEBOOK_SCHEMA_VERSION,
     analysisDimensions: ['referenceBasis', 'interactionFunction'],
     recipientLocus,
+    repairTaxonomy,
     version,
     status: freeze ? 'frozen' : 'draft',
     revision,

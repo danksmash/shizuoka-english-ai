@@ -8,6 +8,7 @@ import { codeRq2Batch } from './researchRq2Ai';
 import { buildRq2Analysis, buildRq2ReliabilitySummary } from './researchRq2Analysis';
 import { buildRq2PreflightAudit } from './researchRq2Preflight';
 import { serializeRq2LiteratureMapCsv } from './researchRq2LiteratureMap';
+import { buildRepairCandidateAudit, canonicalRepairAttributes, serializeRepairCandidatesCsv } from './researchRepair';
 import {
   createRq2Run,
   findActiveFormalRq2Runs,
@@ -270,7 +271,7 @@ router.get('/research-rq2/items', requireManagementRole(['researcher']), async (
     const items = purpose === 'reliability'
       ? rows.map((row) => {
           const safe = { ...row };
-          for (const key of ['aiReferencePrimary','aiReferenceAuxCodes','aiReferenceCodes','aiFunctionPrimary','aiFunctionAuxCodes','aiFunctionCodes','aiRecipientLocus','aiNeedsReview','aiReviewReason','aiReason','aiModel','aiPromptVersion','aiCodebookVersion','aiCodedAt']) delete safe[key];
+          for (const key of ['aiReferencePrimary','aiReferenceAuxCodes','aiReferenceCodes','aiFunctionPrimary','aiFunctionAuxCodes','aiFunctionCodes','aiRepairSubtype','aiRepairOutcome','aiTechnologyInvolvement','aiRepairReason','aiRecipientLocus','aiNeedsReview','aiReviewReason','aiReason','aiModel','aiPromptVersion','aiCodebookVersion','aiCodedAt']) delete safe[key];
           return safe;
         })
       : rows;
@@ -343,6 +344,7 @@ router.post('/research-rq2/human-code', requireManagementRole(['researcher']), a
     const decision = req.body?.decision === 'modify' ? 'modified' : 'confirmed';
     const reference = canonicalPrimaryAux(codebook, 'reference', req.body?.referencePrimary, req.body?.referenceAuxCodes, req.body?.referenceCodes);
     const functions = canonicalPrimaryAux(codebook, 'function', req.body?.functionPrimary, req.body?.functionAuxCodes, req.body?.functionCodes);
+    const repair = canonicalRepairAttributes(functions.primary, req.body || {}, true);
     const item = await updateRq2Item(runId, sequenceId, {
       humanReferencePrimary: reference.primary,
       humanReferenceAuxCodes: reference.aux,
@@ -350,6 +352,9 @@ router.post('/research-rq2/human-code', requireManagementRole(['researcher']), a
       humanFunctionPrimary: functions.primary,
       humanFunctionAuxCodes: functions.aux,
       humanFunctionCodes: [functions.primary, ...functions.aux],
+      humanRepairSubtype: repair.repairSubtype,
+      humanRepairOutcome: repair.repairOutcome,
+      humanTechnologyInvolvement: repair.technologyInvolvement,
       humanRecipientLocus: [],
       humanStatus: decision,
       humanCodebookVersion: String(codebook.version || ''),
@@ -374,6 +379,7 @@ router.post('/research-rq2/reliability-code', requireManagementRole(['researcher
     const codebook = await getRq2Codebook();
     const reference = canonicalPrimaryAux(codebook, 'reference', req.body?.referencePrimary, req.body?.referenceAuxCodes, req.body?.referenceCodes);
     const functions = canonicalPrimaryAux(codebook, 'function', req.body?.functionPrimary, req.body?.functionAuxCodes, req.body?.functionCodes);
+    const repair = canonicalRepairAttributes(functions.primary, req.body || {}, true);
     const record = await saveRq2ReliabilityCode({
       runId,
       sequenceId,
@@ -382,11 +388,41 @@ router.post('/research-rq2/reliability-code', requireManagementRole(['researcher
       referenceAuxCodes: reference.aux,
       functionPrimary: functions.primary,
       functionAuxCodes: functions.aux,
+      repairSubtype: repair.repairSubtype,
+      repairOutcome: repair.repairOutcome,
+      technologyInvolvement: repair.technologyInvolvement,
       codebookVersion: String(codebook.version || ''),
     });
     return res.json({ success: true, record });
   } catch (error: any) {
     return rq2ErrorResponse(res, error, 'RQ2_RELIABILITY_SAVE_UNAVAILABLE');
+  }
+});
+
+router.get('/research-rq2/repair-audit', requireManagementRole(['researcher']), async (req, res) => {
+  try {
+    const lessonOnly = bool(req.query.lessonOnly, true);
+    const [sessions, schedules] = await Promise.all([getAllSessionsForManagement(), getAllStudySchedules()]);
+    const candidates = buildRq2Candidates(sessions, schedules, { lessonOnly });
+    const audit = buildRepairCandidateAudit(candidates);
+    const { rows, ...summary } = audit;
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, lessonOnly, audit: summary });
+  } catch (error: any) {
+    return rq2ErrorResponse(res, error, 'RQ2_REPAIR_AUDIT_UNAVAILABLE');
+  }
+});
+
+router.get('/research-rq2/repair-candidates.csv', requireManagementRole(['researcher']), async (req, res) => {
+  try {
+    const lessonOnly = bool(req.query.lessonOnly, true);
+    const [sessions, schedules] = await Promise.all([getAllSessionsForManagement(), getAllStudySchedules()]);
+    const candidates = buildRq2Candidates(sessions, schedules, { lessonOnly });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="rq2_repair_candidates.csv"');
+    return res.send(serializeRepairCandidatesCsv(candidates));
+  } catch (error: any) {
+    return rq2ErrorResponse(res, error, 'RQ2_REPAIR_CANDIDATES_EXPORT_UNAVAILABLE');
   }
 });
 
@@ -412,7 +448,7 @@ router.get('/research-rq2/export.csv', requireManagementRole(['researcher']), as
     const runId = text(req.query.runId, 120);
     const [run, items] = await Promise.all([getRq2Run(runId), getRq2Items(runId)]);
     assertRq2RunActive(run);
-    const headers = ['run_id','run_type','run_status','seed','target_per_stratum','max_per_participant','lesson_only','run_codebook_version','run_prompt_version','sequence_id','stratum','purpose','stratum_rank','research_id','class_id','session_id','local_date','topic','persona_id','child_utterance_id','child_turn_sequence','previous_ai_english','child_english','next_ai_english','ai_reference_primary','ai_reference_aux_codes','ai_function_primary','ai_function_aux_codes','ai_needs_review','ai_review_reason','ai_reason','ai_model','ai_prompt_version','ai_codebook_version','ai_coded_at','human_reference_primary','human_reference_aux_codes','human_function_primary','human_function_aux_codes','human_status','human_codebook_version','human_coder','human_note','human_coded_at'];
+    const headers = ['run_id','run_type','run_status','seed','target_per_stratum','max_per_participant','lesson_only','run_codebook_version','run_prompt_version','sequence_id','stratum','purpose','stratum_rank','research_id','class_id','session_id','local_date','topic','persona_id','child_utterance_id','child_turn_sequence','previous_ai_english','child_english','next_ai_english','ai_reference_primary','ai_reference_aux_codes','ai_function_primary','ai_function_aux_codes','ai_repair_subtype','ai_repair_outcome','ai_technology_involvement','ai_repair_reason','ai_needs_review','ai_review_reason','ai_reason','ai_model','ai_prompt_version','ai_codebook_version','ai_coded_at','human_reference_primary','human_reference_aux_codes','human_function_primary','human_function_aux_codes','human_repair_subtype','human_repair_outcome','human_technology_involvement','human_status','human_codebook_version','human_coder','human_note','human_coded_at'];
     const rows = items.map((item) => ({
       run_id: runId, run_type: run.runType || 'legacy', run_status: run.status || 'sampled', seed: run.seed, target_per_stratum: run.targetPerStratum, max_per_participant: run.maxPerParticipantPerStratum,
       lesson_only: run.lessonOnly ? 1 : 0, run_codebook_version: run.codebookVersion, run_prompt_version: run.promptVersion,
@@ -424,12 +460,14 @@ router.get('/research-rq2/export.csv', requireManagementRole(['researcher']), as
       ai_reference_aux_codes: item.aiReferenceAuxCodes || (Array.isArray(item.aiReferenceCodes) ? item.aiReferenceCodes.slice(1) : []),
       ai_function_primary: item.aiFunctionPrimary || item.aiFunctionCodes?.[0] || '',
       ai_function_aux_codes: item.aiFunctionAuxCodes || (Array.isArray(item.aiFunctionCodes) ? item.aiFunctionCodes.slice(1) : []),
+      ai_repair_subtype: item.aiRepairSubtype || '', ai_repair_outcome: item.aiRepairOutcome || '', ai_technology_involvement: item.aiTechnologyInvolvement || '', ai_repair_reason: item.aiRepairReason || '',
       ai_needs_review: item.aiNeedsReview ? 1 : 0, ai_review_reason: item.aiReviewReason || '', ai_reason: item.aiReason || '',
       ai_model: item.aiModel || '', ai_prompt_version: item.aiPromptVersion || '', ai_codebook_version: item.aiCodebookVersion || '', ai_coded_at: item.aiCodedAt || '',
       human_reference_primary: item.humanReferencePrimary || item.humanReferenceCodes?.[0] || '',
       human_reference_aux_codes: item.humanReferenceAuxCodes || (Array.isArray(item.humanReferenceCodes) ? item.humanReferenceCodes.slice(1) : []),
       human_function_primary: item.humanFunctionPrimary || item.humanFunctionCodes?.[0] || '',
       human_function_aux_codes: item.humanFunctionAuxCodes || (Array.isArray(item.humanFunctionCodes) ? item.humanFunctionCodes.slice(1) : []),
+      human_repair_subtype: item.humanRepairSubtype || '', human_repair_outcome: item.humanRepairOutcome || '', human_technology_involvement: item.humanTechnologyInvolvement || '',
       human_status: item.humanStatus || '', human_codebook_version: item.humanCodebookVersion || '', human_coder: item.humanCoder || '', human_note: item.humanNote || '', human_coded_at: item.humanCodedAt || '',
     }));
     const body = '\uFEFF' + [headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell((row as any)[header])).join(','))].join('\n');
@@ -446,7 +484,7 @@ router.get('/research-rq2/reliability.csv', requireManagementRole(['researcher']
     const runId = text(req.query.runId, 120);
     await activeRq2Run(runId);
     const records = await getRq2ReliabilityCodes(runId);
-    const headers = ['run_id','sequence_id','coder_id','codebook_version','reference_primary','reference_aux_codes','function_primary','function_aux_codes','saved_at'];
+    const headers = ['run_id','sequence_id','coder_id','codebook_version','reference_primary','reference_aux_codes','function_primary','function_aux_codes','repair_subtype','repair_outcome','technology_involvement','saved_at'];
     const rows = records.map((row) => ({
       run_id: runId,
       sequence_id: row.sequenceId || '',
@@ -456,6 +494,7 @@ router.get('/research-rq2/reliability.csv', requireManagementRole(['researcher']
       reference_aux_codes: row.referenceAuxCodes || (Array.isArray(row.referenceCodes) ? row.referenceCodes.slice(1) : []),
       function_primary: row.functionPrimary || row.functionCodes?.[0] || '',
       function_aux_codes: row.functionAuxCodes || (Array.isArray(row.functionCodes) ? row.functionCodes.slice(1) : []),
+      repair_subtype: row.repairSubtype || '', repair_outcome: row.repairOutcome || '', technology_involvement: row.technologyInvolvement || '',
       saved_at: row.savedAt || '',
     }));
     const body = '\uFEFF' + [headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell((row as any)[header])).join(','))].join('\n');

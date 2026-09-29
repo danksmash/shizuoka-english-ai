@@ -102,9 +102,9 @@ export function buildRq2PreflightAudit(args: {
   const gates = [
     {
       id: 'literature_codebook_schema',
-      label: '文献根拠型コードブック schema 4',
+      label: '文献根拠型コードブック schema 5',
       blocking: true,
-      passed: Number(codebook.schemaVersion || 0) >= 4 && sourceCount(codebook) > 0,
+      passed: Number(codebook.schemaVersion || 0) >= 5 && sourceCount(codebook) > 0,
       detail: `schema=${codebook.schemaVersion || '—'} / 文献${sourceCount(codebook)}件`,
     },
     {

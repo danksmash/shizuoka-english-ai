@@ -34,7 +34,7 @@ export async function createRq2Run(args: {
     maxPerParticipantPerStratum: args.maxPerParticipantPerStratum,
     lessonOnly: args.lessonOnly,
     codebookVersion: args.codebookVersion,
-    promptVersion: 'rq2-coding-prompt-v4',
+    promptVersion: 'rq2-coding-prompt-v5',
     counts: args.counts,
     itemCount: args.items.length,
     status: 'sampled',
@@ -138,6 +138,9 @@ export async function saveRq2ReliabilityCode(args: {
   referenceAuxCodes?: string[];
   functionPrimary: string;
   functionAuxCodes?: string[];
+  repairSubtype?: string;
+  repairOutcome?: string;
+  technologyInvolvement?: string;
   codebookVersion: string;
 }) {
   const coderKey = String(args.coderKey || '').trim().slice(0, 80);
@@ -151,6 +154,9 @@ export async function saveRq2ReliabilityCode(args: {
     functionAuxCodes,
     referenceCodes: args.referencePrimary ? [args.referencePrimary, ...referenceAuxCodes] : [],
     functionCodes: args.functionPrimary ? [args.functionPrimary, ...functionAuxCodes] : [],
+    repairSubtype: String(args.repairSubtype || ''),
+    repairOutcome: String(args.repairOutcome || ''),
+    technologyInvolvement: String(args.technologyInvolvement || ''),
     coderKey,
     savedAt: new Date().toISOString(),
   };
