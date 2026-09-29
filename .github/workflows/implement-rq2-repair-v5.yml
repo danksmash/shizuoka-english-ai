@@ -1,0 +1,41 @@
+name: Implement RQ2 repair v5
+
+on:
+  push:
+    branches:
+      - feature/rq2-repair-v5-20260929b
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    if: ${{ !contains(github.event.head_commit.message, '[repair-impl]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/rq2-repair-v5-20260929b
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Apply implementation patch
+        run: python3 .github/scripts/implement-rq2-repair-v5.py
+      - name: RQ2 QA
+        run: npm run qa:research-rq2
+      - name: RQ3 compatibility QA
+        run: npm run qa:research-rq3
+      - name: TypeScript check
+        run: npm run lint
+      - name: Production build
+        run: npm run build
+      - name: Commit implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json src/server public/research-rq2.html scripts docs/research
+          git commit -m "feat: implement RQ2 repair subtype coding [repair-impl]"
+          git push origin HEAD:feature/rq2-repair-v5-20260929b
