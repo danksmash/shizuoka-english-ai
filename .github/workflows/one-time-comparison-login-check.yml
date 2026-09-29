@@ -1,0 +1,72 @@
+name: One-time comparison login verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-time-comparison-login-check.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
+
+      - name: Verify all 28 active comparison pupil logins
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          python3 - <<'PY'
+          import json, os, urllib.parse, urllib.request
+          token=os.environ['ACCESS_TOKEN']
+          base='https://firestore.googleapis.com/v1/projects/shizuoka-english-ai/databases/(default)/documents/students'
+          docs=[]; page=''
+          while True:
+              url=base+'?pageSize=1000'+(('&pageToken='+urllib.parse.quote(page)) if page else '')
+              req=urllib.request.Request(url,headers={'Authorization':'Bearer '+token})
+              with urllib.request.urlopen(req,timeout=30) as r: data=json.load(r)
+              docs.extend(data.get('documents',[])); page=data.get('nextPageToken','')
+              if not page: break
+          def val(v):
+              if 'stringValue' in v:return v['stringValue']
+              if 'booleanValue' in v:return bool(v['booleanValue'])
+              if 'integerValue' in v:return int(v['integerValue'])
+              return None
+          rows=[]
+          for d in docs:
+              f={k:val(v) for k,v in d.get('fields',{}).items()}
+              if f.get('classId')=='6-C1': rows.append((int(f.get('attendanceNumber') or 0),str(f.get('learningId') or ''),f.get('active') is not False))
+          rows.sort()
+          assert len(rows)==28 and [x[0] for x in rows]==list(range(1,29)) and all(x[2] for x in rows)
+          endpoint='https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app/api/student/resolve'
+          ok=0
+          for no,code,active in rows:
+              body=json.dumps({'learningCode':code}).encode()
+              req=urllib.request.Request(endpoint,data=body,headers={'Content-Type':'application/json'},method='POST')
+              try:
+                  with urllib.request.urlopen(req,timeout=20) as r:
+                      result=json.load(r)
+                  assert result.get('success') is True
+                  ok+=1
+              except Exception as e:
+                  raise RuntimeError(f'login verification failed at attendance {no}') from e
+          assert ok==28
+          print('COMPARISON_LOGIN_PASS 28/28')
+          PY
