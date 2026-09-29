@@ -28,6 +28,17 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Apply consistency patch
         run: python3 .github/scripts/complete-rq2-rq3-repair-v5.py
+      - name: Correct generated QA assertion
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/qa-research-rq3.ts')
+          t=p.read_text(encoding='utf-8')
+          old="assert.ok(page.includes('schemaVersion||0)>=5');"
+          new="assert.ok(page.includes('schemaVersion||0)>=5'));"
+          if old not in t: raise SystemExit('expected generated assertion not found')
+          p.write_text(t.replace(old,new,1),encoding='utf-8')
+          PY
       - name: RQ2 QA
         run: npm run qa:research-rq2
       - name: RQ3 QA
