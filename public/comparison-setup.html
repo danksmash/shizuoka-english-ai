@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>比較校IDセットアップ</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f6f8fc;color:#10224a;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}.wrap{max-width:1080px;margin:0 auto;padding:20px}.card{background:#fff;border:1px solid #d7e2f1;border-radius:14px;padding:18px;margin-bottom:14px;box-shadow:0 4px 14px rgba(32,73,128,.05)}h1{font-size:24px;margin:0 0 6px}h2{font-size:18px;margin:0 0 12px}.muted{color:#64748b;font-size:13px;line-height:1.55}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.field label{display:block;font-size:12px;font-weight:800;margin-bottom:5px}input,button{font:inherit}input{width:100%;padding:10px;border:1px solid #b8c7df;border-radius:8px}button{border-radius:8px;padding:10px 14px;font-weight:800;cursor:pointer}.primary{border:1px solid #1767ed;background:#1767ed;color:#fff}.secondary{border:1px solid #9ab4df;background:#fff;color:#174aa8}.danger{border:1px solid #d6a3a3;background:#fff;color:#a11}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.status{font-size:13px;font-weight:800;margin-top:10px}.ok{color:#147a3d}.err{color:#b91c1c}.warn{background:#fff7e6;border:1px solid #f2c36b;border-radius:10px;padding:10px;font-size:13px;line-height:1.55}.note{background:#eef4ff;border:1px solid #bfd0f5;border-radius:10px;padding:10px;font-size:13px;line-height:1.55}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid #e5edf7;padding:8px;text-align:left}th{background:#f3f7fc}.pill{display:inline-block;padding:2px 7px;border-radius:999px;background:#e8f7ee;color:#138547;font-weight:800}.reserve{background:#fff4db;color:#8a5b00}.hidden{display:none}@media(max-width:800px){.grid{grid-template-columns:1fr 1fr}}@media(max-width:520px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>比較校IDセットアップ</h1>
+    <p class="muted">比較校6年1学級を想定した研究者専用画面です。28名分のIDを先に発行し、転入生用1名分は無効の予備として保持します。正式研究開始日は別操作で登録します。</p>
+  </div>
+
+  <div id="loginCard" class="card">
+    <h2>研究者ログイン</h2>
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <div class="field"><label>研究者ID</label><input id="username" autocomplete="username"></div>
+      <div class="field"><label>パスワード</label><input id="password" type="password" autocomplete="current-password"></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button id="loginBtn" class="primary">ログイン</button></div>
+    <div id="loginStatus" class="status"></div>
+  </div>
+
+  <div id="panel" class="hidden">
+    <div class="card">
+      <h2>1．ID発行</h2>
+      <div class="grid">
+        <div class="field"><label>学級ID</label><input id="classId" value="6-C1"></div>
+        <div class="field"><label>実人数</label><input id="actualCount" type="number" value="28" min="1" max="60"></div>
+        <div class="field"><label>予備人数</label><input id="reserveCount" type="number" value="1" min="0" max="5"></div>
+        <div class="field"><label>予定総数</label><input id="totalCount" value="29" readonly></div>
+      </div>
+      <div class="warn" style="margin-top:12px">ID発行だけでは正式研究参加者になりません。28名は通常利用できるIDとして作成し、29件目は無効の予備IDとして作成します。開始日を設定するまでは本研究参加者メタデータを付与しません。</div>
+      <div class="row" style="margin-top:12px">
+        <button id="bootstrapBtn" class="primary">28名＋予備1名を準備</button>
+        <button id="refreshBtn" class="secondary">状態を更新</button>
+        <button id="csvBtn" class="secondary">ID一覧CSVを保存</button>
+      </div>
+      <div id="setupStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>2．正式研究開始</h2>
+      <div class="grid" style="grid-template-columns:1fr 1fr 2fr">
+        <div class="field"><label>正式研究開始日</label><input id="studyStartDate" type="date"></div>
+        <div class="field"><label>正式参加人数</label><input id="activateCount" type="number" value="28" min="1" max="60"></div>
+        <div class="field"><label>登録内容</label><input value="site_b / comparison / Grade 6" readonly></div>
+      </div>
+      <div class="note" style="margin-top:12px">この操作で出席番号1～28だけを formalStudyParticipant=true、site_b、comparison、6年として登録します。予備IDは対象外です。</div>
+      <div class="row" style="margin-top:12px"><button id="activateBtn" class="primary">開始日を登録して正式参加にする</button></div>
+      <div id="activateStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>3．転入生が来た場合</h2>
+      <div class="grid" style="grid-template-columns:1fr 1fr 2fr">
+        <div class="field"><label>転入生の出席番号</label><input id="reserveAttendance" type="number" value="29" min="1" max="99"></div>
+        <div class="field"><label>研究開始日</label><input id="reserveStartDate" type="date"></div>
+        <div class="field"><label>処理</label><input value="予備IDを6-C1へ移動し、有効化・正式参加登録" readonly></div>
+      </div>
+      <div class="row" style="margin-top:12px"><button id="reserveBtn" class="secondary">予備IDを転入生用に有効化</button></div>
+      <div id="reserveStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>現在のID状態</h2>
+      <div id="summary" class="muted">未取得</div>
+      <div style="overflow:auto;margin-top:10px"><table><thead><tr><th>番号</th><th>学習コード</th><th>区分</th><th>有効</th><th>正式研究</th><th>research_id</th><th>開始日</th></tr></thead><tbody id="rows"></tbody></table></div>
+    </div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);let currentRows=[];
+function setStatus(id,text,ok=true){const el=$(id);el.textContent=text;el.className='status '+(ok?'ok':'err')}
+async function api(path,options={}){const res=await fetch(path,{credentials:'include',headers:{'Content-Type':'application/json',...(options.headers||{})},...options});let data={};try{data=await res.json()}catch{}if(!res.ok)throw new Error(data.error||('HTTP '+res.status));return data}
+async function checkLogin(){try{await api('/api/management/me');$('loginCard').classList.add('hidden');$('panel').classList.remove('hidden');await refresh()}catch{$('loginCard').classList.remove('hidden');$('panel').classList.add('hidden')}}
+$('loginBtn').onclick=async()=>{try{await api('/api/management/login',{method:'POST',body:JSON.stringify({username:$('username').value,password:$('password').value})});setStatus('loginStatus','ログインしました。');await checkLogin()}catch(e){setStatus('loginStatus','ログインできません: '+e.message,false)}};
+function updateTotal(){ $('totalCount').value=String(Number($('actualCount').value||0)+Number($('reserveCount').value||0)); }
+$('actualCount').oninput=updateTotal;$('reserveCount').oninput=updateTotal;
+function render(data){currentRows=data.rows||[];$('summary').textContent=`学級 ${data.classId}：登録 ${data.participantCount}件、正式研究 ${data.formalParticipantCount}件、予備 ${data.reserveCount}件`;const tbody=$('rows');tbody.innerHTML='';for(const row of currentRows){const tr=document.createElement('tr');const isReserve=String(row.classId).endsWith('-R');tr.innerHTML=`<td>${row.attendanceNumber||''}</td><td><b>${row.learningCode||''}</b></td><td><span class="pill ${isReserve?'reserve':''}">${isReserve?'予備':'児童'}</span></td><td>${row.active?'有効':'無効'}</td><td>${row.formalStudyParticipant?'正式':'未登録'}</td><td>${row.researchId||''}</td><td>${row.studyStartDate||''}</td>`;tbody.appendChild(tr)}}
+async function refresh(){try{const c=encodeURIComponent($('classId')?.value||'6-C1');const data=await api('/api/management/comparison-participants/setup?classId='+c);render(data);setStatus('setupStatus','状態を更新しました。')}catch(e){setStatus('setupStatus','状態取得に失敗: '+e.message,false)}}
+$('refreshBtn').onclick=refresh;
+$('bootstrapBtn').onclick=async()=>{if(!confirm('比較校用IDを準備します。実人数と予備人数を確認しましたか？'))return;try{const body={classId:$('classId').value,actualCount:Number($('actualCount').value),reserveCount:Number($('reserveCount').value)};const data=await api('/api/management/comparison-participants/bootstrap',{method:'POST',body:JSON.stringify(body)});setStatus('setupStatus',`準備完了：新規 ${data.createdCount}件、既存再利用 ${data.reusedCount}件`);await refresh()}catch(e){setStatus('setupStatus','ID準備に失敗: '+e.message,false)}};
+$('activateBtn').onclick=async()=>{if(!confirm('出席番号1～28を正式な比較校研究参加者として登録します。開始日は正しいですか？'))return;try{const body={classId:$('classId').value,actualCount:Number($('activateCount').value),studyStartDate:$('studyStartDate').value};const data=await api('/api/management/comparison-participants/activate',{method:'POST',body:JSON.stringify(body)});setStatus('activateStatus',`正式登録完了：${data.participantCount}名、更新 ${data.updated}名`);await refresh()}catch(e){setStatus('activateStatus','正式登録に失敗: '+e.message,false)}};
+$('reserveBtn').onclick=async()=>{if(!confirm('予備IDを転入生用として有効化します。'))return;try{const body={classId:$('classId').value,attendanceNumber:Number($('reserveAttendance').value),studyStartDate:$('reserveStartDate').value};await api('/api/management/comparison-participants/activate-reserve',{method:'POST',body:JSON.stringify(body)});setStatus('reserveStatus','予備IDを転入生用に有効化しました。');await refresh()}catch(e){setStatus('reserveStatus','予備IDの有効化に失敗: '+e.message,false)}};
+$('csvBtn').onclick=()=>{if(!currentRows.length){setStatus('setupStatus','保存するIDがありません。',false);return}const headers=['attendance_number','learning_code','role','active','formal_study_participant','research_id','study_start_date'];const lines=[headers.join(',')];for(const r of currentRows){const vals=[r.attendanceNumber,r.learningCode,String(r.classId).endsWith('-R')?'reserve':'student',r.active?1:0,r.formalStudyParticipant?1:0,r.researchId,r.studyStartDate||''].map(v=>'"'+String(v??'').replaceAll('"','""')+'"');lines.push(vals.join(','))}const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='comparison_6-C1_ids.csv';a.click();URL.revokeObjectURL(a.href)};
+checkLogin();
+</script>
+</body>
+</html>
