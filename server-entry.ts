@@ -36,7 +36,62 @@ const application = express.application as any;
 const originalGet = application.get;
 const originalListen = application.listen;
 
+function ensureExtensionRoutesMounted(app: any) {
+  if (!app.__reflectionRoutesMounted) {
+    app.use('/api/reflection', createReflectionRouter());
+    app.__reflectionRoutesMounted = true;
+  }
+  if (!app.__studyScheduleRoutesMounted) {
+    app.use('/api/management', createStudyScheduleRouter());
+    app.__studyScheduleRoutesMounted = true;
+  }
+  if (!app.__studyParticipantRoutesMounted) {
+    app.use('/api/management', createStudyParticipantRouter());
+    app.__studyParticipantRoutesMounted = true;
+  }
+  if (!app.__comparisonParticipantSetupRoutesMounted) {
+    app.use('/api/management', createComparisonParticipantSetupRouter());
+    app.__comparisonParticipantSetupRoutesMounted = true;
+  }
+  if (!app.__questionnaireRoutesMounted) {
+    app.use('/api/management', createQuestionnaireRouter());
+    app.__questionnaireRoutesMounted = true;
+  }
+  if (!app.__questionnaireAutoSyncRoutesMounted) {
+    app.use('/api/questionnaire-auto', createQuestionnaireAutoSyncRouter());
+    app.__questionnaireAutoSyncRoutesMounted = true;
+  }
+  if (!app.__researchSessionHistoryRoutesMounted) {
+    app.use('/api/management', createResearchSessionHistoryRouter());
+    app.__researchSessionHistoryRoutesMounted = true;
+  }
+  if (!app.__researchSessionAuditRoutesMounted) {
+    app.use('/api/management', createResearchSessionAuditRouter());
+    app.__researchSessionAuditRoutesMounted = true;
+  }
+  if (!app.__researchRq1RoutesMounted) {
+    app.use('/api/management', createResearchRq1Router());
+    app.__researchRq1RoutesMounted = true;
+  }
+  if (!app.__researchRq2FormalAlignmentRoutesMounted) {
+    app.use('/api/management', createResearchRq2FormalAlignmentRouter());
+    app.__researchRq2FormalAlignmentRoutesMounted = true;
+  }
+  if (!app.__researchRq2RoutesMounted) {
+    app.use('/api/management', createResearchRq2Router());
+    app.__researchRq2RoutesMounted = true;
+  }
+  if (!app.__researchRq3RoutesMounted) {
+    app.use('/api/management', createResearchRq3Router());
+    app.__researchRq3RoutesMounted = true;
+  }
+}
+
 application.get = function researchPhaseAwareGet(this: any, path: any, ...handlers: any[]) {
+  // Production registers app.get('*') as the SPA fallback immediately before listen().
+  // Mount extension routers first so their GET endpoints are not swallowed by that fallback.
+  if (path === '*') ensureExtensionRoutesMounted(this);
+
   if (typeof path === 'string' && handlers.length > 0) {
     const replacement = manualResearchExclusionGetHandler(path) || resilientResearchDashboardGetHandler(path) || phaseAwareGetHandler(path);
     if (replacement) handlers[handlers.length - 1] = replacement;
@@ -61,54 +116,9 @@ application.get = function researchPhaseAwareGet(this: any, path: any, ...handle
 };
 
 application.listen = function reflectionAwareListen(this: any, ...args: any[]) {
-  if (!this.__reflectionRoutesMounted) {
-    this.use('/api/reflection', createReflectionRouter());
-    this.__reflectionRoutesMounted = true;
-  }
-  if (!this.__studyScheduleRoutesMounted) {
-    this.use('/api/management', createStudyScheduleRouter());
-    this.__studyScheduleRoutesMounted = true;
-  }
-  if (!this.__studyParticipantRoutesMounted) {
-    this.use('/api/management', createStudyParticipantRouter());
-    this.__studyParticipantRoutesMounted = true;
-  }
-  if (!this.__comparisonParticipantSetupRoutesMounted) {
-    this.use('/api/management', createComparisonParticipantSetupRouter());
-    this.__comparisonParticipantSetupRoutesMounted = true;
-  }
-  if (!this.__questionnaireRoutesMounted) {
-    this.use('/api/management', createQuestionnaireRouter());
-    this.__questionnaireRoutesMounted = true;
-  }
-  if (!this.__questionnaireAutoSyncRoutesMounted) {
-    this.use('/api/questionnaire-auto', createQuestionnaireAutoSyncRouter());
-    this.__questionnaireAutoSyncRoutesMounted = true;
-  }
-  if (!this.__researchSessionHistoryRoutesMounted) {
-    this.use('/api/management', createResearchSessionHistoryRouter());
-    this.__researchSessionHistoryRoutesMounted = true;
-  }
-  if (!this.__researchSessionAuditRoutesMounted) {
-    this.use('/api/management', createResearchSessionAuditRouter());
-    this.__researchSessionAuditRoutesMounted = true;
-  }
-  if (!this.__researchRq1RoutesMounted) {
-    this.use('/api/management', createResearchRq1Router());
-    this.__researchRq1RoutesMounted = true;
-  }
-  if (!this.__researchRq2FormalAlignmentRoutesMounted) {
-    this.use('/api/management', createResearchRq2FormalAlignmentRouter());
-    this.__researchRq2FormalAlignmentRoutesMounted = true;
-  }
-  if (!this.__researchRq2RoutesMounted) {
-    this.use('/api/management', createResearchRq2Router());
-    this.__researchRq2RoutesMounted = true;
-  }
-  if (!this.__researchRq3RoutesMounted) {
-    this.use('/api/management', createResearchRq3Router());
-    this.__researchRq3RoutesMounted = true;
-  }
+  // Development does not register the production '*' fallback, so keep this
+  // idempotent safety net. In production the routes are already mounted above.
+  ensureExtensionRoutesMounted(this);
   return originalListen.apply(this, args);
 };
 
