@@ -46,6 +46,15 @@ function countsByAux(rows: Record<string, any>[], dimension: Dimension, source: 
   return out;
 }
 
+function countsByField(rows: Record<string, any>[], key: string) {
+  const out: Record<string, number> = {};
+  for (const row of rows) {
+    const value = String(row[key] || '').trim();
+    if (value) out[value] = (out[value] || 0) + 1;
+  }
+  return out;
+}
+
 function humanFinalRows(rows: Record<string, any>[]) {
   return rows.filter((row) => row.humanStatus === 'confirmed' || row.humanStatus === 'modified');
 }
@@ -60,6 +69,8 @@ export function buildRq2Analysis(items: Record<string, any>[]) {
       const aiFunction = countsByPrimary(rows, 'function', 'ai');
       const finalReference = countsByPrimary(finalRows, 'reference', 'human');
       const finalFunction = countsByPrimary(finalRows, 'function', 'human');
+      const aiRepRows = rows.filter((row) => primaryCode(row, 'function', 'ai') === 'REP');
+      const finalRepRows = finalRows.filter((row) => primaryCode(row, 'function', 'human') === 'REP');
       return {
         stratum,
         label: RQ2_STRATUM_LABELS[stratum],
@@ -76,6 +87,18 @@ export function buildRq2Analysis(items: Record<string, any>[]) {
         finalFunctionPrimaryCodes: finalFunction,
         finalReferenceAuxCodes: countsByAux(finalRows, 'reference', 'human'),
         finalFunctionAuxCodes: countsByAux(finalRows, 'function', 'human'),
+        aiRepair: {
+          n: aiRepRows.length,
+          subtype: countsByField(aiRepRows, 'aiRepairSubtype'),
+          outcome: countsByField(aiRepRows, 'aiRepairOutcome'),
+          technologyInvolvement: countsByField(aiRepRows, 'aiTechnologyInvolvement'),
+        },
+        finalRepair: {
+          n: finalRepRows.length,
+          subtype: countsByField(finalRepRows, 'humanRepairSubtype'),
+          outcome: countsByField(finalRepRows, 'humanRepairOutcome'),
+          technologyInvolvement: countsByField(finalRepRows, 'humanTechnologyInvolvement'),
+        },
         // Backward-compatible aliases for older dashboard code.
         aiCandidateReferenceCodes: aiReference,
         aiCandidateFunctionCodes: aiFunction,
@@ -130,6 +153,7 @@ export function buildRq2ReliabilitySummary(records: Record<string, any>[]) {
       commonItems: 0,
       reference: { n: 0, agreement: null, kappa: null },
       function: { n: 0, agreement: null, kappa: null },
+      repair: { n: 0, subtypeAgreement: null, outcomeAgreement: null, technologyAgreement: null },
     };
   }
   const [coderA, coderB] = coders;
@@ -144,10 +168,22 @@ export function buildRq2ReliabilitySummary(records: Record<string, any>[]) {
     reliabilityPrimary(aRows.get(key)!, 'function'),
     reliabilityPrimary(bRows.get(key)!, 'function'),
   ] as [string, string]);
+  const repairCommon = common.filter((key) => reliabilityPrimary(aRows.get(key)!, 'function') === 'REP' && reliabilityPrimary(bRows.get(key)!, 'function') === 'REP');
+  const attrAgreement = (key: string) => {
+    const pairs = repairCommon.map((sequenceId) => [String(aRows.get(sequenceId)?.[key] || ''), String(bRows.get(sequenceId)?.[key] || '')]).filter(([a,b]) => Boolean(a && b));
+    if (!pairs.length) return null;
+    return Number((pairs.filter(([a,b]) => a === b).length / pairs.length * 100).toFixed(1));
+  };
   return {
     coders: [coderA, coderB],
     commonItems: common.length,
     reference: categoricalKappa(referencePairs),
     function: categoricalKappa(functionPairs),
+    repair: {
+      n: repairCommon.length,
+      subtypeAgreement: attrAgreement('repairSubtype'),
+      outcomeAgreement: attrAgreement('repairOutcome'),
+      technologyAgreement: attrAgreement('technologyInvolvement'),
+    },
   };
 }

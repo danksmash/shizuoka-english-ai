@@ -1,7 +1,7 @@
 import { buildRq2Candidates } from './researchRq2Sampling';
 import type { StudyScheduleRecord } from './studySchedulePersistence';
 
-export const INTERACTION_CODES_SCHEMA_VERSION = 'interaction-codes-2026-v1';
+export const INTERACTION_CODES_SCHEMA_VERSION = 'interaction-codes-2026-v2';
 
 export const INTERACTION_CODES_HEADERS = [
   'interaction_schema_version',
@@ -29,6 +29,9 @@ export const INTERACTION_CODES_HEADERS = [
   'reference_aux_labels',
   'function_primary',
   'function_aux_labels',
+  'repair_subtype',
+  'repair_outcome',
+  'technology_involvement',
   'coding_status',
   'human_codebook_version',
   'human_coder',
@@ -164,6 +167,9 @@ export function buildInteractionCodeRows(
       reference_aux_labels: confirmed ? finalAux(item, 'reference').join('|') : '',
       function_primary: functionPrimary,
       function_aux_labels: confirmed ? finalAux(item, 'function').join('|') : '',
+      repair_subtype: confirmed && functionPrimary === 'REP' ? String(item.humanRepairSubtype || '') : '',
+      repair_outcome: confirmed && functionPrimary === 'REP' ? String(item.humanRepairOutcome || '') : '',
+      technology_involvement: confirmed && functionPrimary === 'REP' ? String(item.humanTechnologyInvolvement || '') : '',
       coding_status: confirmed ? String(item.humanStatus || 'confirmed') : 'pending',
       human_codebook_version: confirmed ? String(item.humanCodebookVersion || run.codebookVersion || '') : '',
       human_coder: confirmed ? String(item.humanCoder || '') : '',

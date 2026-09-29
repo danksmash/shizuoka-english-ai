@@ -4,6 +4,7 @@ import { getAllSessionsForManagement } from './persistence';
 import { getAllStudySchedules } from './studySchedulePersistence';
 import { buildResearchExportDataSets } from './researchDashboard';
 import { getRq2Codebook, rq2CanonicalPrimaryAndAux } from './researchRq2Codebook';
+import { canonicalRepairAttributes } from './researchRepair';
 import { codeRq2Batch } from './researchRq2Ai';
 import { findActiveFormalRq2Runs, getRq2ReliabilityCodes } from './researchRq2Persistence';
 import {
@@ -165,7 +166,7 @@ router.post('/research-rq3/create-run', requireManagementRole(['researcher']), a
     if (await findActiveRq3Run()) throw new Error('RQ3_ACTIVE_RUN_EXISTS');
     const codebook = await getRq2Codebook();
     if (String(codebook.status || '') !== 'frozen') throw new Error('RQ3_CODEBOOK_NOT_FROZEN');
-    if (Number(codebook.schemaVersion || 0) < 4) throw new Error('RQ3_CODEBOOK_SCHEMA_OUTDATED');
+    if (Number(codebook.schemaVersion || 0) < 5) throw new Error('RQ3_CODEBOOK_SCHEMA_OUTDATED');
     const { candidates } = await baseData();
     if (!candidates.length) throw new Error('RQ3_NO_CANDIDATES');
     const run = await createRq3Run({
@@ -251,6 +252,7 @@ router.post('/research-rq3/human-code', requireManagementRole(['researcher']), a
     if (String(codebook.version || '') !== String(run.codebookVersion || '')) throw new Error('RQ3_CODEBOOK_VERSION_MISMATCH');
     const reference = canonicalPrimaryAux(codebook, 'reference', req.body?.referencePrimary, req.body?.referenceAuxCodes);
     const functions = canonicalPrimaryAux(codebook, 'function', req.body?.functionPrimary, req.body?.functionAuxCodes);
+    const repair = canonicalRepairAttributes(functions.primary, req.body || {}, true);
     const decision = req.body?.decision === 'modify' ? 'modified' : 'confirmed';
     const item = await updateRq3Item(String(run.runId || ''), sequenceId, {
       humanReferencePrimary: reference.primary,
@@ -259,6 +261,9 @@ router.post('/research-rq3/human-code', requireManagementRole(['researcher']), a
       humanFunctionPrimary: functions.primary,
       humanFunctionAuxCodes: functions.aux,
       humanFunctionCodes: [functions.primary, ...functions.aux],
+      humanRepairSubtype: repair.repairSubtype,
+      humanRepairOutcome: repair.repairOutcome,
+      humanTechnologyInvolvement: repair.technologyInvolvement,
       humanStatus: decision,
       humanCodebookVersion: String(codebook.version || ''),
       humanCoder: req.managementUser?.username || 'researcher',
@@ -334,7 +339,7 @@ router.get('/research-rq3/interaction_codes.csv', requireManagementRole(['resear
 });
 
 function serializeReliabilityCsv(runId: string, records: Record<string, any>[]) {
-  const headers = ['run_id','sequence_id','coder_id','codebook_version','reference_primary','reference_aux_codes','function_primary','function_aux_codes','saved_at'];
+  const headers = ['run_id','sequence_id','coder_id','codebook_version','reference_primary','reference_aux_codes','function_primary','function_aux_codes','repair_subtype','repair_outcome','technology_involvement','saved_at'];
   const rows = records.map((row) => ({
     run_id: runId,
     sequence_id: row.sequenceId || '',
@@ -344,6 +349,9 @@ function serializeReliabilityCsv(runId: string, records: Record<string, any>[]) 
     reference_aux_codes: row.referenceAuxCodes || (Array.isArray(row.referenceCodes) ? row.referenceCodes.slice(1) : []),
     function_primary: row.functionPrimary || row.functionCodes?.[0] || '',
     function_aux_codes: row.functionAuxCodes || (Array.isArray(row.functionCodes) ? row.functionCodes.slice(1) : []),
+    repair_subtype: row.repairSubtype || '',
+    repair_outcome: row.repairOutcome || '',
+    technology_involvement: row.technologyInvolvement || '',
     saved_at: row.savedAt || '',
   }));
   return '\uFEFF' + [
