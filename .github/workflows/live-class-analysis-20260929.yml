@@ -1,0 +1,160 @@
+name: Temporary live class analysis 20260929
+
+on:
+  push:
+    branches:
+      - analysis-20260929b
+    paths:
+      - '.github/workflows/live-class-analysis-20260929.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+
+      - name: Read and anonymize selected Firestore sessions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p live-analysis-output
+          python3 - <<'PY'
+          import json, subprocess, urllib.request, urllib.parse, csv, re
+          from datetime import datetime, timezone
+
+          PROJECT='shizuoka-english-ai'
+          DB='(default)'
+          token=subprocess.check_output(['gcloud','auth','print-access-token'], text=True).strip()
+          base=f'https://firestore.googleapis.com/v1/projects/{PROJECT}/databases/{urllib.parse.quote(DB, safe="")}/documents/sessions'
+
+          def val(v):
+              if not isinstance(v, dict): return None
+              if 'stringValue' in v: return v['stringValue']
+              if 'booleanValue' in v: return v['booleanValue']
+              if 'integerValue' in v: return int(v['integerValue'])
+              if 'doubleValue' in v: return float(v['doubleValue'])
+              if 'timestampValue' in v: return v['timestampValue']
+              if 'nullValue' in v: return None
+              if 'arrayValue' in v: return [val(x) for x in v.get('arrayValue',{}).get('values',[])]
+              if 'mapValue' in v: return {k:val(x) for k,x in v.get('mapValue',{}).get('fields',{}).items()}
+              return None
+
+          rows=[]; page=''
+          while True:
+              url=base+'?pageSize=1000'+(('&pageToken='+urllib.parse.quote(page)) if page else '')
+              req=urllib.request.Request(url, headers={'Authorization':'Bearer '+token})
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  data=json.load(r)
+              for d in data.get('documents',[]): rows.append({k:val(v) for k,v in d.get('fields',{}).items()})
+              page=data.get('nextPageToken','')
+              if not page: break
+
+          keep=[]
+          for s in rows:
+              c=str(s.get('classId',''))
+              d=str(s.get('localDate',''))
+              if c not in {'5-1','5-3'}: continue
+              if not ('2026-09-17' <= d <= '2026-09-29'): continue
+              hist=[]
+              for m in s.get('history') or []:
+                  if not isinstance(m,dict): continue
+                  hist.append({
+                      'sender': str(m.get('sender','')),
+                      'englishText': str(m.get('englishText','')),
+                      'japaneseText': str(m.get('japaneseText','')),
+                      'timestamp': m.get('timestamp',''),
+                  })
+              events=[]
+              for e in s.get('systemEvents') or []:
+                  if not isinstance(e,dict): continue
+                  events.append({'type':str(e.get('type','')),'timestamp':e.get('timestamp',''),'value':e.get('value','') if str(e.get('type','')) in {'session_finish','session_start'} else ''})
+              keep.append({
+                  'sessionId':str(s.get('sessionId','')),
+                  'researchId':str(s.get('researchId','')),
+                  'classId':c,
+                  'localDate':d,
+                  'startedAt':s.get('startedAt',''),
+                  'endedAt':s.get('endedAt',''),
+                  'aiStudentId':str(s.get('aiStudentId','')),
+                  'personaId':str(s.get('personaId','')),
+                  'personaCountry':str(s.get('personaCountry','')),
+                  'topic':str(s.get('topic','')),
+                  'targetDurationMinutes':s.get('targetDurationMinutes',0),
+                  'actualDurationSeconds':s.get('actualDurationSeconds',0),
+                  'totalTurns':s.get('totalTurns',0),
+                  'totalChildWords':s.get('totalChildWords',0),
+                  'childQuestionCount':s.get('childQuestionCount',0),
+                  'childReciprocalQuestionCount':s.get('childReciprocalQuestionCount',0),
+                  'childRepairCount':s.get('childRepairCount',0),
+                  'childReasonExpressionCount':s.get('childReasonExpressionCount',0),
+                  'childUniqueWordTypes':s.get('childUniqueWordTypes',0),
+                  'meanChildWordsPerTurn':s.get('meanChildWordsPerTurn',0),
+                  'maxChildWordsPerTurn':s.get('maxChildWordsPerTurn',0),
+                  'reflection':s.get('reflection'),
+                  'history':hist,
+                  'systemEvents':events,
+              })
+
+          keep.sort(key=lambda x:(x['classId'],x['localDate'],str(x['startedAt']),x['sessionId']))
+          meta={
+              'generatedAt':datetime.now(timezone.utc).isoformat(),
+              'source':'Firestore sessions read-only via GitHub OIDC',
+              'rawSessionsScanned':len(rows),
+              'selectedSessions':len(keep),
+              'classes':sorted(set(x['classId'] for x in keep)),
+              'dates':sorted(set(x['localDate'] for x in keep)),
+              'writesPerformed':0,
+              'omittedFields':['studentId','learningId','teacherStudentId','attendanceNumber'],
+          }
+          with open('live-analysis-output/metadata.json','w',encoding='utf-8') as f: json.dump(meta,f,ensure_ascii=False,indent=2)
+          with open('live-analysis-output/sessions.json','w',encoding='utf-8') as f: json.dump(keep,f,ensure_ascii=False,indent=2)
+
+          def wc(t): return len(re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", t or ''))
+          summary=[]
+          for s in keep:
+              child=[m for m in s['history'] if m['sender']=='child']
+              ai=[m for m in s['history'] if m['sender']=='ai']
+              child_words=sum(wc(m['englishText']) for m in child)
+              has_finish=any(e.get('type')=='session_finish' for e in s['systemEvents'])
+              quality='complete' if child and has_finish else ('partial' if child else 'missing_core')
+              summary.append({
+                  'session_id':s['sessionId'],'research_id':s['researchId'],'class_id':s['classId'],'local_date':s['localDate'],
+                  'started_at':s['startedAt'],'persona_id':s['personaId'] or s['aiStudentId'],'persona_country':s['personaCountry'],'topic':s['topic'],
+                  'target_minutes':s['targetDurationMinutes'],'actual_seconds':s['actualDurationSeconds'],
+                  'child_turns':len(child),'ai_turns':len(ai),'child_words_derived':child_words,'child_words_stored':s['totalChildWords'],
+                  'mean_child_words_per_turn':s['meanChildWordsPerTurn'],'child_questions':s['childQuestionCount'],
+                  'child_reciprocal_questions':s['childReciprocalQuestionCount'],'child_repairs':s['childRepairCount'],
+                  'child_reason_expressions':s['childReasonExpressionCount'],'quality_simple':quality,
+              })
+          cols=list(summary[0].keys()) if summary else []
+          with open('live-analysis-output/session-summary.csv','w',newline='',encoding='utf-8-sig') as f:
+              w=csv.DictWriter(f,fieldnames=cols); w.writeheader(); w.writerows(summary)
+          print(json.dumps(meta,ensure_ascii=False))
+          PY
+
+      - name: Upload anonymized analysis artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-class-analysis-20260929
+          path: live-analysis-output/
+          if-no-files-found: error
+          retention-days: 1
