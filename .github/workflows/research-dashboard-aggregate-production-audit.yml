@@ -1,0 +1,55 @@
+name: Research dashboard aggregate production audit
+
+on:
+  push:
+    branches:
+      - fix/research-dashboard-scalable-aggregates-20260930
+    paths:
+      - .github/workflows/research-dashboard-aggregate-production-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
+      - name: Read-only production parity audit
+        shell: bash
+        run: |
+          set -o pipefail
+          export FIRESTORE_ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          export GOOGLE_CLOUD_PROJECT=shizuoka-english-ai
+          export APPLY_RESEARCH_DASHBOARD_AGGREGATES=0
+          export VERIFY_RESEARCH_DASHBOARD_AGGREGATES=1
+          npx tsx scripts/rebuild-research-dashboard-aggregates.ts 2>&1 | tee aggregate-production-audit.log
+      - name: Upload audit diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aggregate-production-audit
+          path: aggregate-production-audit.log
+          if-no-files-found: ignore
+          retention-days: 1
