@@ -37,7 +37,7 @@ jobs:
         with:
           project_id: shizuoka-english-ai
           version: '>= 416.0.0'
-      - name: Read-only production parity audit
+      - name: Read-only production parity and shard-size audit
         shell: bash
         run: |
           set -o pipefail
