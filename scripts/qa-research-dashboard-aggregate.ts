@@ -6,6 +6,10 @@ import {
   buildResearchDashboardDataFromAggregateSessions,
   flattenResearchDashboardAggregateSessions,
 } from '../src/server/researchDashboardAggregate';
+import {
+  RESEARCH_DASHBOARD_AGGREGATE_SHARD_SIZE,
+  shardResearchDashboardAggregateDocuments,
+} from '../src/server/researchDashboardAggregateStorage';
 
 function message(sender: 'child' | 'ai', englishText: string, timestamp: string) {
   return { sender, englishText, japaneseText: '', timestamp };
@@ -59,6 +63,16 @@ function session(overrides: Record<string, any>) {
   };
 }
 
+function canonicalTopExpressions(rows: any[]) {
+  return rows
+    .map((row) => ({
+      expression: String(row.expression || '').trim().toLowerCase(),
+      count: Number(row.count || 0),
+      source: String(row.source || ''),
+    }))
+    .sort((a, b) => b.count - a.count || a.source.localeCompare(b.source) || a.expression.localeCompare(b.expression));
+}
+
 const raw = [
   session({
     sessionId: 'main-1',
@@ -109,7 +123,7 @@ const raw = [
 ];
 
 const documents = buildResearchDashboardAggregateDocuments(raw, 'qa-generation');
-assert.equal(documents.length, 3, 'date × class should produce compact aggregate documents');
+assert.equal(documents.length, 3, 'date × class should produce compact logical aggregate documents');
 assert.ok(documents.every((item) => item.data.schemaVersion === RESEARCH_DASHBOARD_AGGREGATE_VERSION));
 assert.equal(documents.reduce((sum, item) => sum + item.data.sessionCount, 0), 4);
 assert.equal(documents.find((item) => item.data.localDate === '2026-09-17')?.data.sessionCount, 2);
@@ -135,7 +149,11 @@ for (const query of [
   assert.deepEqual(aggregate.charts, legacy.charts, `charts must match legacy path: ${JSON.stringify(query)}`);
   assert.deepEqual(aggregate.dataQuality, legacy.dataQuality, `quality must match legacy path: ${JSON.stringify(query)}`);
   assert.deepEqual(aggregate.systemQuality, legacy.systemQuality, `system quality must match legacy path: ${JSON.stringify(query)}`);
-  assert.deepEqual(aggregate.topExpressions, legacy.topExpressions, `top expressions must match legacy path: ${JSON.stringify(query)}`);
+  assert.deepEqual(
+    canonicalTopExpressions(aggregate.topExpressions),
+    canonicalTopExpressions(legacy.topExpressions),
+    `top expression identities and counts must match legacy path: ${JSON.stringify(query)}`,
+  );
   assert.deepEqual(aggregate.recentSessions, legacy.recentSessions, `recent sessions must match legacy path: ${JSON.stringify(query)}`);
   assert.deepEqual(aggregate.filters, legacy.filters, `filters must match legacy path: ${JSON.stringify(query)}`);
   assert.deepEqual(
@@ -145,4 +163,20 @@ for (const query of [
   );
 }
 
-console.log('Research dashboard aggregate parity QA: PASS');
+const pilotTemplate = documents.find((item) => item.data.localDate === '2026-09-09');
+assert.ok(pilotTemplate, 'Pilot B aggregate template must exist');
+const manyPilotSessions = Array.from({ length: 291 }, (_, index) => ({
+  ...pilotTemplate!.data.sessions[0],
+  session_id: `pilot-${String(index + 1).padStart(3, '0')}`,
+}));
+const largePilotDocument = {
+  id: pilotTemplate!.id,
+  data: { ...pilotTemplate!.data, sessionCount: manyPilotSessions.length, sessions: manyPilotSessions },
+};
+const shards = shardResearchDashboardAggregateDocuments([largePilotDocument]);
+assert.equal(shards.length, Math.ceil(291 / RESEARCH_DASHBOARD_AGGREGATE_SHARD_SIZE));
+assert.ok(shards.every((item) => item.data.sessions.length <= RESEARCH_DASHBOARD_AGGREGATE_SHARD_SIZE));
+assert.equal(shards.reduce((sum, item) => sum + item.data.sessions.length, 0), 291);
+assert.equal(new Set(shards.map((item) => item.id)).size, shards.length, 'each Pilot B shard needs a stable unique id');
+
+console.log('Research dashboard aggregate parity and sharding QA: PASS');
