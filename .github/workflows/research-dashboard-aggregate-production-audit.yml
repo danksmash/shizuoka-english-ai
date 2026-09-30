@@ -37,13 +37,13 @@ jobs:
         with:
           project_id: shizuoka-english-ai
           version: '>= 416.0.0'
-      - name: Read-only production parity and shard-size audit
+      - name: Verify production parity and build derived aggregates
         shell: bash
         run: |
           set -o pipefail
           export FIRESTORE_ACCESS_TOKEN="$(gcloud auth print-access-token)"
           export GOOGLE_CLOUD_PROJECT=shizuoka-english-ai
-          export APPLY_RESEARCH_DASHBOARD_AGGREGATES=0
+          export APPLY_RESEARCH_DASHBOARD_AGGREGATES=1
           export VERIFY_RESEARCH_DASHBOARD_AGGREGATES=1
           npx tsx scripts/rebuild-research-dashboard-aggregates.ts 2>&1 | tee aggregate-production-audit.log
       - name: Upload audit diagnostics
