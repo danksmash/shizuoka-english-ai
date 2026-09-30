@@ -7,16 +7,26 @@ import {
   type ResearchDashboardAggregateState,
 } from './researchDashboardAggregate';
 import { getDocument, listCollection, queryCollectionByStringRange, setDocument, setDocumentsBatch } from './firestore';
+import { getSessionsForManagementByLocalDateRange } from './persistence';
 
 const AGGREGATE_COLLECTION = 'research_dashboard_aggregates';
 const AGGREGATE_META_COLLECTION = 'research_dashboard_aggregate_meta';
 const AGGREGATE_META_ID = 'current';
+const INCREMENTAL_REFRESH_CACHE_MS = 15_000;
 export const RESEARCH_DASHBOARD_AGGREGATE_SHARD_SIZE = 25;
 
 export type StoredResearchDashboardAggregateDocument = ResearchDashboardAggregateDocument & {
   shardIndex: number;
   shardCount: number;
 };
+
+export type StoredResearchDashboardAggregateState = ResearchDashboardAggregateState & {
+  sourceWatermark?: string;
+  latestLocalDate?: string;
+};
+
+let incrementalRefreshInFlight: Promise<number> | null = null;
+let lastIncrementalRefreshAt = 0;
 
 function aggregateBaseId(localDate: string, classId: string): string {
   const encodedClass = Buffer.from(classId || 'unknown', 'utf8').toString('base64url');
@@ -58,15 +68,32 @@ function maxSourceUpdatedAt(rawSessions: Record<string, any>[]): string {
     .at(-1) || '';
 }
 
-export async function getStoredResearchDashboardAggregateState(): Promise<(ResearchDashboardAggregateState & { sourceWatermark?: string }) | null> {
+function maxLogicalLocalDate(documents: Array<{ data: { localDate?: string } }>): string {
+  return documents
+    .map((item) => String(item.data.localDate || ''))
+    .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))
+    .sort()
+    .at(-1) || '';
+}
+
+async function writeStoredAggregateDocuments(documents: Array<{ id: string; data: StoredResearchDashboardAggregateDocument }>) {
+  for (let offset = 0; offset < documents.length; offset += 400) {
+    await setDocumentsBatch(
+      AGGREGATE_COLLECTION,
+      documents.slice(offset, offset + 400).map((item) => ({ id: item.id, data: item.data })),
+    );
+  }
+}
+
+export async function getStoredResearchDashboardAggregateState(): Promise<StoredResearchDashboardAggregateState | null> {
   const row = await getDocument(AGGREGATE_META_COLLECTION, AGGREGATE_META_ID);
   if (!row || row.schemaVersion !== RESEARCH_DASHBOARD_AGGREGATE_VERSION) return null;
-  return row as ResearchDashboardAggregateState & { sourceWatermark?: string };
+  return row as StoredResearchDashboardAggregateState;
 }
 
 export async function loadStoredResearchDashboardAggregates(start?: unknown, end?: unknown): Promise<{
   available: boolean;
-  state: (ResearchDashboardAggregateState & { sourceWatermark?: string }) | null;
+  state: StoredResearchDashboardAggregateState | null;
   documents: StoredResearchDashboardAggregateDocument[];
 }> {
   const state = await getStoredResearchDashboardAggregateState();
@@ -97,6 +124,7 @@ export async function rebuildStoredResearchDashboardAggregates(
     sessionCount,
     sourceSessionCount: rawSessions.length,
     sourceWatermark: maxSourceUpdatedAt(rawSessions),
+    latestLocalDate: maxLogicalLocalDate(logicalDocuments),
   };
   if (options.dryRun) return { ...result, dryRun: true };
 
@@ -111,13 +139,9 @@ export async function rebuildStoredResearchDashboardAggregates(
     sessionCount: 0,
     sourceSessionCount: rawSessions.length,
     sourceWatermark: result.sourceWatermark,
+    latestLocalDate: result.latestLocalDate,
   });
-  for (let offset = 0; offset < documents.length; offset += 400) {
-    await setDocumentsBatch(
-      AGGREGATE_COLLECTION,
-      documents.slice(offset, offset + 400).map((item) => ({ id: item.id, data: item.data })),
-    );
-  }
+  await writeStoredAggregateDocuments(documents);
   const completedAt = new Date().toISOString();
   await setDocument(AGGREGATE_META_COLLECTION, AGGREGATE_META_ID, {
     schemaVersion: RESEARCH_DASHBOARD_AGGREGATE_VERSION,
@@ -129,8 +153,53 @@ export async function rebuildStoredResearchDashboardAggregates(
     sessionCount,
     sourceSessionCount: rawSessions.length,
     sourceWatermark: result.sourceWatermark,
+    latestLocalDate: result.latestLocalDate,
   });
   return { ...result, dryRun: false };
+}
+
+async function refreshStoredResearchDashboardAggregatesToDateInternal(targetLocalDate: string): Promise<number> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(targetLocalDate)) return 0;
+  const state = await getStoredResearchDashboardAggregateState();
+  if (!state || state.status !== 'ready' || !state.generationId) return 0;
+  const start = state.latestLocalDate && state.latestLocalDate <= targetLocalDate
+    ? state.latestLocalDate
+    : targetLocalDate;
+  const rawSessions = await getSessionsForManagementByLocalDateRange(start, targetLocalDate);
+  if (!rawSessions.length) return 0;
+  const logicalDocuments = buildResearchDashboardAggregateDocuments(rawSessions, state.generationId);
+  const documents = shardResearchDashboardAggregateDocuments(logicalDocuments);
+  await writeStoredAggregateDocuments(documents);
+  const now = new Date().toISOString();
+  const latestLocalDate = [state.latestLocalDate || '', maxLogicalLocalDate(logicalDocuments)].sort().at(-1) || state.latestLocalDate || '';
+  const sourceWatermark = [state.sourceWatermark || '', maxSourceUpdatedAt(rawSessions)].sort().at(-1) || state.sourceWatermark || '';
+  await setDocument(AGGREGATE_META_COLLECTION, AGGREGATE_META_ID, {
+    ...state,
+    updatedAt: now,
+    lastIncrementalAt: now,
+    latestLocalDate,
+    sourceWatermark,
+  });
+  return documents.length;
+}
+
+/**
+ * Refresh only the not-yet-materialized date range, plus the latest stored date
+ * itself so sessions added later on the same school day are included. Concurrent
+ * dashboard requests share one refresh per Cloud Run instance.
+ */
+export async function refreshStoredResearchDashboardAggregatesToDate(targetLocalDate: string): Promise<number> {
+  if (Date.now() - lastIncrementalRefreshAt < INCREMENTAL_REFRESH_CACHE_MS) return 0;
+  if (incrementalRefreshInFlight) return incrementalRefreshInFlight;
+  incrementalRefreshInFlight = refreshStoredResearchDashboardAggregatesToDateInternal(targetLocalDate)
+    .then((count) => {
+      lastIncrementalRefreshAt = Date.now();
+      return count;
+    })
+    .finally(() => {
+      incrementalRefreshInFlight = null;
+    });
+  return incrementalRefreshInFlight;
 }
 
 export function flattenStoredResearchDashboardAggregateSessions(
