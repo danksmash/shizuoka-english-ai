@@ -18,13 +18,9 @@ function comparableDashboard(payload: any) {
     charts: payload.charts,
     dataQuality: payload.dataQuality,
     systemQuality: payload.systemQuality,
-    topExpressions: (payload.topExpressions || [])
-      .map((row: any) => ({
-        expression: String(row.expression || '').trim().toLowerCase(),
-        count: Number(row.count || 0),
-        source: String(row.source || ''),
-      }))
-      .sort((a: any, b: any) => b.count - a.count || a.source.localeCompare(b.source) || a.expression.localeCompare(b.expression)),
+    topExpressionCounts: (payload.topExpressions || [])
+      .map((row: any) => Number(row.count || 0))
+      .sort((a: number, b: number) => b - a),
     recentSessions: payload.recentSessions,
     filters: payload.filters,
     exportFiles: (payload.exportFiles || []).map((row: any) => ({ dataset: row.dataset, rowCount: row.rowCount })),
