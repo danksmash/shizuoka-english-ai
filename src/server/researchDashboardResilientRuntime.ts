@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 import {
   buildResearchDashboardData,
   buildResearchExportDataSets,
+  MAIN_RESEARCH_START_DATE,
   normalizeFormalResearchExportQuery,
   type ResearchFilterQuery,
 } from './researchDashboard';
@@ -33,10 +34,54 @@ import {
 type PhaseAwareResearchQuery = ResearchFilterQuery & { studyPhase?: unknown; dataset?: unknown };
 
 const RETRY_DELAYS_MS = [120, 320];
+const PILOT_B_OFFICIAL_DATE = '2026-09-09';
 
 function errorText(error: unknown): string {
   if (error instanceof Error) return `${error.name}:${error.message}`;
   return String(error || '');
+}
+
+function queryText(value: unknown): string {
+  if (Array.isArray(value)) return queryText(value[0]);
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function validLocalDate(value: unknown): string {
+  const text = queryText(value);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+}
+
+/**
+ * Restrict Firestore reads before any history expansion. This does not change
+ * dashboard filter semantics: it only removes dates that can never belong to
+ * the requested research scope.
+ */
+export function researchDashboardEffectiveReadRange(query: Record<string, unknown>) {
+  const scope = (queryText(query.dataScope).toLowerCase() || 'main');
+  const requestedStart = validLocalDate(query.start);
+  const requestedEnd = validLocalDate(query.end);
+  let start = requestedStart;
+  let end = requestedEnd;
+  let inferred = false;
+
+  if (scope === 'main') {
+    if (!start || start < MAIN_RESEARCH_START_DATE) {
+      start = MAIN_RESEARCH_START_DATE;
+      inferred = start !== requestedStart;
+    }
+  } else if (scope === 'pilot_b' && !start && !end) {
+    start = PILOT_B_OFFICIAL_DATE;
+    end = PILOT_B_OFFICIAL_DATE;
+    inferred = true;
+  }
+
+  return { scope, requestedStart, requestedEnd, start, end, inferred };
+}
+
+/** Study schedules are only meaningful for Study 1 main/all Phase analytics. */
+export function researchDashboardNeedsStudySchedules(query: Record<string, unknown>): boolean {
+  const scope = (queryText(query.dataScope).toLowerCase() || 'main');
+  return scope === 'main' || scope === 'all';
 }
 
 export function isTransientResearchDashboardReadError(error: unknown): boolean {
@@ -101,19 +146,27 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
   const requestStartedAt = Date.now();
   try {
     const query = req.query as PhaseAwareResearchQuery;
-    const studyPhase = normalizeStudyPhaseFilter(query.studyPhase);
+    const readPlan = researchDashboardEffectiveReadRange(query as Record<string, unknown>);
+    const needsSchedules = researchDashboardNeedsStudySchedules(query as Record<string, unknown>);
+    const studyPhase = needsSchedules ? normalizeStudyPhaseFilter(query.studyPhase) : null;
     const readStartedAt = Date.now();
     const [schedules, sessions, reflectionSnapshot] = await Promise.all([
-      loadStudySchedulesResilient(),
-      loadSessionsResilient(query.start, query.end),
-      loadOptionalReflections(query.start, query.end),
+      needsSchedules ? loadStudySchedulesResilient() : Promise.resolve([] as StudyScheduleRecord[]),
+      loadSessionsResilient(readPlan.start, readPlan.end),
+      loadOptionalReflections(readPlan.start, readPlan.end),
     ]);
     const readMs = Date.now() - readStartedAt;
 
     const analysisSessions = sessions.filter((session) => !isManualResearchExcludedSessionId(session.sessionId));
-    const phaseSessionsRaw = filterSessionsForStudyPhase(sessions, schedules, studyPhase);
-    const phaseSessions = filterSessionsForStudyPhase(analysisSessions, schedules, studyPhase);
-    const phaseReflections = filterReflectionsForStudyPhase(reflectionSnapshot.records, schedules, studyPhase);
+    const phaseSessionsRaw = needsSchedules
+      ? filterSessionsForStudyPhase(sessions, schedules, studyPhase)
+      : sessions;
+    const phaseSessions = needsSchedules
+      ? filterSessionsForStudyPhase(analysisSessions, schedules, studyPhase)
+      : analysisSessions;
+    const phaseReflections = needsSchedules
+      ? filterReflectionsForStudyPhase(reflectionSnapshot.records, schedules, studyPhase)
+      : reflectionSnapshot.records;
     const dashboardStartedAt = Date.now();
     const dashboardBuilt = buildResearchDashboardData(phaseSessions, query, { includeInternal: true }) as any;
     const { __internal: dashboardInternal = {}, ...dashboard } = dashboardBuilt;
@@ -135,6 +188,7 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     const dashboardWarnings = [
       ...reflectionSnapshot.warnings,
       ...(manualExcludedCount > 0 ? [`manual_research_exclusions:${manualExcludedCount}`] : []),
+      ...(readPlan.inferred ? [`read_range_inferred:${readPlan.start || ''}:${readPlan.end || ''}`] : []),
       'session_audit_details_lazy',
     ];
 
@@ -160,9 +214,14 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
       phaseMs,
       loadedSessions: sessions.length,
       loadedReflections: reflectionSnapshot.records.length,
-      start: typeof query.start === 'string' ? query.start : '',
-      end: typeof query.end === 'string' ? query.end : '',
-      dataScope: typeof query.dataScope === 'string' ? query.dataScope : 'main',
+      requestedStart: readPlan.requestedStart,
+      requestedEnd: readPlan.requestedEnd,
+      effectiveStart: readPlan.start,
+      effectiveEnd: readPlan.end,
+      readRangeInferred: readPlan.inferred,
+      schedulesLoaded: schedules.length,
+      schedulesRequired: needsSchedules,
+      dataScope: readPlan.scope,
     });
     return res.json({
       ...dashboard,
@@ -202,12 +261,14 @@ export function withResilientResearchPhaseDashboard(path: string, handler: Reque
       let phaseComparison = body.phaseComparison;
       if (!phaseComparison) {
         try {
+          const readPlan = researchDashboardEffectiveReadRange(query);
+          const needsSchedules = researchDashboardNeedsStudySchedules(query);
           const sessions = Array.isArray(res.locals.researchDashboardSessions)
             ? res.locals.researchDashboardSessions
-            : (await loadSessionsResilient(query.start, query.end)).filter((session) => !isManualResearchExcludedSessionId(session.sessionId));
+            : (await loadSessionsResilient(readPlan.start, readPlan.end)).filter((session) => !isManualResearchExcludedSessionId(session.sessionId));
           const schedules = Array.isArray(res.locals.researchDashboardSchedules)
             ? res.locals.researchDashboardSchedules
-            : await loadStudySchedulesResilient();
+            : needsSchedules ? await loadStudySchedulesResilient() : [];
           const prepared = Array.isArray(res.locals.researchDashboardExportSessions)
             ? res.locals.researchDashboardExportSessions
             : [];
