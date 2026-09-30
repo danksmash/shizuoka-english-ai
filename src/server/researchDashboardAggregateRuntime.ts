@@ -93,12 +93,13 @@ export function aggregateAwareResearchDashboardGetHandler(path: string): Request
 
       const today = jstToday();
       const explicitEnd = queryText(query.end);
-      const shouldRefresh = !explicitEnd || explicitEnd >= today;
+      const refreshTarget = explicitEnd && explicitEnd < today ? explicitEnd : today;
+      const shouldRefresh = !state.latestLocalDate || refreshTarget >= state.latestLocalDate;
       let refreshedDocuments = 0;
       if (shouldRefresh) {
         refreshedDocuments = await retryResearchDashboardRead(
           'aggregate_incremental_refresh',
-          () => refreshStoredResearchDashboardAggregatesToDate(today),
+          () => refreshStoredResearchDashboardAggregatesToDate(refreshTarget),
         );
       }
 
@@ -170,6 +171,7 @@ export function aggregateAwareResearchDashboardGetHandler(path: string): Request
         aggregateDocuments: aggregateSnapshot.documents.length,
         aggregateSessions: allAggregateSessions.length,
         refreshedDocuments,
+        refreshTarget,
         requestedStart: readPlan.requestedStart,
         requestedEnd: readPlan.requestedEnd,
         effectiveStart: readPlan.start,
