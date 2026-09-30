@@ -24,6 +24,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Dashboard resilience QA
         run: npm run qa:research-dashboard-resilience
+      - name: Aggregate parity QA
+        run: npm run qa:research-dashboard-aggregate
       - name: Pilot B isolation QA
         run: npm run qa:pilot-b
       - name: TypeScript
