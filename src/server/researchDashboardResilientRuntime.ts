@@ -33,6 +33,41 @@ import {
 type PhaseAwareResearchQuery = ResearchFilterQuery & { studyPhase?: unknown; dataset?: unknown };
 
 const RETRY_DELAYS_MS = [120, 320];
+const PILOT_B_OFFICIAL_DATE = '2026-09-09';
+
+function queryText(value: unknown): string {
+  if (Array.isArray(value)) return queryText(value[0]);
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function queryDateBoundary(value: unknown): string {
+  const text = queryText(value);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+}
+
+export type ResearchDashboardReadPlan = {
+  dataScope: string;
+  start: unknown;
+  end: unknown;
+  loadStudySchedules: boolean;
+  derivedPilotBRange: boolean;
+};
+
+export function researchDashboardReadPlan(query: PhaseAwareResearchQuery | Record<string, unknown>): ResearchDashboardReadPlan {
+  const dataScope = queryText(query.dataScope) || 'main';
+  const schoolCondition = queryText(query.schoolCondition) || 'intervention';
+  const explicitStart = queryDateBoundary(query.start);
+  const explicitEnd = queryDateBoundary(query.end);
+  const derivedPilotBRange = dataScope === 'pilot_b' && !explicitStart && !explicitEnd;
+  const phaseApplicable = (dataScope === 'main' || dataScope === 'all') && schoolCondition !== 'comparison';
+  return {
+    dataScope,
+    start: derivedPilotBRange ? PILOT_B_OFFICIAL_DATE : query.start,
+    end: derivedPilotBRange ? PILOT_B_OFFICIAL_DATE : query.end,
+    loadStudySchedules: phaseApplicable,
+    derivedPilotBRange,
+  };
+}
 
 function errorText(error: unknown): string {
   if (error instanceof Error) return `${error.name}:${error.message}`;
@@ -101,12 +136,16 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
   const requestStartedAt = Date.now();
   try {
     const query = req.query as PhaseAwareResearchQuery;
-    const studyPhase = normalizeStudyPhaseFilter(query.studyPhase);
+    const readPlan = researchDashboardReadPlan(query);
+    const studyPhase = readPlan.loadStudySchedules ? normalizeStudyPhaseFilter(query.studyPhase) : '';
     const readStartedAt = Date.now();
+    const schedulePromise = readPlan.loadStudySchedules
+      ? loadStudySchedulesResilient()
+      : Promise.resolve([] as StudyScheduleRecord[]);
     const [schedules, sessions, reflectionSnapshot] = await Promise.all([
-      loadStudySchedulesResilient(),
-      loadSessionsResilient(query.start, query.end),
-      loadOptionalReflections(query.start, query.end),
+      schedulePromise,
+      loadSessionsResilient(readPlan.start, readPlan.end),
+      loadOptionalReflections(readPlan.start, readPlan.end),
     ]);
     const readMs = Date.now() - readStartedAt;
 
@@ -162,7 +201,11 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
       loadedReflections: reflectionSnapshot.records.length,
       start: typeof query.start === 'string' ? query.start : '',
       end: typeof query.end === 'string' ? query.end : '',
-      dataScope: typeof query.dataScope === 'string' ? query.dataScope : 'main',
+      effectiveStart: typeof readPlan.start === 'string' ? readPlan.start : '',
+      effectiveEnd: typeof readPlan.end === 'string' ? readPlan.end : '',
+      derivedPilotBRange: readPlan.derivedPilotBRange,
+      schedulesLoaded: readPlan.loadStudySchedules,
+      dataScope: readPlan.dataScope,
     });
     return res.json({
       ...dashboard,
@@ -199,15 +242,18 @@ export function withResilientResearchPhaseDashboard(path: string, handler: Reque
     (res as any).json = async (body: any) => {
       if (!body || body.success === false) return originalJson(body);
       const query = req.query as Record<string, unknown>;
+      const readPlan = researchDashboardReadPlan(query);
       let phaseComparison = body.phaseComparison;
       if (!phaseComparison) {
         try {
           const sessions = Array.isArray(res.locals.researchDashboardSessions)
             ? res.locals.researchDashboardSessions
-            : (await loadSessionsResilient(query.start, query.end)).filter((session) => !isManualResearchExcludedSessionId(session.sessionId));
+            : (await loadSessionsResilient(readPlan.start, readPlan.end)).filter((session) => !isManualResearchExcludedSessionId(session.sessionId));
           const schedules = Array.isArray(res.locals.researchDashboardSchedules)
             ? res.locals.researchDashboardSchedules
-            : await loadStudySchedulesResilient();
+            : readPlan.loadStudySchedules
+              ? await loadStudySchedulesResilient()
+              : [];
           const prepared = Array.isArray(res.locals.researchDashboardExportSessions)
             ? res.locals.researchDashboardExportSessions
             : [];
