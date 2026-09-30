@@ -15,6 +15,7 @@ import {
   resilientResearchDashboardGetHandler,
   withResilientResearchPhaseDashboard,
 } from './src/server/researchDashboardResilientRuntime';
+import { aggregateAwareResearchDashboardGetHandler } from './src/server/researchDashboardAggregateRuntime';
 import { withResearchSessionAuditManagementPage } from './src/server/researchSessionAuditManagementRuntime';
 import { withResearchReflectionChartPolish } from './src/server/researchReflectionChartPolishRuntime';
 import { withResearchDailyClassStack } from './src/server/researchDailyClassStackRuntime';
@@ -110,7 +111,10 @@ application.get = function researchPhaseAwareGet(this: any, path: any, ...handle
   if (path === '*') ensureExtensionRoutesMounted(this);
 
   if (typeof path === 'string' && handlers.length > 0) {
-    const replacement = manualResearchExclusionGetHandler(path) || resilientResearchDashboardGetHandler(path) || phaseAwareGetHandler(path);
+    const replacement = manualResearchExclusionGetHandler(path)
+      || aggregateAwareResearchDashboardGetHandler(path)
+      || resilientResearchDashboardGetHandler(path)
+      || phaseAwareGetHandler(path);
     if (replacement) handlers[handlers.length - 1] = replacement;
     handlers[handlers.length - 1] = withPersonaCountryDashboardLabels(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withQuestionnaireResearchRuntime(path, handlers[handlers.length - 1]);
