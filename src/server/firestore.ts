@@ -4,6 +4,8 @@ const DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || '(default)';
 let cachedToken: { value: string; expiresAt: number } | null = null;
 
 async function getAccessToken(): Promise<string> {
+  const explicitToken = String(process.env.FIRESTORE_ACCESS_TOKEN || '').trim();
+  if (explicitToken) return explicitToken;
   if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) return cachedToken.value;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 2500);
