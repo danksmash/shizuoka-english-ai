@@ -7,6 +7,8 @@ import {
   flattenResearchDashboardAggregateSessions,
 } from '../src/server/researchDashboardAggregate';
 import {
+  flattenStoredResearchDashboardAggregateSessions,
+  loadStoredResearchDashboardAggregates,
   rebuildStoredResearchDashboardAggregates,
   shardResearchDashboardAggregateDocuments,
 } from '../src/server/researchDashboardAggregateStorage';
@@ -68,6 +70,19 @@ const result = await rebuildStoredResearchDashboardAggregates(source, { dryRun: 
 assert.equal(result.sessionCount, source.length, 'Aggregate session count must equal source session count');
 assert.ok(result.documentCount > 0, 'Aggregate storage must produce at least one sharded document');
 
+let storedReadBackCount: number | string = 'not-applied';
+let storedReadBackDocuments: number | string = 'not-applied';
+if (apply) {
+  const stored = await loadStoredResearchDashboardAggregates();
+  assert.equal(stored.available, true, 'Stored aggregate generation must be marked ready after rebuild');
+  assert.equal(stored.state?.generationId, result.generationId, 'Read-back generation must match the completed rebuild');
+  assert.equal(stored.documents.length, result.documentCount, 'Read-back shard count must match the completed rebuild');
+  const storedSessions = flattenStoredResearchDashboardAggregateSessions(stored.documents);
+  storedReadBackCount = storedSessions.length;
+  storedReadBackDocuments = stored.documents.length;
+  assert.equal(storedSessions.length, source.length, 'Stored aggregate read-back must recover every source session exactly once');
+}
+
 console.log(JSON.stringify({
   success: true,
   mode: apply ? 'apply' : 'dry-run',
@@ -75,6 +90,8 @@ console.log(JSON.stringify({
   aggregateSessionCount: result.sessionCount,
   logicalDocumentCount: result.logicalDocumentCount,
   storedShardCount: result.documentCount,
+  storedReadBackDocuments,
+  storedReadBackCount,
   maxShardJsonBytes: verify ? maxShardJsonBytes : 'not-verified',
   pilotSessions: verify ? pilotSessions : 'not-verified',
   pilotParticipants: verify ? pilotParticipants : 'not-verified',
