@@ -6,7 +6,10 @@ import {
   buildResearchDashboardDataFromAggregateSessions,
   flattenResearchDashboardAggregateSessions,
 } from '../src/server/researchDashboardAggregate';
-import { rebuildStoredResearchDashboardAggregates } from '../src/server/researchDashboardAggregateStorage';
+import {
+  rebuildStoredResearchDashboardAggregates,
+  shardResearchDashboardAggregateDocuments,
+} from '../src/server/researchDashboardAggregateStorage';
 
 const apply = process.env.APPLY_RESEARCH_DASHBOARD_AGGREGATES === '1';
 const verify = process.env.VERIFY_RESEARCH_DASHBOARD_AGGREGATES !== '0';
@@ -32,8 +35,16 @@ assert.ok(source.length > 0, 'Production research source must contain sessions b
 
 let pilotSessions = 0;
 let pilotParticipants = 0;
+let maxShardJsonBytes = 0;
 if (verify) {
   const logicalDocuments = buildResearchDashboardAggregateDocuments(source, 'production-read-only-verification');
+  const storedShards = shardResearchDashboardAggregateDocuments(logicalDocuments);
+  maxShardJsonBytes = storedShards.reduce(
+    (max, item) => Math.max(max, Buffer.byteLength(JSON.stringify(item.data), 'utf8')),
+    0,
+  );
+  assert.ok(maxShardJsonBytes < 900_000, `Aggregate shard is too close to Firestore 1 MiB limit: ${maxShardJsonBytes}`);
+
   const summaries = flattenResearchDashboardAggregateSessions(logicalDocuments.map((item) => item.data));
   const pilot = buildResearchDashboardDataFromAggregateSessions(summaries, { dataScope: 'pilot_b' });
   pilotSessions = Number(pilot.metrics.totalSessions || 0);
@@ -64,6 +75,7 @@ console.log(JSON.stringify({
   aggregateSessionCount: result.sessionCount,
   logicalDocumentCount: result.logicalDocumentCount,
   storedShardCount: result.documentCount,
+  maxShardJsonBytes: verify ? maxShardJsonBytes : 'not-verified',
   pilotSessions: verify ? pilotSessions : 'not-verified',
   pilotParticipants: verify ? pilotParticipants : 'not-verified',
 }, null, 2));
