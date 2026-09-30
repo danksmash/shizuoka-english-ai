@@ -13,6 +13,8 @@ const AGGREGATE_COLLECTION = 'research_dashboard_aggregates';
 const AGGREGATE_META_COLLECTION = 'research_dashboard_aggregate_meta';
 const AGGREGATE_META_ID = 'current';
 const INCREMENTAL_REFRESH_CACHE_MS = 15_000;
+const AGGREGATE_WRITE_BATCH_SIZE = 10;
+const AGGREGATE_WRITE_MAX_ATTEMPTS = 3;
 export const RESEARCH_DASHBOARD_AGGREGATE_SHARD_SIZE = 25;
 
 export type StoredResearchDashboardAggregateDocument = ResearchDashboardAggregateDocument & {
@@ -31,6 +33,39 @@ let lastIncrementalRefreshAt = 0;
 function aggregateBaseId(localDate: string, classId: string): string {
   const encodedClass = Buffer.from(classId || 'unknown', 'utf8').toString('base64url');
   return `${localDate}__${encodedClass}`;
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientAggregateWriteError(error: unknown): boolean {
+  const text = error instanceof Error ? `${error.name}:${error.message}` : String(error || '');
+  return /AbortError|aborted|ETIMEDOUT|ECONNRESET|fetch failed/i.test(text)
+    || /FIRESTORE_(?:BATCH_SET|SET)_(?:408|429|500|502|503|504)/i.test(text);
+}
+
+async function retryAggregateWrite<T>(label: string, write: () => Promise<T>): Promise<T> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= AGGREGATE_WRITE_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await write();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientAggregateWriteError(error) || attempt >= AGGREGATE_WRITE_MAX_ATTEMPTS) throw error;
+      console.warn('Research dashboard aggregate write retry', {
+        label,
+        attempt,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      await wait(attempt * 250);
+    }
+  }
+  throw lastError;
+}
+
+async function setAggregateMeta(data: Record<string, unknown>): Promise<void> {
+  await retryAggregateWrite('aggregate_meta', () => setDocument(AGGREGATE_META_COLLECTION, AGGREGATE_META_ID, data));
 }
 
 export function shardResearchDashboardAggregateDocuments(
@@ -77,11 +112,12 @@ function maxLogicalLocalDate(documents: Array<{ data: { localDate?: string } }>)
 }
 
 async function writeStoredAggregateDocuments(documents: Array<{ id: string; data: StoredResearchDashboardAggregateDocument }>) {
-  for (let offset = 0; offset < documents.length; offset += 400) {
-    await setDocumentsBatch(
+  for (let offset = 0; offset < documents.length; offset += AGGREGATE_WRITE_BATCH_SIZE) {
+    const chunk = documents.slice(offset, offset + AGGREGATE_WRITE_BATCH_SIZE);
+    await retryAggregateWrite(`aggregate_documents_${offset}`, () => setDocumentsBatch(
       AGGREGATE_COLLECTION,
-      documents.slice(offset, offset + 400).map((item) => ({ id: item.id, data: item.data })),
-    );
+      chunk.map((item) => ({ id: item.id, data: item.data })),
+    ));
   }
 }
 
@@ -129,7 +165,7 @@ export async function rebuildStoredResearchDashboardAggregates(
   if (options.dryRun) return { ...result, dryRun: true };
 
   const now = new Date().toISOString();
-  await setDocument(AGGREGATE_META_COLLECTION, AGGREGATE_META_ID, {
+  await setAggregateMeta({
     schemaVersion: RESEARCH_DASHBOARD_AGGREGATE_VERSION,
     generationId,
     status: 'building',
@@ -143,7 +179,7 @@ export async function rebuildStoredResearchDashboardAggregates(
   });
   await writeStoredAggregateDocuments(documents);
   const completedAt = new Date().toISOString();
-  await setDocument(AGGREGATE_META_COLLECTION, AGGREGATE_META_ID, {
+  await setAggregateMeta({
     schemaVersion: RESEARCH_DASHBOARD_AGGREGATE_VERSION,
     generationId,
     status: 'ready',
@@ -173,7 +209,7 @@ async function refreshStoredResearchDashboardAggregatesToDateInternal(targetLoca
   const now = new Date().toISOString();
   const latestLocalDate = [state.latestLocalDate || '', maxLogicalLocalDate(logicalDocuments)].sort().at(-1) || state.latestLocalDate || '';
   const sourceWatermark = [state.sourceWatermark || '', maxSourceUpdatedAt(rawSessions)].sort().at(-1) || state.sourceWatermark || '';
-  await setDocument(AGGREGATE_META_COLLECTION, AGGREGATE_META_ID, {
+  await setAggregateMeta({
     ...state,
     updatedAt: now,
     lastIncrementalAt: now,
