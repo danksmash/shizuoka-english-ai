@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   isTransientResearchDashboardReadError,
+  researchDashboardReadPlan,
   retryResearchDashboardRead,
 } from '../src/server/researchDashboardResilientRuntime';
 
@@ -10,6 +11,40 @@ assert.equal(isTransientResearchDashboardReadError(new Error('FIRESTORE_GET_429:
 assert.equal(isTransientResearchDashboardReadError(new Error('AbortError:This operation was aborted')), true);
 assert.equal(isTransientResearchDashboardReadError(new Error('FIRESTORE_RANGE_QUERY_503:backend unavailable')), true);
 assert.equal(isTransientResearchDashboardReadError(new Error('FIRESTORE_LIST_400:bad request')), false);
+
+const mainPlan = researchDashboardReadPlan({ dataScope: 'main', schoolCondition: 'intervention' });
+assert.equal(mainPlan.start, undefined, 'main without dates must preserve full-period reading');
+assert.equal(mainPlan.end, undefined, 'main without dates must preserve full-period reading');
+assert.equal(mainPlan.loadStudySchedules, true, 'intervention main still needs Study 1 schedules for Phase analysis');
+assert.equal(mainPlan.derivedPilotBRange, false);
+
+const comparisonPlan = researchDashboardReadPlan({ dataScope: 'main', schoolCondition: 'comparison' });
+assert.equal(comparisonPlan.loadStudySchedules, false, 'comparison dashboard must not depend on Study 1 schedule reads because Phase is not applicable');
+
+const pilotPlan = researchDashboardReadPlan({ dataScope: 'pilot_b' });
+assert.equal(pilotPlan.start, '2026-09-09', 'Pilot B without explicit dates must read only the official Pilot B date');
+assert.equal(pilotPlan.end, '2026-09-09', 'Pilot B without explicit dates must read only the official Pilot B date');
+assert.equal(pilotPlan.loadStudySchedules, false, 'Pilot B must not depend on Study 1 schedules');
+assert.equal(pilotPlan.derivedPilotBRange, true);
+
+const explicitPilotPlan = researchDashboardReadPlan({ dataScope: 'pilot_b', start: '2026-09-08' });
+assert.equal(explicitPilotPlan.start, '2026-09-08', 'an explicit Pilot B date boundary must keep the user request');
+assert.equal(explicitPilotPlan.end, undefined);
+assert.equal(explicitPilotPlan.derivedPilotBRange, false);
+assert.equal(explicitPilotPlan.loadStudySchedules, false);
+
+const testPlan = researchDashboardReadPlan({ dataScope: 'test' });
+assert.equal(testPlan.start, undefined, 'test data are not safely reducible to one fixed date');
+assert.equal(testPlan.end, undefined, 'test data are not safely reducible to one fixed date');
+assert.equal(testPlan.loadStudySchedules, false, 'test data must not depend on Study 1 schedules');
+
+const reservePlan = researchDashboardReadPlan({ dataScope: 'reserve' });
+assert.equal(reservePlan.loadStudySchedules, false, 'reserve data must not depend on Study 1 schedules');
+
+const allPlan = researchDashboardReadPlan({ dataScope: 'all', schoolCondition: 'all' });
+assert.equal(allPlan.start, undefined, 'all must preserve full-period reading');
+assert.equal(allPlan.end, undefined, 'all must preserve full-period reading');
+assert.equal(allPlan.loadStudySchedules, true, 'all includes main intervention data and therefore still needs Phase schedules');
 
 let transientAttempts = 0;
 const recovered = await retryResearchDashboardRead('qa-transient', async () => {
@@ -34,7 +69,9 @@ const resilientSource = fs.readFileSync('src/server/researchDashboardResilientRu
 assert.ok(resilientSource.includes("warnings: ['lesson_reflections_unavailable']"), 'Reflection failure must degrade partially, not blank the dashboard');
 assert.ok(resilientSource.includes('getSessionsForManagementByLocalDateRange(start, end)'), 'Dashboard session reads must be scoped by requested localDate range before expansion');
 assert.ok(resilientSource.includes('getReflectionRecordsForTeacherDateRange(start, end)'), 'Lesson Reflection dashboard reads must use the requested date range');
-assert.ok(resilientSource.includes('loadStudySchedulesResilient(),'), 'Study schedules must start in the first parallel read group, not after dashboard aggregation');
+assert.ok(resilientSource.includes("const PILOT_B_OFFICIAL_DATE = '2026-09-09'"), 'Pilot B official date must be encoded in the dashboard read plan');
+assert.ok(resilientSource.includes('loadSessionsResilient(readPlan.start, readPlan.end)'), 'Dashboard must apply the read plan before Firestore session expansion');
+assert.ok(resilientSource.includes('readPlan.loadStudySchedules'), 'Study schedule reads must be conditional on Phase applicability');
 assert.ok(
   resilientSource.includes('res.locals.researchDashboardSessions = analysisSessions'),
   'Phase comparison should reuse the already loaded, manual-exclusion-filtered session snapshot',
@@ -43,6 +80,8 @@ assert.ok(resilientSource.includes('let phaseComparison = body.phaseComparison')
 assert.ok(resilientSource.includes("res.setHeader('Server-Timing'"), 'Dashboard must expose coarse server-side timing for future latency audits');
 assert.ok(resilientSource.includes("body.success === false"), 'Phase enrichment must not start secondary work for a failed core dashboard response');
 assert.ok(resilientSource.includes('isManualResearchExcludedSessionId'), 'Manual research exclusions must be applied before dashboard and Phase analysis');
+assert.ok(resilientSource.includes('effectiveStart:'), 'Dashboard timing logs must expose the effective read boundary');
+assert.ok(resilientSource.includes('schedulesLoaded:'), 'Dashboard timing logs must expose whether Study 1 schedules were required');
 
 const firestoreSource = fs.readFileSync('src/server/firestore.ts', 'utf8');
 assert.ok(firestoreSource.includes('queryCollectionByStringRange'), 'Firestore helper must support server-side localDate range reads');
