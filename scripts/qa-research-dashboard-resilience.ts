@@ -85,6 +85,12 @@ assert.ok(resilientSource.includes('schedulesRequired: needsSchedules'), 'Timing
 assert.ok(resilientSource.includes("body.success === false"), 'Phase enrichment must not start secondary work for a failed core dashboard response');
 assert.ok(resilientSource.includes('isManualResearchExcludedSessionId'), 'Manual research exclusions must be applied before dashboard and Phase analysis');
 
+const aggregateRuntimeSource = fs.readFileSync('src/server/researchDashboardAggregateRuntime.ts', 'utf8');
+assert.ok(aggregateRuntimeSource.includes("dataSource: 'materialized-aggregate'"), 'Normal dashboard path must expose its aggregate data source');
+assert.ok(aggregateRuntimeSource.includes('rawSessionsLoaded: 0'), 'Aggregate dashboard must not load Raw histories on its successful path');
+assert.ok(aggregateRuntimeSource.includes('return fallback(req, res, next)'), 'Aggregate optimization must retain the resilient Raw fallback');
+assert.ok(aggregateRuntimeSource.includes('refreshStoredResearchDashboardAggregatesToDate'), 'Aggregate dashboard must refresh the recent unmaterialized range before serving current data');
+
 const firestoreSource = fs.readFileSync('src/server/firestore.ts', 'utf8');
 assert.ok(firestoreSource.includes('queryCollectionByStringRange'), 'Firestore helper must support server-side localDate range reads');
 assert.ok(firestoreSource.includes("}, 'FIRESTORE_RANGE_QUERY')"), 'Range-query failures must be classifiable for bounded retry');
@@ -110,7 +116,8 @@ assert.equal(resilientSource.includes('buildResearchSessionAuditDetails'), false
 assert.ok(resilientSource.includes('buildConsistentPhaseComparisonFromExportSessions'), 'Phase comparison must reuse prepared export session rows');
 
 const entry = fs.readFileSync('server-entry.ts', 'utf8');
-assert.ok(entry.includes('manualResearchExclusionGetHandler(path) || resilientResearchDashboardGetHandler(path) || phaseAwareGetHandler(path)'));
+assert.ok(entry.includes('aggregateAwareResearchDashboardGetHandler(path)'));
+assert.ok(entry.indexOf('aggregateAwareResearchDashboardGetHandler(path)') < entry.indexOf('resilientResearchDashboardGetHandler(path)'), 'Aggregate path must be attempted before the Raw fallback');
 assert.ok(entry.includes('withResilientResearchPhaseDashboard'));
 assert.equal(
   entry.includes("if (path === '/api/management/research.dashboard') {\n      handlers[handlers.length - 1] = withResearchPhaseDashboardConsistency"),
