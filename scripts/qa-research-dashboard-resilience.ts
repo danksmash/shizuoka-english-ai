@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   isTransientResearchDashboardReadError,
+  researchDashboardEffectiveReadRange,
+  researchDashboardNeedsStudySchedules,
   retryResearchDashboardRead,
 } from '../src/server/researchDashboardResilientRuntime';
 
@@ -30,17 +32,56 @@ await assert.rejects(
 );
 assert.equal(permanentAttempts, 1, 'permanent errors must not be retried');
 
+assert.deepEqual(
+  researchDashboardEffectiveReadRange({ dataScope: 'pilot_b' }),
+  {
+    scope: 'pilot_b', requestedStart: '', requestedEnd: '',
+    start: '2026-09-09', end: '2026-09-09', inferred: true,
+  },
+  'Pilot B without a date must never list the entire sessions collection',
+);
+assert.deepEqual(
+  researchDashboardEffectiveReadRange({ dataScope: 'pilot_b', start: '2026-09-09', end: '2026-09-09' }),
+  {
+    scope: 'pilot_b', requestedStart: '2026-09-09', requestedEnd: '2026-09-09',
+    start: '2026-09-09', end: '2026-09-09', inferred: false,
+  },
+);
+assert.deepEqual(
+  researchDashboardEffectiveReadRange({ dataScope: 'main' }),
+  {
+    scope: 'main', requestedStart: '', requestedEnd: '',
+    start: '2026-09-17', end: '', inferred: true,
+  },
+  'Main must start at the formal research boundary when the user asks for all main data',
+);
+assert.equal(researchDashboardEffectiveReadRange({ dataScope: 'main', start: '2026-09-01' }).start, '2026-09-17');
+assert.equal(researchDashboardEffectiveReadRange({ dataScope: 'main', start: '2026-09-20' }).start, '2026-09-20');
+assert.deepEqual(
+  researchDashboardEffectiveReadRange({ dataScope: 'test' }),
+  { scope: 'test', requestedStart: '', requestedEnd: '', start: '', end: '', inferred: false },
+  'Test data are not bounded because valid test rows can occur throughout the study',
+);
+assert.equal(researchDashboardNeedsStudySchedules({ dataScope: 'main' }), true);
+assert.equal(researchDashboardNeedsStudySchedules({ dataScope: 'all' }), true);
+assert.equal(researchDashboardNeedsStudySchedules({ dataScope: 'pilot_b' }), false);
+assert.equal(researchDashboardNeedsStudySchedules({ dataScope: 'test' }), false);
+assert.equal(researchDashboardNeedsStudySchedules({ dataScope: 'reserve' }), false);
+
 const resilientSource = fs.readFileSync('src/server/researchDashboardResilientRuntime.ts', 'utf8');
 assert.ok(resilientSource.includes("warnings: ['lesson_reflections_unavailable']"), 'Reflection failure must degrade partially, not blank the dashboard');
-assert.ok(resilientSource.includes('getSessionsForManagementByLocalDateRange(start, end)'), 'Dashboard session reads must be scoped by requested localDate range before expansion');
-assert.ok(resilientSource.includes('getReflectionRecordsForTeacherDateRange(start, end)'), 'Lesson Reflection dashboard reads must use the requested date range');
-assert.ok(resilientSource.includes('loadStudySchedulesResilient(),'), 'Study schedules must start in the first parallel read group, not after dashboard aggregation');
+assert.ok(resilientSource.includes('getSessionsForManagementByLocalDateRange(start, end)'), 'Dashboard session reads must be scoped by effective localDate range before expansion');
+assert.ok(resilientSource.includes('getReflectionRecordsForTeacherDateRange(start, end)'), 'Lesson Reflection dashboard reads must use the effective date range');
+assert.ok(resilientSource.includes('researchDashboardEffectiveReadRange(query'), 'Dashboard must compute a scope-aware read plan before Firestore access');
+assert.ok(resilientSource.includes('needsSchedules ? loadStudySchedulesResilient() : Promise.resolve'), 'Non-main data scopes must not depend on Study 1 schedule reads');
 assert.ok(
   resilientSource.includes('res.locals.researchDashboardSessions = analysisSessions'),
   'Phase comparison should reuse the already loaded, manual-exclusion-filtered session snapshot',
 );
 assert.ok(resilientSource.includes('let phaseComparison = body.phaseComparison'), 'Phase wrapper must reuse the core response instead of rebuilding Phase analytics');
 assert.ok(resilientSource.includes("res.setHeader('Server-Timing'"), 'Dashboard must expose coarse server-side timing for future latency audits');
+assert.ok(resilientSource.includes('effectiveStart: readPlan.start'), 'Timing log must expose the effective read boundary without personal data');
+assert.ok(resilientSource.includes('schedulesRequired: needsSchedules'), 'Timing log must show whether Study 1 schedules were required');
 assert.ok(resilientSource.includes("body.success === false"), 'Phase enrichment must not start secondary work for a failed core dashboard response');
 assert.ok(resilientSource.includes('isManualResearchExcludedSessionId'), 'Manual research exclusions must be applied before dashboard and Phase analysis');
 
