@@ -27,8 +27,8 @@ export const RQ2_STRATUM_LABELS: Record<Rq2StratumId, string> = {
 };
 
 export interface Rq2Candidate {
-  candidateRuleVersion: string;
-  dataQualityFlag: string;
+  candidateRuleVersion?: string;
+  dataQualityFlag?: string;
   sequenceId: string;
   stratum: Rq2StratumId;
   researchId: string;
