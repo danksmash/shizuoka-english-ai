@@ -54,7 +54,8 @@ export function buildRq3Candidates(
   return buildRq2Candidates(rawSessions, schedules, { lessonOnly: false })
     .map((candidate) => {
       const session = bySession.get(candidate.sessionId);
-      if (!session || Number(session.analysis_included || 0) !== 1) return null;
+      const dialogueIncluded = Number(session?.dialogue_analysis_included ?? session?.analysis_included ?? 0);
+      if (!session || dialogueIncluded !== 1) return null;
       return {
         ...candidate,
         siteId: String(session.site_id || ''),
@@ -63,6 +64,7 @@ export function buildRq3Candidates(
         gradeLevel: session.grade_level ?? '',
         studyPhase: String(session.study_phase || ''),
         analysisPeriod: String(session.analysis_period || ''),
+        dialogueAnalysisIncluded: 1,
         analysisIncluded: 1,
       };
     })

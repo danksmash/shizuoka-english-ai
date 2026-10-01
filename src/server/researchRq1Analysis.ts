@@ -1,18 +1,20 @@
 import { buildResearchExportDataSets, researchDataScopeForRow } from './researchDashboard';
 import { getManualResearchExclusion } from './researchManualExclusions';
+import { effectivePersonaSelectionExclusionReason } from './researchAnalysisEligibility';
 import { analysisPeriodForLocalDate, phaseForLocalDate, type StudyScheduleRecord } from './studySchedulePersistence';
 import { canonicalRq1Country } from './researchRq1Targets';
 
-export const RQ1_CHOICE_SCHEMA_VERSION = 'rq1-choice-2026-v1';
-export const RQ1_PERIOD_SUMMARY_SCHEMA_VERSION = 'rq1-period-summary-2026-v1';
-export const RQ1_TRANSITION_SCHEMA_VERSION = 'rq1-transition-2026-v1';
+export const RQ1_CHOICE_SCHEMA_VERSION = 'rq1-choice-2026-v2';
+export const RQ1_PERIOD_SUMMARY_SCHEMA_VERSION = 'rq1-period-summary-2026-v2';
+export const RQ1_TRANSITION_SCHEMA_VERSION = 'rq1-transition-2026-v2';
 
 export const RQ1_CHOICE_HEADERS = [
   'rq1_choice_schema_version','site_id','research_id','participant_key','school_condition','class_id','grade_level',
   'session_id','local_date','local_started_at','study_phase','analysis_period','session_lifetime_number','selection_order_all','selection_order_valid',
   'persona_id','persona_country','persona_gender','target_country','target_match',
+  'child_turn_count','actual_duration_seconds','rapid_restart_flag',
   'lesson_context_inferred','lesson_context_final','dialogue_analysis_included','data_quality_flag','session_status','session_finish_reason','mic_error_count',
-  'free_choice_status','selection_included','selection_exclusion_reason',
+  'free_choice_status','raw_selection_included','effective_selection_included','effective_selection_exclusion_reason','selection_included','selection_exclusion_reason',
 ] as const;
 
 export const RQ1_PERIOD_SUMMARY_HEADERS = [
@@ -58,6 +60,13 @@ function sortKey(row: Row) {
   return `${String(row.local_started_at || '')}|${String(row.session_id || '')}`;
 }
 
+function localStartedMs(value: unknown): number {
+  const text = String(value || '').trim();
+  if (!text) return 0;
+  const parsed = Date.parse(text.includes('T') ? text : `${text.replace(' ', 'T')}+09:00`);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function numericRate(numerator: number, denominator: number): number | '' {
   return denominator > 0 ? Number((numerator / denominator).toFixed(6)) : '';
 }
@@ -97,13 +106,22 @@ export function buildRq1ChoiceRows(args: {
       study_start_date: session.study_start_date || '',
     });
 
-    let exclusionReason = '';
-    if (manual) exclusionReason = `manual:${manual.reason}`;
-    else if (dataScope !== 'main') exclusionReason = `data_scope:${dataScope}`;
-    else if (!analysisPeriod) exclusionReason = 'outside_analysis_period';
-    else if (finalLessonContext !== 'in_lesson') exclusionReason = `lesson_context:${finalLessonContext || 'unknown'}`;
-    else if (!targetCountry) exclusionReason = 'target_country_missing';
-    else if (!personaCountry) exclusionReason = 'persona_country_missing';
+    let rawExclusionReason = '';
+    if (manual) rawExclusionReason = `manual:${manual.reason}`;
+    else if (dataScope !== 'main') rawExclusionReason = `data_scope:${dataScope}`;
+    else if (!analysisPeriod) rawExclusionReason = 'outside_analysis_period';
+    else if (finalLessonContext !== 'in_lesson') rawExclusionReason = `lesson_context:${finalLessonContext || 'unknown'}`;
+    else if (!targetCountry) rawExclusionReason = 'target_country_missing';
+    else if (!personaCountry) rawExclusionReason = 'persona_country_missing';
+
+    const childTurnCount = Math.max(0, Number(session.child_turn_count || 0));
+    const rawSelectionIncluded = rawExclusionReason ? 0 : 1;
+    const effectiveQualityReason = effectivePersonaSelectionExclusionReason(childTurnCount);
+    const effectiveExclusionReason = rawExclusionReason || effectiveQualityReason;
+    const effectiveSelectionIncluded = effectiveExclusionReason ? 0 : 1;
+    const dialogueAnalysisIncluded = Number(
+      analysisSession?.dialogue_analysis_included ?? analysisSession?.analysis_included ?? 0,
+    );
 
     candidateRows.push({
       rq1_choice_schema_version: RQ1_CHOICE_SCHEMA_VERSION,
@@ -126,16 +144,22 @@ export function buildRq1ChoiceRows(args: {
       persona_gender: String(session.persona_gender || ''),
       target_country: targetCountry,
       target_match: targetCountry && personaCountry ? (targetCountry === personaCountry ? 1 : 0) : '',
+      child_turn_count: childTurnCount,
+      actual_duration_seconds: Math.max(0, Number(session.actual_duration_seconds || 0)),
+      rapid_restart_flag: 0,
       lesson_context_inferred: String(session.lesson_context_inferred || 'unknown'),
       lesson_context_final: finalLessonContext,
-      dialogue_analysis_included: Number(analysisSession?.analysis_included || 0),
+      dialogue_analysis_included: dialogueAnalysisIncluded,
       data_quality_flag: String(session.data_quality_flag || ''),
       session_status: String(session.session_status || ''),
       session_finish_reason: String(session.session_finish_reason || ''),
       mic_error_count: Number(session.mic_error_count || 0),
       free_choice_status: 'app_free_selection_default_not_independently_verified',
-      selection_included: exclusionReason ? 0 : 1,
-      selection_exclusion_reason: exclusionReason,
+      raw_selection_included: rawSelectionIncluded,
+      effective_selection_included: effectiveSelectionIncluded,
+      effective_selection_exclusion_reason: effectiveExclusionReason,
+      selection_included: effectiveSelectionIncluded,
+      selection_exclusion_reason: effectiveExclusionReason,
     });
   }
 
@@ -155,6 +179,13 @@ export function buildRq1ChoiceRows(args: {
         valid += 1;
         row.selection_order_valid = valid;
       }
+      if (Number(row.child_turn_count || 0) > 0 || index + 1 >= rows.length) return;
+      const currentMs = localStartedMs(row.local_started_at);
+      const nextMs = localStartedMs(rows[index + 1].local_started_at);
+      const sameDate = String(row.local_date || '') === String(rows[index + 1].local_date || '');
+      if (sameDate && currentMs > 0 && nextMs >= currentMs && nextMs - currentMs <= 30_000) {
+        row.rapid_restart_flag = 1;
+      }
     });
   }
 
@@ -163,7 +194,7 @@ export function buildRq1ChoiceRows(args: {
 
 export function buildRq1PeriodSummaryRows(choiceRows: Row[], participants: Rq1AnalysisParticipant[]) {
   const periods = ['period1','period2','period3'];
-  const included = choiceRows.filter((row) => Number(row.selection_included || 0) === 1);
+  const included = choiceRows.filter((row) => Number(row.effective_selection_included ?? row.selection_included ?? 0) === 1);
   return participants.flatMap((participant) => periods.map((period) => {
     const rows = included
       .filter((row) => String(row.research_id || '') === participant.researchId && String(row.analysis_period || '') === period)
@@ -203,7 +234,7 @@ export function buildRq1PeriodSummaryRows(choiceRows: Row[], participants: Rq1An
 }
 
 export function buildRq1TransitionRows(choiceRows: Row[], participants: Rq1AnalysisParticipant[]) {
-  const included = choiceRows.filter((row) => Number(row.selection_included || 0) === 1);
+  const included = choiceRows.filter((row) => Number(row.effective_selection_included ?? row.selection_included ?? 0) === 1);
   return participants.map((participant) => {
     const rows = included
       .filter((row) => String(row.research_id || '') === participant.researchId)
@@ -274,23 +305,25 @@ export function serializeRq1Csv(rows: Row[], headers: readonly string[]) {
 }
 
 export const RQ1_ANALYSIS_SPEC = {
-  version: 'rq1-analysis-plan-2026-v1',
+  version: 'rq1-analysis-plan-2026-v2',
   status: 'fixed_template_not_executed',
-  sourcePlan: 'JES共同研究計画 2026-09-22 RQ1選択変化修正版',
+  sourcePlan: 'JES共同研究計画 2026-09-22 RQ1選択変化修正版＋2026-10-01有効選択定義',
   targetCountryRule: {
     intervention: '実践校の最終的な担当国を、Phase 1を含む全期間共通の分析上の参照国として別対応表に固定する。過去session文書のassigned_partner_countryは書き換えない。',
     comparison: '実践校の担当国構成・学年に基づく学級対応で分析上の対応国を児童ごとに設定し、児童には知らせない。',
     freeze: '正式CSVは対応国表がfrozenかつ全正式参加者を被覆し、frozen時snapshotと一致する場合のみ出力する。',
   },
-  choiceUnit: '自由選択で開始した独立sessionを1選択機会とする。現在のアプリは自由選択UIを既定とするが、教師指定の有無をログ単独では独立検証できないためfree_choice_statusに明示する。',
+  choiceUnit: '全開始選択はsession作成を1回としてraw_selection_includedに保持する。RQ1主要分析の有効Persona選択は、通常の研究採否条件に加えてchild_turn_count>=1を満たすsessionとする。actual_duration_secondsには閾値を設けない。',
   inclusion: {
-    primary: ['data_scope == main','analysis_period in period1..3','lesson_context_final == in_lesson','manual research exclusionなし','Persona国・対応国が判定可能'],
-    shortSession: '短時間終了・missing_reflection・interruptedを一律除外しない。選択行動の採否と対話内容の採否を分離し、data_quality_flagとdialogue_analysis_includedを併記する。',
+    primary: ['data_scope == main','analysis_period in period1..3','lesson_context_final == in_lesson','manual research exclusionなし','Persona国・対応国が判定可能','child_turn_count >= 1'],
+    rawSensitivity: '児童発話0回を含む全開始選択はraw_selection_includedで保持し、主要結果に対する感度分析とQAに用いる。',
+    shortSession: '短時間終了・missing_reflectionを時間だけで一律除外しない。児童発話が1回以上あれば有効選択とし、対話内容分析の採否はdialogue_analysis_includedで別管理する。',
+    rapidRestart: '児童発話0回のsession後30秒以内に同一児童が次sessionを開始した場合はrapid_restart_flag=1とし、操作再試行のQAに用いる。主要選択率の分母には入れない。',
   },
   files: {
-    persona_choices: '1選択機会1行。target_matchを二項混合モデルの目的変数に使用。',
-    persona_period_summary: '児童×period 1行。選択率と期間内継続率の分子・分母を保持。',
-    persona_transition: '児童1行。period1非選択者の適格性、period2/3までの初回移行、追跡可否を保持。',
+    persona_choices: '1session開始1行。raw_selection_includedとeffective_selection_includedを併記し、主要モデルはeffective_selection_included=1の行を使用する。',
+    persona_period_summary: '児童×period 1行。有効選択のみで選択率と期間内継続率の分子・分母を保持。',
+    persona_transition: '児童1行。有効選択系列に基づきperiod1非選択者の適格性、period2/3までの初回移行、追跡可否を保持。',
   },
   primaryModel: {
     family: 'binomial_logit_mixed',
@@ -307,7 +340,7 @@ export const RQ1_ANALYSIS_SPEC = {
     missing: '追跡不能を非移行に置き換えない。period3未観測でもperiod2で移行済みなら累積移行=1として保持する。',
   },
   continuation: {
-    definition: '同一児童・同一period内の連続選択対で、前回が対応国Personaの対を分母、今回も対応国Personaの対を分子とする。同じ国の別Personaも継続に含む。',
+    definition: '同一児童・同一period内の連続する有効選択対で、前回が対応国Personaの対を分母、今回も対応国Personaの対を分子とする。同じ国の別Personaも継続に含む。',
     model: '二項混合モデルでperiod1→period3の学校間変化差を副次的に推定する。期間境界の対は主集計に含めない。',
   },
   multiplicity: 'H1主要対比は1つ。H2とH3の副次仮説にはHolm法を適用する。その他の期間対比は探索的。',
