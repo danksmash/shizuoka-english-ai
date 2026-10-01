@@ -2,12 +2,19 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { buildResearchDataSets } from '../src/server/researchExport';
 import { validateSessionSaveInput } from '../src/dataContract';
-import { normalizeFormalResearchExportQuery } from '../src/server/researchDashboard';
+import {
+  RESEARCH_EXPORT_HEADERS,
+  buildResearchExportDataSets,
+  filterResearchExportDataSets,
+  normalizeFormalResearchExportQuery,
+} from '../src/server/researchDashboard';
+import { augmentSessionRowsWithPhase, PHASE_SESSION_EXPORT_HEADERS } from '../src/server/researchPhaseAnalyticsRuntime';
 import {
   buildStreamingPreparationFromSessions,
   buildStreamingRowsForPage,
   serializeStreamingCsvRow,
 } from '../src/server/researchStreamingExportRuntime';
+import { buildFastStreamingSessionRowsForPage } from '../src/server/researchStreamingSessionBuilder';
 
 const server = fs.readFileSync('server.ts', 'utf8');
 assert.ok(server.includes("student-fail:${ip}"));
@@ -91,41 +98,101 @@ function largeSession(index: number, includeHistory: boolean) {
     session.history = Array.from({ length: UTTERANCES_PER_SESSION }, (_, turn) => ({
       id: `m_${index}_${turn}`,
       sender: turn % 2 === 0 ? 'ai' : 'child',
-      englishText: turn % 2 === 0 ? 'Hello. How are you?' : 'I am fine.',
-      japaneseText: turn % 2 === 0 ? 'こんにちは。元気ですか。' : '元気です。',
+      englishText: turn % 2 === 0 ? 'I like soccer. What do you like?' : 'I like soccer.',
+      japaneseText: turn % 2 === 0 ? '私はサッカーが好きです。あなたは？' : '私はサッカーが好きです。',
       timestamp: started + turn * 8_000,
-      wordCount: turn % 2 === 0 ? 4 : 3,
+      wordCount: turn % 2 === 0 ? 7 : 3,
     }));
   }
   return session;
 }
 
+function normalizedRows(rows: Record<string, any>[], headers: readonly string[]) {
+  return rows.map((row) => Object.fromEntries(headers.map((header) => [header, row[header] ?? ''])))
+    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+}
+
+const exportQuery = normalizeFormalResearchExportQuery({ dataScope: 'main', schoolCondition: 'intervention' });
+
+// Equivalence audit: the streaming path must preserve the existing CSV contract.
+const paritySessions = Array.from({ length: 30 }, (_, index) => largeSession(index, true));
+const parityMetadata = Array.from({ length: 30 }, (_, index) => largeSession(index, false));
+const parityPreparation = buildStreamingPreparationFromSessions(parityMetadata, [], '');
+const legacy = filterResearchExportDataSets(buildResearchExportDataSets(paritySessions), exportQuery);
+const streamedSessions = augmentSessionRowsWithPhase(
+  buildFastStreamingSessionRowsForPage(paritySessions, parityPreparation, [], '', exportQuery),
+  [],
+);
+const streamedUtterances = buildStreamingRowsForPage(paritySessions, parityPreparation, [], '', exportQuery, 'utterances');
+const streamedExpressions = buildStreamingRowsForPage(paritySessions, parityPreparation, [], '', exportQuery, 'expressions');
+assert.deepEqual(
+  normalizedRows(streamedSessions, PHASE_SESSION_EXPORT_HEADERS),
+  normalizedRows(augmentSessionRowsWithPhase(legacy.sessions, []), PHASE_SESSION_EXPORT_HEADERS),
+  'streaming sessions.csv must preserve the legacy CSV contract',
+);
+assert.deepEqual(
+  normalizedRows(streamedUtterances, RESEARCH_EXPORT_HEADERS.utterances),
+  normalizedRows(legacy.utterances, RESEARCH_EXPORT_HEADERS.utterances),
+  'streaming utterances.csv must preserve the legacy CSV contract',
+);
+assert.deepEqual(
+  normalizedRows(streamedExpressions, RESEARCH_EXPORT_HEADERS.expressions),
+  normalizedRows(legacy.expressions, RESEARCH_EXPORT_HEADERS.expressions),
+  'streaming expressions.csv must preserve the legacy CSV contract',
+);
+console.log('Streaming export legacy-contract parity QA: PASS');
+
 const scaleStartedAt = Date.now();
 const rssBefore = process.memoryUsage().rss;
 const metadata = Array.from({ length: LARGE_SESSION_COUNT }, (_, index) => largeSession(index, false));
 const preparation = buildStreamingPreparationFromSessions(metadata, [], '');
+const preparationElapsed = Date.now() - scaleStartedAt;
 assert.equal(preparation.contextBySessionId.size, LARGE_SESSION_COUNT);
-const exportQuery = normalizeFormalResearchExportQuery({ dataScope: 'main', schoolCondition: 'intervention' });
+let peakRss = process.memoryUsage().rss;
+
+let sessionRows = 0;
+const sessionsStartedAt = Date.now();
+for (let start = 0; start < LARGE_SESSION_COUNT; start += PAGE_SIZE) {
+  const page = Array.from({ length: Math.min(PAGE_SIZE, LARGE_SESSION_COUNT - start) }, (_, offset) => largeSession(start + offset, true));
+  const rows = buildFastStreamingSessionRowsForPage(page, preparation, [], '', exportQuery);
+  sessionRows += rows.length;
+  peakRss = Math.max(peakRss, process.memoryUsage().rss);
+}
+const sessionsElapsed = Date.now() - sessionsStartedAt;
+assert.equal(sessionRows, LARGE_SESSION_COUNT);
+assert.ok(sessionsElapsed < 20_000, `10k session streaming transform too slow: ${sessionsElapsed}ms`);
+
 let utteranceRows = 0;
 let serializedBytes = 0;
-let peakRss = process.memoryUsage().rss;
+const utterancesStartedAt = Date.now();
 for (let start = 0; start < LARGE_SESSION_COUNT; start += PAGE_SIZE) {
   const page = Array.from({ length: Math.min(PAGE_SIZE, LARGE_SESSION_COUNT - start) }, (_, offset) => largeSession(start + offset, true));
   const rows = buildStreamingRowsForPage(page, preparation, [], '', exportQuery, 'utterances');
   utteranceRows += rows.length;
   for (const row of rows) {
-    serializedBytes += Buffer.byteLength(serializeStreamingCsvRow(row, [
-      'research_id','site_id','school_condition','formal_study_participant','study_start_date','class_id','session_id','utterance_id','persona_id','topic',
-      'turn_sequence','speaker_turn_number','speaker','local_timestamp','english_text_anonymized','japanese_translation',
-      'is_question','question_type','is_reciprocal_question','is_repair','is_reason_expression',
-    ]), 'utf8') + 1;
+    serializedBytes += Buffer.byteLength(serializeStreamingCsvRow(row, RESEARCH_EXPORT_HEADERS.utterances), 'utf8') + 1;
   }
   peakRss = Math.max(peakRss, process.memoryUsage().rss);
 }
-const scaleElapsed = Date.now() - scaleStartedAt;
+const utterancesElapsed = Date.now() - utterancesStartedAt;
 assert.equal(utteranceRows, LARGE_SESSION_COUNT * UTTERANCES_PER_SESSION);
 assert.ok(serializedBytes > 1_000_000, '100k utterance CSV payload should exceed 1MB');
+assert.ok(utterancesElapsed < 20_000, `100k utterance streaming transform too slow: ${utterancesElapsed}ms`);
+
+let expressionRows = 0;
+const expressionsStartedAt = Date.now();
+for (let start = 0; start < LARGE_SESSION_COUNT; start += PAGE_SIZE) {
+  const page = Array.from({ length: Math.min(PAGE_SIZE, LARGE_SESSION_COUNT - start) }, (_, offset) => largeSession(start + offset, true));
+  const rows = buildStreamingRowsForPage(page, preparation, [], '', exportQuery, 'expressions');
+  expressionRows += rows.length;
+  peakRss = Math.max(peakRss, process.memoryUsage().rss);
+}
+const expressionsElapsed = Date.now() - expressionsStartedAt;
+assert.ok(expressionRows >= LARGE_SESSION_COUNT, `expected expression rows, got ${expressionRows}`);
+assert.ok(expressionsElapsed < 30_000, `100k utterance expression transform too slow: ${expressionsElapsed}ms`);
+
+const scaleElapsed = Date.now() - scaleStartedAt;
 const rssIncreaseMiB = (peakRss - rssBefore) / 1024 / 1024;
 assert.ok(rssIncreaseMiB < 384, `100k utterance streaming RSS increase too high: ${rssIncreaseMiB.toFixed(1)} MiB`);
-assert.ok(scaleElapsed < 60_000, `100k utterance streaming transform too slow: ${scaleElapsed}ms`);
-console.log(`10,000 sessions / 100,000 utterances streaming QA: PASS (${scaleElapsed}ms, +${rssIncreaseMiB.toFixed(1)} MiB RSS)`);
+assert.ok(scaleElapsed < 55_000, `combined 100k export transforms too slow: ${scaleElapsed}ms`);
+console.log(`10,000 sessions / 100,000 utterances full streaming QA: PASS (prep ${preparationElapsed}ms, sessions ${sessionsElapsed}ms, utterances ${utterancesElapsed}ms, expressions ${expressionsElapsed}ms, total ${scaleElapsed}ms, +${rssIncreaseMiB.toFixed(1)} MiB RSS, expressions ${expressionRows})`);
