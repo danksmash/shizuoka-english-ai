@@ -5,7 +5,6 @@ import type { RequestHandler, Response } from 'express';
 import {
   RESEARCH_EXPORT_HEADERS,
   buildResearchExportDataSets,
-  filterResearchSessionRows,
   normalizeFormalResearchExportQuery,
   serializeResearchCsv,
   type ResearchFilterQuery,
@@ -32,7 +31,6 @@ import {
 } from './researchPhaseAnalyticsRuntime';
 import {
   filterReflectionsForStudyPhase,
-  filterSessionsForStudyPhase,
   normalizeStudyPhaseFilter,
 } from './researchPhaseRuntime';
 import { getAllStudySchedules, type StudyScheduleRecord } from './studySchedulePersistence';
@@ -42,6 +40,7 @@ import {
   buildFastStreamingRowsForPage,
   type FastStreamingPreparation,
 } from './researchStreamingFastBuilder';
+import { buildFastStreamingSessionRowsForPage } from './researchStreamingSessionBuilder';
 
 const FULL_PAGE_SIZE = 500;
 const METADATA_PAGE_SIZE = 500;
@@ -132,13 +131,6 @@ async function prepareProductionExport(
   return buildStreamingPreparationFromSessions(metadataSessions, schedules, studyPhase);
 }
 
-function applyGlobalContext(rows: Row[], preparation: StreamingPreparation): Row[] {
-  return rows.map((row) => ({
-    ...row,
-    ...(preparation.contextBySessionId.get(String(row.session_id || '')) || {}),
-  }));
-}
-
 export function buildStreamingRowsForPage(
   pageSessions: Row[],
   preparation: StreamingPreparation,
@@ -147,16 +139,13 @@ export function buildStreamingRowsForPage(
   exportQuery: ResearchFilterQuery,
   dataset: LargeDataset,
 ): Row[] {
-  if (dataset === 'utterances' || dataset === 'expressions') {
-    return buildFastStreamingRowsForPage(pageSessions, preparation, schedules, studyPhase, exportQuery, dataset);
+  if (dataset === 'sessions') {
+    return augmentSessionRowsWithPhase(
+      buildFastStreamingSessionRowsForPage(pageSessions, preparation, schedules, studyPhase, exportQuery),
+      schedules,
+    );
   }
-  const phasePage = filterSessionsForStudyPhase(pageSessions, schedules, studyPhase);
-  if (!phasePage.length) return [];
-  const built = buildResearchExportDataSets(phasePage);
-  const sessions = applyGlobalContext(built.sessions, preparation);
-  const includedSessions = filterResearchSessionRows(sessions, exportQuery);
-  if (!includedSessions.length) return [];
-  return augmentSessionRowsWithPhase(includedSessions, schedules);
+  return buildFastStreamingRowsForPage(pageSessions, preparation, schedules, studyPhase, exportQuery, dataset);
 }
 
 function csvCell(value: unknown, protectLeadingWhitespace: boolean): string {
