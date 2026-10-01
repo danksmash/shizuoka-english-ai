@@ -49,14 +49,14 @@ async function loadCandidateSource(lessonOnly: boolean) {
       sessions,
       schedules,
       candidates: buildRq2Candidates(sessions, schedules, { lessonOnly: false }),
-      candidateSource: 'all_eligible_main_sessions',
+      candidateSource: 'all_dialogue_eligible_main_sessions',
       finalIncludedSessionCount: null,
     };
   }
   const analysisSessions = await buildAnalysisSessionRows(sessions, schedules);
   const includedIds = new Set(
     analysisSessions
-      .filter((row) => Number(row.analysis_included || 0) === 1)
+      .filter((row) => Number(row.dialogue_analysis_included || 0) === 1)
       .map((row) => String(row.session_id || ''))
       .filter(Boolean),
   );
@@ -65,7 +65,7 @@ async function loadCandidateSource(lessonOnly: boolean) {
     sessions: finalSessions,
     schedules,
     candidates: buildRq2Candidates(finalSessions, schedules, { lessonOnly: false }),
-    candidateSource: 'analysis_included_final',
+    candidateSource: 'dialogue_analysis_included_final',
     finalIncludedSessionCount: finalSessions.length,
   };
 }
@@ -123,11 +123,11 @@ router.get('/research-rq2/preflight-audit', requireManagementRole(['researcher']
     });
     const finalGate = {
       id: 'final_analysis_inclusion',
-      label: '最終採否 analysis_included を使用',
+      label: '最終採否 dialogue_analysis_included を使用',
       blocking: true,
-      passed: lessonOnly && candidateSource === 'analysis_included_final',
-      detail: candidateSource === 'analysis_included_final'
-        ? `最終採用session ${finalIncludedSessionCount ?? 0}件から候補生成`
+      passed: lessonOnly && candidateSource === 'dialogue_analysis_included_final',
+      detail: candidateSource === 'dialogue_analysis_included_final'
+        ? `対話分析採用session ${finalIncludedSessionCount ?? 0}件から候補生成`
         : '授業内推定だけでは正式抽出不可',
     };
     const gates = [...audit.gates, finalGate];
@@ -157,7 +157,7 @@ router.get('/research-rq2/sample-preview', requireManagementRole(['researcher'])
       success: true,
       selected: sampled.items.length,
       counts: sampled.counts,
-      formalReady: lessonOnly && candidateSource === 'analysis_included_final' && rq2FormalSamplingReady(sampled.counts),
+      formalReady: lessonOnly && candidateSource === 'dialogue_analysis_included_final' && rq2FormalSamplingReady(sampled.counts),
       shortfalls: rq2SamplingShortfalls(sampled.counts),
       targetPerStratum,
       maxPerParticipantPerStratum,
@@ -183,7 +183,7 @@ router.post('/research-rq2/sample', requireManagementRole(['researcher']), async
       loadCandidateSource(lessonOnly),
       getRq2Codebook(),
     ]);
-    if (runType === 'formal' && candidateSource !== 'analysis_included_final') throw new Error('RQ2_FORMAL_FINAL_INCLUSION_REQUIRED');
+    if (runType === 'formal' && candidateSource !== 'dialogue_analysis_included_final') throw new Error('RQ2_FORMAL_FINAL_INCLUSION_REQUIRED');
     const sampled = sampleRq2Candidates(candidates, seed, targetPerStratum, maxPerParticipantPerStratum);
 
     assertRq2SamplingConfirmation({
