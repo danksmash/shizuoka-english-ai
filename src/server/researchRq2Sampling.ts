@@ -1,7 +1,10 @@
 import crypto from 'node:crypto';
 import { buildResearchExportDataSets, researchDataScopeForRow } from './researchDashboard';
 import { filterManualResearchExcludedSessions } from './researchManualExclusions';
+import { dialogueAnalysisEligible } from './researchAnalysisEligibility';
 import { analysisPeriodForLocalDate, phaseForLocalDate, type StudyScheduleRecord } from './studySchedulePersistence';
+
+export const RQ2_CANDIDATE_RULE_VERSION = 'rq2-candidate-2026-v2';
 
 export const RQ2_STRATA = [
   'intervention_phase1',
@@ -24,6 +27,8 @@ export const RQ2_STRATUM_LABELS: Record<Rq2StratumId, string> = {
 };
 
 export interface Rq2Candidate {
+  candidateRuleVersion: string;
+  dataQualityFlag: string;
   sequenceId: string;
   stratum: Rq2StratumId;
   researchId: string;
@@ -44,7 +49,6 @@ export interface Rq2SampledItem extends Rq2Candidate {
   purpose: Rq2Purpose;
   stratumRank: number;
 }
-
 
 function localDateOf(session: Record<string, any>): string {
   const stored = String(session.localDate || '');
@@ -96,7 +100,8 @@ export function buildRq2Candidates(
   for (const session of sessions) {
     const sessionId = String(session.sessionId || '');
     const row = sessionRows.get(sessionId);
-    if (!row || String(row.data_quality_flag || '') !== 'complete') continue;
+    const dataQualityFlag = String(row?.data_quality_flag || '');
+    if (!row || !dialogueAnalysisEligible(dataQualityFlag)) continue;
     const localDate = String(row.local_date || localDateOf(session));
     const scope = researchDataScopeForRow({
       class_id: row.class_id || session.classId || '',
@@ -121,6 +126,8 @@ export function buildRq2Candidates(
       if (!childText) continue;
       const childUtteranceId = String(current.utterance_id || `turn-${current.turn_sequence || index + 1}`);
       out.push({
+        candidateRuleVersion: RQ2_CANDIDATE_RULE_VERSION,
+        dataQualityFlag,
         sequenceId: `${sessionId}::${childUtteranceId}`,
         stratum,
         researchId: String(row.research_id || ''),
