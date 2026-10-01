@@ -63,7 +63,7 @@ function sortKey(row: Row) {
 function localStartedMs(value: unknown): number {
   const text = String(value || '').trim();
   if (!text) return 0;
-  const parsed = Date.parse(text.includes('T') ? text : `${text.replace(' ', 'T')}Z`);
+  const parsed = Date.parse(text.includes('T') ? text : `${text.replace(' ', 'T')}+09:00`);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
@@ -194,7 +194,7 @@ export function buildRq1ChoiceRows(args: {
 
 export function buildRq1PeriodSummaryRows(choiceRows: Row[], participants: Rq1AnalysisParticipant[]) {
   const periods = ['period1','period2','period3'];
-  const included = choiceRows.filter((row) => Number(row.effective_selection_included ?? row.selection_included || 0) === 1);
+  const included = choiceRows.filter((row) => Number(row.effective_selection_included ?? row.selection_included ?? 0) === 1);
   return participants.flatMap((participant) => periods.map((period) => {
     const rows = included
       .filter((row) => String(row.research_id || '') === participant.researchId && String(row.analysis_period || '') === period)
@@ -234,7 +234,7 @@ export function buildRq1PeriodSummaryRows(choiceRows: Row[], participants: Rq1An
 }
 
 export function buildRq1TransitionRows(choiceRows: Row[], participants: Rq1AnalysisParticipant[]) {
-  const included = choiceRows.filter((row) => Number(row.effective_selection_included ?? row.selection_included || 0) === 1);
+  const included = choiceRows.filter((row) => Number(row.effective_selection_included ?? row.selection_included ?? 0) === 1);
   return participants.map((participant) => {
     const rows = included
       .filter((row) => String(row.research_id || '') === participant.researchId)
