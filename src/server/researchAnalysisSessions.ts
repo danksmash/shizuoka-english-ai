@@ -9,9 +9,14 @@ import {
   type StudyScheduleRecord,
 } from './studySchedulePersistence';
 import { getManualResearchExclusion } from './researchManualExclusions';
+import {
+  dialogueAnalysisEligible,
+  qualityExclusionReason,
+  reflectionAnalysisEligible,
+} from './researchAnalysisEligibility';
 
 export const RESEARCH_ANALYSIS_SESSION_OVERRIDE_COLLECTION = 'research_analysis_session_overrides';
-export const ANALYSIS_SESSION_SCHEMA_VERSION = 'analysis-session-2026-v1';
+export const ANALYSIS_SESSION_SCHEMA_VERSION = 'analysis-session-2026-v2';
 
 export const ANALYSIS_SESSION_HEADERS = [
   'analysis_schema_version',
@@ -29,6 +34,12 @@ export const ANALYSIS_SESSION_HEADERS = [
   'data_quality_flag',
   'lesson_context_inferred',
   'lesson_context_final',
+  'dialogue_analysis_eligible',
+  'dialogue_analysis_included',
+  'dialogue_exclusion_reason',
+  'reflection_analysis_eligible',
+  'reflection_analysis_included',
+  'reflection_exclusion_reason',
   'analysis_included_default',
   'analysis_included',
   'analysis_decision_source',
@@ -80,16 +91,41 @@ function phaseId(row: Record<string, any>, schedule: StudyScheduleRecord | undef
   return '';
 }
 
-function hardExclusionReason(
-  row: Record<string, any>,
+function structuralExclusionReason(
   dataScope: string,
   analysisPeriod: string,
   manualReason: string,
 ): string {
   if (manualReason) return `manual:${manualReason}`;
   if (dataScope !== 'main') return `data_scope:${dataScope || 'unknown'}`;
-  if (String(row.data_quality_flag || '') !== 'complete') return `data_quality:${String(row.data_quality_flag || 'unknown')}`;
   if (!analysisPeriod) return 'outside_analysis_period';
+  return '';
+}
+
+function legacyHardExclusionReason(
+  row: Record<string, any>,
+  dataScope: string,
+  analysisPeriod: string,
+  manualReason: string,
+): string {
+  const structural = structuralExclusionReason(dataScope, analysisPeriod, manualReason);
+  if (structural) return structural;
+  if (String(row.data_quality_flag || '') !== 'complete') return `data_quality:${String(row.data_quality_flag || 'unknown')}`;
+  return '';
+}
+
+function finalExclusionReason(args: {
+  structuralReason: string;
+  qualityReason: string;
+  overridePresent: boolean;
+  requestedIncluded: boolean;
+  lessonContextFinal: string;
+}) {
+  if (args.structuralReason) return args.structuralReason;
+  if (args.qualityReason) return args.qualityReason;
+  if (args.overridePresent && !args.requestedIncluded) return 'manual_override_excluded';
+  if (args.lessonContextFinal === 'outside_lesson') return 'outside_lesson';
+  if (args.lessonContextFinal !== 'in_lesson') return 'lesson_context_not_confirmed';
   return '';
 }
 
@@ -110,18 +146,50 @@ export async function buildAnalysisSessionRows(
     const studyPhase = phaseId(row, schedule);
     const dataScope = researchDataScopeForRow(row);
     const manual = getManualResearchExclusion(sessionId);
-    const hardReason = hardExclusionReason(row, dataScope, analysisPeriod, manual?.reason || '');
+    const manualReason = manual?.reason || '';
+    const structuralReason = structuralExclusionReason(dataScope, analysisPeriod, manualReason);
+    const legacyHardReason = legacyHardExclusionReason(row, dataScope, analysisPeriod, manualReason);
     const inferred = String(row.lesson_context_inferred || 'unknown');
-    const defaultIncluded = !hardReason && inferred === 'in_lesson';
     const override = overrideBySession.get(sessionId);
     const lessonContextFinal = override?.lessonContextFinal || inferred;
-    const requestedIncluded = override ? Boolean(override.analysisIncluded) : defaultIncluded;
-    const included = !hardReason && requestedIncluded && lessonContextFinal === 'in_lesson';
-    const exclusionReason = included
+
+    const legacyDefaultIncluded = !legacyHardReason && inferred === 'in_lesson';
+    const legacyRequestedIncluded = override ? Boolean(override.analysisIncluded) : legacyDefaultIncluded;
+    const legacyIncluded = !legacyHardReason && legacyRequestedIncluded && lessonContextFinal === 'in_lesson';
+    const legacyExclusionReason = legacyIncluded
       ? ''
-      : hardReason
-        || (override && !requestedIncluded ? 'manual_override_excluded' : '')
+      : legacyHardReason
+        || (override && !legacyRequestedIncluded ? 'manual_override_excluded' : '')
         || (lessonContextFinal === 'outside_lesson' ? 'outside_lesson' : 'lesson_context_not_confirmed');
+
+    const purposeDefaultIncluded = !structuralReason && inferred === 'in_lesson';
+    const purposeRequestedIncluded = override ? Boolean(override.analysisIncluded) : purposeDefaultIncluded;
+    const dataQualityFlag = String(row.data_quality_flag || '');
+    const dialogueEligible = dialogueAnalysisEligible(dataQualityFlag);
+    const reflectionEligible = reflectionAnalysisEligible(dataQualityFlag);
+    const dialogueIncluded = !structuralReason
+      && dialogueEligible
+      && purposeRequestedIncluded
+      && lessonContextFinal === 'in_lesson';
+    const reflectionIncluded = !structuralReason
+      && reflectionEligible
+      && purposeRequestedIncluded
+      && lessonContextFinal === 'in_lesson';
+    const dialogueExclusionReason = dialogueIncluded ? '' : finalExclusionReason({
+      structuralReason,
+      qualityReason: qualityExclusionReason(dataQualityFlag, 'dialogue'),
+      overridePresent: Boolean(override),
+      requestedIncluded: purposeRequestedIncluded,
+      lessonContextFinal,
+    });
+    const reflectionExclusionReason = reflectionIncluded ? '' : finalExclusionReason({
+      structuralReason,
+      qualityReason: qualityExclusionReason(dataQualityFlag, 'reflection'),
+      overridePresent: Boolean(override),
+      requestedIncluded: purposeRequestedIncluded,
+      lessonContextFinal,
+    });
+
     const siteId = String(row.site_id || '');
     const researchId = String(row.research_id || '');
     return {
@@ -137,13 +205,19 @@ export async function buildAnalysisSessionRows(
       study_phase: studyPhase,
       analysis_period: analysisPeriod,
       data_scope: dataScope,
-      data_quality_flag: String(row.data_quality_flag || ''),
+      data_quality_flag: dataQualityFlag,
       lesson_context_inferred: inferred,
       lesson_context_final: lessonContextFinal,
-      analysis_included_default: defaultIncluded ? 1 : 0,
-      analysis_included: included ? 1 : 0,
+      dialogue_analysis_eligible: dialogueEligible ? 1 : 0,
+      dialogue_analysis_included: dialogueIncluded ? 1 : 0,
+      dialogue_exclusion_reason: dialogueExclusionReason,
+      reflection_analysis_eligible: reflectionEligible ? 1 : 0,
+      reflection_analysis_included: reflectionIncluded ? 1 : 0,
+      reflection_exclusion_reason: reflectionExclusionReason,
+      analysis_included_default: legacyDefaultIncluded ? 1 : 0,
+      analysis_included: legacyIncluded ? 1 : 0,
       analysis_decision_source: override ? 'manual_override' : 'default_rule',
-      exclusion_reason: exclusionReason,
+      exclusion_reason: legacyExclusionReason,
       decision_note: String(override?.note || ''),
       decision_updated_at: String(override?.updatedAt || ''),
     };
