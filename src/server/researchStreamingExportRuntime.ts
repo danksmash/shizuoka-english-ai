@@ -8,7 +8,6 @@ import {
   filterResearchSessionRows,
   normalizeFormalResearchExportQuery,
   serializeResearchCsv,
-  type ResearchExportDatasetName,
   type ResearchFilterQuery,
 } from './researchDashboard';
 import { getStudentRecordsForManagement } from './persistence';
@@ -38,6 +37,11 @@ import {
 } from './researchPhaseRuntime';
 import { getAllStudySchedules, type StudyScheduleRecord } from './studySchedulePersistence';
 import { readResearchSessionPage } from './researchExportPaging';
+import {
+  buildFastStreamingPreparation,
+  buildFastStreamingRowsForPage,
+  type FastStreamingPreparation,
+} from './researchStreamingFastBuilder';
 
 const FULL_PAGE_SIZE = 500;
 const METADATA_PAGE_SIZE = 500;
@@ -45,20 +49,13 @@ const CSV_BATCH_ROWS = 200;
 const METADATA_FIELDS = [
   'sessionId', 'studentId', 'researchId', 'classId', 'startedAt', 'endedAt', 'localDate', 'personaId', 'aiStudentId',
 ];
-const GLOBAL_CONTEXT_FIELDS = [
-  'local_date', 'local_start_time', 'local_end_time', 'local_started_at', 'local_ended_at',
-  'lifetime_session_number', 'daily_session_number', 'days_since_previous_session',
-  'same_class_starts_5min', 'same_class_starts_10min', 'usage_context_inferred', 'lesson_context_inferred',
-] as const;
 
 type Row = Record<string, any>;
 type LargeDataset = 'sessions' | 'utterances' | 'expressions';
 type StudentRecord = Awaited<ReturnType<typeof getStudentRecordsForManagement>>[number];
 type StudentMap = Map<string, StudentRecord>;
 
-export type StreamingPreparation = {
-  contextBySessionId: Map<string, Row>;
-};
+export type StreamingPreparation = FastStreamingPreparation;
 
 function documentId(row: Row): string {
   return String(row.sessionId || row._name || '').split('/').pop() || '';
@@ -123,15 +120,7 @@ export function buildStreamingPreparationFromSessions(
   schedules: StudyScheduleRecord[],
   studyPhase: unknown,
 ): StreamingPreparation {
-  const phaseSessions = filterSessionsForStudyPhase(metadataSessions, schedules, studyPhase);
-  const contextRows = buildResearchExportDataSets(phaseSessions).sessions;
-  const contextBySessionId = new Map<string, Row>();
-  for (const row of contextRows) {
-    const context: Row = {};
-    for (const field of GLOBAL_CONTEXT_FIELDS) context[field] = row[field] ?? '';
-    contextBySessionId.set(String(row.session_id || ''), context);
-  }
-  return { contextBySessionId };
+  return buildFastStreamingPreparation(metadataSessions, schedules, studyPhase);
 }
 
 async function prepareProductionExport(
@@ -158,15 +147,16 @@ export function buildStreamingRowsForPage(
   exportQuery: ResearchFilterQuery,
   dataset: LargeDataset,
 ): Row[] {
+  if (dataset === 'utterances' || dataset === 'expressions') {
+    return buildFastStreamingRowsForPage(pageSessions, preparation, schedules, studyPhase, exportQuery, dataset);
+  }
   const phasePage = filterSessionsForStudyPhase(pageSessions, schedules, studyPhase);
   if (!phasePage.length) return [];
   const built = buildResearchExportDataSets(phasePage);
   const sessions = applyGlobalContext(built.sessions, preparation);
   const includedSessions = filterResearchSessionRows(sessions, exportQuery);
   if (!includedSessions.length) return [];
-  const includedIds = new Set(includedSessions.map((row) => String(row.session_id || '')));
-  if (dataset === 'sessions') return augmentSessionRowsWithPhase(includedSessions, schedules);
-  return built[dataset].filter((row) => includedIds.has(String(row.session_id || '')));
+  return augmentSessionRowsWithPhase(includedSessions, schedules);
 }
 
 function csvCell(value: unknown, protectLeadingWhitespace: boolean): string {
