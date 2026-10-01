@@ -11,6 +11,7 @@ import { withQuestionnaireResearchRuntime } from './src/server/questionnaireDash
 import { withResearchPhaseAnalyticsRuntime } from './src/server/researchPhaseAnalyticsRuntime';
 import { withResearchPhaseDashboardRecovery } from './src/server/researchPhaseDashboardRecovery';
 import { withResearchPhaseDashboardConsistency } from './src/server/researchPhaseDashboardConsistency';
+import { withResearchStreamingExportRuntime } from './src/server/researchStreamingExportRuntime';
 import {
   resilientResearchDashboardGetHandler,
   withResilientResearchPhaseDashboard,
@@ -128,6 +129,7 @@ application.get = function researchPhaseAwareGet(this: any, path: any, ...handle
     handlers[handlers.length - 1] = withResearchDailyClassStack(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withResearchWordsByClassRuntime(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withResearchDashboardChartUnification(path, handlers[handlers.length - 1]);
+    handlers[handlers.length - 1] = withResearchStreamingExportRuntime(path, handlers[handlers.length - 1]);
   }
   return originalGet.call(this, path, ...handlers);
 };
