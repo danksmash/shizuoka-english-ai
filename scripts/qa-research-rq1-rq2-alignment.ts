@@ -73,6 +73,7 @@ const analysisSessionRows = rawSessions.map((row, index) => ({
   session_id: row.sessionId,
   lesson_context_final: 'in_lesson',
   analysis_included: index === 1 ? 0 : 1,
+  dialogue_analysis_included: index === 1 ? 0 : 1,
 }));
 const choices = buildRq1ChoiceRows({
   rawSessions,
@@ -82,7 +83,9 @@ const choices = buildRq1ChoiceRows({
 });
 assert.equal(choices.length, 5);
 assert.ok(RQ1_CHOICE_HEADERS.includes('target_country'));
-assert.ok(RQ1_CHOICE_HEADERS.includes('selection_inclusion_reason' as any) === false);
+assert.ok(RQ1_CHOICE_HEADERS.includes('raw_selection_included'));
+assert.ok(RQ1_CHOICE_HEADERS.includes('effective_selection_included'));
+assert.ok(RQ1_CHOICE_HEADERS.includes('child_turn_count'));
 const p1First = choices.find((row) => row.session_id === 's-p1-a')!;
 assert.equal(p1First.target_country, 'United Kingdom');
 assert.equal(p1First.persona_country, 'United States');
@@ -90,7 +93,10 @@ assert.equal(p1First.target_match, 0);
 assert.equal(p1First.analysis_period, 'period1');
 assert.equal(p1First.study_phase, 'phase1');
 const short = choices.find((row) => row.session_id === 's-p1-short')!;
-assert.equal(short.selection_included, 1);
+assert.equal(short.raw_selection_included, 1);
+assert.equal(short.effective_selection_included, 0);
+assert.equal(short.selection_included, 0);
+assert.equal(short.selection_exclusion_reason, 'no_child_utterance');
 assert.equal(short.dialogue_analysis_included, 0);
 assert.equal(short.data_quality_flag, 'missing_core');
 const p2 = choices.find((row) => row.session_id === 's-p2-a')!;
@@ -101,7 +107,7 @@ assert.equal(p2.study_phase, 'phase2');
 const summaries = buildRq1PeriodSummaryRows(choices, [participant]);
 assert.equal(summaries.length, 3);
 const sum1 = summaries.find((row) => row.analysis_period === 'period1')!;
-assert.equal(sum1.choice_denominator, 2);
+assert.equal(sum1.choice_denominator, 1);
 assert.equal(sum1.target_choice_numerator, 0);
 const sum3 = summaries.find((row) => row.analysis_period === 'period3')!;
 assert.equal(sum3.choice_denominator, 2);
@@ -117,6 +123,8 @@ assert.equal(transitions[0].transition_by_period3, 1);
 assert.equal(transitions[0].first_transition_period, 'period2');
 assert.equal(transitions[0].first_transition_session_id, 's-p2-a');
 assert.ok(RQ1_ANALYSIS_SPEC.targetCountryRule.intervention.includes('過去session文書'));
+assert.ok(RQ1_ANALYSIS_SPEC.choiceUnit.includes('child_turn_count>=1'));
+assert.ok(RQ1_ANALYSIS_SPEC.inclusion.rawSensitivity.includes('全開始選択'));
 assert.ok(RQ1_ANALYSIS_SPEC.personaConfounding.includes('個別補正しない'));
 assert.ok(RQ1_ANALYSIS_SPEC.continuation.definition.includes('同じ国の別Persona'));
 
@@ -186,8 +194,8 @@ assert.ok(rq1Page.includes('persona_choices.csv'));
 assert.ok(rq1Page.includes('persona_period_summary.csv'));
 assert.ok(rq1Page.includes('persona_transition.csv'));
 
-assert.ok(rq2Alignment.includes("candidateSource: 'analysis_included_final'"));
-assert.ok(rq2Alignment.includes("Number(row.analysis_included || 0) === 1"));
+assert.ok(rq2Alignment.includes("candidateSource: 'dialogue_analysis_included_final'"));
+assert.ok(rq2Alignment.includes("Number(row.dialogue_analysis_included || 0) === 1"));
 assert.ok(rq2Alignment.includes('RQ2_FORMAL_FINAL_INCLUSION_REQUIRED'));
 assert.ok(rq2Alignment.includes("id: 'final_analysis_inclusion'"));
 assert.ok(rq2Alignment.includes('buildAnalysisSessionRows'));
