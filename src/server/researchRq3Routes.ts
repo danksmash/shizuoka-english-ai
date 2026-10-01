@@ -117,7 +117,9 @@ router.get('/research-rq3/status', requireManagementRole(['researcher']), async 
       },
       analysisSessions: {
         total: analysisSessions.length,
-        included: analysisSessions.filter((row) => Number(row.analysis_included || 0) === 1).length,
+        dialogueIncluded: analysisSessions.filter((row) => Number(row.dialogue_analysis_included || 0) === 1).length,
+        reflectionIncluded: analysisSessions.filter((row) => Number(row.reflection_analysis_included || 0) === 1).length,
+        included: analysisSessions.filter((row) => Number(row.dialogue_analysis_included || 0) === 1).length,
         manualOverrides: analysisSessions.filter((row) => row.analysis_decision_source === 'manual_override').length,
         unresolvedLessonContext: analysisSessions.filter((row) => row.exclusion_reason === 'lesson_context_not_confirmed').length,
       },
