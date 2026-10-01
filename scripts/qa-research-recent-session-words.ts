@@ -33,6 +33,6 @@ const injected = injectRecentSessionWordCountManagementHtml(html);
 assert.match(injected, /id="recentSessionWordCountRuntime"/);
 assert.match(injected, /発話語数/);
 assert.match(injected, /child_total_words/);
-assert.equal((injectRecentSessionWordCountManagementHtml(injected).match(/recentSessionWordCountRuntime/g) || []).length, 2);
+assert.equal(injectRecentSessionWordCountManagementHtml(injected), injected);
 
 console.log('qa-research-recent-session-words: PASS');
