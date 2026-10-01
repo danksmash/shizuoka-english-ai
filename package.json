@@ -22,7 +22,7 @@
     "qa:data": "tsx scripts/qa-data-contract.ts",
     "qa:ai-reflection-ui": "tsx scripts/qa-ai-reflection-4point-ui.ts",
     "qa:chart-unification": "tsx scripts/qa-research-chart-unification.ts",
-    "qa:management": "tsx scripts/qa-management-page.ts && tsx scripts/qa-persona-country-dashboard.ts && npm run qa:chart-unification",
+    "qa:management": "tsx scripts/qa-management-page.ts && tsx scripts/qa-persona-country-dashboard.ts && tsx scripts/qa-research-recent-session-words.ts && npm run qa:chart-unification",
     "qa:study-schedule": "tsx scripts/qa-study-schedule.ts",
     "qa:comparison-study": "tsx scripts/qa-comparison-study-metadata.ts && tsx scripts/qa-comparison-researcher-route.ts",
     "qa:research-phase": "tsx scripts/qa-research-phase-filter.ts",
