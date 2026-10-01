@@ -10,6 +10,7 @@ const dashboard = {
     { session_id: 'S2', data_quality_flag: 'missing_core' },
     { session_id: 'S3', data_quality_flag: 'interrupted' },
     { session_id: 'S4', data_quality_flag: 'complete' },
+    { session_id: 'S5', data_quality_flag: 'complete' },
   ],
 };
 
@@ -18,6 +19,7 @@ const exportSessions = [
   { session_id: 'S2', child_total_words: 0, data_quality_flag: 'missing_core' },
   { session_id: 'S3', child_total_words: 0, data_quality_flag: 'interrupted' },
   { session_id: 'S4', child_total_words: '18', data_quality_flag: 'complete' },
+  { session_id: 'S5', child_total_words: '', data_quality_flag: 'complete' },
 ];
 
 const enhanced = enhanceRecentSessionWordCounts(dashboard, exportSessions);
@@ -25,6 +27,7 @@ assert.equal(enhanced.recentSessions[0].child_total_words, 37);
 assert.equal(enhanced.recentSessions[1].child_total_words, null);
 assert.equal(enhanced.recentSessions[2].child_total_words, 0);
 assert.equal(enhanced.recentSessions[3].child_total_words, 18);
+assert.equal(enhanced.recentSessions[4].child_total_words, null);
 assert.equal(enhanced.recentSessions[0].data_quality_flag, 'complete');
 assert.equal(enhanced.recentSessions[1].data_quality_flag, 'missing_core');
 
