@@ -4,7 +4,9 @@ type Row = Record<string, any>;
 
 function normalizedChildWordCount(row: Row | undefined): number | null {
   if (!row || String(row.data_quality_flag || '') === 'missing_core') return null;
-  const value = Number(row.child_total_words);
+  const raw = row.child_total_words;
+  if (raw === null || raw === undefined || raw === '') return null;
+  const value = Number(raw);
   if (!Number.isFinite(value) || value < 0) return null;
   return Math.trunc(value);
 }
