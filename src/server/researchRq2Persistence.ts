@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { getDocument, queryCollection, setDocument, setDocumentsBatch } from './firestore';
-import type { Rq2SampledItem, Rq2Purpose } from './researchRq2Sampling';
+import { RQ2_CANDIDATE_RULE_VERSION, type Rq2SampledItem, type Rq2Purpose } from './researchRq2Sampling';
 import type { Rq2RunType } from './researchRq2RunGuard';
 
 export const RQ2_RUN_COLLECTION = 'research_rq2_runs';
@@ -34,6 +34,7 @@ export async function createRq2Run(args: {
     maxPerParticipantPerStratum: args.maxPerParticipantPerStratum,
     lessonOnly: args.lessonOnly,
     codebookVersion: args.codebookVersion,
+    candidateRuleVersion: RQ2_CANDIDATE_RULE_VERSION,
     promptVersion: 'rq2-coding-prompt-v5',
     counts: args.counts,
     itemCount: args.items.length,
