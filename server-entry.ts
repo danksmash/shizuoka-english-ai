@@ -25,6 +25,7 @@ import {
   createResearchSessionHistoryRouter,
   withResearchSessionHistoryManagementPage,
 } from './src/server/researchSessionHistoryRuntime';
+import { withResearchRecentSessionWordCount } from './src/server/researchRecentSessionWordCountRuntime';
 import { createResearchSessionAuditRouter } from './src/server/researchSessionAuditRoutes';
 import { createResearchRq1Router } from './src/server/researchRq1Routes';
 import { withResearchRq1DashboardLink } from './src/server/researchRq1DashboardRuntime';
@@ -130,6 +131,7 @@ application.get = function researchPhaseAwareGet(this: any, path: any, ...handle
     handlers[handlers.length - 1] = withResearchWordsByClassRuntime(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withResearchDashboardChartUnification(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withResearchStreamingExportRuntime(path, handlers[handlers.length - 1]);
+    handlers[handlers.length - 1] = withResearchRecentSessionWordCount(path, handlers[handlers.length - 1]);
   }
   return originalGet.call(this, path, ...handlers);
 };
