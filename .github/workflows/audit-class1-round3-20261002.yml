@@ -48,3 +48,5 @@ jobs:
           GOOGLE_CLOUD_PROJECT: shizuoka-english-ai
           FIRESTORE_DATABASE_ID: '(default)'
         run: npx tsx scripts/audit-class1-round3-20261002.ts
+
+# Trigger marker: 2026-10-02 class 1 round 3 read-only audit
