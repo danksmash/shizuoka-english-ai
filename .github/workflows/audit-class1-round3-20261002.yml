@@ -43,10 +43,25 @@ jobs:
           project_id: shizuoka-english-ai
           version: '>= 416.0.0'
 
-      - name: Run read-only class analysis
+      - name: Run compact read-only class analysis
         env:
           GOOGLE_CLOUD_PROJECT: shizuoka-english-ai
           FIRESTORE_DATABASE_ID: '(default)'
         run: |
           sed -i "s/\['1','3'\]/['5-1','5-3']/g; s/dateCounts\['1'\]/dateCounts['5-1']/g; s/dateCounts\['3'\]/dateCounts['5-3']/g; s/class_id==='1'/class_id==='5-1'/g" scripts/audit-class1-round3-20261002.ts
-          npx tsx scripts/audit-class1-round3-20261002.ts
+          npx tsx scripts/audit-class1-round3-20261002.ts > /tmp/full-audit.log
+          node <<'NODE'
+          const fs = require('fs');
+          const s = fs.readFileSync('/tmp/full-audit.log','utf8');
+          const body = s.split('CLASS1_ROUND3_AUDIT_BEGIN')[1].split('CLASS1_ROUND3_AUDIT_END')[0];
+          const j = JSON.parse(body);
+          const rounds = {};
+          for (const [c,v] of Object.entries(j.rounds || {})) {
+            rounds[c] = {};
+            for (const [k,x] of Object.entries(v)) rounds[c][k] = x.aggregate;
+          }
+          const compact = { generated_at:j.generated_at, date_counts:j.date_counts, rounds, target_date:j.target_date, target:j.target_class1?.aggregate };
+          console.log('COMPACT_AUDIT_BEGIN');
+          console.log(JSON.stringify(compact,null,2));
+          console.log('COMPACT_AUDIT_END');
+          NODE
