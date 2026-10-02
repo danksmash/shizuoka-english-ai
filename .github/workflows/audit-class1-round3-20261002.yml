@@ -48,6 +48,5 @@ jobs:
           GOOGLE_CLOUD_PROJECT: shizuoka-english-ai
           FIRESTORE_DATABASE_ID: '(default)'
         run: |
-          cp scripts/audit-class1-round3-20261002.ts /tmp/audit-class1-round3.ts
-          sed -i "s/\['1','3'\]/['5-1','5-3']/g; s/dateCounts\['1'\]/dateCounts['5-1']/g; s/dateCounts\['3'\]/dateCounts['5-3']/g; s/class_id==='1'/class_id==='5-1'/g" /tmp/audit-class1-round3.ts
-          npx tsx /tmp/audit-class1-round3.ts
+          sed -i "s/\['1','3'\]/['5-1','5-3']/g; s/dateCounts\['1'\]/dateCounts['5-1']/g; s/dateCounts\['3'\]/dateCounts['5-3']/g; s/class_id==='1'/class_id==='5-1'/g" scripts/audit-class1-round3-20261002.ts
+          npx tsx scripts/audit-class1-round3-20261002.ts
