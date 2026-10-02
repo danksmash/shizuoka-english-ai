@@ -1,0 +1,72 @@
+name: Audit class 1 round 3 compact 20261002
+
+on:
+  push:
+    branches:
+      - 'audit/class1-round3-20261002'
+    paths:
+      - '.github/workflows/audit-class1-round3-compact-20261002.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
+
+      - name: Run compact read-only analysis
+        env:
+          GOOGLE_CLOUD_PROJECT: shizuoka-english-ai
+          FIRESTORE_DATABASE_ID: '(default)'
+        run: |
+          sed -i "s/\['1','3'\]/['5-1','5-3']/g; s/dateCounts\['1'\]/dateCounts['5-1']/g; s/dateCounts\['3'\]/dateCounts['5-3']/g; s/class_id==='1'/class_id==='5-1'/g" scripts/audit-class1-round3-20261002.ts
+          npx tsx scripts/audit-class1-round3-20261002.ts > /tmp/full-audit.log
+          node <<'NODE'
+          const fs = require('fs');
+          const s = fs.readFileSync('/tmp/full-audit.log','utf8');
+          const body = s.split('CLASS1_ROUND3_AUDIT_BEGIN')[1].split('CLASS1_ROUND3_AUDIT_END')[0];
+          const j = JSON.parse(body);
+          const rounds = {};
+          for (const [c,v] of Object.entries(j.rounds || {})) {
+            rounds[c] = {};
+            for (const [k,x] of Object.entries(v)) rounds[c][k] = x.aggregate;
+          }
+          const compact = {
+            generated_at: j.generated_at,
+            date_counts: j.date_counts,
+            rounds,
+            target_date: j.target_date,
+            target: j.target_class1?.aggregate
+          };
+          console.log('COMPACT_AUDIT_BEGIN');
+          console.log(JSON.stringify(compact,null,2));
+          console.log('COMPACT_AUDIT_END');
+          NODE
