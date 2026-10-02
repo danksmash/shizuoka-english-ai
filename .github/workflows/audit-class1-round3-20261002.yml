@@ -1,0 +1,50 @@
+name: Audit class 1 round 3 20261002
+
+on:
+  push:
+    branches:
+      - 'audit/class1-round3-20261002'
+    paths:
+      - 'scripts/audit-class1-round3-20261002.ts'
+      - '.github/workflows/audit-class1-round3-20261002.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
+
+      - name: Run read-only class analysis
+        env:
+          GOOGLE_CLOUD_PROJECT: shizuoka-english-ai
+          FIRESTORE_DATABASE_ID: '(default)'
+        run: npx tsx scripts/audit-class1-round3-20261002.ts
