@@ -35,6 +35,14 @@ export function isStudyClassId(value: unknown): value is StudyClassId {
     && ((STUDY_CLASS_IDS as readonly string[]).includes(value) || /^[56]-C[1-9]$/.test(value));
 }
 
+function configuredComparisonClassIds(): StudyClassId[] {
+  const raw = process.env.STUDY_COMPARISON_CLASS_IDS || '6-C1';
+  return [...new Set(raw
+    .split(',')
+    .map((value) => value.trim().toUpperCase())
+    .filter((value) => /^[56]-C[1-9]$/.test(value)))];
+}
+
 function isRealIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split('-').map(Number);
@@ -130,6 +138,7 @@ export async function getAllStudySchedules(): Promise<StudyScheduleRecord[]> {
   }
   const classIds = [...new Set([
     ...STUDY_CLASS_IDS,
+    ...configuredComparisonClassIds(),
     ...[...byClass.keys()].filter((classId) => /^[56]-C[1-9]$/.test(classId)),
   ])].sort((a, b) => a.localeCompare(b, 'ja'));
   return classIds.map((classId) => normalizeRecord(byClass.get(classId) || null, classId));
