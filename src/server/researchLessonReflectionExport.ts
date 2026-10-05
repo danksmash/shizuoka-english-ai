@@ -30,20 +30,24 @@ function conditionForClassId(classId: string): 'intervention' | 'comparison' | '
   return '';
 }
 
-function siteForClassId(classId: string): 'site_a' | 'site_b' | '' {
-  const condition = conditionForClassId(classId);
+function conditionForRecord(record: ReflectionRecord): 'intervention' | 'comparison' | '' {
+  return record.schoolCondition || conditionForClassId(record.classId);
+}
+
+function siteForRecord(record: ReflectionRecord): 'site_a' | 'site_b' | '' {
+  if (record.studySiteId) return record.studySiteId;
+  const condition = conditionForRecord(record);
   return condition === 'comparison' ? 'site_b' : condition === 'intervention' ? 'site_a' : '';
 }
 
 function scopeRowForReflection(record: ReflectionRecord): Record<string, unknown> {
-  const condition = conditionForClassId(record.classId);
+  const condition = conditionForRecord(record);
   return {
     class_id: record.classId,
     local_date: record.localDate,
-    ...(condition === 'comparison' ? {
-      formal_study_participant: 1,
-      school_condition: 'comparison',
-    } : {}),
+    formal_study_participant: record.formalStudyParticipant ? 1 : 0,
+    school_condition: condition,
+    study_start_date: record.studyStartDate || '',
   };
 }
 
@@ -77,7 +81,7 @@ export function buildResearchLessonReflectionRows(
   return records
     .filter((record) => {
       const scope = researchDataScopeForRow(scopeRowForReflection(record));
-      const condition = conditionForClassId(record.classId);
+      const condition = conditionForRecord(record);
       return (!start || record.localDate >= start)
         && (!end || record.localDate <= end)
         && (!dataScope || dataScope === 'all' || scope === dataScope)
@@ -88,11 +92,11 @@ export function buildResearchLessonReflectionRows(
     .sort((a, b) => a.localDate.localeCompare(b.localDate) || a.classId.localeCompare(b.classId, 'ja') || a.researchId.localeCompare(b.researchId))
     .map((record) => ({
       research_id: record.researchId,
-      site_id: siteForClassId(record.classId),
-      school_condition: conditionForClassId(record.classId),
+      site_id: siteForRecord(record),
+      school_condition: conditionForRecord(record),
       class_id: record.classId,
       data_scope: researchDataScopeForRow(scopeRowForReflection(record)),
-      grade_level: gradeForClassId(record.classId),
+      grade_level: record.gradeLevel || gradeForClassId(record.classId),
       class_number: classNumberForClassId(record.classId),
       local_date: record.localDate,
       status: record.status,
