@@ -5,6 +5,7 @@ import {
   QUESTIONNAIRE_POST_FORM_ID,
   QUESTIONNAIRE_PRE_FORM_ID,
   canonicalQuestionnaireAutoPayload,
+  comparisonPreBeforeFormalAllowed,
   computeQuestionnaireAutoSignature,
   formalStudy1ParticipantHash,
   isFormalStudy1Participant,
@@ -24,6 +25,13 @@ assert.equal(questionnaireWaveForFormId(QUESTIONNAIRE_MID_FORM_ID), 'mid_pre_rev
 assert.equal(questionnaireWaveForFormId(QUESTIONNAIRE_POST_FORM_ID), 'post_pre_exchange');
 assert.match(QUESTIONNAIRE_MID_FORM_ID, /^[A-Za-z0-9_-]{20,}$/);
 assert.equal(questionnaireWaveForFormId('unknown-form'), null);
+
+assert.equal(comparisonPreBeforeFormalAllowed('pre_app', '6-C1', true), true, 'official comparison PRE must be ingestible before first AI session/formal activation');
+assert.equal(comparisonPreBeforeFormalAllowed('mid_pre_reveal', '6-C1', true), false, 'comparison MID must require formal activation');
+assert.equal(comparisonPreBeforeFormalAllowed('post_pre_exchange', '6-C1', true), false, 'comparison POST must require formal activation');
+assert.equal(comparisonPreBeforeFormalAllowed('pre_app', '6-PB', true), false, 'Pilot B must never use comparison PRE exception');
+assert.equal(comparisonPreBeforeFormalAllowed('pre_app', '6-C1', false), false, 'inactive comparison IDs must not use PRE exception');
+assert.equal(comparisonPreBeforeFormalAllowed('pre_app', '5-C1', true), false, 'only configured comparison classes may use PRE exception by default');
 
 assert.equal(STUDY1_FORMAL_PARTICIPANT_COUNT, 145);
 assert.equal(STUDY1_FORMAL_PARTICIPANT_HASHES.size, 145);
@@ -93,7 +101,10 @@ assert.ok(route.includes("String(process.env.QUESTIONNAIRE_INGEST_SECRET || '').
 assert.ok(route.includes('X-Questionnaire-Timestamp'));
 assert.ok(route.includes('X-Questionnaire-Signature'));
 assert.ok(core.includes('NOT_FORMAL_STUDY1_PARTICIPANT'));
-assert.ok(core.includes('student.formalStudyParticipant'), 'questionnaire ingest must gate on normalized formal-study metadata');
+assert.ok(core.includes('comparisonPreBeforeFormalAllowed'), 'official comparison PRE must have a narrow pre-activation ingest path');
+assert.ok(core.includes("preBeforeFormal ? 'site_b'"), 'pre-activation comparison PRE must be stored as site_b');
+assert.ok(core.includes("preBeforeFormal ? 'comparison'"), 'pre-activation comparison PRE must be stored in the comparison condition');
+assert.ok(core.includes('student.formalStudyParticipant'), 'questionnaire ingest must still gate MID/POST on normalized formal-study metadata');
 assert.ok(participantMetadata.includes('STUDY1_FORMAL_PARTICIPANT_HASHES'), 'legacy 145-person allowlist must remain the intervention fallback inside the shared metadata layer');
 assert.ok(participantMetadata.includes("studySiteId: 'site_a'"));
 assert.ok(participantMetadata.includes("schoolCondition: 'intervention'"));
@@ -101,7 +112,7 @@ assert.ok(core.includes('createDocumentIfAbsent'));
 assert.ok(core.includes('QUESTIONNAIRE_SYNC_STATE_COLLECTION'));
 assert.equal((participantHashes.match(/[0-9a-f]{64}/g) || []).length, 145, 'allowlist file must contain exactly 145 irreversible hashes');
 assert.ok(!participantHashes.includes('learningCode') && !participantHashes.includes('researchId') && !participantHashes.includes('studentId:'), 'allowlist source must not expose operational identifiers');
-assert.ok(manualRoute.includes('importStrictGoogleFormsQuestionnaireCsv'), 'manual CSV fallback must use the same formal-roster gate');
+assert.ok(manualRoute.includes('importStrictGoogleFormsQuestionnaireCsv'), 'manual CSV fallback must use the same guarded importer');
 assert.ok(!manualRoute.includes('importGoogleFormsQuestionnaireCsv'), 'old permissive importer must not remain on the management route');
 assert.ok(manualRoute.includes("router.post('/questionnaire/revision'"));
 assert.ok(analysisPage.includes('/api/management/questionnaire/revision'));
