@@ -5,6 +5,7 @@ import {
   formalStudy1ParticipantHash as legacyFormalStudy1ParticipantHash,
   isLegacyFormalStudy1Participant,
   isLegacyFormalStudy1ParticipantHash,
+  validComparisonClassId,
 } from './studyParticipantMetadata';
 import {
   QUESTIONNAIRE_COLLECTION,
@@ -25,7 +26,6 @@ export const QUESTIONNAIRE_SYNC_STATE_COLLECTION = 'questionnaire_sync_state';
 export const QUESTIONNAIRE_SYNC_STATE_DOCUMENT = 'study1';
 export const QUESTIONNAIRE_SIGNATURE_MAX_AGE_SECONDS = 300;
 
-
 export interface QuestionnaireAutoIngestPayload {
   formId: string;
   formResponseId: string;
@@ -45,6 +45,22 @@ export interface QuestionnaireAutoIngestResult {
 
 function normalizedLearningCode(value: unknown): string {
   return String(value ?? '').trim().toUpperCase();
+}
+
+function configuredComparisonClassIds(): Set<string> {
+  const raw = process.env.STUDY_COMPARISON_CLASS_IDS || '6-C1';
+  return new Set(raw
+    .split(',')
+    .map((value) => value.trim().toUpperCase())
+    .filter((value) => validComparisonClassId(value)));
+}
+
+export function comparisonPreBeforeFormalAllowed(wave: QuestionnaireWave, classId: unknown, active: unknown = true): boolean {
+  const normalizedClassId = String(classId || '').trim().toUpperCase();
+  return wave === 'pre_app'
+    && active !== false
+    && validComparisonClassId(normalizedClassId)
+    && configuredComparisonClassIds().has(normalizedClassId);
 }
 
 export function questionnaireWaveForFormId(formId: unknown): QuestionnaireWave | null {
@@ -164,7 +180,9 @@ async function persistCanonicalQuestionnaire(
 
   const student = await resolveStudentByCode(code);
   if (!student) throw new Error('LEARNING_CODE_NOT_FOUND');
-  if (!student.formalStudyParticipant) throw new Error('NOT_FORMAL_STUDY1_PARTICIPANT');
+  const preBeforeFormal = !student.formalStudyParticipant
+    && comparisonPreBeforeFormalAllowed(wave, student.classId, student.active);
+  if (!student.formalStudyParticipant && !preBeforeFormal) throw new Error('NOT_FORMAL_STUDY1_PARTICIPANT');
 
   const gradeLevel = student.gradeLevel || gradeForClassId(student.classId);
   if (!gradeLevel) throw new Error('NOT_MAIN_STUDY_CLASS');
@@ -180,8 +198,8 @@ async function persistCanonicalQuestionnaire(
     classId: student.classId,
     gradeLevel,
     dataScope: 'main',
-    siteId: student.studySiteId || 'site_a',
-    schoolCondition: student.schoolCondition || 'intervention',
+    siteId: preBeforeFormal ? 'site_b' : (student.studySiteId || 'site_a'),
+    schoolCondition: preBeforeFormal ? 'comparison' : (student.schoolCondition || 'intervention'),
     surveyWave: wave,
     surveyDate: tokyoDate(submittedAt),
     submittedAt,
