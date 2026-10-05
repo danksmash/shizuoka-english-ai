@@ -24,11 +24,11 @@ export interface ReflectionRecord {
   researchId: string;
   classId: string;
   learningId: string;
-  formalStudyParticipant: boolean;
-  studySiteId: 'site_a' | 'site_b' | '';
-  schoolCondition: 'intervention' | 'comparison' | '';
-  studyStartDate: string;
-  gradeLevel: 5 | 6 | null;
+  formalStudyParticipant?: boolean;
+  studySiteId?: 'site_a' | 'site_b' | '';
+  schoolCondition?: 'intervention' | 'comparison' | '';
+  studyStartDate?: string;
+  gradeLevel?: 5 | 6 | null;
   localDate: string;
   todayGoal: string;
   goalRating: number | null;
