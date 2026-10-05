@@ -20,6 +20,11 @@ const make = (
   researchId,
   classId,
   learningId: 'HIDDEN1',
+  formalStudyParticipant: false,
+  studySiteId: '',
+  schoolCondition: '',
+  studyStartDate: '',
+  gradeLevel: null,
   localDate,
   todayGoal: '相手の話をよく聞く。',
   goalRating: 3,
@@ -41,13 +46,26 @@ const records: ReflectionRecord[] = [
   make('R-PILOT-OFFDATE', '6-PB', '2026-09-10'),
   make('R-TEST', 'テスト', '2026-09-10'),
   make('R-RESERVE', '予備', '2026-09-10'),
+  make('R-COMP-PRE', '6-C1', '2026-10-05', {
+    studySiteId: 'site_b', schoolCondition: 'comparison', gradeLevel: 6,
+  }),
+  make('R-COMP-MAIN', '6-C1', '2026-10-13', {
+    formalStudyParticipant: true, studySiteId: 'site_b', schoolCondition: 'comparison', studyStartDate: '2026-10-12', gradeLevel: 6,
+  }),
 ];
 
 const defaultFormal = normalizeFormalResearchExportQuery({});
 const mainRows = buildResearchLessonReflectionRows(records, defaultFormal);
-assert.equal(mainRows.length, 2, 'formal export default must include only main Reflection rows');
+assert.equal(mainRows.length, 2, 'formal export default must include only intervention main Reflection rows');
 assert.ok(mainRows.every((row) => row.data_scope === 'main'));
 assert.ok(mainRows.every((row) => !('learning_id' in row) && !('student_id' in row)), 'formal rows must omit learning/internal IDs');
+
+const comparisonRows = buildResearchLessonReflectionRows(records, { dataScope: 'main', schoolCondition: 'comparison' });
+assert.deepEqual(comparisonRows.map((row) => row.research_id), ['R-COMP-MAIN'], 'comparison main export must require formal participant metadata and study start date');
+assert.equal(comparisonRows[0]?.site_id, 'site_b');
+assert.equal(comparisonRows[0]?.school_condition, 'comparison');
+const comparisonPreRows = buildResearchLessonReflectionRows(records, { dataScope: 'test', schoolCondition: 'all', classId: '6-C1' });
+assert.ok(comparisonPreRows.some((row) => row.research_id === 'R-COMP-PRE'), 'comparison reflection before formal activation must remain test scope');
 
 const pilotRows = buildResearchLessonReflectionRows(records, { dataScope: 'pilot_b' });
 assert.deepEqual(pilotRows.map((row) => row.research_id), ['R-PILOT-OFFICIAL'], 'only the official Pilot B date may be pilot_b');
