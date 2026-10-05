@@ -98,7 +98,7 @@ function researchScopeRowForReflection(classId: string, localDate: string, stude
   return {
     class_id: classId,
     local_date: localDate,
-    formal_study_participant: student?.formalStudyParticipant === true || comparison ? 1 : 0,
+    formal_study_participant: student?.formalStudyParticipant === true ? 1 : 0,
     school_condition: comparison ? 'comparison' : (student?.schoolCondition || 'intervention'),
     study_start_date: student?.studyStartDate || '',
   };
@@ -138,6 +138,7 @@ async function buildLinkageAudit() {
   const scheduleByClass = new Map(schedules.map((schedule) => [schedule.classId, schedule]));
   const classIds = [...new Set([
     ...STUDY_CLASS_IDS,
+    ...schedules.map((schedule) => schedule.classId),
     ...participants.map((participant) => participant.classId),
   ])].sort((a, b) => a.localeCompare(b, 'ja'));
   const studentByResearchId = new Map(students.map((student) => [student.researchId, student]));
