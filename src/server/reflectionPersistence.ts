@@ -11,6 +11,11 @@ export interface ReflectionIdentity {
   researchId: string;
   classId: string;
   learningId: string;
+  formalStudyParticipant?: boolean;
+  studySiteId?: 'site_a' | 'site_b' | '';
+  schoolCondition?: 'intervention' | 'comparison' | '';
+  studyStartDate?: string;
+  gradeLevel?: 5 | 6 | null;
 }
 
 export interface ReflectionRecord {
@@ -19,6 +24,11 @@ export interface ReflectionRecord {
   researchId: string;
   classId: string;
   learningId: string;
+  formalStudyParticipant?: boolean;
+  studySiteId?: 'site_a' | 'site_b' | '';
+  schoolCondition?: 'intervention' | 'comparison' | '';
+  studyStartDate?: string;
+  gradeLevel?: 5 | 6 | null;
   localDate: string;
   todayGoal: string;
   goalRating: number | null;
@@ -87,6 +97,18 @@ function rating(value: unknown): number | null {
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 4 ? parsed : null;
 }
 
+function gradeLevel(value: unknown): 5 | 6 | null {
+  return value === 5 || value === 6 ? value : null;
+}
+
+function studySiteId(value: unknown): 'site_a' | 'site_b' | '' {
+  return value === 'site_a' || value === 'site_b' ? value : '';
+}
+
+function schoolCondition(value: unknown): 'intervention' | 'comparison' | '' {
+  return value === 'intervention' || value === 'comparison' ? value : '';
+}
+
 function normalizeStoredRecord(row: Record<string, any> | null): ReflectionRecord | null {
   if (!row) return null;
   const reflectionText = cleanText(row.reflectionText, REFLECTION_MAX_CHARS);
@@ -96,6 +118,11 @@ function normalizeStoredRecord(row: Record<string, any> | null): ReflectionRecor
     researchId: cleanText(row.researchId, 200),
     classId: cleanText(row.classId, 40),
     learningId: cleanText(row.learningId, 20).toUpperCase(),
+    formalStudyParticipant: row.formalStudyParticipant === true,
+    studySiteId: studySiteId(row.studySiteId),
+    schoolCondition: schoolCondition(row.schoolCondition),
+    studyStartDate: /^\d{4}-\d{2}-\d{2}$/.test(String(row.studyStartDate || '')) ? String(row.studyStartDate) : '',
+    gradeLevel: gradeLevel(row.gradeLevel),
     localDate: cleanText(row.localDate, 20),
     todayGoal: cleanText(row.todayGoal, GOAL_MAX_CHARS),
     goalRating: rating(row.goalRating),
@@ -124,7 +151,6 @@ export async function saveLessonReflection(
   const reflectionId = reflectionDocumentId(identity.studentId, localDate);
   const existing = normalizeStoredRecord(await getDocument(REFLECTION_COLLECTION, reflectionId));
   const now = new Date().toISOString();
-  // Submission is monotonic. A delayed autosave can never downgrade a submitted record to draft.
   const status: 'draft' | 'submitted' = input.status === 'submitted' || existing?.status === 'submitted' ? 'submitted' : 'draft';
   const reflectionText = input.reflectionText === undefined ? (existing?.reflectionText || '') : cleanText(input.reflectionText, REFLECTION_MAX_CHARS);
   const record: ReflectionRecord = {
@@ -133,6 +159,11 @@ export async function saveLessonReflection(
     researchId: identity.researchId,
     classId: identity.classId,
     learningId: identity.learningId,
+    formalStudyParticipant: identity.formalStudyParticipant === true,
+    studySiteId: studySiteId(identity.studySiteId),
+    schoolCondition: schoolCondition(identity.schoolCondition),
+    studyStartDate: /^\d{4}-\d{2}-\d{2}$/.test(String(identity.studyStartDate || '')) ? String(identity.studyStartDate) : '',
+    gradeLevel: gradeLevel(identity.gradeLevel),
     localDate,
     todayGoal: input.todayGoal === undefined ? (existing?.todayGoal || '') : cleanText(input.todayGoal, GOAL_MAX_CHARS),
     goalRating: input.goalRating === undefined ? (existing?.goalRating ?? null) : rating(input.goalRating),

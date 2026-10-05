@@ -68,6 +68,11 @@ async function requireIdentity(req: express.Request, res: express.Response): Pro
     researchId: current.researchId,
     classId: current.classId,
     learningId: current.learningId,
+    formalStudyParticipant: current.formalStudyParticipant === true,
+    studySiteId: current.studySiteId || '',
+    schoolCondition: current.schoolCondition || '',
+    studyStartDate: current.studyStartDate || '',
+    gradeLevel: current.gradeLevel || null,
   };
 }
 

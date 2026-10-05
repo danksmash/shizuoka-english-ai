@@ -8,6 +8,7 @@ import { getAllStudySchedules } from './studySchedulePersistence';
 import {
   buildQuestionnaireStatistics,
   getAllQuestionnaireRecords,
+  type QuestionnaireRecord,
   type QuestionnaireWave,
 } from './questionnaireResearch';
 import {
@@ -22,6 +23,22 @@ function wave(value: unknown): QuestionnaireWave | null {
   if (value === 'pre_app' || value === 'mid_pre_reveal' || value === 'post_pre_exchange') return value;
   if (value === 'post_exchange') return 'post_pre_exchange';
   return null;
+}
+
+function legacyStatisticsInput(records: QuestionnaireRecord[]) {
+  const comparisonRecords = records.filter((record) => record.schoolCondition === 'comparison');
+  if (!comparisonRecords.length) {
+    return {
+      records,
+      scope: 'all_records_legacy_compatible',
+      comparisonExcluded: 0,
+    };
+  }
+  return {
+    records: records.filter((record) => record.schoolCondition !== 'comparison'),
+    scope: 'intervention_only_comparison_excluded',
+    comparisonExcluded: comparisonRecords.length,
+  };
 }
 
 router.post('/questionnaire/import', requireManagementRole(['researcher']), async (req, res) => {
@@ -43,8 +60,14 @@ router.post('/questionnaire/import', requireManagementRole(['researcher']), asyn
 router.post('/questionnaire/statistics', requireManagementRole(['researcher']), async (_req, res) => {
   try {
     const records = await getAllQuestionnaireRecords();
+    const legacy = legacyStatisticsInput(records);
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ success: true, ...buildQuestionnaireStatistics(records) });
+    return res.json({
+      success: true,
+      ...buildQuestionnaireStatistics(legacy.records),
+      legacyStatisticsScope: legacy.scope,
+      comparisonExcludedFromLegacyStatistics: legacy.comparisonExcluded,
+    });
   } catch (error: any) {
     console.error('Questionnaire statistics failed', { message: error?.message });
     return res.status(503).json({ success: false, error: 'QUESTIONNAIRE_STATISTICS_UNAVAILABLE' });
@@ -61,10 +84,15 @@ router.post('/questionnaire/analysis', requireManagementRole(['researcher']), as
         return [];
       }),
     ]);
+    const legacy = legacyStatisticsInput(records);
     res.setHeader('Cache-Control', 'no-store');
     return res.json({
       success: true,
-      statistics: buildQuestionnaireStatistics(records),
+      statistics: {
+        ...buildQuestionnaireStatistics(legacy.records),
+        legacyStatisticsScope: legacy.scope,
+        comparisonExcludedFromLegacyStatistics: legacy.comparisonExcluded,
+      },
       descriptive: buildQuestionnaireDescriptiveStatistics(records),
       timingAudit: buildQuestionnaireTimingAudit(records, schedules),
       revision: {
