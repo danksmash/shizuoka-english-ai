@@ -127,13 +127,18 @@ const writer = {
 
 await syncResearchDailyAggregateContribution(null, base, writer);
 await syncResearchDailyAggregateContribution(base, { ...base, totalChildWords: 50, reflection: { ...base.reflection, conveyedIdeas: 3 } }, writer);
-assert.equal(calls.length, 2, 'repeat saves overwrite the same contribution instead of incrementing');
-assert.equal(calls[0].path, calls[1].path);
-assert.equal((calls[1].value as any).totalChildWords, 50);
+assert.equal(calls.length, 4, 'each live sync writes a queryable localDate plus one idempotent contribution');
+assert.equal(calls[0].path, 'localDate');
+assert.equal(calls[0].value, '2026-10-07');
+assert.equal(calls[1].path, calls[3].path, 'repeat saves overwrite the same contribution instead of incrementing');
+assert.equal((calls[3].value as any).totalChildWords, 50);
 
 await syncResearchDailyAggregateContribution(base, { ...base, localDate:'2026-10-08' }, writer);
-assert.equal(calls.at(-2)?.type, 'remove');
-assert.equal(calls.at(-2)?.id, '2026-10-07');
+assert.equal(calls.at(-3)?.type, 'remove');
+assert.equal(calls.at(-3)?.id, '2026-10-07');
+assert.equal(calls.at(-2)?.type, 'patch');
+assert.equal(calls.at(-2)?.path, 'localDate');
+assert.equal(calls.at(-2)?.id, '2026-10-08');
 assert.equal(calls.at(-1)?.type, 'patch');
 assert.equal(calls.at(-1)?.id, '2026-10-08');
 
@@ -192,9 +197,15 @@ assert.ok(backfill.includes('RESEARCH_DASHBOARD_SESSION_FIELDS'), 'backfill and 
 assert.ok(backfill.includes('dashboardParity'), 'backfill audit must compare dashboard output parity');
 assert.ok(backfill.includes('cutoverReady'), 'aggregate cutover must have an explicit readiness gate');
 assert.ok(backfill.includes('researchDailyAggregateCapacity'), 'aggregate audit must report document-capacity headroom');
+assert.ok(backfill.includes('markPendingAggregateSessionsSyncedAfterAuditedBackfill'), 'audited backfill must repair pending synchronization markers');
+assert.ok(backfill.includes('if (audit.cutoverReady)'), 'pending markers must clear only after full parity and capacity gates pass');
 assert.ok(persistence.includes('const DASHBOARD_SESSION_FIELDS = RESEARCH_DASHBOARD_SESSION_FIELDS;'), 'live dashboard projection must share the aggregate field contract');
 assert.ok(persistence.includes('studentByResearchId.get'), 'aggregate rows must refresh current study metadata without studentId');
 assert.ok(persistence.includes('getDailyAggregateDashboardSessionsForManagementByLocalDateRange'), 'guarded aggregate reader must exist before cutover');
+assert.ok(persistence.includes("queryCollection(SESSION_COLLECTION, 'aggregateSyncStatus', 'pending', 1)"), 'aggregate reader must fail closed when any canonical session is not yet synchronized');
+assert.ok(persistence.includes("aggregateSyncStatus: 'pending'"), 'canonical session save must durably mark aggregate synchronization pending');
+assert.ok(persistence.includes("patchDocumentField(SESSION_COLLECTION, args.sessionId, 'aggregateSyncStatus', 'synced')"), 'pending state must clear only after shadow aggregate persistence succeeds');
+assert.ok(persistence.includes("queryCollectionByStringRange(RESEARCH_DAILY_AGGREGATE_COLLECTION, 'localDate', from, to)"), 'bounded aggregate reads must use Firestore localDate range queries');
 assert.ok(persistence.includes('researchDailyAggregateDocumentsToDashboardSessions(selected)'), 'aggregate reader must reconstruct summary-level sessions');
 assert.ok(manualExclusions.includes('aggregateSessionKey'), 'manual exclusions must recognize aggregate hashed session ids');
 assert.ok(persistence.includes('formalStudyParticipant: args.formalStudyParticipant === true'), 'shadow writes must receive current study metadata');
