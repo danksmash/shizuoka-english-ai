@@ -688,9 +688,9 @@ function dailyAggregateDocumentDate(document: Record<string, any>): string {
 }
 
 /**
- * Aggregate shadow reader for cutover verification. It is intentionally kept
- * separate from the live dashboard read path until cutover is explicitly
- * enabled after the remaining guards pass.
+ * Aggregate-first Research Dashboard reader. Correctness is guarded by the
+ * canonical aggregateSyncStatus marker; the resilient runtime falls back to
+ * the projected canonical-session path whenever this reader is unhealthy.
  */
 export async function getDailyAggregateDashboardSessionsForManagementByLocalDateRange(
   start?: unknown,
