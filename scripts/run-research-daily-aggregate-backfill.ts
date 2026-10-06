@@ -7,6 +7,10 @@ async function main() {
   const before = await auditResearchDailyAggregateBackfill();
   console.log(`RESEARCH_DAILY_AGGREGATE_BACKFILL_BEFORE=${JSON.stringify(before)}`);
 
+  if (before.expectedCapacity?.nearDocumentLimit === true) {
+    throw new Error('RESEARCH_DAILY_AGGREGATE_BACKFILL_ABORTED_CAPACITY');
+  }
+
   const result = await backfillResearchDailyAggregates();
   console.log(`RESEARCH_DAILY_AGGREGATE_BACKFILL_RESULT=${JSON.stringify(result)}`);
 
