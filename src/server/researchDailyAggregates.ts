@@ -14,7 +14,7 @@ export const RESEARCH_DASHBOARD_SESSION_FIELDS = [
   'actualDurationSeconds','startedAt','endedAt','localDate','schemaVersion','totalTurns','totalChildWords','reflection',
   'aiTurnCount','dialogueUtteranceCount',
   'personaLabelCondition','assignedPartnerId','assignedPartnerCountry','assignmentAnnouncedAt','ttsFallbackCount','micErrorCount',
-  'aiRequestFailureCount','gradeLevel','schoolCondition','studySiteId','studyStartDate','formalStudyParticipant',
+  'aiRequestFailureCount','gradeLevel','schoolCondition','studySiteId','studyStartDate','formalStudyParticipant','updatedAt',
 ];
 
 export type ResearchDailyContribution = {
