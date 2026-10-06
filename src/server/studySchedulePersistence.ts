@@ -10,7 +10,10 @@ export interface StudyScheduleSnapshot {
   revision: number;
   appStartDate: string;
   nationalityRevealDate: string;
+  announcedVisitorCountries: string[];
+  announcedVisitorCountryCounts: Record<string, number>;
   videoViewDate: string;
+  assignmentRevealDate: string;
   exchangeDate: string;
   updatedAt: string;
   updatedBy: string;
@@ -25,7 +28,10 @@ export interface StudyScheduleInput {
   classId: unknown;
   appStartDate?: unknown;
   nationalityRevealDate?: unknown;
+  announcedVisitorCountries?: unknown;
+  announcedVisitorCountryCounts?: unknown;
   videoViewDate?: unknown;
+  assignmentRevealDate?: unknown;
   exchangeDate?: unknown;
   expectedRevision?: unknown;
 }
@@ -57,6 +63,33 @@ export function normalizeStudyDate(value: unknown): string {
   return text;
 }
 
+function normalizeVisitorCountries(value: unknown): string[] {
+  if (value === null || value === undefined || value === '') return [];
+  const raw = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(/[|,\n]/)
+      : [];
+  const out: string[] = [];
+  for (const item of raw) {
+    const country = typeof item === 'string' ? item.trim().slice(0, 120) : '';
+    if (country && !out.includes(country)) out.push(country);
+  }
+  if (out.length > 20) throw new Error('INVALID_VISITOR_COUNTRY_LIST');
+  return out;
+}
+
+function normalizeVisitorCountryCounts(value: unknown, countries: string[]): Record<string, number> {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const out: Record<string, number> = {};
+  for (const country of countries) {
+    const parsed = Number(source[country]);
+    if (Number.isFinite(parsed) && Number.isInteger(parsed) && parsed >= 1 && parsed <= 20) out[country] = parsed;
+    else out[country] = 1;
+  }
+  return out;
+}
+
 function normalizeSnapshot(value: Record<string, any> | undefined, fallbackRevision = 0): StudyScheduleSnapshot {
   const safeDate = (raw: unknown) => {
     try { return normalizeStudyDate(raw); } catch { return ''; }
@@ -66,7 +99,10 @@ function normalizeSnapshot(value: Record<string, any> | undefined, fallbackRevis
     revision: Number.isInteger(revision) && revision >= 0 ? revision : fallbackRevision,
     appStartDate: safeDate(value?.appStartDate),
     nationalityRevealDate: safeDate(value?.nationalityRevealDate),
+    announcedVisitorCountries: normalizeVisitorCountries(value?.announcedVisitorCountries),
+    announcedVisitorCountryCounts: normalizeVisitorCountryCounts(value?.announcedVisitorCountryCounts, normalizeVisitorCountries(value?.announcedVisitorCountries)),
     videoViewDate: safeDate(value?.videoViewDate),
+    assignmentRevealDate: safeDate(value?.assignmentRevealDate),
     exchangeDate: safeDate(value?.exchangeDate),
     updatedAt: typeof value?.updatedAt === 'string' ? value.updatedAt : '',
     updatedBy: typeof value?.updatedBy === 'string' ? value.updatedBy.slice(0, 100) : '',
@@ -79,7 +115,10 @@ function blankSchedule(classId: StudyClassId): StudyScheduleRecord {
     revision: 0,
     appStartDate: '',
     nationalityRevealDate: '',
+    announcedVisitorCountries: [],
+    announcedVisitorCountryCounts: {},
     videoViewDate: '',
+    assignmentRevealDate: '',
     exchangeDate: '',
     updatedAt: '',
     updatedBy: '',
@@ -96,33 +135,45 @@ function normalizeRecord(row: Record<string, any> | null, classId: StudyClassId)
   return { classId, ...current, history };
 }
 
-export function validateStudyScheduleOrder(schedule: Pick<StudyScheduleSnapshot, 'appStartDate' | 'nationalityRevealDate' | 'videoViewDate' | 'exchangeDate'>): void {
-  const ordered = [schedule.appStartDate, schedule.nationalityRevealDate, schedule.videoViewDate, schedule.exchangeDate].filter(Boolean);
-  for (let index = 1; index < ordered.length; index += 1) {
-    if (ordered[index] < ordered[index - 1]) throw new Error('INVALID_STUDY_DATE_ORDER');
+export function identifiedOtherStartDate(schedule: Pick<StudyScheduleSnapshot, 'videoViewDate' | 'assignmentRevealDate' | 'announcedVisitorCountries'>): string {
+  const visitorSetConfigured = Array.isArray(schedule.announcedVisitorCountries) && schedule.announcedVisitorCountries.length > 0;
+  if (visitorSetConfigured) {
+    if (!schedule.videoViewDate || !schedule.assignmentRevealDate) return '';
+    return schedule.videoViewDate > schedule.assignmentRevealDate ? schedule.videoViewDate : schedule.assignmentRevealDate;
+  }
+  return schedule.assignmentRevealDate || schedule.videoViewDate || '';
+}
+
+export function validateStudyScheduleOrder(schedule: Pick<StudyScheduleSnapshot, 'appStartDate' | 'nationalityRevealDate' | 'videoViewDate' | 'assignmentRevealDate' | 'exchangeDate'>): void {
+  if (schedule.appStartDate && schedule.nationalityRevealDate && schedule.nationalityRevealDate < schedule.appStartDate) throw new Error('INVALID_STUDY_DATE_ORDER');
+  if (schedule.nationalityRevealDate && schedule.videoViewDate && schedule.videoViewDate < schedule.nationalityRevealDate) throw new Error('INVALID_STUDY_DATE_ORDER');
+  if (schedule.nationalityRevealDate && schedule.assignmentRevealDate && schedule.assignmentRevealDate < schedule.nationalityRevealDate) throw new Error('INVALID_STUDY_DATE_ORDER');
+  for (const date of [schedule.videoViewDate, schedule.assignmentRevealDate].filter(Boolean)) {
+    if (schedule.exchangeDate && schedule.exchangeDate < date) throw new Error('INVALID_STUDY_DATE_ORDER');
   }
 }
 
-export function phaseForLocalDate(localDate: string, schedule: Pick<StudyScheduleSnapshot, 'appStartDate' | 'nationalityRevealDate' | 'videoViewDate' | 'exchangeDate'>): StudyPhase {
+export function phaseForLocalDate(localDate: string, schedule: Pick<StudyScheduleSnapshot, 'appStartDate' | 'nationalityRevealDate' | 'announcedVisitorCountries' | 'videoViewDate' | 'assignmentRevealDate' | 'exchangeDate'>): StudyPhase {
   if (!isRealIsoDate(localDate) || !schedule.appStartDate) return 'unconfigured';
   if (localDate < schedule.appStartDate) return 'pre_start';
   if (!schedule.nationalityRevealDate || localDate < schedule.nationalityRevealDate) return 'unknown_virtual_other';
-  if (!schedule.videoViewDate || localDate < schedule.videoViewDate) return 'anticipated_other';
+  const phase3Start = identifiedOtherStartDate(schedule);
+  if (!phase3Start || localDate < phase3Start) return 'anticipated_other';
   if (!schedule.exchangeDate || localDate < schedule.exchangeDate) return 'identified_real_other';
   return 'exchange_or_after';
 }
 
 export function analysisPeriodForLocalDate(
   localDate: string,
-  schedule: Pick<StudyScheduleSnapshot, 'appStartDate' | 'nationalityRevealDate' | 'videoViewDate' | 'exchangeDate'>,
+  schedule: Pick<StudyScheduleSnapshot, 'appStartDate' | 'nationalityRevealDate' | 'announcedVisitorCountries' | 'videoViewDate' | 'assignmentRevealDate' | 'exchangeDate'>,
 ): AnalysisPeriod {
-  if (!isRealIsoDate(localDate)) return '';
-  const { appStartDate, nationalityRevealDate, videoViewDate, exchangeDate } = schedule;
-  if (!appStartDate || !nationalityRevealDate || !videoViewDate || !exchangeDate) return '';
-  if (localDate < appStartDate || localDate >= exchangeDate) return '';
-  if (localDate < nationalityRevealDate) return 'period1';
-  if (localDate < videoViewDate) return 'period2';
-  return 'period3';
+  if (!isRealIsoDate(localDate) || !schedule.appStartDate) return '';
+  if (localDate < schedule.appStartDate) return '';
+  if (schedule.exchangeDate && localDate >= schedule.exchangeDate) return '';
+  if (!schedule.nationalityRevealDate || localDate < schedule.nationalityRevealDate) return 'period1';
+  const phase3Start = identifiedOtherStartDate(schedule);
+  if (phase3Start && localDate >= phase3Start) return 'period3';
+  return 'period2';
 }
 
 export async function getStudySchedule(classId: StudyClassId): Promise<StudyScheduleRecord> {
@@ -152,17 +203,28 @@ export async function saveStudySchedule(input: StudyScheduleInput, updatedBy: st
   if (!Number.isInteger(expectedRevision) || expectedRevision < 0) throw new Error('INVALID_EXPECTED_REVISION');
   if (expectedRevision !== current.revision) throw new Error('STUDY_SCHEDULE_REVISION_CONFLICT');
 
+  const hasVisitorCountries = Object.prototype.hasOwnProperty.call(input, 'announcedVisitorCountries');
+  const announcedVisitorCountries = hasVisitorCountries
+    ? normalizeVisitorCountries(input.announcedVisitorCountries)
+    : current.announcedVisitorCountries;
+  const announcedVisitorCountryCounts = Object.prototype.hasOwnProperty.call(input, 'announcedVisitorCountryCounts')
+    ? normalizeVisitorCountryCounts(input.announcedVisitorCountryCounts, announcedVisitorCountries)
+    : normalizeVisitorCountryCounts(current.announcedVisitorCountryCounts, announcedVisitorCountries);
   const nextDates = {
-    appStartDate: normalizeStudyDate(input.appStartDate),
-    nationalityRevealDate: normalizeStudyDate(input.nationalityRevealDate),
-    videoViewDate: normalizeStudyDate(input.videoViewDate),
-    exchangeDate: normalizeStudyDate(input.exchangeDate),
+    appStartDate: Object.prototype.hasOwnProperty.call(input, 'appStartDate') ? normalizeStudyDate(input.appStartDate) : current.appStartDate,
+    nationalityRevealDate: Object.prototype.hasOwnProperty.call(input, 'nationalityRevealDate') ? normalizeStudyDate(input.nationalityRevealDate) : current.nationalityRevealDate,
+    videoViewDate: Object.prototype.hasOwnProperty.call(input, 'videoViewDate') ? normalizeStudyDate(input.videoViewDate) : current.videoViewDate,
+    assignmentRevealDate: Object.prototype.hasOwnProperty.call(input, 'assignmentRevealDate') ? normalizeStudyDate(input.assignmentRevealDate) : current.assignmentRevealDate,
+    exchangeDate: Object.prototype.hasOwnProperty.call(input, 'exchangeDate') ? normalizeStudyDate(input.exchangeDate) : current.exchangeDate,
   };
   validateStudyScheduleOrder(nextDates);
 
   const unchanged = current.appStartDate === nextDates.appStartDate
     && current.nationalityRevealDate === nextDates.nationalityRevealDate
+    && JSON.stringify(current.announcedVisitorCountries) === JSON.stringify(announcedVisitorCountries)
+    && JSON.stringify(current.announcedVisitorCountryCounts) === JSON.stringify(announcedVisitorCountryCounts)
     && current.videoViewDate === nextDates.videoViewDate
+    && current.assignmentRevealDate === nextDates.assignmentRevealDate
     && current.exchangeDate === nextDates.exchangeDate;
   if (unchanged) return current;
 
@@ -170,6 +232,8 @@ export async function saveStudySchedule(input: StudyScheduleInput, updatedBy: st
   const snapshot: StudyScheduleSnapshot = {
     revision: current.revision + 1,
     ...nextDates,
+    announcedVisitorCountries,
+    announcedVisitorCountryCounts,
     updatedAt: now,
     updatedBy: String(updatedBy || 'researcher').slice(0, 100),
   };

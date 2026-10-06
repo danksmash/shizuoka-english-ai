@@ -52,8 +52,8 @@ function canonicalAssignedCountry(value: unknown): string {
 }
 
 function assignmentAnnouncementIso(schedule: StudyScheduleRecord): string {
-  if (!schedule.nationalityRevealDate) return '';
-  return new Date(`${schedule.nationalityRevealDate}T00:00:00+09:00`).toISOString();
+  if (!schedule.assignmentRevealDate) return '';
+  return new Date(`${schedule.assignmentRevealDate}T00:00:00+09:00`).toISOString();
 }
 
 function phaseCounts() {
@@ -71,12 +71,22 @@ function isComparisonClassId(classId: string): boolean {
   return /^[56]-C[1-9]$/.test(classId);
 }
 
-function configuredFieldCount(schedule: StudyScheduleRecord, _schoolCondition: 'intervention' | 'comparison'): number {
-  return [schedule.appStartDate, schedule.nationalityRevealDate, schedule.videoViewDate, schedule.exchangeDate].filter(Boolean).length;
+function configuredFieldCount(schedule: StudyScheduleRecord, schoolCondition: 'intervention' | 'comparison'): number {
+  if (schoolCondition === 'comparison') {
+    return [schedule.appStartDate, schedule.nationalityRevealDate, schedule.videoViewDate, schedule.exchangeDate].filter(Boolean).length;
+  }
+  return [
+    schedule.appStartDate,
+    schedule.nationalityRevealDate,
+    schedule.announcedVisitorCountries.length ? 'visitor-countries' : '',
+    schedule.videoViewDate,
+    schedule.assignmentRevealDate,
+    schedule.exchangeDate,
+  ].filter(Boolean).length;
 }
 
-function requiredConfiguredFieldCount(_schoolCondition: 'intervention' | 'comparison'): number {
-  return 4;
+function requiredConfiguredFieldCount(schoolCondition: 'intervention' | 'comparison'): number {
+  return schoolCondition === 'comparison' ? 4 : 6;
 }
 
 function blankScheduleForClass(classId: string): StudyScheduleRecord {
@@ -85,7 +95,10 @@ function blankScheduleForClass(classId: string): StudyScheduleRecord {
     revision: 0,
     appStartDate: '',
     nationalityRevealDate: '',
+    announcedVisitorCountries: [],
+    announcedVisitorCountryCounts: {},
     videoViewDate: '',
+    assignmentRevealDate: '',
     exchangeDate: '',
     updatedAt: '',
     updatedBy: '',
@@ -207,6 +220,9 @@ async function buildLinkageAudit() {
       reflectionDayKeys: reflectionKeys.size,
       matchedDialogueReflectionDayKeys: matchedDayKeys,
       participantCount: classParticipants.length,
+      announcedVisitorCountries: schedule.announcedVisitorCountries,
+      announcedVisitorCountryCounts: schedule.announcedVisitorCountryCounts,
+      visitorCountrySetConfigured: classCondition === 'intervention' && schedule.announcedVisitorCountries.length > 0,
       assignedCountryConfiguredParticipants: configuredParticipants.length,
       assignedCountryUnconfiguredParticipants: classParticipants.length - configuredParticipants.length,
       assignedCountryComparableSessions,
@@ -223,7 +239,7 @@ async function buildLinkageAudit() {
       scheduleToDialogue: ['class_id', 'local_date'],
       scheduleToReflection: ['class_id', 'local_date'],
       dialogueToReflection: ['research_id', 'local_date'],
-      note: '実践校のPhaseは正式学級日程から導出します。共通分析期間period1～3は両校とも4つの基準日から導出します。比較校のnationalityRevealDate/videoViewDate/exchangeDateはC1/C2/Postの分析基準日であり、国籍告知・本人動画・交流を実施したことを意味しません。保存済みrevisionはschedule.historyに保持します。',
+      note: '実践校のPhaseは正式学級日程から導出します。Phase 2は学級共通の来校国籍集合、Phase 3は本人動画と担当相手告知の両方がそろった後です。比較校のnationalityRevealDate/videoViewDate/exchangeDateはC1/C2/Postの分析基準日であり、国籍告知・本人動画・交流を実施したことを意味しません。保存済みrevisionはschedule.historyに保持します。',
     },
     classes: classRows,
   };
@@ -246,8 +262,8 @@ async function buildLinkageCsv(): Promise<string> {
   const studentByResearchId = new Map(students.map((student) => [student.researchId, student]));
   const headers = [
     'record_type', 'research_id', 'site_id', 'school_condition', 'class_id', 'local_date', 'record_id', 'data_scope', 'study_phase', 'analysis_period', 'schedule_revision',
-    'app_start_date', 'nationality_reveal_date', 'video_view_date', 'exchange_date',
-    'assigned_partner_country', 'assigned_partner_id', 'assignment_announced_at', 'persona_country', 'assigned_country_persona_match',
+    'app_start_date', 'nationality_reveal_date', 'announced_visitor_countries', 'announced_visitor_country_counts', 'video_view_date', 'assignment_reveal_date', 'exchange_date',
+    'assigned_partner_country', 'assigned_partner_id', 'assignment_announced_at', 'persona_country', 'visitor_country_persona_match', 'assigned_country_persona_match',
   ];
   const rows: Record<string, unknown>[] = [];
   for (const session of sessions) {
@@ -266,11 +282,16 @@ async function buildLinkageCsv(): Promise<string> {
       }),
       study_phase: comparison ? '' : phaseForLocalDate(localDate, schedule), analysis_period: analysisPeriodForLocalDate(localDate, schedule), schedule_revision: schedule.revision,
       app_start_date: schedule.appStartDate, nationality_reveal_date: schedule.nationalityRevealDate,
-      video_view_date: schedule.videoViewDate, exchange_date: schedule.exchangeDate,
+      announced_visitor_countries: schedule.announcedVisitorCountries.join('|'),
+      announced_visitor_country_counts: schedule.announcedVisitorCountries.map((country) => `${country}:${schedule.announcedVisitorCountryCounts[country] || 1}`).join('|'),
+      video_view_date: schedule.videoViewDate, assignment_reveal_date: schedule.assignmentRevealDate, exchange_date: schedule.exchangeDate,
       assigned_partner_country: session.assignedPartnerCountry || '',
       assigned_partner_id: session.assignedPartnerId || '',
       assignment_announced_at: session.assignmentAnnouncedAt || '',
       persona_country: session.personaCountry || '',
+      visitor_country_persona_match: normalizedCountry(session.personaCountry) && schedule.announcedVisitorCountries.length
+        ? (schedule.announcedVisitorCountries.some((country) => normalizedCountry(country) === normalizedCountry(session.personaCountry)) ? 1 : 0)
+        : '',
       assigned_country_persona_match: normalizedCountry(session.assignedPartnerCountry) && normalizedCountry(session.personaCountry)
         ? (normalizedCountry(session.assignedPartnerCountry) === normalizedCountry(session.personaCountry) ? 1 : 0)
         : '',
@@ -287,11 +308,14 @@ async function buildLinkageCsv(): Promise<string> {
       record_id: reflection.reflectionId, data_scope: researchDataScopeForRow(researchScopeRowForReflection(classId, reflection.localDate, student)),
       study_phase: comparison ? '' : phaseForLocalDate(reflection.localDate, schedule), analysis_period: analysisPeriodForLocalDate(reflection.localDate, schedule), schedule_revision: schedule.revision,
       app_start_date: schedule.appStartDate, nationality_reveal_date: schedule.nationalityRevealDate,
-      video_view_date: schedule.videoViewDate, exchange_date: schedule.exchangeDate,
+      announced_visitor_countries: schedule.announcedVisitorCountries.join('|'),
+      announced_visitor_country_counts: schedule.announcedVisitorCountries.map((country) => `${country}:${schedule.announcedVisitorCountryCounts[country] || 1}`).join('|'),
+      video_view_date: schedule.videoViewDate, assignment_reveal_date: schedule.assignmentRevealDate, exchange_date: schedule.exchangeDate,
       assigned_partner_country: student?.assignedPartnerCountry || '',
       assigned_partner_id: student?.assignedPartnerId || '',
       assignment_announced_at: student?.assignmentAnnouncedAt || '',
       persona_country: '',
+      visitor_country_persona_match: '',
       assigned_country_persona_match: '',
     });
   }
@@ -369,7 +393,7 @@ export function createStudyScheduleRouter() {
         const assignedPartnerCountry = canonicalAssignedCountry(input?.assignedPartnerCountry);
         const assignedPartnerId = typeof input?.assignedPartnerId === 'string' ? input.assignedPartnerId.trim().slice(0, 120) : '';
         if (assignedPartnerId && !assignedPartnerCountry) throw new Error('ASSIGNED_COUNTRY_REQUIRED_FOR_PARTNER');
-        if (assignedPartnerCountry && !schedule.nationalityRevealDate) throw new Error('NATIONALITY_REVEAL_DATE_REQUIRED');
+        if (assignedPartnerCountry && !schedule.assignmentRevealDate) throw new Error('ASSIGNMENT_REVEAL_DATE_REQUIRED');
         return {
           researchId,
           assignedPartnerCountry,

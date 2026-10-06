@@ -32,8 +32,8 @@ import {
   serializeQuestionnaireCsv,
 } from './questionnaireResearch';
 
-export const PHASE_RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v8';
-export const PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION = 9;
+export const PHASE_RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v9';
+export const PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION = 10;
 
 export const PHASE_IDS = ['phase1', 'phase2', 'phase3', 'phase4'] as const;
 export type PhaseId = typeof PHASE_IDS[number];
@@ -48,6 +48,11 @@ type PhaseStats = {
   sessionSharePercent: number | null;
   participantN: number;
   participantMeanSharePercent: number | null;
+  visitorEligibleSessions: number;
+  visitorMatchedSessions: number;
+  visitorSessionSharePercent: number | null;
+  visitorParticipantN: number;
+  visitorParticipantMeanSharePercent: number | null;
 };
 
 const PHASE_LABELS: Record<PhaseId, string> = {
@@ -104,21 +109,27 @@ export function buildPhaseComparisonFromExportSessions(
 ) {
   const scope = requestedDataScope(query);
   const requestedCondition = typeof query.schoolCondition === 'string' ? query.schoolCondition.trim() : '';
+  const emptyPhase = (phase: PhaseId): PhaseStats => ({
+    phase,
+    label: PHASE_LABELS[phase],
+    sessions: 0,
+    eligibleSessions: 0,
+    matchedSessions: 0,
+    sessionSharePercent: null,
+    participantN: 0,
+    participantMeanSharePercent: null,
+    visitorEligibleSessions: 0,
+    visitorMatchedSessions: 0,
+    visitorSessionSharePercent: null,
+    visitorParticipantN: 0,
+    visitorParticipantMeanSharePercent: null,
+  });
   if (requestedCondition === 'comparison') {
     return {
       applicable: false,
       reason: 'ResearchPhaseは国籍告知・本人動画・実在留学生交流を行う実践校のみを対象にします。比較校はPhase 1～4へ割り当てません。',
       filterNote: '比較校は同じ相対経過時点でPre／Mid／Postを実施しますが、Phase分析には含めません。',
-      phases: PHASE_IDS.map((phase) => ({
-        phase,
-        label: PHASE_LABELS[phase],
-        sessions: 0,
-        eligibleSessions: 0,
-        matchedSessions: 0,
-        sessionSharePercent: null,
-        participantN: 0,
-        participantMeanSharePercent: null,
-      })),
+      phases: PHASE_IDS.map(emptyPhase),
     };
   }
   if (!['main', 'all'].includes(scope)) {
@@ -126,59 +137,81 @@ export function buildPhaseComparisonFromExportSessions(
       applicable: false,
       reason: 'ResearchPhaseは本研究データのみを対象にします。',
       filterNote: 'Phase比較はPersona・研究Phaseフィルタを除外して集計します。',
-      phases: PHASE_IDS.map((phase) => ({
-        phase,
-        label: PHASE_LABELS[phase],
-        sessions: 0,
-        eligibleSessions: 0,
-        matchedSessions: 0,
-        sessionSharePercent: null,
-        participantN: 0,
-        participantMeanSharePercent: null,
-      })),
+      phases: PHASE_IDS.map(emptyPhase),
     };
   }
 
-  const sessions = filterResearchSessionRows(exportSessions, comparisonQuery(query));
-  const buckets = new Map<PhaseId, { sessions: number; eligible: number; matched: number; participants: Map<string, { eligible: number; matched: number }> }>();
-  for (const phase of PHASE_IDS) buckets.set(phase, { sessions: 0, eligible: 0, matched: 0, participants: new Map() });
-
-  for (const row of sessions) {
-    const phase = phaseIdForRow(row, schedules);
-    if (!phase) continue;
-    const bucket = buckets.get(phase)!;
-    bucket.sessions += 1;
-    const assigned = normalizedResearchCountry(row.assigned_partner_country);
-    const selected = normalizedResearchCountry(row.persona_country);
-    if (!assigned || !selected) continue;
+  type MatchBucket = { eligible: number; matched: number; participants: Map<string, { eligible: number; matched: number }> };
+  const buckets = new Map<PhaseId, { sessions: number; assigned: MatchBucket; visitor: MatchBucket }>();
+  for (const phase of PHASE_IDS) {
+    buckets.set(phase, {
+      sessions: 0,
+      assigned: { eligible: 0, matched: 0, participants: new Map() },
+      visitor: { eligible: 0, matched: 0, participants: new Map() },
+    });
+  }
+  const addMatch = (bucket: MatchBucket, researchId: string, matched: number) => {
     bucket.eligible += 1;
-    const matched = assigned === selected ? 1 : 0;
     bucket.matched += matched;
-    const researchId = String(row.research_id || '');
-    if (!researchId) continue;
+    if (!researchId) return;
     const participant = bucket.participants.get(researchId) || { eligible: 0, matched: 0 };
     participant.eligible += 1;
     participant.matched += matched;
     bucket.participants.set(researchId, participant);
+  };
+  const statsFor = (bucket: MatchBucket) => {
+    const shares = Array.from(bucket.participants.values())
+      .filter((item) => item.eligible > 0)
+      .map((item) => (item.matched / item.eligible) * 100);
+    const mean = shares.length ? shares.reduce((sum, value) => sum + value, 0) / shares.length : null;
+    return {
+      eligible: bucket.eligible,
+      matched: bucket.matched,
+      sessionShare: bucket.eligible ? Math.round((bucket.matched / bucket.eligible) * 1000) / 10 : null,
+      participantN: shares.length,
+      participantMean: mean === null ? null : Math.round(mean * 10) / 10,
+    };
+  };
+
+  const sessions = filterResearchSessionRows(exportSessions, comparisonQuery(query));
+  for (const row of sessions) {
+    const phase = phaseIdForRow(row, schedules);
+    if (!phase) continue;
+    const classId = String(row.class_id || row.classId || '');
+    const localDate = String(row.local_date || row.localDate || '');
+    const schedule = schedules.find((item) => item.classId === classId);
+    if (!schedule) continue;
+    const bucket = buckets.get(phase)!;
+    bucket.sessions += 1;
+    const selected = normalizedResearchCountry(row.persona_country);
+    const researchId = String(row.research_id || '');
+
+    const visitorSet = new Set((schedule.announcedVisitorCountries || []).map(normalizedResearchCountry).filter(Boolean));
+    if (selected && visitorSet.size) addMatch(bucket.visitor, researchId, visitorSet.has(selected) ? 1 : 0);
+
+    const assigned = normalizedResearchCountry(row.assigned_partner_country);
+    const assignmentKnown = Boolean(schedule.assignmentRevealDate && localDate && localDate >= schedule.assignmentRevealDate);
+    if (assignmentKnown && assigned && selected) addMatch(bucket.assigned, researchId, assigned === selected ? 1 : 0);
   }
 
   const phases: PhaseStats[] = PHASE_IDS.map((phase) => {
     const bucket = buckets.get(phase)!;
-    const participantShares = Array.from(bucket.participants.values())
-      .filter((item) => item.eligible > 0)
-      .map((item) => (item.matched / item.eligible) * 100);
-    const participantMean = participantShares.length
-      ? participantShares.reduce((sum, value) => sum + value, 0) / participantShares.length
-      : null;
+    const assigned = statsFor(bucket.assigned);
+    const visitor = statsFor(bucket.visitor);
     return {
       phase,
       label: PHASE_LABELS[phase],
       sessions: bucket.sessions,
-      eligibleSessions: bucket.eligible,
-      matchedSessions: bucket.matched,
-      sessionSharePercent: bucket.eligible ? Math.round((bucket.matched / bucket.eligible) * 1000) / 10 : null,
-      participantN: participantShares.length,
-      participantMeanSharePercent: participantMean === null ? null : Math.round(participantMean * 10) / 10,
+      eligibleSessions: assigned.eligible,
+      matchedSessions: assigned.matched,
+      sessionSharePercent: assigned.sessionShare,
+      participantN: assigned.participantN,
+      participantMeanSharePercent: assigned.participantMean,
+      visitorEligibleSessions: visitor.eligible,
+      visitorMatchedSessions: visitor.matched,
+      visitorSessionSharePercent: visitor.sessionShare,
+      visitorParticipantN: visitor.participantN,
+      visitorParticipantMeanSharePercent: visitor.participantMean,
     };
   });
 
@@ -186,11 +219,11 @@ export function buildPhaseComparisonFromExportSessions(
     applicable: true,
     reason: '',
     filterNote: 'Phase比較は実践校のみを対象にし、Persona・研究Phaseフィルタを除外して、開始日・終了日・データ区分・学年・学級・テーマ・complete条件を反映します。',
-    phase1Note: 'Phase 1は、後に担当となる国のPersonaとの一致率です。児童はこの時点では担当国を知りません。',
+    phase1Note: 'Phase 1の来校国籍群一致は、後に告知される国籍集合を分析上だけ遡及適用した基準選好です。児童はこの時点では来校国籍を知りません。',
+    phase2Note: 'Phase 2は来校予定国籍群への焦点化、Phase 3は担当相手告知後の担当国への焦点化を別指標として扱います。',
     phases,
   };
 }
-
 export function buildPhaseComparison(
   rawSessions: Row[],
   schedules: StudyScheduleRecord[],
@@ -205,55 +238,117 @@ export function buildPhaseComparison(
 
 export function augmentSessionRowsWithPhase(rows: Row[], schedules: StudyScheduleRecord[]): Row[] {
   return rows.map((row) => {
-    const schedule = schedules.find((item) => item.classId === String(row.class_id || row.classId || ''));
+    const classId = String(row.class_id || row.classId || '');
+    const schedule = schedules.find((item) => item.classId === classId);
     const localDate = String(row.local_date || row.localDate || '');
     const studyPhase = phaseIdForRow(row, schedules);
     const analysisPeriod = schedule ? analysisPeriodForLocalDate(localDate, schedule) : '';
     const assigned = normalizedResearchCountry(row.assigned_partner_country);
     const selected = normalizedResearchCountry(row.persona_country);
-    const eligible = Boolean(studyPhase && assigned && selected);
+    const visitorCountries = schedule?.announcedVisitorCountries || [];
+    const visitorSet = new Set(visitorCountries.map(normalizedResearchCountry).filter(Boolean));
+    const visitorEligible = Boolean(schedule && selected && visitorSet.size > 0 && studyPhase);
+    const assignmentKnown = Boolean(schedule?.assignmentRevealDate && localDate && localDate >= schedule.assignmentRevealDate);
+    const assignedEligible = Boolean(studyPhase && assignmentKnown && assigned && selected);
     return {
       ...row,
       research_schema_version: PHASE_RESEARCH_EXPORT_SCHEMA_VERSION,
       study_phase: studyPhase,
       analysis_period: analysisPeriod,
-      assigned_country_persona_eligible: eligible ? 1 : 0,
-      assigned_country_persona_match: eligible ? (assigned === selected ? 1 : 0) : '',
+      recipient_specificity_stage: studyPhase,
+      announced_visitor_countries: visitorCountries.join('|'),
+      announced_visitor_country_counts: schedule
+        ? visitorCountries.map((country) => `${country}:${schedule.announcedVisitorCountryCounts[country] || 1}`).join('|')
+        : '',
+      nationality_reveal_date: schedule?.nationalityRevealDate || '',
+      video_view_date: schedule?.videoViewDate || '',
+      assignment_reveal_date: schedule?.assignmentRevealDate || '',
+      visitor_country_persona_eligible: visitorEligible ? 1 : 0,
+      visitor_country_persona_match: visitorEligible ? (visitorSet.has(selected) ? 1 : 0) : '',
+      assignment_known_to_learner: assignmentKnown ? 1 : 0,
+      assigned_country_persona_eligible: assignedEligible ? 1 : 0,
+      assigned_country_persona_match: assignedEligible ? (assigned === selected ? 1 : 0) : '',
     };
   });
 }
-
 export const PHASE_SESSION_EXPORT_HEADERS = (() => {
   const headers = [...RESEARCH_EXPORT_HEADERS.sessions];
   const insertAt = Math.max(0, headers.indexOf('assignment_announced_at') + 1);
-  headers.splice(insertAt, 0, 'study_phase', 'analysis_period', 'assigned_country_persona_eligible', 'assigned_country_persona_match');
+  headers.splice(insertAt, 0,
+    'study_phase','analysis_period','recipient_specificity_stage',
+    'announced_visitor_countries','announced_visitor_country_counts','nationality_reveal_date','video_view_date','assignment_reveal_date',
+    'visitor_country_persona_eligible','visitor_country_persona_match',
+    'assignment_known_to_learner','assigned_country_persona_eligible','assigned_country_persona_match'
+  );
   return headers;
 })();
 
 export const PHASE_CODEBOOK_ROWS = [
   {
     file_name: 'sessions.csv', variable: 'study_phase',
-    definition: 'Study Scheduleの学級別日程とlocal_dateからphaseForLocalDateで算出した研究Phase',
+    definition: 'Study Scheduleの学級別日程とlocal_dateから算出した研究Phase',
     data_type: 'string', allowed_values: 'phase1 | phase2 | phase3 | phase4 | blank',
     analysis_use: '対話相手の段階的具体化に伴う縦断比較',
   },
   {
     file_name: 'sessions.csv', variable: 'analysis_period',
-    definition: '学級別の4基準日から両校共通に算出する主要分析期間。実践校はPhase 1～3に対応し、比較校は同じ相対経過期間に対応する',
+    definition: '既に設定済みの基準日だけで逐次判定する主要分析期間。未来日程が未確定でもperiod1/2を確定できる',
     data_type: 'string', allowed_values: 'period1 | period2 | period3 | blank',
     analysis_use: '実践校・比較校の共通時間軸による縦断比較',
   },
   {
-    file_name: 'sessions.csv', variable: 'assigned_country_persona_eligible',
-    definition: 'study_phase、担当国、選択Persona国がすべて判定可能な場合1',
+    file_name: 'sessions.csv', variable: 'recipient_specificity_stage',
+    definition: '相手具体化段階。study_phaseと同じ段階ラベルを明示的に保持する',
+    data_type: 'string', allowed_values: 'phase1 | phase2 | phase3 | phase4 | blank',
+    analysis_use: '20 Persona→来校国籍群→担当相手というrecipient specificityの分析',
+  },
+  {
+    file_name: 'sessions.csv', variable: 'announced_visitor_countries',
+    definition: '学級全体に国籍告知日に提示した来校予定留学生の国籍集合。session本体を書き換えずStudy Scheduleから分析時結合する',
+    data_type: 'string', allowed_values: 'country1|country2|... | blank',
+    analysis_use: 'Phase 1→2の来校国籍群Persona選択率',
+  },
+  {
+    file_name: 'sessions.csv', variable: 'announced_visitor_country_counts',
+    definition: '国籍別の実際の来校予定人数をCountry:n形式で保持する補助情報',
+    data_type: 'string', allowed_values: 'Country:n|... | blank',
+    analysis_use: '来校者構成の再現・感度分析',
+  },
+  {
+    file_name: 'sessions.csv', variable: 'assignment_reveal_date',
+    definition: '児童が自分のグループの担当留学生を知った学級共通基準日',
+    data_type: 'string', allowed_values: 'YYYY-MM-DD | blank',
+    analysis_use: 'Phase 3開始と担当国Persona分析の基準',
+  },
+  {
+    file_name: 'sessions.csv', variable: 'visitor_country_persona_eligible',
+    definition: '学級の来校国籍集合と選択Persona国が判定可能な場合1。Phase 1では将来告知される集合を分析上だけ遡及適用する',
     data_type: 'number', allowed_values: '0 | 1',
-    analysis_use: '担当国Persona選択率の分母判定',
+    analysis_use: '来校国籍群Persona選択率の分母判定',
+  },
+  {
+    file_name: 'sessions.csv', variable: 'visitor_country_persona_match',
+    definition: '選択Persona国が来校国籍集合に含まれる場合1、不一致0、比較不能は空欄',
+    data_type: 'number', allowed_values: '0 | 1 | blank',
+    analysis_use: 'Phase 1→2の20→来校国籍群への焦点化',
+  },
+  {
+    file_name: 'sessions.csv', variable: 'assignment_known_to_learner',
+    definition: 'local_dateがassignment_reveal_date以降で、児童が担当相手を知っている段階なら1',
+    data_type: 'number', allowed_values: '0 | 1',
+    analysis_use: '担当国Persona指標の曝露時点判定',
+  },
+  {
+    file_name: 'sessions.csv', variable: 'assigned_country_persona_eligible',
+    definition: '担当相手告知後で、session時点の担当国snapshotと選択Persona国が判定可能な場合1',
+    data_type: 'number', allowed_values: '0 | 1',
+    analysis_use: 'Phase 3の担当国Persona選択率の分母判定',
   },
   {
     file_name: 'sessions.csv', variable: 'assigned_country_persona_match',
-    definition: '比較可能sessionで担当留学生の国と選択Personaの国が一致した場合1、不一致0、比較不能は空欄',
+    definition: '担当相手告知後の比較可能sessionで担当留学生の国と選択Personaの国が一致した場合1、不一致0、比較不能は空欄',
     data_type: 'number', allowed_values: '0 | 1 | blank',
-    analysis_use: 'Phase別担当国Persona選択率',
+    analysis_use: 'Phase 2→3の来校国籍群→担当国への焦点化',
   },
 ];
 
@@ -284,7 +379,10 @@ function scheduleSnapshot(schedules: StudyScheduleRecord[]) {
     revision: schedule.revision,
     appStartDate: schedule.appStartDate,
     nationalityRevealDate: schedule.nationalityRevealDate,
+    announcedVisitorCountries: schedule.announcedVisitorCountries,
+    announcedVisitorCountryCounts: schedule.announcedVisitorCountryCounts,
     videoViewDate: schedule.videoViewDate,
+    assignmentRevealDate: schedule.assignmentRevealDate,
     exchangeDate: schedule.exchangeDate,
   }]));
 }
@@ -326,12 +424,12 @@ function buildStoredZip(files: Array<{ name: string; content: string }>): Buffer
 
 function injectPhaseAnalyticsUi(html: string): string {
   const oldIndicators = '<div class="research-indicators section"><div class="card indicator"><h3>告知前／告知後セッション</h3><b><span id="iBefore">-</span> / <span id="iAfter">-</span></b><p>担当留学生の告知日時が登録されている児童のみを集計</p></div><div class="card indicator"><h3>告知後・担当国Persona選択率</h3><b id="iCountryShare">-</b><p id="iCountryDetail">対象データなし</p></div><div class="card indicator"><h3>個別利用らしいセッション</h3><b id="iIndividual">-</b><p id="iIndividualDetail">対象データなし</p></div></div>';
-  const newIndicators = '<div class="research-indicators section"><div class="card indicator"><h3>実践進行確認：Phase別セッション数</h3><div id="iPhaseCounts" class="phase-mini">読み込み中…</div><p id="iPhaseCountNote">Phase 1〜4をStudy 1日程から判定</p></div><div class="card indicator"><h3>過程指標：担当国Persona選択率（Phase別）</h3><b id="iPhaseCountryHeadline">-</b><p id="iPhaseCountryDetail">児童平均を表示。RQ3の正式な類型分布分析は専用ページで実施</p></div><div class="card indicator"><h3>個別利用らしいセッション（推定）</h3><b id="iIndividual">-</b><p id="iIndividualDetail">対象データなし</p><p>同学級の開始時刻集中度から推定。家庭利用を直接示すものではありません。</p></div><span id="iBefore" hidden></span><span id="iAfter" hidden></span><span id="iCountryShare" hidden></span><span id="iCountryDetail" hidden></span></div>';
+  const newIndicators = '<div class="research-indicators section"><div class="card indicator"><h3>実践進行確認：Phase別セッション数</h3><div id="iPhaseCounts" class="phase-mini">読み込み中…</div><p id="iPhaseCountNote">Phase 1〜4をStudy 1日程から判定</p></div><div class="card indicator"><h3>過程指標：相手選択の焦点化</h3><b id="iPhaseCountryHeadline">-</b><p id="iPhaseCountryDetail">Phase 1→2は来校国籍群、Phase 2→3は担当国を別指標で表示</p></div><div class="card indicator"><h3>個別利用らしいセッション（推定）</h3><b id="iIndividual">-</b><p id="iIndividualDetail">対象データなし</p><p>同学級の開始時刻集中度から推定。家庭利用を直接示すものではありません。</p></div><span id="iBefore" hidden></span><span id="iAfter" hidden></span><span id="iCountryShare" hidden></span><span id="iCountryDetail" hidden></span></div>';
   if (!html.includes(oldIndicators)) throw new Error('PHASE_ANALYTICS_INDICATOR_ANCHOR_MISSING');
   let out = html.replace(oldIndicators, newIndicators);
 
   const phaseSlot = '<div id="phaseCountryPanelSlot" class="phase-country-slot"></div>';
-  const phaseCard = '<div class="card chart-card phase-country-card"><h3>過程指標：担当国Persona選択率のPhase別変化</h3><div id="chartPhaseCountry" class="chart"></div><p id="chartPhaseNote" class="muted" style="font-size:11px"></p></div>';
+  const phaseCard = '<div class="card chart-card phase-country-card"><h3>過程指標：20→来校国籍群→担当国への焦点化</h3><div id="chartPhaseCountry" class="chart"></div><p id="chartPhaseNote" class="muted" style="font-size:11px"></p></div>';
   if (!out.includes(phaseSlot)) throw new Error('PHASE_ANALYTICS_LAYOUT_SLOT_MISSING');
   out = out.replace(phaseSlot, '<div id="phaseCountryPanelSlot" class="phase-country-slot">' + phaseCard + '</div>');
 
@@ -342,6 +440,10 @@ function injectPhaseAnalyticsUi(html: string): string {
 (function(){
   function p$(id){return document.getElementById(id)}
   function pct(value){return value===null||value===undefined||!isFinite(Number(value))?'—':Number(value).toFixed(1)+'%'}
+  function row(label,value,n,matched,eligible,sessionShare){
+    var v=value===null||value===undefined?0:Math.max(0,Math.min(100,Number(value)));
+    return '<div class="phase-rate-row"><div class="phase-rate-label">'+label+'</div><div class="phase-rate-track"><div class="phase-rate-fill" style="width:'+v+'%"></div></div><div class="phase-rate-value">'+pct(value)+'</div><div class="phase-rate-sub">児童 n='+n+' ／ session '+matched+'/'+eligible+' = '+pct(sessionShare)+'</div></div>';
+  }
   function renderPhaseComparison(data){
     var box=p$('iPhaseCounts'), headline=p$('iPhaseCountryHeadline'), detail=p$('iPhaseCountryDetail'), chart=p$('chartPhaseCountry'), note=p$('chartPhaseNote');
     if(!box||!headline||!detail||!chart)return;
@@ -350,11 +452,19 @@ function injectPhaseAnalyticsUi(html: string): string {
       box.textContent='対象外';headline.textContent='対象外';detail.textContent=pc&&pc.reason?pc.reason:'ResearchPhaseは本研究データのみを対象にします。';chart.innerHTML='<div class="muted" style="padding:28px 8px">対象外</div>';if(note)note.textContent=detail.textContent;return;
     }
     box.innerHTML=pc.phases.map(function(r){return '<div>'+r.label+' <b>'+r.sessions+'</b></div>'}).join('');
-    var p2=pc.phases.find(function(r){return r.phase==='phase2'}), p3=pc.phases.find(function(r){return r.phase==='phase3'});
-    headline.textContent=(p3&&p3.participantMeanSharePercent!==null)?'Phase 3 '+pct(p3.participantMeanSharePercent):(p2&&p2.participantMeanSharePercent!==null?'Phase 2 '+pct(p2.participantMeanSharePercent):'—');
-    detail.textContent='児童平均を主表示。'+pc.filterNote;
-    chart.innerHTML=pc.phases.map(function(r){var v=r.participantMeanSharePercent===null?0:Math.max(0,Math.min(100,Number(r.participantMeanSharePercent)));return '<div class="phase-rate-row"><div class="phase-rate-label">'+r.label+'</div><div class="phase-rate-track"><div class="phase-rate-fill" style="width:'+v+'%"></div></div><div class="phase-rate-value">'+pct(r.participantMeanSharePercent)+'</div><div class="phase-rate-sub">児童 n='+r.participantN+' ／ session '+r.matchedSessions+'/'+r.eligibleSessions+' = '+pct(r.sessionSharePercent)+'</div></div>'}).join('');
-    if(note)note.textContent=pc.phase1Note+' '+pc.filterNote;
+    var p1=pc.phases.find(function(r){return r.phase==='phase1'}), p2=pc.phases.find(function(r){return r.phase==='phase2'}), p3=pc.phases.find(function(r){return r.phase==='phase3'});
+    var visitor=p2&&p2.visitorParticipantMeanSharePercent!==null?pct(p2.visitorParticipantMeanSharePercent):'—';
+    var assigned=p3&&p3.participantMeanSharePercent!==null?pct(p3.participantMeanSharePercent):'—';
+    headline.textContent='来校国籍群 P2 '+visitor+' / 担当国 P3 '+assigned;
+    detail.textContent='児童平均。Phase 1→2とPhase 2→3は偶然一致確率が異なるため別指標として扱います。';
+    var html='<div class="muted" style="font-weight:800;margin:8px 4px">来校国籍群Persona選択率（20→集合）</div>';
+    if(p1)html+=row('Phase 1',p1.visitorParticipantMeanSharePercent,p1.visitorParticipantN,p1.visitorMatchedSessions,p1.visitorEligibleSessions,p1.visitorSessionSharePercent);
+    if(p2)html+=row('Phase 2',p2.visitorParticipantMeanSharePercent,p2.visitorParticipantN,p2.visitorMatchedSessions,p2.visitorEligibleSessions,p2.visitorSessionSharePercent);
+    html+='<div class="muted" style="font-weight:800;margin:20px 4px 8px">担当国Persona選択率（集合→担当国）</div>';
+    if(p2)html+=row('Phase 2',p2.participantMeanSharePercent,p2.participantN,p2.matchedSessions,p2.eligibleSessions,p2.sessionSharePercent);
+    if(p3)html+=row('Phase 3',p3.participantMeanSharePercent,p3.participantN,p3.matchedSessions,p3.eligibleSessions,p3.sessionSharePercent);
+    chart.innerHTML=html;
+    if(note)note.textContent=pc.phase1Note+' '+(pc.phase2Note||'')+' '+pc.filterNote;
   }
   window.__renderPhaseComparison=renderPhaseComparison;
 })();
@@ -469,9 +579,11 @@ const bundleHandler: RequestHandler = async (req, res) => {
       study_phase: studyPhase || 'all',
       study_schedule_snapshot: scheduleSnapshot(schedules),
       phase_definition_source: 'study_schedules + phaseForLocalDate(local_date)',
-      analysis_period_definition_source: 'study_schedules + analysisPeriodForLocalDate(local_date); comparison C1/C2/Post are analysis boundaries only',
+      analysis_period_definition_source: 'study_schedules + analysisPeriodForLocalDate(local_date); known boundaries are usable before future dates are configured; comparison C1/C2/Post are analysis boundaries only',
       phase_comparison_filter_exclusions: ['personaId', 'studyPhase'],
-      assigned_country_persona_definition: 'assigned_partner_country compared with persona_country after country normalization',
+      visitor_country_persona_definition: 'announcedVisitorCountries class-level historical configuration compared with persona_country; Phase 1 uses the future announced set only as a retrospective analysis reference',
+      visitor_country_provenance: 'class-level study_schedules configuration joined at export time; raw session documents are never rewritten',
+      assigned_country_persona_definition: 'only after assignmentRevealDate; immutable session-time assigned_partner_country compared with persona_country after country normalization',
       assignment_country_provenance: 'immutable session-time snapshot when present; blank remains blank and is never silently backfilled from the current student assignment record',
       row_counts: rowCounts,
       lesson_reflection_join_key: ['research_id', 'local_date'],

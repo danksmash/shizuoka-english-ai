@@ -23,7 +23,10 @@ const schedule: StudyScheduleRecord = {
   revision: 1,
   appStartDate: '2026-09-17',
   nationalityRevealDate: '2026-10-10',
+  announcedVisitorCountries: ['Australia'],
+  announcedVisitorCountryCounts: { Australia: 1 },
   videoViewDate: '2026-10-20',
+  assignmentRevealDate: '2026-10-20',
   exchangeDate: '2026-11-10',
   updatedAt: '2026-09-16T00:00:00Z',
   updatedBy: 'qa',
@@ -93,6 +96,8 @@ const participant: Rq1AnalysisParticipant = {
   classId: '5-1',
   gradeLevel: 5,
   targetCountry: 'Australia',
+  visitorCountries: ['Australia'],
+  visitorSetSource: 'qa',
 };
 const zeroStart = dialogueSession(
   's-zero-start',

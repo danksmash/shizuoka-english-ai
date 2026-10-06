@@ -14,7 +14,13 @@ import type { StudyScheduleRecord } from '../src/server/studySchedulePersistence
 
 const schedule: StudyScheduleRecord = {
   classId: '5-1', revision: 3,
-  appStartDate: '2026-09-17', nationalityRevealDate: '2026-10-01', videoViewDate: '2026-10-08', exchangeDate: '2026-10-15',
+  appStartDate: '2026-09-17',
+  nationalityRevealDate: '2026-10-01',
+  announcedVisitorCountries: ['United States'],
+  announcedVisitorCountryCounts: { 'United States': 1 },
+  videoViewDate: '2026-10-08',
+  assignmentRevealDate: '2026-10-08',
+  exchangeDate: '2026-10-15',
   updatedAt: '2026-09-12T00:00:00.000Z', updatedBy: 'qa', history: [],
 };
 
@@ -25,11 +31,12 @@ const rawSession = (sessionId: string, researchId: string, studentId: string, lo
     schemaVersion: 4, researchSchemaVersion: 'research-2026-v1', sessionId, researchId, studentId, classId: '5-1',
     aiStudentId, topic: 'favorites', targetDurationMinutes: 2, actualDurationSeconds: 120,
     startedAt: new Date(start).toISOString(), endedAt: new Date(start + 120000).toISOString(),
-    assignedPartnerId: `${researchId}-partner`, assignedPartnerCountry: 'United States', assignmentAnnouncedAt: '2026-10-01T00:00:00.000Z',
+    assignedPartnerId: `${researchId}-partner`, assignedPartnerCountry: 'United States', assignmentAnnouncedAt: '2026-10-07T15:00:00.000Z',
     appVersion: '1.0.7', build: 'qa', studentSelectedSpeechRate: 1,
+    formalStudyParticipant: true, studySiteId: 'site_a', schoolCondition: 'intervention', studyStartDate: '2026-09-17',
     history: [
       { id: `${sessionId}-a`, sender: 'ai', englishText: 'What do you like?', japaneseText: '何が好きですか。', timestamp: start },
-      { id: `${sessionId}-c`, sender: 'child', englishText: 'I like soccer.', japaneseText: 'サッカーが好きです。', timestamp: start + 30000 },
+      { id: `${sessionId}-c`, sender: 'child', englishText: 'I like soccer.', japaneseText: 'サッカーが好きです。', timestamp: start + 30000, wordCount: 3 },
     ],
     reflection: { scaleVersion: '4point-v1', conveyedIdeas: 3, understoodPartner: 3, noticedLanguageCulture: 3 },
     systemEvents: [{ type: 'session_start', timestamp: start }, { type: 'session_finish', timestamp: start + 119000 }],
@@ -51,13 +58,21 @@ const comparison = buildPhaseComparison(raw as any, [schedule], { dataScope: 'ma
 assert.equal(comparison.applicable, true);
 assert.equal(comparison.phases[0].sessions, 2, 'Persona filter must not collapse Phase comparison');
 assert.equal(comparison.phases[1].sessions, 3, 'StudyPhase filter must not collapse Phase comparison');
-assert.equal(comparison.phases[0].participantMeanSharePercent, 50);
-assert.equal(comparison.phases[0].sessionSharePercent, 50);
-assert.equal(comparison.phases[1].participantMeanSharePercent, 75);
-assert.equal(comparison.phases[1].sessionSharePercent, 66.7);
+
+// Phase 1/2 use visitor-country-set match, not assigned-country exposure.
+assert.equal(comparison.phases[0].visitorParticipantMeanSharePercent, 50);
+assert.equal(comparison.phases[0].visitorSessionSharePercent, 50);
+assert.equal(comparison.phases[1].visitorParticipantMeanSharePercent, 75);
+assert.equal(comparison.phases[1].visitorSessionSharePercent, 66.7);
+assert.equal(comparison.phases[0].eligibleSessions, 0);
+assert.equal(comparison.phases[1].eligibleSessions, 0);
+
+// Assigned-country eligibility begins only after assignmentRevealDate / Phase 3.
 assert.equal(comparison.phases[2].participantMeanSharePercent, 50);
+assert.equal(comparison.phases[2].sessionSharePercent, 50);
 assert.equal(comparison.phases[3].participantMeanSharePercent, 100);
-assert.ok(comparison.phase1Note?.includes('担当国を知りません'));
+assert.ok(comparison.phase1Note?.includes('来校国籍'));
+assert.ok(comparison.phase2Note?.includes('Phase 2'));
 
 const notApplicable = buildPhaseComparison(raw as any, [schedule], { dataScope: 'test' });
 assert.equal(notApplicable.applicable, false);
@@ -68,38 +83,56 @@ assert.equal(comparisonNotApplicable.applicable, false);
 assert.ok(comparisonNotApplicable.reason.includes('比較校'));
 
 const augmented = augmentSessionRowsWithPhase([
-  { class_id: '5-1', local_date: '2026-09-17', persona_country: 'United States', assigned_partner_country: 'USA', research_schema_version: 'research-2026-v4' },
+  { class_id: '5-1', local_date: '2026-09-17', persona_country: 'United States', assigned_partner_country: 'United States', research_schema_version: 'research-2026-v4' },
   { class_id: '5-1', local_date: '2026-10-01', persona_country: 'Bangladesh', assigned_partner_country: 'United States', research_schema_version: 'research-2026-v4' },
-  { class_id: '5-1', local_date: '2026-10-08', persona_country: '', assigned_partner_country: 'United States', research_schema_version: 'research-2026-v4' },
+  { class_id: '5-1', local_date: '2026-10-08', persona_country: 'United States', assigned_partner_country: 'United States', research_schema_version: 'research-2026-v4' },
 ], [schedule]);
+
 assert.equal(augmented[0].study_phase, 'phase1');
-assert.equal(augmented[0].assigned_country_persona_eligible, 1);
-assert.equal(augmented[0].assigned_country_persona_match, 1);
+assert.equal(augmented[0].visitor_country_persona_eligible, 1);
+assert.equal(augmented[0].visitor_country_persona_match, 1);
+assert.equal(augmented[0].assignment_known_to_learner, 0);
+assert.equal(augmented[0].assigned_country_persona_eligible, 0);
+assert.equal(augmented[0].assigned_country_persona_match, '');
+
 assert.equal(augmented[1].study_phase, 'phase2');
-assert.equal(augmented[1].assigned_country_persona_match, 0);
+assert.equal(augmented[1].visitor_country_persona_match, 0);
+assert.equal(augmented[1].assignment_known_to_learner, 0);
+assert.equal(augmented[1].assigned_country_persona_eligible, 0);
+
 assert.equal(augmented[2].study_phase, 'phase3');
-assert.equal(augmented[2].assigned_country_persona_eligible, 0);
-assert.equal(augmented[2].assigned_country_persona_match, '');
+assert.equal(augmented[2].assignment_known_to_learner, 1);
+assert.equal(augmented[2].assigned_country_persona_eligible, 1);
+assert.equal(augmented[2].assigned_country_persona_match, 1);
+
 assert.equal(augmented[0].analysis_period, 'period1');
 assert.equal(augmented[1].analysis_period, 'period2');
 assert.equal(augmented[2].analysis_period, 'period3');
+assert.equal(augmented[0].announced_visitor_countries, 'United States');
+assert.equal(augmented[0].assignment_reveal_date, '2026-10-08');
 assert.ok(augmented.every((row) => row.research_schema_version === PHASE_RESEARCH_EXPORT_SCHEMA_VERSION));
 
-for (const field of ['study_phase', 'analysis_period', 'assigned_country_persona_eligible', 'assigned_country_persona_match']) {
-  assert.ok(PHASE_SESSION_EXPORT_HEADERS.includes(field));
+for (const field of [
+  'study_phase','analysis_period','recipient_specificity_stage',
+  'announced_visitor_countries','announced_visitor_country_counts',
+  'visitor_country_persona_eligible','visitor_country_persona_match',
+  'assignment_reveal_date','assignment_known_to_learner',
+  'assigned_country_persona_eligible','assigned_country_persona_match',
+]) {
+  assert.ok(PHASE_SESSION_EXPORT_HEADERS.includes(field as any));
   assert.ok(PHASE_CODEBOOK_ROWS.some((row) => row.variable === field));
 }
-assert.equal(PHASE_RESEARCH_EXPORT_SCHEMA_VERSION, 'research-2026-v8');
-assert.equal(PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION, 9);
+assert.equal(PHASE_RESEARCH_EXPORT_SCHEMA_VERSION, 'research-2026-v9');
+assert.equal(PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION, 10);
 
 let capturedHtml = '';
 const wrapped = withResearchPhaseAnalyticsRuntime('/management', ((_req: any, res: any) => res.send(managementPageHtmlWithStudyPhase())) as any);
 const res: any = { send(body: any) { capturedHtml = String(body); return body; } };
 wrapped({} as any, res, (() => {}) as any);
 assert.ok(capturedHtml.includes('Phase別セッション数'));
-assert.ok(capturedHtml.includes('担当国Persona選択率（Phase別）'));
+assert.ok(capturedHtml.includes('相手選択の焦点化'));
 assert.ok(capturedHtml.includes('個別利用らしいセッション（推定）'));
-assert.ok(capturedHtml.includes('担当国Persona選択率のPhase別変化'));
+assert.ok(capturedHtml.includes('20→来校国籍群→担当国への焦点化'));
 assert.ok(capturedHtml.includes('id="chartPhaseCountry"'));
 assert.ok(capturedHtml.includes('id="phaseCountryPanelSlot"'),'Phase chart must render inside the E-layout analysis column');
 assert.ok(capturedHtml.includes('phase-country-card'),'Phase chart must use the dedicated analysis card class');
@@ -112,13 +145,16 @@ assert.ok(capturedHtml.includes("window.__renderPhaseComparison=renderPhaseCompa
 const source = fs.readFileSync('src/server/researchPhaseAnalyticsRuntime.ts', 'utf8');
 assert.ok(source.includes('study_schedule_snapshot'));
 assert.ok(source.includes("phase_comparison_filter_exclusions: ['personaId', 'studyPhase']"));
+assert.ok(source.includes('visitor_country_provenance'));
 assert.ok(source.includes('assignment_country_provenance'));
 assert.ok(source.includes('analysis_period_definition_source'));
+assert.ok(source.includes('raw session documents are never rewritten'));
 assert.equal(source.includes('may fall back to the current student assignment record'), false);
 assert.equal(source.includes("fetch('/api/management/research.dashboard?"),false,'Phase analytics must not issue a second dashboard request');
 assert.ok(source.includes("window.__renderPhaseComparison=renderPhaseComparison"));
 assert.ok(source.includes("PHASE_ANALYTICS_LAYOUT_SLOT_MISSING"));
 assert.equal(source.includes("PHASE_ANALYTICS_CHART_ANCHOR_MISSING"),false,'Phase chart must no longer be appended as a fifth item in the two-column chart grid');
+
 const entry = fs.readFileSync('server-entry.ts', 'utf8');
 assert.ok(entry.includes('withResearchPhaseAnalyticsRuntime'));
 

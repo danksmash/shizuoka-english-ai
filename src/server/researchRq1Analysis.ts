@@ -4,31 +4,38 @@ import { effectivePersonaSelectionExclusionReason } from './researchAnalysisElig
 import { analysisPeriodForLocalDate, phaseForLocalDate, type StudyScheduleRecord } from './studySchedulePersistence';
 import { canonicalRq1Country } from './researchRq1Targets';
 
-export const RQ1_CHOICE_SCHEMA_VERSION = 'rq1-choice-2026-v2';
-export const RQ1_PERIOD_SUMMARY_SCHEMA_VERSION = 'rq1-period-summary-2026-v2';
-export const RQ1_TRANSITION_SCHEMA_VERSION = 'rq1-transition-2026-v2';
+export const RQ1_CHOICE_SCHEMA_VERSION = 'rq1-choice-2026-v3';
+export const RQ1_PERIOD_SUMMARY_SCHEMA_VERSION = 'rq1-period-summary-2026-v3';
+export const RQ1_TRANSITION_SCHEMA_VERSION = 'rq1-transition-2026-v3';
 
 export const RQ1_CHOICE_HEADERS = [
   'rq1_choice_schema_version','site_id','research_id','participant_key','school_condition','class_id','grade_level',
   'session_id','local_date','local_started_at','study_phase','analysis_period','session_lifetime_number','selection_order_all','selection_order_valid',
-  'persona_id','persona_country','persona_gender','target_country','target_match',
+  'persona_id','persona_country','persona_gender',
+  'visitor_country_set','visitor_set_source','visitor_match',
+  'assigned_target_country','assignment_known_to_learner','assigned_target_reference_match','assigned_target_exposed_match',
+  'target_country','target_match',
   'child_turn_count','actual_duration_seconds','rapid_restart_flag',
   'lesson_context_inferred','lesson_context_final','dialogue_analysis_included','data_quality_flag','session_status','session_finish_reason','mic_error_count',
   'free_choice_status','raw_selection_included','effective_selection_included','effective_selection_exclusion_reason','selection_included','selection_exclusion_reason',
 ] as const;
 
 export const RQ1_PERIOD_SUMMARY_HEADERS = [
-  'rq1_period_summary_schema_version','site_id','research_id','participant_key','school_condition','class_id','grade_level','target_country','analysis_period',
-  'choice_denominator','target_choice_numerator','target_selection_rate','period_observed','distinct_persona_count',
-  'continuation_denominator','continuation_numerator','continuation_rate',
-  'first_choice_at','last_choice_at',
+  'rq1_period_summary_schema_version','site_id','research_id','participant_key','school_condition','class_id','grade_level','analysis_period',
+  'visitor_country_set','visitor_choice_denominator','visitor_choice_numerator','visitor_selection_rate',
+  'visitor_continuation_denominator','visitor_continuation_numerator','visitor_continuation_rate',
+  'assigned_target_country','assigned_choice_denominator','assigned_choice_numerator','assigned_selection_rate',
+  'assigned_continuation_denominator','assigned_continuation_numerator','assigned_continuation_rate',
+  'choice_denominator','target_choice_numerator','target_selection_rate','period_observed',
+  'distinct_persona_count','distinct_country_count','selection_entropy_bits','first_choice_at','last_choice_at',
 ] as const;
 
 export const RQ1_TRANSITION_HEADERS = [
-  'rq1_transition_schema_version','site_id','research_id','participant_key','school_condition','class_id','grade_level','target_country',
-  'period1_choice_count','period1_target_count','baseline_eligible','baseline_eligibility_reason',
-  'period2_observed','period3_observed','transition_by_period2','transition_by_period3','period3_followup_status',
-  'first_transition_period','first_transition_date','first_transition_session_id','first_transition_selection_order','opportunities_before_transition',
+  'rq1_transition_schema_version','site_id','research_id','participant_key','school_condition','class_id','grade_level',
+  'visitor_country_set','visitor_period1_choice_count','visitor_period1_match_count','visitor_baseline_eligible','visitor_baseline_eligibility_reason',
+  'visitor_period2_observed','visitor_transition_by_period2','visitor_first_transition_date','visitor_first_transition_session_id','visitor_opportunities_before_transition',
+  'assigned_target_country','assigned_period2_choice_count','assigned_period2_match_count','assigned_baseline_eligible','assigned_baseline_eligibility_reason',
+  'assigned_period3_observed','assigned_transition_by_period3','assigned_first_transition_date','assigned_first_transition_session_id','assigned_opportunities_before_transition',
 ] as const;
 
 export interface Rq1AnalysisParticipant {
@@ -38,6 +45,8 @@ export interface Rq1AnalysisParticipant {
   classId: string;
   gradeLevel: 5 | 6 | '';
   targetCountry: string;
+  visitorCountries?: string[];
+  visitorSetSource?: string;
 }
 
 type Row = Record<string, any>;
@@ -71,6 +80,40 @@ function numericRate(numerator: number, denominator: number): number | '' {
   return denominator > 0 ? Number((numerator / denominator).toFixed(6)) : '';
 }
 
+function canonicalCountrySet(values: unknown[]): string[] {
+  return [...new Set(values.map(canonicalRq1Country).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'en'));
+}
+
+function continuation(rows: Row[], field: string) {
+  let denominator = 0;
+  let numerator = 0;
+  for (let index = 1; index < rows.length; index += 1) {
+    const previous = rows[index - 1];
+    const current = rows[index];
+    if (Number(previous[field]) !== 1) continue;
+    denominator += 1;
+    if (Number(current[field]) === 1) numerator += 1;
+  }
+  return { denominator, numerator, rate: numericRate(numerator, denominator) };
+}
+
+function entropyBits(rows: Row[]) {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = String(row.persona_id || '');
+    if (!key) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const n = Array.from(counts.values()).reduce((sum, value) => sum + value, 0);
+  if (!n) return '';
+  let h = 0;
+  for (const count of counts.values()) {
+    const p = count / n;
+    h -= p * Math.log2(p);
+  }
+  return Number(h.toFixed(6));
+}
+
 export function buildRq1ChoiceRows(args: {
   rawSessions: Row[];
   schedules: StudyScheduleRecord[];
@@ -97,6 +140,15 @@ export function buildRq1ChoiceRows(args: {
     const finalLessonContext = String(analysisSession?.lesson_context_final || session.lesson_context_inferred || 'unknown');
     const targetCountry = canonicalRq1Country(participant.targetCountry);
     const personaCountry = canonicalRq1Country(session.persona_country);
+    const visitorCountries = canonicalCountrySet(Array.isArray(participant.visitorCountries) ? participant.visitorCountries : []);
+    const visitorMatch = visitorCountries.length && personaCountry ? (visitorCountries.includes(personaCountry) ? 1 : 0) : '';
+    const targetReferenceMatch = targetCountry && personaCountry ? (targetCountry === personaCountry ? 1 : 0) : '';
+    const assignmentKnown = participant.schoolCondition === 'intervention'
+      && Boolean(schedule?.assignmentRevealDate)
+      && Boolean(localDate)
+      && localDate >= String(schedule?.assignmentRevealDate || '');
+    const targetExposedMatch = assignmentKnown && targetReferenceMatch !== '' ? targetReferenceMatch : '';
+
     const manual = getManualResearchExclusion(sessionId);
     const dataScope = researchDataScopeForRow({
       class_id: classId,
@@ -111,7 +163,6 @@ export function buildRq1ChoiceRows(args: {
     else if (dataScope !== 'main') rawExclusionReason = `data_scope:${dataScope}`;
     else if (!analysisPeriod) rawExclusionReason = 'outside_analysis_period';
     else if (finalLessonContext !== 'in_lesson') rawExclusionReason = `lesson_context:${finalLessonContext || 'unknown'}`;
-    else if (!targetCountry) rawExclusionReason = 'target_country_missing';
     else if (!personaCountry) rawExclusionReason = 'persona_country_missing';
 
     const childTurnCount = Math.max(0, Number(session.child_turn_count || 0));
@@ -142,8 +193,15 @@ export function buildRq1ChoiceRows(args: {
       persona_id: String(session.persona_id || ''),
       persona_country: personaCountry || String(session.persona_country || ''),
       persona_gender: String(session.persona_gender || ''),
+      visitor_country_set: visitorCountries.join('|'),
+      visitor_set_source: String(participant.visitorSetSource || ''),
+      visitor_match: visitorMatch,
+      assigned_target_country: targetCountry,
+      assignment_known_to_learner: assignmentKnown ? 1 : 0,
+      assigned_target_reference_match: targetReferenceMatch,
+      assigned_target_exposed_match: targetExposedMatch,
       target_country: targetCountry,
-      target_match: targetCountry && personaCountry ? (targetCountry === personaCountry ? 1 : 0) : '',
+      target_match: targetReferenceMatch,
       child_turn_count: childTurnCount,
       actual_duration_seconds: Math.max(0, Number(session.actual_duration_seconds || 0)),
       rapid_restart_flag: 0,
@@ -183,9 +241,7 @@ export function buildRq1ChoiceRows(args: {
       const currentMs = localStartedMs(row.local_started_at);
       const nextMs = localStartedMs(rows[index + 1].local_started_at);
       const sameDate = String(row.local_date || '') === String(rows[index + 1].local_date || '');
-      if (sameDate && currentMs > 0 && nextMs >= currentMs && nextMs - currentMs <= 30_000) {
-        row.rapid_restart_flag = 1;
-      }
+      if (sameDate && currentMs > 0 && nextMs >= currentMs && nextMs - currentMs <= 30_000) row.rapid_restart_flag = 1;
     });
   }
 
@@ -199,16 +255,15 @@ export function buildRq1PeriodSummaryRows(choiceRows: Row[], participants: Rq1An
     const rows = included
       .filter((row) => String(row.research_id || '') === participant.researchId && String(row.analysis_period || '') === period)
       .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
-    const targetN = rows.filter((row) => Number(row.target_match) === 1).length;
-    let continuationDenominator = 0;
-    let continuationNumerator = 0;
-    for (let index = 1; index < rows.length; index += 1) {
-      const previous = rows[index - 1];
-      const current = rows[index];
-      if (Number(previous.target_match) !== 1) continue;
-      continuationDenominator += 1;
-      if (Number(current.target_match) === 1) continuationNumerator += 1;
-    }
+
+    const visitorRows = rows.filter((row) => row.visitor_match === 0 || row.visitor_match === 1);
+    const visitorN = visitorRows.filter((row) => Number(row.visitor_match) === 1).length;
+    const visitorCont = continuation(visitorRows, 'visitor_match');
+
+    const targetRows = rows.filter((row) => row.assigned_target_reference_match === 0 || row.assigned_target_reference_match === 1);
+    const targetN = targetRows.filter((row) => Number(row.assigned_target_reference_match) === 1).length;
+    const targetCont = continuation(targetRows, 'assigned_target_reference_match');
+
     return {
       rq1_period_summary_schema_version: RQ1_PERIOD_SUMMARY_SCHEMA_VERSION,
       site_id: participant.siteId,
@@ -217,16 +272,28 @@ export function buildRq1PeriodSummaryRows(choiceRows: Row[], participants: Rq1An
       school_condition: participant.schoolCondition,
       class_id: participant.classId,
       grade_level: participant.gradeLevel,
-      target_country: canonicalRq1Country(participant.targetCountry),
       analysis_period: period,
-      choice_denominator: rows.length,
+      visitor_country_set: canonicalCountrySet(Array.isArray(participant.visitorCountries) ? participant.visitorCountries : []).join('|'),
+      visitor_choice_denominator: visitorRows.length,
+      visitor_choice_numerator: visitorN,
+      visitor_selection_rate: numericRate(visitorN, visitorRows.length),
+      visitor_continuation_denominator: visitorCont.denominator,
+      visitor_continuation_numerator: visitorCont.numerator,
+      visitor_continuation_rate: visitorCont.rate,
+      assigned_target_country: canonicalRq1Country(participant.targetCountry),
+      assigned_choice_denominator: targetRows.length,
+      assigned_choice_numerator: targetN,
+      assigned_selection_rate: numericRate(targetN, targetRows.length),
+      assigned_continuation_denominator: targetCont.denominator,
+      assigned_continuation_numerator: targetCont.numerator,
+      assigned_continuation_rate: targetCont.rate,
+      choice_denominator: targetRows.length,
       target_choice_numerator: targetN,
-      target_selection_rate: numericRate(targetN, rows.length),
+      target_selection_rate: numericRate(targetN, targetRows.length),
       period_observed: rows.length > 0 ? 1 : 0,
       distinct_persona_count: new Set(rows.map((row) => String(row.persona_id || '')).filter(Boolean)).size,
-      continuation_denominator: continuationDenominator,
-      continuation_numerator: continuationNumerator,
-      continuation_rate: numericRate(continuationNumerator, continuationDenominator),
+      distinct_country_count: new Set(rows.map((row) => String(row.persona_country || '')).filter(Boolean)).size,
+      selection_entropy_bits: entropyBits(rows),
       first_choice_at: rows[0]?.local_started_at || '',
       last_choice_at: rows.at(-1)?.local_started_at || '',
     };
@@ -239,31 +306,23 @@ export function buildRq1TransitionRows(choiceRows: Row[], participants: Rq1Analy
     const rows = included
       .filter((row) => String(row.research_id || '') === participant.researchId)
       .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
-    const p1 = rows.filter((row) => row.analysis_period === 'period1');
-    const p2 = rows.filter((row) => row.analysis_period === 'period2');
-    const p3 = rows.filter((row) => row.analysis_period === 'period3');
-    const p1Target = p1.filter((row) => Number(row.target_match) === 1).length;
-    const eligible = p1.length > 0 && p1Target === 0;
-    const reason = p1.length === 0 ? 'no_valid_period1_choice' : p1Target > 0 ? 'target_selected_in_period1' : 'eligible';
-    const later = [...p2, ...p3].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
-    const firstTransition = eligible ? later.find((row) => Number(row.target_match) === 1) : undefined;
-    const period2Observed = p2.length > 0;
-    const period3Observed = p3.length > 0;
-    let transitionByPeriod2: number | '' = '';
-    let transitionByPeriod3: number | '' = '';
-    let period3FollowupStatus = eligible ? 'missing' : 'not_eligible';
-    if (eligible && period2Observed) transitionByPeriod2 = p2.some((row) => Number(row.target_match) === 1) ? 1 : 0;
-    if (eligible) {
-      const transitionedByP2 = p2.some((row) => Number(row.target_match) === 1);
-      if (transitionedByP2) {
-        transitionByPeriod3 = 1;
-        period3FollowupStatus = period3Observed ? 'observed_after_transition' : 'transition_already_observed_period2';
-      } else if (period3Observed) {
-        transitionByPeriod3 = p3.some((row) => Number(row.target_match) === 1) ? 1 : 0;
-        period3FollowupStatus = 'observed_period3';
-      }
-    }
-    const firstIndex = firstTransition ? later.findIndex((row) => row.session_id === firstTransition.session_id) : -1;
+    const p1 = rows.filter((row) => row.analysis_period === 'period1' && (row.visitor_match === 0 || row.visitor_match === 1));
+    const p2Visitor = rows.filter((row) => row.analysis_period === 'period2' && (row.visitor_match === 0 || row.visitor_match === 1));
+    const p2Target = rows.filter((row) => row.analysis_period === 'period2' && (row.assigned_target_reference_match === 0 || row.assigned_target_reference_match === 1));
+    const p3Target = rows.filter((row) => row.analysis_period === 'period3' && (row.assigned_target_reference_match === 0 || row.assigned_target_reference_match === 1));
+
+    const p1VisitorMatches = p1.filter((row) => Number(row.visitor_match) === 1).length;
+    const visitorEligible = p1.length > 0 && p1VisitorMatches === 0;
+    const visitorReason = p1.length === 0 ? 'no_valid_period1_choice' : p1VisitorMatches > 0 ? 'visitor_set_selected_in_period1' : 'eligible';
+    const visitorFirst = visitorEligible ? p2Visitor.find((row) => Number(row.visitor_match) === 1) : undefined;
+    const visitorFirstIndex = visitorFirst ? p2Visitor.findIndex((row) => row.session_id === visitorFirst.session_id) : -1;
+
+    const p2TargetMatches = p2Target.filter((row) => Number(row.assigned_target_reference_match) === 1).length;
+    const targetEligible = p2Target.length > 0 && p2TargetMatches === 0;
+    const targetReason = p2Target.length === 0 ? 'no_valid_period2_choice' : p2TargetMatches > 0 ? 'assigned_target_selected_in_period2' : 'eligible';
+    const targetFirst = targetEligible ? p3Target.find((row) => Number(row.assigned_target_reference_match) === 1) : undefined;
+    const targetFirstIndex = targetFirst ? p3Target.findIndex((row) => row.session_id === targetFirst.session_id) : -1;
+
     return {
       rq1_transition_schema_version: RQ1_TRANSITION_SCHEMA_VERSION,
       site_id: participant.siteId,
@@ -272,21 +331,26 @@ export function buildRq1TransitionRows(choiceRows: Row[], participants: Rq1Analy
       school_condition: participant.schoolCondition,
       class_id: participant.classId,
       grade_level: participant.gradeLevel,
-      target_country: canonicalRq1Country(participant.targetCountry),
-      period1_choice_count: p1.length,
-      period1_target_count: p1Target,
-      baseline_eligible: eligible ? 1 : 0,
-      baseline_eligibility_reason: reason,
-      period2_observed: period2Observed ? 1 : 0,
-      period3_observed: period3Observed ? 1 : 0,
-      transition_by_period2: transitionByPeriod2,
-      transition_by_period3: transitionByPeriod3,
-      period3_followup_status: period3FollowupStatus,
-      first_transition_period: firstTransition?.analysis_period || '',
-      first_transition_date: firstTransition?.local_date || '',
-      first_transition_session_id: firstTransition?.session_id || '',
-      first_transition_selection_order: firstTransition?.selection_order_valid || '',
-      opportunities_before_transition: firstIndex >= 0 ? firstIndex : '',
+      visitor_country_set: canonicalCountrySet(Array.isArray(participant.visitorCountries) ? participant.visitorCountries : []).join('|'),
+      visitor_period1_choice_count: p1.length,
+      visitor_period1_match_count: p1VisitorMatches,
+      visitor_baseline_eligible: visitorEligible ? 1 : 0,
+      visitor_baseline_eligibility_reason: visitorReason,
+      visitor_period2_observed: p2Visitor.length > 0 ? 1 : 0,
+      visitor_transition_by_period2: visitorEligible && p2Visitor.length > 0 ? (visitorFirst ? 1 : 0) : '',
+      visitor_first_transition_date: visitorFirst?.local_date || '',
+      visitor_first_transition_session_id: visitorFirst?.session_id || '',
+      visitor_opportunities_before_transition: visitorFirstIndex >= 0 ? visitorFirstIndex : '',
+      assigned_target_country: canonicalRq1Country(participant.targetCountry),
+      assigned_period2_choice_count: p2Target.length,
+      assigned_period2_match_count: p2TargetMatches,
+      assigned_baseline_eligible: targetEligible ? 1 : 0,
+      assigned_baseline_eligibility_reason: targetReason,
+      assigned_period3_observed: p3Target.length > 0 ? 1 : 0,
+      assigned_transition_by_period3: targetEligible && p3Target.length > 0 ? (targetFirst ? 1 : 0) : '',
+      assigned_first_transition_date: targetFirst?.local_date || '',
+      assigned_first_transition_session_id: targetFirst?.session_id || '',
+      assigned_opportunities_before_transition: targetFirstIndex >= 0 ? targetFirstIndex : '',
     };
   });
 }
@@ -305,45 +369,60 @@ export function serializeRq1Csv(rows: Row[], headers: readonly string[]) {
 }
 
 export const RQ1_ANALYSIS_SPEC = {
-  version: 'rq1-analysis-plan-2026-v2',
-  status: 'fixed_template_not_executed',
-  sourcePlan: 'JES共同研究計画 2026-09-22 RQ1選択変化修正版＋2026-10-01有効選択定義',
-  targetCountryRule: {
-    intervention: '実践校の最終的な担当国を、Phase 1を含む全期間共通の分析上の参照国として別対応表に固定する。過去session文書のassigned_partner_countryは書き換えない。',
-    comparison: '実践校の担当国構成・学年に基づく学級対応で分析上の対応国を児童ごとに設定し、児童には知らせない。',
-    freeze: '正式CSVは対応国表がfrozenかつ全正式参加者を被覆し、frozen時snapshotと一致する場合のみ出力する。',
+  version: 'rq1-analysis-plan-2026-v3',
+  status: 'staged_recipient_specificity_model',
+  sourcePlan: '当初の段階的相手具体化（来校者情報なし→来校国籍群→本人動画＋担当相手）と2026-10-06監査結果を統合',
+  conceptualSequence: '20 Persona → 来校予定国籍群 → 担当国／特定された実在留学生',
+  visitorCountryRule: {
+    intervention: 'Phase 2で学級全体に実際に告知した来校予定国籍集合をStudy Scheduleに固定し、Phase 1にも分析上だけ遡及適用して基準選好を作る。raw sessionは書き換えない。',
+    comparison: '児童には情報提示せず、同学年の実践校来校国籍集合プロフィールを固定規則で分析上割り当てる。',
+    primaryContrast: 'period1→period2 の来校国籍群Persona選択確率変化の学校間差',
   },
-  choiceUnit: '全開始選択はsession作成を1回としてraw_selection_includedに保持する。RQ1主要分析の有効Persona選択は、通常の研究採否条件に加えてchild_turn_count>=1を満たすsessionとする。actual_duration_secondsには閾値を設けない。',
+  assignedCountryRule: {
+    intervention: 'Phase 3で児童が自分のグループの担当留学生を知った後に担当国を曝露情報として扱う。最終担当国はperiod2にも分析上だけ遡及適用し、period2→period3の基準差を作る。',
+    comparison: '実践校の担当国構成・学年に基づく分析上の対応国を児童ごとに固定し、児童には知らせない。',
+    freeze: '最終担当国を用いる正式なPhase 3分析では対応国表をfrozenかつ再現可能な状態にする。',
+  },
+  choiceUnit: '全開始選択はsession作成を1回としてraw_selection_includedに保持する。主要分析の有効Persona選択は、通常の研究採否条件に加えてchild_turn_count>=1を満たすsessionとする。actual_duration_secondsには閾値を設けない。',
   inclusion: {
-    primary: ['data_scope == main','analysis_period in period1..3','lesson_context_final == in_lesson','manual research exclusionなし','Persona国・対応国が判定可能','child_turn_count >= 1'],
+    primary: ['data_scope == main','analysis_period in period1..3','lesson_context_final == in_lesson','manual research exclusionなし','Persona国が判定可能','child_turn_count >= 1'],
     rawSensitivity: '児童発話0回を含む全開始選択はraw_selection_includedで保持し、主要結果に対する感度分析とQAに用いる。',
     shortSession: '短時間終了・missing_reflectionを時間だけで一律除外しない。児童発話が1回以上あれば有効選択とし、対話内容分析の採否はdialogue_analysis_includedで別管理する。',
     rapidRestart: '児童発話0回のsession後30秒以内に同一児童が次sessionを開始した場合はrapid_restart_flag=1とし、操作再試行のQAに用いる。主要選択率の分母には入れない。',
   },
   files: {
-    persona_choices: '1session開始1行。raw_selection_includedとeffective_selection_includedを併記し、主要モデルはeffective_selection_included=1の行を使用する。',
-    persona_period_summary: '児童×period 1行。有効選択のみで選択率と期間内継続率の分子・分母を保持。',
-    persona_transition: '児童1行。有効選択系列に基づきperiod1非選択者の適格性、period2/3までの初回移行、追跡可否を保持。',
+    persona_choices: '1session開始1行。visitor_matchとassigned_target_reference_matchを分離し、20→集合と集合→担当国を同一系列から再現する。',
+    persona_period_summary: '児童×period 1行。来校国籍群選択率・担当国選択率・各継続率・選択多様性を別々に保持。',
+    persona_transition: '児童1行。period1→2の来校国籍群への初回移行と、period2→3の担当国への初回移行を別々に保持。',
   },
-  primaryModel: {
-    family: 'binomial_logit_mixed',
-    dependent: 'target_match',
-    fixedEffects: ['school_condition','analysis_period','school_condition:analysis_period'],
-    randomEffects: ['1|participant_key'],
-    primaryContrast: 'period2→period3 の確率変化の学校間差',
-    additionalContrasts: ['period1→period2 は操作確認的','period1→period3 は全体変化の補足'],
+  primaryModels: {
+    rq1a: {
+      family: 'binomial_logit_mixed',
+      dependent: 'visitor_match',
+      fixedEffects: ['school_condition','analysis_period(period1/period2)','school_condition:analysis_period'],
+      randomEffects: ['1|participant_key'],
+      contrast: 'period1→period2 の来校国籍群Persona選択確率変化の学校間差',
+    },
+    rq1b: {
+      family: 'binomial_logit_mixed',
+      dependent: 'assigned_target_reference_match',
+      fixedEffects: ['school_condition','analysis_period(period2/period3)','school_condition:analysis_period'],
+      randomEffects: ['1|participant_key'],
+      contrast: 'period2→period3 の担当国Persona選択確率変化の学校間差',
+    },
     report: ['推定確率','確率差','95%信頼区間','児童・期間別分子/分母'],
   },
-  transition: {
-    eligible: 'period1に有効選択が1回以上あり、対応国Personaを一度も選ばなかった児童',
-    h2: 'period3までの累積初回移行の学校間差。児童1行の二項ロジスティック回帰を基本とする。',
-    missing: '追跡不能を非移行に置き換えない。period3未観測でもperiod2で移行済みなら累積移行=1として保持する。',
+  transitions: {
+    visitor: 'period1に有効選択があり来校国籍群Personaを一度も選ばなかった児童について、period2で初めて集合内Personaを選んだ割合。',
+    assigned: 'period2に有効選択があり最終担当国Personaを一度も選ばなかった児童について、period3で初めて担当国Personaを選んだ割合。',
+    missing: '追跡不能を非移行に置き換えない。',
   },
   continuation: {
-    definition: '同一児童・同一period内の連続する有効選択対で、前回が対応国Personaの対を分母、今回も対応国Personaの対を分子とする。同じ国の別Personaも継続に含む。',
-    model: '二項混合モデルでperiod1→period3の学校間変化差を副次的に推定する。期間境界の対は主集計に含めない。',
+    visitor: '同一児童・同一period内で前回が来校国籍群内Personaの対を分母、次回も集合内なら分子。',
+    assigned: '同一児童・同一period内で前回が担当国Personaの対を分母、次回も担当国なら分子。同じ国の別Personaも継続に含む。',
   },
-  multiplicity: 'H1主要対比は1つ。H2とH3の副次仮説にはHolm法を適用する。その他の期間対比は探索的。',
+  diversity: 'distinct_persona_count、distinct_country_count、selection_entropy_bitsは20→集合→1への収束を記述する補助指標で、主要仮説検定には用いない。',
+  multiplicity: 'RQ1-AとRQ1-Bを主要な段階別対比として事前に区別する。移行率・継続率は副次指標としてHolm法を検討し、その他の期間対比は探索的。',
   personaConfounding: '画面上の位置、性別、イラスト・性格等はPersonaと固定的に結び付くため個別補正しない。Phase 1の実測選好をこれらを含む包括的な基準とし、因果的に交絡が除去されたとは解釈しない。',
   software: {
     primary: 'jamovi + GAMLj3（二項混合モデル）',
