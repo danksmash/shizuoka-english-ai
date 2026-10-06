@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { deleteDocumentField, patchDocumentField } from './firestore';
 
-const COLLECTION = 'research_daily_aggregates';
+export const RESEARCH_DAILY_AGGREGATE_COLLECTION = 'research_daily_aggregates';
 
 export type ResearchDailyContribution = {
   researchId: string;
@@ -72,7 +72,72 @@ export async function syncResearchDailyAggregateContribution(
   const key = researchDailyContributionKey(current.sessionId);
   const priorDate = previous ? text(previous.localDate, 10) : '';
   if (priorDate && priorDate !== contribution.localDate) {
-    await writer.remove(COLLECTION, priorDate, `contributions.${key}`);
+    await writer.remove(RESEARCH_DAILY_AGGREGATE_COLLECTION, priorDate, `contributions.${key}`);
   }
-  await writer.patch(COLLECTION, contribution.localDate, `contributions.${key}`, contribution);
+  await writer.patch(RESEARCH_DAILY_AGGREGATE_COLLECTION, contribution.localDate, `contributions.${key}`, contribution);
+}
+
+export type ResearchDailyAggregateDocument = {
+  localDate: string;
+  contributions: Record<string, ResearchDailyContribution>;
+};
+
+export function buildResearchDailyAggregateDocuments(
+  sessions: Record<string, any>[],
+): ResearchDailyAggregateDocument[] {
+  const byDate = new Map<string, Record<string, ResearchDailyContribution>>();
+  for (const session of sessions) {
+    const contribution = buildResearchDailyContribution(session);
+    const key = researchDailyContributionKey(session.sessionId);
+    const contributions = byDate.get(contribution.localDate) || {};
+    contributions[key] = contribution;
+    byDate.set(contribution.localDate, contributions);
+  }
+  return [...byDate.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([localDate, contributions]) => ({ localDate, contributions }));
+}
+
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => `${JSON.stringify(key)}:${stable(nested)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function auditResearchDailyAggregateDocuments(
+  expected: ResearchDailyAggregateDocument[],
+  actual: Record<string, any>[],
+) {
+  const expectedByDate = new Map(expected.map((row) => [row.localDate, row.contributions]));
+  const actualByDate = new Map(actual.map((row) => {
+    const resourceId = typeof row._name === 'string' ? row._name.split('/').at(-1) || '' : '';
+    return [text(row.localDate, 10) || text(resourceId, 10), row.contributions || {}];
+  }));
+  const dates = [...new Set([...expectedByDate.keys(), ...actualByDate.keys()])].filter(Boolean).sort();
+  const differences: Array<{
+    localDate: string;
+    kind: 'unexpected_date' | 'missing_date' | 'contribution_mismatch';
+  }> = [];
+  for (const localDate of dates) {
+    const wanted = expectedByDate.get(localDate);
+    const found = actualByDate.get(localDate);
+    if (!wanted) differences.push({ localDate, kind: 'unexpected_date' });
+    else if (!found) differences.push({ localDate, kind: 'missing_date' });
+    else if (stable(wanted) !== stable(found)) differences.push({ localDate, kind: 'contribution_mismatch' });
+  }
+  const expectedContributions = expected.reduce((sum, row) => sum + Object.keys(row.contributions).length, 0);
+  const actualContributions = actual.reduce((sum, row) => sum + Object.keys(row.contributions || {}).length, 0);
+  return {
+    matches: differences.length === 0,
+    expectedDays: expected.length,
+    actualDays: actualByDate.size,
+    expectedContributions,
+    actualContributions,
+    differences,
+  };
 }

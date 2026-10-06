@@ -28,6 +28,7 @@ import {
 import { withResearchRecentSessionWordCount } from './src/server/researchRecentSessionWordCountRuntime';
 import { createResearchSessionAuditRouter } from './src/server/researchSessionAuditRoutes';
 import { createResearchDashboardLazyRouter } from './src/server/researchDashboardLazyRoutes';
+import { createResearchDailyAggregateRouter } from './src/server/researchDailyAggregateRoutes';
 import { createResearchRq1Router } from './src/server/researchRq1Routes';
 import { withResearchRq1DashboardLink } from './src/server/researchRq1DashboardRuntime';
 import { createResearchRq2FormalAlignmentRouter } from './src/server/researchRq2FormalAlignmentRoutes';
@@ -50,6 +51,7 @@ this.use('/api/management', createQuestionnaireRouter());
 this.use('/api/questionnaire-auto', createQuestionnaireAutoSyncRouter());
 this.use('/api/management', createResearchSessionHistoryRouter());
 this.use('/api/management', createResearchSessionAuditRouter());
+this.use('/api/management', createResearchDailyAggregateRouter());
 this.use('/api/management', createResearchRq1Router());
 this.use('/api/management', createResearchRq2FormalAlignmentRouter());
 this.use('/api/management', createResearchRq2Router());
@@ -92,6 +94,10 @@ function ensureExtensionRoutesMounted(app: any) {
   if (!app.__researchDashboardLazyRoutesMounted) {
     app.use('/api/management', createResearchDashboardLazyRouter());
     app.__researchDashboardLazyRoutesMounted = true;
+  }
+  if (!app.__researchDailyAggregateRoutesMounted) {
+    app.use('/api/management', createResearchDailyAggregateRouter());
+    app.__researchDailyAggregateRoutesMounted = true;
   }
   if (!app.__researchRq1RoutesMounted) {
     app.use('/api/management', createResearchRq1Router());
