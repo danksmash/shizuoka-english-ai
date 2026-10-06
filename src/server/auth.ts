@@ -90,6 +90,9 @@ export function researcherRouteAllowed(req: Pick<Request, 'path'>): boolean {
   if (path === '/api/management/research.csv') return true;
   if (path === '/api/management/research.summary') return true;
   if (path === '/api/management/research.dashboard') return true;
+  if (path === '/research.recent-sessions' || path === '/api/management/research.recent-sessions') return true;
+  if (path === '/research.expressions-summary' || path === '/api/management/research.expressions-summary') return true;
+  if (path === '/research/lesson-reflections.csv' || path === '/api/reflection/research/lesson-reflections.csv') return true;
   if (path === '/api/management/research.bundle.zip') return true;
   if (path.startsWith('/research.daily-aggregates/') || path.startsWith('/api/management/research.daily-aggregates/')) return true;
   if (path === '/research.sessions' || path === '/api/management/research.sessions') return true;
