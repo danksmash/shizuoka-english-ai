@@ -4,7 +4,12 @@ import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, 
 import { getPersonaResearchMetadata } from '../data/personaResearch';
 import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, queryCollectionByStringRange, queryCollectionFieldsByStringRange, queryCollectionLatest, setDocument } from './firestore';
 import { resolveTtsRuntimeMetadata } from './ttsRuntimeMetadata';
-import { RESEARCH_DASHBOARD_SESSION_FIELDS, syncResearchDailyAggregateContribution } from './researchDailyAggregates';
+import {
+  RESEARCH_DAILY_AGGREGATE_COLLECTION,
+  RESEARCH_DASHBOARD_SESSION_FIELDS,
+  researchDailyAggregateDocumentsToDashboardSessions,
+  syncResearchDailyAggregateContribution,
+} from './researchDailyAggregates';
 import {
   normalizeSchoolCondition,
   normalizeStudyGradeLevel,
@@ -665,6 +670,41 @@ export async function getDashboardSessionsForManagementByLocalDateRange(start?: 
     queryCollectionFieldsByStringRange(SESSION_COLLECTION, 'localDate', from, to, DASHBOARD_SESSION_FIELDS),
     getStudentRecordsForManagement(),
   ]);
+  return managementSessionsWithAssignments(sessions, students);
+}
+
+
+function dailyAggregateDocumentDate(document: Record<string, any>): string {
+  const explicit = managementDateBoundary(document.localDate);
+  if (explicit) return explicit;
+  const resourceId = typeof document._name === 'string' ? document._name.split('/').at(-1) || '' : '';
+  return managementDateBoundary(resourceId);
+}
+
+/**
+ * Aggregate shadow reader for cutover verification. This remains separate from
+ * the live dashboard read path until the cutover gate is explicitly enabled.
+ * Current study metadata is refreshed from the student master by researchId;
+ * assigned-partner fields remain the session-time snapshots in the aggregate.
+ */
+export async function getDailyAggregateDashboardSessionsForManagementByLocalDateRange(
+  start?: unknown,
+  end?: unknown,
+): Promise<Record<string, any>[]> {
+  const from = managementDateBoundary(start);
+  const to = managementDateBoundary(end);
+  const [documents, students] = await Promise.all([
+    listCollection(RESEARCH_DAILY_AGGREGATE_COLLECTION, 1000),
+    getStudentRecordsForManagement(),
+  ]);
+  const selected = documents.filter((document) => {
+    const date = dailyAggregateDocumentDate(document);
+    if (!date) return false;
+    if (from && date < from) return false;
+    if (to && date > to) return false;
+    return true;
+  });
+  const sessions = researchDailyAggregateDocumentsToDashboardSessions(selected);
   return managementSessionsWithAssignments(sessions, students);
 }
 
