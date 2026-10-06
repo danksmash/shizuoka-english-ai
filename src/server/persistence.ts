@@ -507,6 +507,7 @@ export interface SaveCanonicalSessionArgs {
   personaLabelCondition?: PersonaLabelCondition; countryLabelVisible?: boolean; accentLabelVisible?: boolean; flagVisible?: boolean;
   studentSelectedSpeechRate?: number; effectiveTtsSpeechRate?: number;
   assignedPartnerId?: string; assignedPartnerCountry?: string; assignmentAnnouncedAt?: string;
+  formalStudyParticipant?: boolean; studySiteId?: StudySiteId | ''; schoolCondition?: SchoolCondition | ''; studyStartDate?: string;
 }
 
 export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
@@ -565,7 +566,16 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
   };
   await setDocument(SESSION_COLLECTION, args.sessionId, document);
   try {
-    await syncResearchDailyAggregateContribution(existing, document);
+    // The canonical management dashboard resolves study-participant metadata
+    // from the current student record. Keep the rebuildable aggregate shadow
+    // aligned at write time without changing the immutable session document.
+    await syncResearchDailyAggregateContribution(existing, {
+      ...document,
+      formalStudyParticipant: args.formalStudyParticipant === true,
+      studySiteId: normalizeStudySiteId(args.studySiteId),
+      schoolCondition: normalizeSchoolCondition(args.schoolCondition),
+      studyStartDate: normalizeStudyStartDate(args.studyStartDate),
+    });
   } catch (error: any) {
     // Aggregates are a rebuildable shadow index. Never make the canonical
     // session save fail after the source document has already been persisted.
@@ -598,7 +608,7 @@ export async function getStudentHistory(studentId: string): Promise<Record<strin
     totalChildWords: session.totalChildWords, uniqueVocabularyCount: session.uniqueVocabularyCount, reflection: session.reflection || null,
   }));
 }
-function managementSessionsWithAssignments(
+export function managementSessionsWithAssignments(
   sessions: Record<string, any>[],
   students: Awaited<ReturnType<typeof getStudentRecordsForManagement>>,
 ): Record<string, any>[] {
