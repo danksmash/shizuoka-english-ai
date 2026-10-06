@@ -1,4 +1,4 @@
-import { listCollection, listCollectionFields, setDocumentsBatch } from './firestore';
+import { listCollection, listCollectionFields, patchDocumentField, queryCollection, setDocumentsBatch } from './firestore';
 import { getStudentRecordsForManagement, managementSessionsWithAssignments } from './persistence';
 import { buildResearchDashboardData, type ResearchFilterQuery } from './researchDashboard';
 import {
@@ -107,6 +107,19 @@ export async function auditResearchDailyAggregateBackfill() {
   };
 }
 
+async function markPendingAggregateSessionsSyncedAfterAuditedBackfill() {
+  for (let round = 0; round < 100; round += 1) {
+    const pending = await queryCollection(SESSION_COLLECTION, 'aggregateSyncStatus', 'pending', 500);
+    if (!pending.length) return;
+    for (const session of pending) {
+      const id = String(session.sessionId || (typeof session._name === 'string' ? session._name.split('/').at(-1) || '' : ''));
+      if (!id) throw new Error('RESEARCH_DAILY_AGGREGATE_PENDING_SESSION_ID_MISSING');
+      await patchDocumentField(SESSION_COLLECTION, id, 'aggregateSyncStatus', 'synced');
+    }
+  }
+  throw new Error('RESEARCH_DAILY_AGGREGATE_PENDING_SESSIONS_NOT_CLEARED');
+}
+
 export async function backfillResearchDailyAggregates() {
   const sessions = await sourceSessions();
   const expected = buildResearchDailyAggregateDocuments(sessions);
@@ -121,5 +134,9 @@ export async function backfillResearchDailyAggregates() {
       expected.slice(index, index + 5).map((row) => ({ id: row.localDate, data: row })),
     );
   }
-  return auditResearchDailyAggregateBackfill();
+  const audit = await auditResearchDailyAggregateBackfill();
+  if (audit.cutoverReady) {
+    await markPendingAggregateSessionsSyncedAfterAuditedBackfill();
+  }
+  return audit;
 }
