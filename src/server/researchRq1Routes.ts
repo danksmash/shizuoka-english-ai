@@ -4,7 +4,6 @@ import { getAllSessionsForManagement } from './persistence';
 import { getAllStudySchedules } from './studySchedulePersistence';
 import { buildAnalysisSessionRows } from './researchAnalysisSessions';
 import {
-  assertRq1FormalTargetStatus,
   freezeRq1TargetTable,
   getRq1TargetStatus,
   initializeRq1InterventionTargets,
@@ -74,15 +73,58 @@ function targetTableCsv(status: Awaited<ReturnType<typeof getRq1TargetStatus>>) 
   ].join('\n') + '\n';
 }
 
-function analysisParticipants(status: Awaited<ReturnType<typeof getRq1TargetStatus>>): Rq1AnalysisParticipant[] {
-  return status.participants.map((row) => ({
-    researchId: row.researchId,
-    siteId: row.siteId,
-    schoolCondition: row.schoolCondition,
-    classId: row.classId,
-    gradeLevel: row.gradeLevel,
-    targetCountry: row.targetCountry,
-  }));
+function stableBucket(value: string, size: number) {
+  if (size <= 1) return 0;
+  let hash = 2166136261;
+  for (const char of value) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return hash % size;
+}
+
+function analysisParticipants(
+  status: Awaited<ReturnType<typeof getRq1TargetStatus>>,
+  schedules: Awaited<ReturnType<typeof getAllStudySchedules>>,
+): Rq1AnalysisParticipant[] {
+  const interventionProfilesByGrade = new Map<number, Array<{ classId: string; countries: string[] }>>();
+  for (const schedule of schedules) {
+    if (/^[56]-C[1-9]$/.test(schedule.classId) || !schedule.announcedVisitorCountries.length) continue;
+    const grade = Number(String(schedule.classId).split('-')[0]);
+    if (grade !== 5 && grade !== 6) continue;
+    const list = interventionProfilesByGrade.get(grade) || [];
+    list.push({ classId: schedule.classId, countries: schedule.announcedVisitorCountries.slice() });
+    interventionProfilesByGrade.set(grade, list);
+  }
+  for (const list of interventionProfilesByGrade.values()) list.sort((a, b) => a.classId.localeCompare(b.classId, 'ja'));
+
+  return status.participants.map((row) => {
+    if (row.schoolCondition === 'intervention') {
+      const schedule = schedules.find((item) => item.classId === row.classId);
+      return {
+        researchId: row.researchId,
+        siteId: row.siteId,
+        schoolCondition: row.schoolCondition,
+        classId: row.classId,
+        gradeLevel: row.gradeLevel,
+        targetCountry: row.targetCountry,
+        visitorCountries: schedule?.announcedVisitorCountries || [],
+        visitorSetSource: schedule?.announcedVisitorCountries.length ? 'intervention_class_schedule' : '',
+      };
+    }
+    const profiles = interventionProfilesByGrade.get(Number(row.gradeLevel)) || [];
+    const profile = profiles.length ? profiles[stableBucket(`rq1-visitor-set-v1|${row.researchId}`, profiles.length)] : null;
+    return {
+      researchId: row.researchId,
+      siteId: row.siteId,
+      schoolCondition: row.schoolCondition,
+      classId: row.classId,
+      gradeLevel: row.gradeLevel,
+      targetCountry: row.targetCountry,
+      visitorCountries: profile?.countries || [],
+      visitorSetSource: profile ? `comparison_seeded_profile:${profile.classId}` : '',
+    };
+  });
 }
 
 async function formalData() {
@@ -91,9 +133,8 @@ async function formalData() {
     getAllStudySchedules(),
     getRq1TargetStatus(),
   ]);
-  assertRq1FormalTargetStatus(targetStatus);
   const analysisSessions = await buildAnalysisSessionRows(sessions, schedules);
-  const participants = analysisParticipants(targetStatus);
+  const participants = analysisParticipants(targetStatus, schedules);
   const choices = buildRq1ChoiceRows({
     rawSessions: sessions,
     schedules,
@@ -265,7 +306,12 @@ router.get('/research-rq1/bundle.zip', requireManagementRole(['researcher']), as
         persona_period_summary: periodSummary.length,
         persona_transition: transitions.length,
       },
-      rule: 'Formal RQ1 exports require a frozen target-country table; raw session assignment snapshots are never backfilled.',
+      readiness: {
+        visitor_set_analysis: choices.some((row) => String(row.visitor_country_set || '')),
+        assigned_country_target_table_status: targetStatus.config.status,
+        assigned_country_formal_ready: targetStatus.formalReady,
+      },
+      rule: 'Phase 1→2 visitor-set analysis is available once class visitor-country sets are configured. Final Phase 2→3 assigned-country inference requires a frozen target-country table. Raw session assignment snapshots are never backfilled.',
     };
     const zip = buildStoredZip([...files, { name: 'rq1_manifest.json', content: JSON.stringify(manifest, null, 2) }]);
     res.setHeader('Content-Type', 'application/zip');
