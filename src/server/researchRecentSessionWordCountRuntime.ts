@@ -63,7 +63,8 @@ const RECENT_SESSION_WORD_COUNT_SCRIPT = `<script id="recentSessionWordCountRunt
     Array.prototype.forEach.call(body.querySelectorAll('tr'),function(row,index){
       if(!row.cells||row.cells.length<6)return;
       var sessionId=String(row.getAttribute('data-rsh-session')||'');
-      var value=sessionId&&wordCounts.has(sessionId)?wordCounts.get(sessionId):(currentRows[index]?validWordCount(currentRows[index].child_total_words):null);
+      var inlineValue=validWordCount(row.getAttribute('data-child-words'));
+      var value=sessionId&&wordCounts.has(sessionId)?wordCounts.get(sessionId):(inlineValue!==null?inlineValue:(currentRows[index]?validWordCount(currentRows[index].child_total_words):null));
       var text=wordText(value),cell=row.cells[5];
       if(cell.textContent!==text)cell.textContent=text;
       if(cell.getAttribute('data-recent-word-count')!=='1')cell.setAttribute('data-recent-word-count','1');

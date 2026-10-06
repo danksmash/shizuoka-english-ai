@@ -1,11 +1,10 @@
 import type { RequestHandler } from 'express';
 import {
   buildResearchDashboardData,
-  buildResearchExportDataSets,
   normalizeFormalResearchExportQuery,
   type ResearchFilterQuery,
 } from './researchDashboard';
-import { getSessionsForManagementByLocalDateRange } from './persistence';
+import { getDashboardSessionsForManagementByLocalDateRange } from './persistence';
 import { getAllReflectionRecordsForTeacher, getReflectionRecordsForTeacherDateRange } from './reflectionPersistence';
 import {
   buildResearchLessonReflectionCodebookRows,
@@ -76,7 +75,7 @@ function errorText(error: unknown): string {
 
 export function isTransientResearchDashboardReadError(error: unknown): boolean {
   const text = errorText(error);
-  return /FIRESTORE_(?:GET|LIST|QUERY|MULTI_QUERY|RANGE_QUERY)_(?:408|429|500|502|503|504)/i.test(text)
+  return /FIRESTORE_(?:GET|LIST|QUERY|MULTI_QUERY|RANGE_QUERY|PROJECTED_RANGE_QUERY|LATEST_QUERY)_(?:408|429|500|502|503|504)/i.test(text)
     || /METADATA_TOKEN_(?:408|429|500|502|503|504)/i.test(text)
     || /AbortError|aborted|fetch failed|ECONNRESET|ETIMEDOUT|EAI_AGAIN|UND_ERR/i.test(text);
 }
@@ -114,7 +113,7 @@ async function loadStudySchedulesResilient(): Promise<StudyScheduleRecord[]> {
 }
 
 async function loadSessionsResilient(start?: unknown, end?: unknown): Promise<Record<string, any>[]> {
-  return retryResearchDashboardRead('sessions_and_students', () => getSessionsForManagementByLocalDateRange(start, end));
+  return retryResearchDashboardRead('sessions_and_students', () => getDashboardSessionsForManagementByLocalDateRange(start, end));
 }
 
 async function loadOptionalReflections(start?: unknown, end?: unknown): Promise<{ records: Awaited<ReturnType<typeof getAllReflectionRecordsForTeacher>>; warnings: string[] }> {
@@ -178,9 +177,7 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     ];
 
     const phaseStartedAt = Date.now();
-    const preparedPhaseSessions = !studyPhase
-      ? (Array.isArray(dashboardInternal.exportSessions) ? dashboardInternal.exportSessions : [])
-      : buildResearchExportDataSets(analysisSessions).sessions;
+    const preparedPhaseSessions = Array.isArray(dashboardInternal.exportSessions) ? dashboardInternal.exportSessions : [];
     const phaseComparison = preparedPhaseSessions.length || analysisSessions.length === 0
       ? buildConsistentPhaseComparisonFromExportSessions(preparedPhaseSessions, schedules, query)
       : buildConsistentPhaseComparison(analysisSessions, schedules, query);

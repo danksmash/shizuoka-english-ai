@@ -83,7 +83,7 @@ const sample = {
 const lessonCsv = '\uFEFF"research_id","class_id","data_scope","grade_level","class_number","local_date","status","today_goal","goal_rating","communication_rating"\n"R0001","5-1","test","5","1","2026-09-01","submitted","goal","3","4"\n"R0002","5-1","test","5","1","2026-09-01","submitted","goal","4","3"\n"R0003","5-1","test","5","1","2026-09-02","submitted","goal","4","4"\n';
 const urlApi: any = { createObjectURL:() => 'blob:test', revokeObjectURL:() => {} };
 const context: any = {
-  console, document:documentStub, window:{}, location, sessionStorage:sessionStorageStub, alert:() => {}, URL:urlApi, URLSearchParams, Set, Map, Math, Number, String, Array, Object, Date, Blob,
+  console, document:documentStub, window:{}, location, sessionStorage:sessionStorageStub, alert:() => {}, URL:urlApi, URLSearchParams, AbortController, Set, Map, Math, Number, String, Array, Object, Date, Blob,
   fetch:async(url:string) => {
     fetchCalls.push(url);
     const isLessonCsv = url.includes('/api/management/research.csv') && url.includes('dataset=lesson_reflections');
@@ -309,6 +309,7 @@ const researchSession = (id:string,date:string,wordCount:number,durationSeconds:
   return {
     schemaVersion:4,researchSchemaVersion:'research-2026-v4',researchId:'R-'+id,studentId:'S-'+id,classId:'5-1',sessionId:id,
     aiStudentId:'emma_usa',personaId:'emma_usa',topic:'favorites',targetDurationMinutes:2,actualDurationSeconds:durationSeconds,
+    totalTurns:withChild?1:0,totalChildWords:withChild?wordCount:0,
     startedAt:new Date(startedAt).toISOString(),endedAt:new Date(startedAt+durationSeconds*1000).toISOString(),
     history,reflection,systemEvents:[{type:'session_finish',timestamp:startedAt+durationSeconds*1000-1000}],
   };

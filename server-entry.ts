@@ -27,6 +27,7 @@ import {
 } from './src/server/researchSessionHistoryRuntime';
 import { withResearchRecentSessionWordCount } from './src/server/researchRecentSessionWordCountRuntime';
 import { createResearchSessionAuditRouter } from './src/server/researchSessionAuditRoutes';
+import { createResearchDashboardLazyRouter } from './src/server/researchDashboardLazyRoutes';
 import { createResearchRq1Router } from './src/server/researchRq1Routes';
 import { withResearchRq1DashboardLink } from './src/server/researchRq1DashboardRuntime';
 import { createResearchRq2FormalAlignmentRouter } from './src/server/researchRq2FormalAlignmentRoutes';
@@ -87,6 +88,10 @@ function ensureExtensionRoutesMounted(app: any) {
   if (!app.__researchSessionAuditRoutesMounted) {
     app.use('/api/management', createResearchSessionAuditRouter());
     app.__researchSessionAuditRoutesMounted = true;
+  }
+  if (!app.__researchDashboardLazyRoutesMounted) {
+    app.use('/api/management', createResearchDashboardLazyRouter());
+    app.__researchDashboardLazyRoutesMounted = true;
   }
   if (!app.__researchRq1RoutesMounted) {
     app.use('/api/management', createResearchRq1Router());

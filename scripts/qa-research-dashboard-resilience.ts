@@ -5,11 +5,26 @@ import {
   researchDashboardReadPlan,
   retryResearchDashboardRead,
 } from '../src/server/researchDashboardResilientRuntime';
+import { buildResearchDashboardData } from '../src/server/researchDashboard';
+
+const aggregateOnlySession:any = {
+  sessionId:'aggregate-only',researchId:'R-AGG',studentId:'S-AGG',classId:'5-1',aiStudentId:'emma_usa',personaId:'emma_usa',
+  topic:'favorites',targetDurationMinutes:2,actualDurationSeconds:60,totalTurns:2,totalChildWords:12,
+  startedAt:'2026-09-17T01:00:00.000Z',endedAt:'2026-09-17T01:01:00.000Z',localDate:'2026-09-17',
+  reflection:{scaleVersion:'4point-v1',understoodPartner:4,conveyedIdeas:3,noticedLanguageCulture:4},
+};
+Object.defineProperty(aggregateOnlySession,'history',{get(){throw new Error('dashboard touched history')}});
+Object.defineProperty(aggregateOnlySession,'systemEvents',{get(){throw new Error('dashboard touched systemEvents')}});
+const aggregateDashboard:any = buildResearchDashboardData([aggregateOnlySession],{dataScope:'main'});
+assert.equal(aggregateDashboard.metrics.totalSessions,1);
+assert.equal(aggregateDashboard.metrics.childUtteranceCount,2);
+assert.equal(aggregateDashboard.metrics.meanChildWordsPerMinute,12);
 
 assert.equal(isTransientResearchDashboardReadError(new Error('FIRESTORE_LIST_503:backend unavailable')), true);
 assert.equal(isTransientResearchDashboardReadError(new Error('FIRESTORE_GET_429:quota')), true);
 assert.equal(isTransientResearchDashboardReadError(new Error('AbortError:This operation was aborted')), true);
 assert.equal(isTransientResearchDashboardReadError(new Error('FIRESTORE_RANGE_QUERY_503:backend unavailable')), true);
+assert.equal(isTransientResearchDashboardReadError(new Error('FIRESTORE_PROJECTED_RANGE_QUERY_503:backend unavailable')), true);
 assert.equal(isTransientResearchDashboardReadError(new Error('FIRESTORE_LIST_400:bad request')), false);
 
 const mainPlan = researchDashboardReadPlan({ dataScope: 'main', schoolCondition: 'intervention' });
@@ -67,7 +82,7 @@ assert.equal(permanentAttempts, 1, 'permanent errors must not be retried');
 
 const resilientSource = fs.readFileSync('src/server/researchDashboardResilientRuntime.ts', 'utf8');
 assert.ok(resilientSource.includes("warnings: ['lesson_reflections_unavailable']"), 'Reflection failure must degrade partially, not blank the dashboard');
-assert.ok(resilientSource.includes('getSessionsForManagementByLocalDateRange(start, end)'), 'Dashboard session reads must be scoped by requested localDate range before expansion');
+assert.ok(resilientSource.includes('getDashboardSessionsForManagementByLocalDateRange(start, end)'), 'Dashboard reads must use projected session fields scoped by localDate');
 assert.ok(resilientSource.includes('getReflectionRecordsForTeacherDateRange(start, end)'), 'Lesson Reflection dashboard reads must use the requested date range');
 assert.ok(resilientSource.includes("const PILOT_B_OFFICIAL_DATE = '2026-09-09'"), 'Pilot B official date must be encoded in the dashboard read plan');
 assert.ok(resilientSource.includes('loadSessionsResilient(readPlan.start, readPlan.end)'), 'Dashboard must apply the read plan before Firestore session expansion');
@@ -97,9 +112,17 @@ assert.equal(questionnaireRuntime.includes('questionnairePromise'), false, 'Rese
 
 const dashboardSource = fs.readFileSync('src/server/researchDashboard.ts', 'utf8');
 const dashboardFn = dashboardSource.slice(dashboardSource.indexOf('export function buildResearchDashboardData'), dashboardSource.indexOf('undefined', dashboardSource.indexOf('export function buildResearchDashboardData')));
-assert.ok(dashboardFn.includes('buildResearchDataSets(targetSessions)'), 'dashboard must build the detailed research dataset once');
-assert.ok(dashboardFn.includes('buildResearchExportDataSetsFromTechnical(technical)'), 'dashboard export rows must reuse that same detailed parse');
-assert.equal(dashboardFn.includes('buildResearchExportDataSets(targetSessions)'), false, 'dashboard must not reparse all dialogue history for export rows');
+assert.ok(dashboardFn.includes('buildResearchDashboardSessionRows(rawSessions)'), 'dashboard must use stored session aggregates');
+assert.equal(dashboardFn.includes('buildResearchDataSets('), false, 'dashboard must not expand history, expressions, or system events');
+assert.ok(dashboardSource.includes('export function buildResearchTopExpressions'), 'expression analysis must remain available as a lazy computation');
+
+const lazyRoutes = fs.readFileSync('src/server/researchDashboardLazyRoutes.ts', 'utf8');
+assert.ok(lazyRoutes.includes("router.get('/research.expressions-summary'"), 'expression summary must have a dedicated lazy endpoint');
+assert.ok(lazyRoutes.includes("router.get('/research.recent-sessions'"), 'recent sessions must have a dedicated bounded endpoint');
+assert.ok(lazyRoutes.includes('buildResearchRecentSessions(selected, query, 20)'), 'recent endpoint must return at most 20 rows');
+const managementPage = fs.readFileSync('src/server/managementPage.ts', 'utf8');
+assert.ok(managementPage.includes('dashboardController.abort()'), 'a new dashboard request must abort the previous request');
+assert.ok(managementPage.includes('表現分析を読み込む'), 'expression analysis must require an explicit user action');
 
 const auditRoute = fs.readFileSync('src/server/researchSessionAuditRoutes.ts', 'utf8');
 assert.ok(auditRoute.includes("router.post('/research.session-audit'"), 'session audit must be available as an explicit lazy route');
