@@ -86,7 +86,7 @@ assert.equal(capacity.nearDocumentLimit, false);
 assert.equal(capacity.maxContributionsPerDay, 2);
 assert.ok(capacity.maxDocumentBytes > 0);
 
-const [entry, auth, routes, backfill, firestore, persistence, server] = await Promise.all([
+const [entry, auth, routes, backfill, firestore, persistence, server, runner, deployWorkflow] = await Promise.all([
   readFile('server-entry.ts','utf8'),
   readFile('src/server/auth.ts','utf8'),
   readFile('src/server/researchDailyAggregateRoutes.ts','utf8'),
@@ -94,6 +94,8 @@ const [entry, auth, routes, backfill, firestore, persistence, server] = await Pr
   readFile('src/server/firestore.ts','utf8'),
   readFile('src/server/persistence.ts','utf8'),
   readFile('server.ts','utf8'),
+  readFile('scripts/run-research-daily-aggregate-backfill.ts','utf8'),
+  readFile('.github/workflows/cloud-run-deploy.yml','utf8'),
 ]);
 assert.ok(entry.includes('createResearchDailyAggregateRouter()'));
 assert.ok(auth.includes("path.startsWith('/research.daily-aggregates/')"));
@@ -108,4 +110,9 @@ assert.ok(persistence.includes('formalStudyParticipant: args.formalStudyParticip
 assert.ok(persistence.includes("schoolCondition: args.schoolCondition || ''"), 'shadow writes must include current study condition metadata');
 assert.ok(server.includes('formalStudyParticipant:student.formalStudyParticipant'), 'session route must pass resolved study metadata to the shadow index');
 assert.ok(firestore.includes("params.append('mask.fieldPaths', fieldPath)"));
+assert.ok(runner.includes("RESEARCH_AGGREGATE_BACKFILL_CONFIRMATION_REQUIRED"), 'one-shot runner must require an explicit confirmation value');
+assert.ok(runner.includes("!after.cutoverReady"), 'one-shot runner must fail closed unless the parity/capacity gate passes');
+assert.ok(deployWorkflow.includes('MARKER="ops/run-research-aggregate-backfill-v2-20261007"'), 'production backfill must be one-shot marker gated');
+assert.ok(deployWorkflow.includes('--service-account "$RUNTIME_SA"'), 'backfill job must use the production runtime service account');
+assert.ok(deployWorkflow.includes('--max-retries 0'), 'one-shot backfill must not automatically repeat writes');
 console.log('Research daily aggregate shadow-write QA: PASS');
