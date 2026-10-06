@@ -1,0 +1,85 @@
+name: One-time audited research aggregate backfill 2026-10-07
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/research-daily-aggregate-backfill-once-20261007.yml'
+      - 'scripts/run-research-daily-aggregate-backfill.ts'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: research-daily-aggregate-backfill-20261007
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
+
+      - name: Wait for this commit to reach production
+        env:
+          API_URL: https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app
+        run: |
+          EXPECTED_BUILD="${GITHUB_SHA:0:12}"
+          for attempt in $(seq 1 60); do
+            health=$(curl --fail --silent --show-error --max-time 15 "$API_URL/api/health" || true)
+            if echo "$health" | grep -q "\"build\":\"$EXPECTED_BUILD\""; then
+              echo "Verified production build $EXPECTED_BUILD"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for production build $EXPECTED_BUILD" >&2
+          exit 1
+
+      - name: Resolve production runtime identity and image
+        run: |
+          IMAGE=$(gcloud run services describe shizuoka-english-ai             --project shizuoka-english-ai             --region asia-northeast1             --format='value(spec.template.spec.containers[0].image)')
+          RUNTIME_SA=$(gcloud run services describe shizuoka-english-ai             --project shizuoka-english-ai             --region asia-northeast1             --format='value(spec.template.spec.serviceAccountName)')
+          if [ -z "$RUNTIME_SA" ]; then
+            PROJECT_NUMBER=$(gcloud projects describe shizuoka-english-ai --format='value(projectNumber)')
+            RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+          fi
+          test -n "$IMAGE"
+          test -n "$RUNTIME_SA"
+          echo "BACKFILL_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "BACKFILL_RUNTIME_SA=$RUNTIME_SA" >> "$GITHUB_ENV"
+
+      - name: Create one-time backfill job
+        run: |
+          gcloud run jobs deploy research-daily-aggregate-backfill-20261007             --project shizuoka-english-ai             --region asia-northeast1             --image "$BACKFILL_IMAGE"             --service-account "$BACKFILL_RUNTIME_SA"             --command npx             --args tsx,scripts/run-research-daily-aggregate-backfill.ts             --set-env-vars GOOGLE_CLOUD_PROJECT=shizuoka-english-ai             --max-retries 0             --task-timeout 900s             --memory 512Mi             --quiet
+
+      - name: Execute audited backfill
+        run: |
+          gcloud run jobs execute research-daily-aggregate-backfill-20261007             --project shizuoka-english-ai             --region asia-northeast1             --wait
+
+      - name: Print audited backfill result
+        if: always()
+        run: |
+          gcloud logging read             'resource.type="cloud_run_job" AND resource.labels.job_name="research-daily-aggregate-backfill-20261007" AND (textPayload:"RESEARCH_DAILY_AGGREGATE_BACKFILL_PREFLIGHT=" OR textPayload:"RESEARCH_DAILY_AGGREGATE_BACKFILL_RESULT=" OR textPayload:"RESEARCH_DAILY_AGGREGATE_BACKFILL_FAILED")'             --project shizuoka-english-ai             --freshness=1h             --limit=50             --order=asc             --format='value(textPayload)' || true
+
+      - name: Remove one-time job definition
+        if: always()
+        run: |
+          gcloud run jobs delete research-daily-aggregate-backfill-20261007             --project shizuoka-english-ai             --region asia-northeast1             --quiet || true
