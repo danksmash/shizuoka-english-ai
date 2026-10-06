@@ -348,7 +348,7 @@ jobs:
           done
 
       - name: One-shot audited research aggregate backfill
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, 'ops: run audited research aggregate backfill')
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, 'run audited research aggregate backfill')
         run: |
           set -euo pipefail
           PROJECT_ID="shizuoka-english-ai"
