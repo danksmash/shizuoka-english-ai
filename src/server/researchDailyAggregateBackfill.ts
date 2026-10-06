@@ -1,4 +1,5 @@
-import { listCollection, listCollectionFields, setDocumentsBatch } from './firestore';
+import { listCollection, setDocumentsBatch } from './firestore';
+import { getDashboardSessionsForManagementByLocalDateRange } from './persistence';
 import { buildResearchDashboardData, type ResearchFilterQuery } from './researchDashboard';
 import {
   RESEARCH_DAILY_AGGREGATE_COLLECTION,
@@ -9,15 +10,10 @@ import {
   researchDailyAggregateDocumentsToDashboardSessions,
 } from './researchDailyAggregates';
 
-const SESSION_COLLECTION = 'sessions';
-const SOURCE_FIELDS = RESEARCH_DASHBOARD_SESSION_FIELDS;
-
 async function sourceSessions() {
-  const sessions = await listCollectionFields(SESSION_COLLECTION, SOURCE_FIELDS, 1000);
-  return sessions.map((session) => ({
-    ...session,
-    sessionId: session.sessionId || (typeof session._name === 'string' ? session._name.split('/').at(-1) || '' : ''),
-  }));
+  // Use the exact canonical dashboard read path so participant/site/condition/start-date
+  // metadata are joined from the current student master in the same way as production.
+  return getDashboardSessionsForManagementByLocalDateRange();
 }
 
 function stable(value: unknown): string {
