@@ -7,6 +7,7 @@ import {
   retryResearchDashboardRead,
 } from '../src/server/researchDashboardResilientRuntime';
 import { buildResearchDashboardData } from '../src/server/researchDashboard';
+import { researcherRouteAllowed } from '../src/server/auth';
 
 const aggregateOnlySession:any = {
   sessionId:'aggregate-only',researchId:'R-AGG',studentId:'S-AGG',classId:'5-1',aiStudentId:'emma_usa',personaId:'emma_usa',
@@ -151,9 +152,40 @@ const lazyRoutes = fs.readFileSync('src/server/researchDashboardLazyRoutes.ts', 
 assert.ok(lazyRoutes.includes("router.get('/research.expressions-summary'"), 'expression summary must have a dedicated lazy endpoint');
 assert.ok(lazyRoutes.includes("router.get('/research.recent-sessions'"), 'recent sessions must have a dedicated bounded endpoint');
 assert.ok(lazyRoutes.includes('buildResearchRecentSessions(selected, query, 20)'), 'recent endpoint must return at most 20 rows');
+
+const researcherRouteFiles = fs.readdirSync('src/server').filter((name) => name.endsWith('.ts'));
+const researcherRoutePattern = /router\.(?:get|post|put|patch|delete)\(\s*(['"])([^'"]+)\1\s*,\s*requireManagementRole\(\['researcher'\]\)/g;
+const researcherProtectedRoutes = new Set<string>();
+for (const fileName of researcherRouteFiles) {
+  const source = fs.readFileSync(`src/server/${fileName}`, 'utf8');
+  for (const match of source.matchAll(researcherRoutePattern)) researcherProtectedRoutes.add(match[2]);
+}
+assert.ok(researcherProtectedRoutes.size > 0, 'researcher route coverage audit must discover protected routes');
+for (const routePath of researcherProtectedRoutes) {
+  assert.equal(
+    researcherRouteAllowed({ path: routePath } as any),
+    true,
+    `researcher allowlist must include protected router path ${routePath}`,
+  );
+}
+for (const fullPath of [
+  '/api/management/research.recent-sessions',
+  '/api/management/research.expressions-summary',
+  '/api/reflection/research/lesson-reflections.csv',
+]) {
+  assert.equal(researcherRouteAllowed({ path: fullPath } as any), true, `researcher allowlist must include full mounted path ${fullPath}`);
+}
+
 const managementPage = fs.readFileSync('src/server/managementPage.ts', 'utf8');
 assert.ok(managementPage.includes('dashboardController.abort()'), 'a new dashboard request must abort the previous request');
 assert.ok(managementPage.includes('表現分析を読み込む'), 'expression analysis must require an explicit user action');
+assert.ok(managementPage.includes('async function loadRecentSessionsForDashboard'), 'recent-session loading must have an isolated failure boundary');
+assert.ok(managementPage.includes('最新セッションの読み込みに失敗しました'), 'recent-session failure must be shown only in the recent-session area');
+const loadDashboardStart = managementPage.indexOf('async function loadDashboard()');
+const loadDashboardEnd = managementPage.indexOf('function markDashboardFiltersPending', loadDashboardStart);
+const loadDashboardSource = managementPage.slice(loadDashboardStart, loadDashboardEnd);
+assert.ok(loadDashboardSource.includes('await loadRecentSessionsForDashboard(params,signal,seq)'), 'dashboard must invoke the isolated recent-session loader after the core result is rendered');
+assert.equal(loadDashboardSource.includes('/api/management/research.recent-sessions'), false, 'core dashboard try/catch must not own the recent-session request directly');
 
 const auditRoute = fs.readFileSync('src/server/researchSessionAuditRoutes.ts', 'utf8');
 assert.ok(auditRoute.includes("router.post('/research.session-audit'"), 'session audit must be available as an explicit lazy route');
