@@ -4,7 +4,12 @@ import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, 
 import { getPersonaResearchMetadata } from '../data/personaResearch';
 import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, queryCollectionByStringRange, queryCollectionFieldsByStringRange, queryCollectionLatest, setDocument } from './firestore';
 import { resolveTtsRuntimeMetadata } from './ttsRuntimeMetadata';
-import { RESEARCH_DASHBOARD_SESSION_FIELDS, syncResearchDailyAggregateContribution } from './researchDailyAggregates';
+import {
+  RESEARCH_DAILY_AGGREGATE_COLLECTION,
+  RESEARCH_DASHBOARD_SESSION_FIELDS,
+  researchDailyAggregateDocumentsToDashboardSessions,
+  syncResearchDailyAggregateContribution,
+} from './researchDailyAggregates';
 import {
   normalizeSchoolCondition,
   normalizeStudyGradeLevel,
@@ -629,6 +634,28 @@ export function managementSessionsWithAssignments(
   });
 }
 
+export function managementAggregateSessionsWithCurrentStudyMetadata(
+  sessions: Record<string, any>[],
+  students: Awaited<ReturnType<typeof getStudentRecordsForManagement>>,
+): Record<string, any>[] {
+  const studentByResearchId = new Map(
+    students
+      .filter((student) => Boolean(student.researchId))
+      .map((student) => [student.researchId, student]),
+  );
+  return sessions.map((session) => {
+    const student = studentByResearchId.get(String(session.researchId || ''));
+    return {
+      ...session,
+      formalStudyParticipant: student?.formalStudyParticipant === true,
+      studySiteId: student?.studySiteId || '',
+      schoolCondition: student?.schoolCondition || '',
+      studyGradeLevel: student?.gradeLevel || '',
+      studyStartDate: student?.studyStartDate || '',
+    };
+  });
+}
+
 function managementDateBoundary(value: unknown): string {
   const text = typeof value === 'string' ? value.trim() : '';
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
@@ -660,6 +687,18 @@ export async function getDashboardSessionsForManagementByLocalDateRange(start?: 
     getStudentRecordsForManagement(),
   ]);
   return managementSessionsWithAssignments(sessions, students);
+}
+
+export async function getResearchDailyAggregateSessionsForManagementByLocalDateRange(start?: unknown, end?: unknown): Promise<Record<string, any>[]> {
+  const from = managementDateBoundary(start);
+  const to = managementDateBoundary(end);
+  const [documents, students] = await Promise.all([
+    listCollection(RESEARCH_DAILY_AGGREGATE_COLLECTION, 1000),
+    getStudentRecordsForManagement(),
+  ]);
+  const sessions = researchDailyAggregateDocumentsToDashboardSessions(documents)
+    .filter((session) => (!from || String(session.localDate || '') >= from) && (!to || String(session.localDate || '') <= to));
+  return managementAggregateSessionsWithCurrentStudyMetadata(sessions, students);
 }
 
 export async function getRecentSessionsForManagement(limit = 100): Promise<Record<string, any>[]> {
