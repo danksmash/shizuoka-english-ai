@@ -122,7 +122,7 @@ assert.equal(capacity.nearDocumentLimit, false);
 assert.equal(capacity.maxContributionsPerDay, 2);
 assert.ok(capacity.maxDocumentBytes > 0);
 
-const [entry, server, auth, routes, backfill, firestore, persistence] = await Promise.all([
+const [entry, server, auth, routes, backfill, firestore, persistence, backfillRunner, backfillWorkflow] = await Promise.all([
   readFile('server-entry.ts','utf8'),
   readFile('server.ts','utf8'),
   readFile('src/server/auth.ts','utf8'),
@@ -130,6 +130,8 @@ const [entry, server, auth, routes, backfill, firestore, persistence] = await Pr
   readFile('src/server/researchDailyAggregateBackfill.ts','utf8'),
   readFile('src/server/firestore.ts','utf8'),
   readFile('src/server/persistence.ts','utf8'),
+  readFile('scripts/run-research-daily-aggregate-backfill.ts','utf8'),
+  readFile('.github/workflows/research-daily-aggregate-backfill-once-20261007.yml','utf8'),
 ]);
 assert.ok(entry.includes('createResearchDailyAggregateRouter()'));
 assert.ok(auth.includes("path.startsWith('/research.daily-aggregates/')"));
@@ -148,4 +150,13 @@ assert.ok(server.includes('formalStudyParticipant:student.formalStudyParticipant
 assert.ok(server.includes('schoolCondition:student.schoolCondition'));
 assert.ok(server.includes('studyStartDate:student.studyStartDate'));
 assert.ok(firestore.includes("params.append('mask.fieldPaths', fieldPath)"));
+assert.ok(backfillRunner.includes('RESEARCH_DAILY_AGGREGATE_BACKFILL_ABORTED_CAPACITY'), 'one-time runner must abort before writing when capacity is unsafe');
+assert.ok(backfillRunner.includes('RESEARCH_DAILY_AGGREGATE_BACKFILL_PARITY_FAILED'), 'one-time runner must fail closed on parity mismatch');
+assert.ok(backfillRunner.includes('result.cutoverReady'), 'one-time runner must require cutover readiness');
+assert.equal(backfillRunner.includes('MANAGEMENT_'), false, 'one-time runner must not depend on management credentials');
+assert.ok(backfillWorkflow.includes('Wait for this commit to reach production'), 'one-time workflow must wait for the exact deployed build');
+assert.ok(backfillWorkflow.includes('--service-account "$BACKFILL_RUNTIME_SA"'), 'Cloud Run Job must reuse the production runtime identity');
+assert.ok(backfillWorkflow.includes('--max-retries 0'), 'one-time backfill must not retry a write job automatically');
+assert.ok(backfillWorkflow.includes('Remove one-time job definition'), 'one-time job definition must be cleaned up');
+assert.equal(/MANAGEMENT_(PASSWORD|ACCOUNTS|SESSION)/.test(backfillWorkflow), false, 'workflow must not expose or use researcher credentials');
 console.log('Research daily aggregate shadow-write QA: PASS');
