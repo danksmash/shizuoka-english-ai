@@ -613,8 +613,14 @@ export function managementSessionsWithAssignments(
   students: Awaited<ReturnType<typeof getStudentRecordsForManagement>>,
 ): Record<string, any>[] {
   const studentById = new Map(students.map((student) => [student.studentId, student]));
+  const studentByResearchId = new Map(
+    students
+      .filter((student) => String(student.researchId || '').trim())
+      .map((student) => [String(student.researchId || '').trim().toUpperCase(), student]),
+  );
   return sessions.map((session) => {
-    const student = studentById.get(String(session.studentId || ''));
+    const student = studentById.get(String(session.studentId || ''))
+      || studentByResearchId.get(String(session.researchId || '').trim().toUpperCase());
     return {
       ...session,
       assignedPartnerId: normalizeAssignmentText(session.assignedPartnerId),
