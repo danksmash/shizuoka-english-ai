@@ -151,6 +151,18 @@ jobs:
               return sum(1 for m in hist if isinstance(m,dict) and str(m.get('sender') or '')=='child' and str(m.get('englishText') or '').strip())
           formal_research_ids=set(str(s.get('researchId') or '') for s in formal_students if str(s.get('researchId') or ''))
           formal_student_ids=set(str(s.get('studentId') or '') for s in formal_students if str(s.get('studentId') or ''))
+          research_to_att={str(s.get('researchId') or ''):int(s.get('attendanceNumber')) for s in class_students if str(s.get('researchId') or '') and str(s.get('attendanceNumber') or '').isdigit()}
+          all_53=[s for s in sessions if str(s.get('classId') or '')=='5-3']
+          usage=collections.Counter(research_to_att.get(str(s.get('researchId') or ''),0) for s in all_53)
+          usage.pop(0,None)
+          usage_1006=collections.Counter(research_to_att.get(str(s.get('researchId') or ''),0) for s in target)
+          usage_1006.pop(0,None)
+          print('ATTENDANCE_USAGE',json.dumps({
+              'active_attendance_numbers':sorted(int(s.get('attendanceNumber')) for s in class_students if str(s.get('attendanceNumber') or '').isdigit()),
+              'all_session_counts_by_attendance':{str(k):usage[k] for k in sorted(usage)},
+              'oct06_session_counts_by_attendance':{str(k):usage_1006[k] for k in sorted(usage_1006)},
+          },ensure_ascii=False,sort_keys=True))
+
           formal_target=[s for s in target if (str(s.get('researchId') or '') in formal_research_ids) or (str(s.get('studentId') or '') in formal_student_ids)]
           child_valid=[s for s in formal_target if child_turns(s)>=1]
           valid_by_country=collections.Counter(str(s.get('personaCountry') or '').strip() for s in child_valid if str(s.get('personaCountry') or '').strip())
