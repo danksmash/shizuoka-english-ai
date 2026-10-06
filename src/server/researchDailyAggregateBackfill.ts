@@ -1,4 +1,5 @@
 import { listCollection, listCollectionFields, setDocumentsBatch } from './firestore';
+import { getStudentRecordsForManagement, managementSessionsWithAssignments } from './persistence';
 import { buildResearchDashboardData, type ResearchFilterQuery } from './researchDashboard';
 import {
   RESEARCH_DAILY_AGGREGATE_COLLECTION,
@@ -13,11 +14,18 @@ const SESSION_COLLECTION = 'sessions';
 const SOURCE_FIELDS = RESEARCH_DASHBOARD_SESSION_FIELDS;
 
 async function sourceSessions() {
-  const sessions = await listCollectionFields(SESSION_COLLECTION, SOURCE_FIELDS, 1000);
-  return sessions.map((session) => ({
+  const [sessions, students] = await Promise.all([
+    listCollectionFields(SESSION_COLLECTION, SOURCE_FIELDS, 1000),
+    getStudentRecordsForManagement(),
+  ]);
+  const normalized = sessions.map((session) => ({
     ...session,
     sessionId: session.sessionId || (typeof session._name === 'string' ? session._name.split('/').at(-1) || '' : ''),
   }));
+  // Match the live Research Dashboard exactly: study participation/site/
+  // condition/start-date come from the current student master, while assigned
+  // partner metadata remains the immutable session snapshot.
+  return managementSessionsWithAssignments(normalized, students);
 }
 
 function stable(value: unknown): string {
