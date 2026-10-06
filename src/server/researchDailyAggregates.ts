@@ -125,6 +125,9 @@ export async function syncResearchDailyAggregateContribution(
   if (priorDate && priorDate !== contribution.localDate) {
     await writer.remove(RESEARCH_DAILY_AGGREGATE_COLLECTION, priorDate, `contributions.${key}`);
   }
+  // Keep the date as a first-class field so bounded dashboard reads can use a
+  // Firestore range query even for aggregate documents created after backfill.
+  await writer.patch(RESEARCH_DAILY_AGGREGATE_COLLECTION, contribution.localDate, 'localDate', contribution.localDate);
   await writer.patch(RESEARCH_DAILY_AGGREGATE_COLLECTION, contribution.localDate, `contributions.${key}`, contribution);
 }
 
