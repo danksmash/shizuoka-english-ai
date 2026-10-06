@@ -148,6 +148,7 @@ export function validateStudyScheduleOrder(schedule: Pick<StudyScheduleSnapshot,
   if (schedule.appStartDate && schedule.nationalityRevealDate && schedule.nationalityRevealDate < schedule.appStartDate) throw new Error('INVALID_STUDY_DATE_ORDER');
   if (schedule.nationalityRevealDate && schedule.videoViewDate && schedule.videoViewDate < schedule.nationalityRevealDate) throw new Error('INVALID_STUDY_DATE_ORDER');
   if (schedule.nationalityRevealDate && schedule.assignmentRevealDate && schedule.assignmentRevealDate < schedule.nationalityRevealDate) throw new Error('INVALID_STUDY_DATE_ORDER');
+  if (schedule.nationalityRevealDate && schedule.exchangeDate && schedule.exchangeDate < schedule.nationalityRevealDate) throw new Error('INVALID_STUDY_DATE_ORDER');
   for (const date of [schedule.videoViewDate, schedule.assignmentRevealDate].filter(Boolean)) {
     if (schedule.exchangeDate && schedule.exchangeDate < date) throw new Error('INVALID_STUDY_DATE_ORDER');
   }
@@ -157,10 +158,10 @@ export function phaseForLocalDate(localDate: string, schedule: Pick<StudySchedul
   if (!isRealIsoDate(localDate) || !schedule.appStartDate) return 'unconfigured';
   if (localDate < schedule.appStartDate) return 'pre_start';
   if (!schedule.nationalityRevealDate || localDate < schedule.nationalityRevealDate) return 'unknown_virtual_other';
+  if (schedule.exchangeDate && localDate >= schedule.exchangeDate) return 'exchange_or_after';
   const phase3Start = identifiedOtherStartDate(schedule);
   if (!phase3Start || localDate < phase3Start) return 'anticipated_other';
-  if (!schedule.exchangeDate || localDate < schedule.exchangeDate) return 'identified_real_other';
-  return 'exchange_or_after';
+  return 'identified_real_other';
 }
 
 export function analysisPeriodForLocalDate(

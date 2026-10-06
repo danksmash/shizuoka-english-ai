@@ -68,6 +68,19 @@ const phase2Only={
 assert.equal(phaseForLocalDate('2026-10-06',phase2Only),'anticipated_other');
 assert.equal(analysisPeriodForLocalDate('2026-10-06',phase2Only),'period2');
 
+// Exchange date is authoritative even if Phase 3 dates have not yet been entered.
+const exchangeKnownBeforePhase3={...phase2Only,exchangeDate:'2026-10-16'};
+assert.equal(phaseForLocalDate('2026-10-15',exchangeKnownBeforePhase3),'anticipated_other');
+assert.equal(phaseForLocalDate('2026-10-16',exchangeKnownBeforePhase3),'exchange_or_after');
+assert.equal(analysisPeriodForLocalDate('2026-10-16',exchangeKnownBeforePhase3),'');
+assert.throws(() => validateStudyScheduleOrder({
+  appStartDate:'2026-09-17',
+  nationalityRevealDate:'2026-10-06',
+  videoViewDate:'',
+  assignmentRevealDate:'',
+  exchangeDate:'2026-10-05',
+}), /INVALID_STUDY_DATE_ORDER/);
+
 // With a visitor-country set configured, video alone must not start Phase 3.
 const videoOnly={...phase2Only,videoViewDate:'2026-10-12'};
 assert.equal(phaseForLocalDate('2026-10-12',videoOnly),'anticipated_other');
