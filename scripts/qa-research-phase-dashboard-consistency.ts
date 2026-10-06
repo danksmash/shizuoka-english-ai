@@ -44,7 +44,10 @@ const schedule: StudyScheduleRecord = {
   revision: 1,
   appStartDate: '2026-09-17',
   nationalityRevealDate: '2026-09-24',
+  announcedVisitorCountries: ['United States'],
+  announcedVisitorCountryCounts: { 'United States': 1 },
   videoViewDate: '2026-10-01',
+  assignmentRevealDate: '2026-10-01',
   exchangeDate: '2026-10-15',
   updatedAt: '2026-09-16T00:00:00.000Z',
   updatedBy: 'qa',
@@ -71,7 +74,10 @@ const missingSchedule: StudyScheduleRecord = {
   revision: 0,
   appStartDate: '',
   nationalityRevealDate: '',
+  announcedVisitorCountries: [],
+  announcedVisitorCountryCounts: {},
   videoViewDate: '',
+  assignmentRevealDate: '',
   exchangeDate: '',
 };
 const missingComparison = buildConsistentPhaseComparison([rawSession] as any, [missingSchedule], { dataScope: 'main' });
