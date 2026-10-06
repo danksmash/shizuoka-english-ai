@@ -11,6 +11,10 @@ import {
   syncResearchDailyAggregateContribution,
 } from '../src/server/researchDailyAggregates';
 import { managementSessionsWithAssignments } from '../src/server/persistence';
+import {
+  MANUAL_RESEARCH_EXCLUSIONS,
+  isManualResearchExcludedSessionId,
+} from '../src/server/researchManualExclusions';
 
 const base = {
   sessionId: 'session-1', researchId: 'R001', classId: '5-1', localDate: '2026-10-07',
@@ -72,6 +76,49 @@ assert.equal(managementJoined[0].schoolCondition, 'comparison');
 assert.equal(managementJoined[0].studyStartDate, '2026-10-06');
 assert.equal(managementJoined[0].assignedPartnerCountry, 'United States', 'assigned partner must remain the session snapshot');
 
+
+const aggregateMetadataJoined = managementSessionsWithAssignments([
+  {
+    ...base,
+    sessionId:researchDailyContributionKey(base.sessionId),
+    studentId:'',
+    formalStudyParticipant:false,
+    studySiteId:'',
+    schoolCondition:'',
+    studyStartDate:'',
+    assignedPartnerCountry:'United States',
+  },
+], [{
+  studentId:'student-1',
+  researchId:'R001',
+  learningId:'AAAA',
+  classId:'5-1',
+  attendanceNumber:1,
+  active:true,
+  createdAt:'2026-09-01T00:00:00.000Z',
+  updatedAt:'2026-10-07T00:00:00.000Z',
+  assignedPartnerId:'current-partner',
+  assignedPartnerCountry:'Current Country',
+  assignmentAnnouncedAt:'2026-10-07T00:00:00.000Z',
+  formalStudyParticipant:true,
+  studySiteId:'site_b',
+  schoolCondition:'comparison',
+  gradeLevel:5,
+  studyStartDate:'2026-10-06',
+}] as any);
+assert.equal(aggregateMetadataJoined[0].schoolCondition, 'comparison', 'anonymous aggregate rows must refresh study metadata by researchId');
+assert.equal(aggregateMetadataJoined[0].studyStartDate, '2026-10-06');
+assert.equal(aggregateMetadataJoined[0].assignedPartnerCountry, 'United States', 'researchId join must not overwrite assigned-partner session snapshots');
+
+for (const exclusion of MANUAL_RESEARCH_EXCLUSIONS) {
+  assert.equal(isManualResearchExcludedSessionId(exclusion.sessionId), true);
+  assert.equal(
+    isManualResearchExcludedSessionId(researchDailyContributionKey(exclusion.sessionId)),
+    true,
+    'aggregate hashed session keys must preserve manual research exclusions',
+  );
+}
+
 const calls: Array<{ type: string; collection: string; id: string; path: string; value?: unknown }> = [];
 const writer = {
   patch: async (collection: string, id: string, path: string, value: unknown) => { calls.push({ type:'patch', collection, id, path, value }); },
@@ -122,7 +169,7 @@ assert.equal(capacity.nearDocumentLimit, false);
 assert.equal(capacity.maxContributionsPerDay, 2);
 assert.ok(capacity.maxDocumentBytes > 0);
 
-const [entry, server, auth, routes, backfill, firestore, persistence, deployWorkflow, backfillRunner] = await Promise.all([
+const [entry, server, auth, routes, backfill, firestore, persistence, manualExclusions, deployWorkflow, backfillRunner] = await Promise.all([
   readFile('server-entry.ts','utf8'),
   readFile('server.ts','utf8'),
   readFile('src/server/auth.ts','utf8'),
@@ -130,6 +177,7 @@ const [entry, server, auth, routes, backfill, firestore, persistence, deployWork
   readFile('src/server/researchDailyAggregateBackfill.ts','utf8'),
   readFile('src/server/firestore.ts','utf8'),
   readFile('src/server/persistence.ts','utf8'),
+  readFile('src/server/researchManualExclusions.ts','utf8'),
   readFile('.github/workflows/cloud-run-deploy.yml','utf8'),
   readFile('scripts/run-research-daily-aggregate-backfill.ts','utf8'),
 ]);
@@ -145,6 +193,10 @@ assert.ok(backfill.includes('dashboardParity'), 'backfill audit must compare das
 assert.ok(backfill.includes('cutoverReady'), 'aggregate cutover must have an explicit readiness gate');
 assert.ok(backfill.includes('researchDailyAggregateCapacity'), 'aggregate audit must report document-capacity headroom');
 assert.ok(persistence.includes('const DASHBOARD_SESSION_FIELDS = RESEARCH_DASHBOARD_SESSION_FIELDS;'), 'live dashboard projection must share the aggregate field contract');
+assert.ok(persistence.includes('studentByResearchId.get'), 'aggregate rows must refresh current study metadata without studentId');
+assert.ok(persistence.includes('getDailyAggregateDashboardSessionsForManagementByLocalDateRange'), 'guarded aggregate reader must exist before cutover');
+assert.ok(persistence.includes('researchDailyAggregateDocumentsToDashboardSessions(selected)'), 'aggregate reader must reconstruct summary-level sessions');
+assert.ok(manualExclusions.includes('aggregateSessionKey'), 'manual exclusions must recognize aggregate hashed session ids');
 assert.ok(persistence.includes('formalStudyParticipant: args.formalStudyParticipant === true'), 'shadow writes must receive current study metadata');
 assert.ok(server.includes('formalStudyParticipant:student.formalStudyParticipant'), 'session route must pass resolved study metadata to the shadow write');
 assert.ok(server.includes('schoolCondition:student.schoolCondition'));

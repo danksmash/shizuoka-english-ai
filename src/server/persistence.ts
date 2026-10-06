@@ -4,7 +4,12 @@ import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, 
 import { getPersonaResearchMetadata } from '../data/personaResearch';
 import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, queryCollectionByStringRange, queryCollectionFieldsByStringRange, queryCollectionLatest, setDocument } from './firestore';
 import { resolveTtsRuntimeMetadata } from './ttsRuntimeMetadata';
-import { RESEARCH_DASHBOARD_SESSION_FIELDS, syncResearchDailyAggregateContribution } from './researchDailyAggregates';
+import {
+  RESEARCH_DAILY_AGGREGATE_COLLECTION,
+  RESEARCH_DASHBOARD_SESSION_FIELDS,
+  researchDailyAggregateDocumentsToDashboardSessions,
+  syncResearchDailyAggregateContribution,
+} from './researchDailyAggregates';
 import {
   normalizeSchoolCondition,
   normalizeStudyGradeLevel,
@@ -613,8 +618,14 @@ export function managementSessionsWithAssignments(
   students: Awaited<ReturnType<typeof getStudentRecordsForManagement>>,
 ): Record<string, any>[] {
   const studentById = new Map(students.map((student) => [student.studentId, student]));
+  const studentByResearchId = new Map(
+    students
+      .filter((student) => String(student.researchId || '').trim())
+      .map((student) => [String(student.researchId || '').trim().toUpperCase(), student]),
+  );
   return sessions.map((session) => {
-    const student = studentById.get(String(session.studentId || ''));
+    const student = studentById.get(String(session.studentId || ''))
+      || studentByResearchId.get(String(session.researchId || '').trim().toUpperCase());
     return {
       ...session,
       assignedPartnerId: normalizeAssignmentText(session.assignedPartnerId),
@@ -659,6 +670,40 @@ export async function getDashboardSessionsForManagementByLocalDateRange(start?: 
     queryCollectionFieldsByStringRange(SESSION_COLLECTION, 'localDate', from, to, DASHBOARD_SESSION_FIELDS),
     getStudentRecordsForManagement(),
   ]);
+  return managementSessionsWithAssignments(sessions, students);
+}
+
+
+function dailyAggregateDocumentDate(document: Record<string, any>): string {
+  const explicit = managementDateBoundary(document.localDate);
+  if (explicit) return explicit;
+  const resourceId = typeof document._name === 'string' ? document._name.split('/').at(-1) || '' : '';
+  return managementDateBoundary(resourceId);
+}
+
+/**
+ * Aggregate shadow reader for cutover verification. It is intentionally kept
+ * separate from the live dashboard read path until cutover is explicitly
+ * enabled after the remaining guards pass.
+ */
+export async function getDailyAggregateDashboardSessionsForManagementByLocalDateRange(
+  start?: unknown,
+  end?: unknown,
+): Promise<Record<string, any>[]> {
+  const from = managementDateBoundary(start);
+  const to = managementDateBoundary(end);
+  const [documents, students] = await Promise.all([
+    listCollection(RESEARCH_DAILY_AGGREGATE_COLLECTION, 1000),
+    getStudentRecordsForManagement(),
+  ]);
+  const selected = documents.filter((document) => {
+    const date = dailyAggregateDocumentDate(document);
+    if (!date) return false;
+    if (from && date < from) return false;
+    if (to && date > to) return false;
+    return true;
+  });
+  const sessions = researchDailyAggregateDocumentsToDashboardSessions(selected);
   return managementSessionsWithAssignments(sessions, students);
 }
 
