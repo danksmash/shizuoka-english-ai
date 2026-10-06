@@ -347,6 +347,58 @@ jobs:
             rm -f "$tts_headers" "$tts_audio"
           done
 
+      - name: One-shot research aggregate backfill and parity gate
+        if: success()
+        run: |
+          MARKER="ops/run-research-aggregate-backfill-v2-20261007"
+          if ! git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep -qx "$MARKER"; then
+            echo "Research aggregate backfill marker was not changed in this commit; skipping."
+            exit 0
+          fi
+
+          IMAGE=$(gcloud run services describe shizuoka-english-ai \
+            --project shizuoka-english-ai \
+            --region asia-northeast1 \
+            --format='value(spec.template.spec.containers[0].image)')
+          RUNTIME_SA=$(gcloud run services describe shizuoka-english-ai \
+            --project shizuoka-english-ai \
+            --region asia-northeast1 \
+            --format='value(spec.template.spec.serviceAccountName)')
+          if [ -z "$RUNTIME_SA" ]; then
+            PROJECT_NUMBER=$(gcloud projects describe shizuoka-english-ai --format='value(projectNumber)')
+            RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+          fi
+          test -n "$IMAGE"
+          test -n "$RUNTIME_SA"
+
+          gcloud run jobs deploy research-aggregate-backfill-v2 \
+            --project shizuoka-english-ai \
+            --region asia-northeast1 \
+            --image "$IMAGE" \
+            --service-account "$RUNTIME_SA" \
+            --command npx \
+            --args tsx,scripts/run-research-daily-aggregate-backfill.ts \
+            --set-env-vars RESEARCH_AGGREGATE_BACKFILL_CONFIRM=BACKFILL_RESEARCH_DAILY_AGGREGATES \
+            --tasks 1 \
+            --max-retries 0 \
+            --task-timeout 900s \
+            --memory 512Mi \
+            --quiet
+
+          EXECUTION=$(gcloud run jobs execute research-aggregate-backfill-v2 \
+            --project shizuoka-english-ai \
+            --region asia-northeast1 \
+            --wait \
+            --format='value(metadata.name)')
+          echo "Research aggregate execution: $EXECUTION"
+
+          gcloud logging read \
+            'resource.type="cloud_run_job" AND resource.labels.job_name="research-aggregate-backfill-v2"' \
+            --project shizuoka-english-ai \
+            --limit 120 \
+            --order desc \
+            --format='value(textPayload)' | head -n 160
+
       - name: Mark Cloud Run deployment verified
         if: success()
         env:
