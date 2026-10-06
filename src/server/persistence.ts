@@ -507,6 +507,7 @@ export interface SaveCanonicalSessionArgs {
   personaLabelCondition?: PersonaLabelCondition; countryLabelVisible?: boolean; accentLabelVisible?: boolean; flagVisible?: boolean;
   studentSelectedSpeechRate?: number; effectiveTtsSpeechRate?: number;
   assignedPartnerId?: string; assignedPartnerCountry?: string; assignmentAnnouncedAt?: string;
+  formalStudyParticipant?: boolean; studySiteId?: string; schoolCondition?: string; studyGradeLevel?: 5 | 6 | ''; studyStartDate?: string;
 }
 
 export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
@@ -565,7 +566,14 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
   };
   await setDocument(SESSION_COLLECTION, args.sessionId, document);
   try {
-    await syncResearchDailyAggregateContribution(existing, document);
+    await syncResearchDailyAggregateContribution(existing, {
+      ...document,
+      formalStudyParticipant: args.formalStudyParticipant === true,
+      studySiteId: args.studySiteId || '',
+      schoolCondition: args.schoolCondition || '',
+      gradeLevel: args.studyGradeLevel || document.gradeLevel,
+      studyStartDate: args.studyStartDate || '',
+    });
   } catch (error: any) {
     // Aggregates are a rebuildable shadow index. Never make the canonical
     // session save fail after the source document has already been persisted.
