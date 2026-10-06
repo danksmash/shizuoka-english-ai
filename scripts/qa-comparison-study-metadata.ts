@@ -200,7 +200,10 @@ const comparisonSchedule: StudyScheduleRecord = {
   revision: 1,
   appStartDate: '2026-10-01',
   nationalityRevealDate: '2026-10-15',
+  announcedVisitorCountries: [],
+  announcedVisitorCountryCounts: {},
   videoViewDate: '2026-10-22',
+  assignmentRevealDate: '',
   exchangeDate: '2026-10-29',
   updatedAt: '',
   updatedBy: '',
@@ -222,7 +225,10 @@ assert.ok(comparisonPhase.reason.includes('比較校'));
 const interventionSchedule: StudyScheduleRecord = {
   ...comparisonSchedule,
   classId: '5-1',
+  announcedVisitorCountries: ['United States'],
+  announcedVisitorCountryCounts: { 'United States': 1 },
   videoViewDate: '2026-10-22',
+  assignmentRevealDate: '2026-10-22',
 };
 const bothPhase = buildPhaseComparisonFromExportSessions(exportData.sessions, [interventionSchedule, comparisonSchedule], {
   dataScope: 'main',
