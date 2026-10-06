@@ -125,6 +125,10 @@ export async function syncResearchDailyAggregateContribution(
   if (priorDate && priorDate !== contribution.localDate) {
     await writer.remove(RESEARCH_DAILY_AGGREGATE_COLLECTION, priorDate, `contributions.${key}`);
   }
+  // Keep localDate queryable on documents created by live shadow writes.
+  // Historical backfill already writes this field, but a brand-new date may
+  // otherwise contain only the dynamic contributions map.
+  await writer.patch(RESEARCH_DAILY_AGGREGATE_COLLECTION, contribution.localDate, 'localDate', contribution.localDate);
   await writer.patch(RESEARCH_DAILY_AGGREGATE_COLLECTION, contribution.localDate, `contributions.${key}`, contribution);
 }
 
