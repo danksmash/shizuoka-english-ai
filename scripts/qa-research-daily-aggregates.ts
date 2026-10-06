@@ -122,7 +122,7 @@ assert.equal(capacity.nearDocumentLimit, false);
 assert.equal(capacity.maxContributionsPerDay, 2);
 assert.ok(capacity.maxDocumentBytes > 0);
 
-const [entry, server, auth, routes, backfill, firestore, persistence] = await Promise.all([
+const [entry, server, auth, routes, backfill, firestore, persistence, deployWorkflow, backfillRunner] = await Promise.all([
   readFile('server-entry.ts','utf8'),
   readFile('server.ts','utf8'),
   readFile('src/server/auth.ts','utf8'),
@@ -130,6 +130,8 @@ const [entry, server, auth, routes, backfill, firestore, persistence] = await Pr
   readFile('src/server/researchDailyAggregateBackfill.ts','utf8'),
   readFile('src/server/firestore.ts','utf8'),
   readFile('src/server/persistence.ts','utf8'),
+  readFile('.github/workflows/cloud-run-deploy.yml','utf8'),
+  readFile('scripts/run-research-daily-aggregate-backfill.ts','utf8'),
 ]);
 assert.ok(entry.includes('createResearchDailyAggregateRouter()'));
 assert.ok(auth.includes("path.startsWith('/research.daily-aggregates/')"));
@@ -148,4 +150,10 @@ assert.ok(server.includes('formalStudyParticipant:student.formalStudyParticipant
 assert.ok(server.includes('schoolCondition:student.schoolCondition'));
 assert.ok(server.includes('studyStartDate:student.studyStartDate'));
 assert.ok(firestore.includes("params.append('mask.fieldPaths', fieldPath)"));
+assert.ok(backfillRunner.includes('backfillResearchDailyAggregates()'));
+assert.ok(backfillRunner.includes("result.cutoverReady"));
+assert.ok(deployWorkflow.includes("contains(github.event.head_commit.message, 'run audited research aggregate backfill')"), 'production backfill must be explicitly one-shot gated');
+assert.ok(deployWorkflow.includes('gcloud run jobs deploy "$JOB_NAME"'));
+assert.ok(deployWorkflow.includes('gcloud run jobs execute "$JOB_NAME"'));
+assert.ok(deployWorkflow.includes('gcloud run jobs delete "$JOB_NAME"'), 'one-shot job must clean itself up');
 console.log('Research daily aggregate shadow-write QA: PASS');
