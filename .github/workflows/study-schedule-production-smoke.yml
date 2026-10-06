@@ -30,8 +30,17 @@ jobs:
           echo "$page" | grep -q 'Mid基準日（C1）'
           echo "$page" | grep -q '本人動画日 / C2分析基準日'
           echo "$page" | grep -q 'C2（動画提示なし）'
+          echo "$page" | grep -q '担当相手告知日'
+          echo "$page" | grep -q 'Phase 2　来校予定留学生の国籍'
+          echo "$page" | grep -q 'Phase 3　担当留学生設定'
+          echo "$page" | grep -q 'Phase 2の来校国籍群告知日とは別の出来事として管理します'
           echo "$page" | grep -q 'Post基準日'
           echo "$page" | grep -q 'href="/management"'
+
+          rq1_page="$(curl --fail --silent --show-error --max-time 20 "$API_URL/research-rq1.html")"
+          echo "$rq1_page" | grep -q 'Phase 1→2：20 Personaから来校国籍群へ'
+          echo "$rq1_page" | grep -q 'Phase 2→3：来校国籍群から担当国へ'
+          echo "$rq1_page" | grep -q '比較校には国籍情報・担当国を提示しません'
 
           dashboard="$(curl --fail --silent --show-error --max-time 20 "$API_URL/management")"
           echo "$dashboard" | grep -q 'Study 1 日程管理'
