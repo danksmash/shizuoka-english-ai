@@ -693,7 +693,9 @@ export async function getResearchDailyAggregateSessionsForManagementByLocalDateR
   const from = managementDateBoundary(start);
   const to = managementDateBoundary(end);
   const [documents, students] = await Promise.all([
-    listCollection(RESEARCH_DAILY_AGGREGATE_COLLECTION, 1000),
+    (from || to)
+      ? queryCollectionByStringRange(RESEARCH_DAILY_AGGREGATE_COLLECTION, 'localDate', from, to)
+      : listCollection(RESEARCH_DAILY_AGGREGATE_COLLECTION, 1000),
     getStudentRecordsForManagement(),
   ]);
   const sessions = researchDailyAggregateDocumentsToDashboardSessions(documents)
