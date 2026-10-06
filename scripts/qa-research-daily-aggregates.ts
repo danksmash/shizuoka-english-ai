@@ -193,6 +193,9 @@ assert.ok(backfill.includes('cutoverReady'), 'aggregate cutover must have an exp
 assert.ok(backfill.includes('researchDailyAggregateCapacity'), 'aggregate audit must report document-capacity headroom');
 assert.ok(persistence.includes('const DASHBOARD_SESSION_FIELDS = RESEARCH_DASHBOARD_SESSION_FIELDS;'), 'live dashboard projection must share the aggregate field contract');
 assert.ok(persistence.includes('studentByResearchId.get'), 'aggregate dashboard rows must be able to refresh current study metadata without studentId');
+assert.ok(persistence.includes('getDailyAggregateDashboardSessionsForManagementByLocalDateRange'), 'aggregate reader must exist separately before live cutover');
+assert.ok(persistence.includes('researchDailyAggregateDocumentsToDashboardSessions(selected)'), 'aggregate reader must reconstruct only summary-level dashboard sessions');
+assert.ok(persistence.includes('managementSessionsWithAssignments(sessions, students)'), 'aggregate reader must refresh current study metadata at read time');
 assert.ok(manualExclusions.includes('aggregateSessionKey'), 'manual exclusions must recognize anonymous aggregate session keys');
 assert.ok(persistence.includes('formalStudyParticipant: args.formalStudyParticipant === true'), 'shadow writes must receive current study metadata');
 assert.ok(server.includes('formalStudyParticipant:student.formalStudyParticipant'), 'session route must pass resolved study metadata to the shadow write');
