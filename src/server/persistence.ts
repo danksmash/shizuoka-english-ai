@@ -4,7 +4,7 @@ import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, 
 import { getPersonaResearchMetadata } from '../data/personaResearch';
 import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, queryCollectionByStringRange, queryCollectionFieldsByStringRange, queryCollectionLatest, setDocument } from './firestore';
 import { resolveTtsRuntimeMetadata } from './ttsRuntimeMetadata';
-import { syncResearchDailyAggregateContribution } from './researchDailyAggregates';
+import { RESEARCH_DASHBOARD_SESSION_FIELDS, syncResearchDailyAggregateContribution } from './researchDailyAggregates';
 import {
   normalizeSchoolCondition,
   normalizeStudyGradeLevel,
@@ -640,13 +640,7 @@ export async function getAllSessionsForManagement(): Promise<Record<string, any>
   return getSessionsForManagementByLocalDateRange();
 }
 
-const DASHBOARD_SESSION_FIELDS = [
-  'sessionId','studentId','researchId','classId','aiStudentId','personaId','personaCountry','topic','targetDurationMinutes',
-  'actualDurationSeconds','startedAt','endedAt','localDate','schemaVersion','totalTurns','totalChildWords','reflection',
-  'aiTurnCount','dialogueUtteranceCount',
-  'personaLabelCondition','assignedPartnerId','assignedPartnerCountry','assignmentAnnouncedAt','ttsFallbackCount','micErrorCount',
-  'aiRequestFailureCount','gradeLevel','schoolCondition','studySiteId','studyStartDate','formalStudyParticipant',
-];
+const DASHBOARD_SESSION_FIELDS = RESEARCH_DASHBOARD_SESSION_FIELDS;
 
 export async function getDashboardSessionsForManagementByLocalDateRange(start?: unknown, end?: unknown): Promise<Record<string, any>[]> {
   const from = managementDateBoundary(start);
