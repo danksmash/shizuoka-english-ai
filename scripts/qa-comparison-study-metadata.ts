@@ -46,6 +46,21 @@ assert.deepEqual(explicitComparison, {
   gradeLevel: 5,
   studyStartDate: '2026-10-01',
 });
+
+const configuredComparison = normalizeStudyParticipantMetadata({
+  classId: '6-C1',
+  attendanceNumber: 1,
+  active: true,
+});
+assert.deepEqual(configuredComparison, {
+  formalStudyParticipant: true,
+  studySiteId: 'site_b',
+  schoolCondition: 'comparison',
+  gradeLevel: 6,
+  studyStartDate: '2026-10-06',
+});
+assert.equal(normalizeStudyParticipantMetadata({ classId: '6-C1', attendanceNumber: 29, active: true }).formalStudyParticipant, false);
+assert.equal(normalizeStudyParticipantMetadata({ classId: '6-C1', attendanceNumber: 1, active: false }).formalStudyParticipant, false);
 assert.equal(isStudyClassId('5-C1'), true);
 assert.equal(isStudyClassId('6-C9'), true);
 assert.equal(isStudyClassId('5-C0'), false);
