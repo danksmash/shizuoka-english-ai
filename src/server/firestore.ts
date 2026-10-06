@@ -148,6 +148,43 @@ export async function setDocument(collection: string, id: string, data: Record<s
   if (!response.ok) throw new Error(`FIRESTORE_SET_${response.status}:${(await response.text()).slice(0, 500)}`);
 }
 
+export async function patchDocumentField(
+  collection: string,
+  id: string,
+  fieldPath: string,
+  value: unknown,
+): Promise<void> {
+  const segments = fieldPath.split('.').filter(Boolean);
+  if (!segments.length || segments.some((segment) => !/^[A-Za-z0-9_]+$/.test(segment))) {
+    throw new Error('FIRESTORE_INVALID_FIELD_PATH');
+  }
+  let encoded = toFirestoreValue(value);
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    encoded = { mapValue: { fields: { [segments[index]]: encoded } } };
+  }
+  const params = new URLSearchParams({ 'updateMask.fieldPaths': fieldPath });
+  const response = await firestoreFetch(`/${encodeURIComponent(collection)}/${encodeURIComponent(id)}?${params.toString()}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ fields: encoded.mapValue.fields }),
+  });
+  if (!response.ok) throw new Error(`FIRESTORE_PATCH_FIELD_${response.status}:${(await response.text()).slice(0, 500)}`);
+}
+
+export async function deleteDocumentField(collection: string, id: string, fieldPath: string): Promise<void> {
+  const segments = fieldPath.split('.').filter(Boolean);
+  if (!segments.length || segments.some((segment) => !/^[A-Za-z0-9_]+$/.test(segment))) {
+    throw new Error('FIRESTORE_INVALID_FIELD_PATH');
+  }
+  const params = new URLSearchParams({ 'updateMask.fieldPaths': fieldPath });
+  const response = await firestoreFetch(`/${encodeURIComponent(collection)}/${encodeURIComponent(id)}?${params.toString()}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ fields: {} }),
+  });
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`FIRESTORE_DELETE_FIELD_${response.status}:${(await response.text()).slice(0, 500)}`);
+  }
+}
+
 export async function setDocumentsBatch(
   collection: string,
   documents: Array<{ id: string; data: Record<string, unknown> }>,
