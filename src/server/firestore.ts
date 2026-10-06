@@ -105,6 +105,23 @@ async function runStructuredQuery(
   }
 }
 
+export async function queryCollectionLatest(
+  collection: string,
+  orderField: string,
+  limit = 100,
+  fieldPaths: string[] = [],
+): Promise<Record<string, any>[]> {
+  const structuredQuery: Record<string, any> = {
+    from: [{ collectionId: collection }],
+    orderBy: [{ field: { fieldPath: orderField }, direction: 'DESCENDING' }],
+    limit: Math.max(1, Math.min(1000, Math.trunc(limit) || 1)),
+  };
+  if (fieldPaths.length) {
+    structuredQuery.select = { fields: fieldPaths.map((fieldPath) => ({ fieldPath })) };
+  }
+  return runStructuredQuery(structuredQuery, 'FIRESTORE_LATEST_QUERY');
+}
+
 export async function firestoreAvailable(): Promise<boolean> {
   try {
     const response = await firestoreFetch('/__health_probe__?mask.fieldPaths=missing');
@@ -195,6 +212,27 @@ export async function queryCollectionByStringRange(
     where,
     orderBy: [{ field: { fieldPath: field }, direction: 'ASCENDING' }],
   }, 'FIRESTORE_RANGE_QUERY');
+}
+
+export async function queryCollectionFieldsByStringRange(
+  collection: string,
+  field: string,
+  startInclusive = '',
+  endInclusive = '',
+  fieldPaths: string[] = [],
+): Promise<Record<string, any>[]> {
+  const start = String(startInclusive || '').trim();
+  const end = String(endInclusive || '').trim();
+  const filters: Record<string, any>[] = [];
+  if (start) filters.push({ fieldFilter: { field: { fieldPath: field }, op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: start } } });
+  if (end) filters.push({ fieldFilter: { field: { fieldPath: field }, op: 'LESS_THAN_OR_EQUAL', value: { stringValue: end } } });
+  const structuredQuery: Record<string, any> = {
+    from: [{ collectionId: collection }],
+    ...(filters.length ? { where: filters.length === 1 ? filters[0] : { compositeFilter: { op:'AND', filters } } } : {}),
+    ...(start || end ? { orderBy: [{ field: { fieldPath: field }, direction:'ASCENDING' }] } : {}),
+  };
+  if (fieldPaths.length) structuredQuery.select = { fields: fieldPaths.map((fieldPath) => ({ fieldPath })) };
+  return runStructuredQuery(structuredQuery, 'FIRESTORE_PROJECTED_RANGE_QUERY');
 }
 
 export async function listCollection(collection: string, pageSize = 200): Promise<Record<string, any>[]> {

@@ -7,6 +7,7 @@ const announced='2026-09-02T00:00:00.000Z';
 const make=(sessionId:string,started:number,extra:Record<string,any>={})=>({
  schemaVersion:4,researchSchemaVersion:'research-2026-v1',researchId:'R1',studentId:'S1',classId:'5-1',sessionId,
  aiStudentId:'emma_usa',personaId:'emma_usa',personaCountry:'United States',personaGender:'female',topic:'favorites',targetDurationMinutes:2,actualDurationSeconds:120,
+ totalTurns:1,totalChildWords:7,
  startedAt:new Date(started).toISOString(),endedAt:new Date(started+120000).toISOString(),appVersion:'1.0.7',build:'abc',
  assignedPartnerId:'P1',assignedPartnerCountry:'United States',assignmentAnnouncedAt:announced,studentSelectedSpeechRate:1,
  ttsTelemetryVersion:'cors-visible-v1',ttsProvider:'azure-speech',ttsPrimaryProvider:'azure-speech',ttsActualProvider:'azure-speech',ttsProviderObserved:1,ttsProviderEventCount:2,ttsFallbackCount:0,ttsFallbackReason:'',ttsProviderDeviation:0,
@@ -15,7 +16,7 @@ const make=(sessionId:string,started:number,extra:Record<string,any>={})=>({
  systemEvents:[{type:'session_start',timestamp:started},{type:'help_open',timestamp:started+1000},{type:'vocab_bank_open',timestamp:started+2000},{type:'session_finish',timestamp:started+119000}],
  ...extra,
 });
-const raw=[make('before',before),make('after',after),make('other',after+3600000,{researchId:'R2',studentId:'S2',classId:'6-2',aiStudentId:'rahul_bangladesh',personaId:'rahul_bangladesh',personaCountry:'Bangladesh',assignedPartnerId:'P2',assignedPartnerCountry:'India',ttsTelemetryVersion:undefined,ttsProvider:'google-chirp3-hd',ttsActualProvider:undefined,ttsProviderObserved:undefined,ttsProviderEventCount:undefined,ttsFallbackCount:undefined,ttsFallbackReason:undefined,ttsProviderDeviation:undefined,reflection:null,systemEvents:[{type:'session_start',timestamp:after+3600000},{type:'ai_request_failure',timestamp:after+3610000,value:'503'},{type:'mic_error',timestamp:after+3620000,value:'network'},{type:'tts_provider',timestamp:after+3625000,value:'device-fallback'},{type:'session_finish',timestamp:after+3659000}]})];
+const raw=[make('before',before),make('after',after),make('other',after+3600000,{researchId:'R2',studentId:'S2',classId:'6-2',aiStudentId:'rahul_bangladesh',personaId:'rahul_bangladesh',personaCountry:'Bangladesh',assignedPartnerId:'P2',assignedPartnerCountry:'India',ttsTelemetryVersion:undefined,ttsProvider:'google-chirp3-hd',ttsActualProvider:undefined,ttsProviderObserved:undefined,ttsProviderEventCount:undefined,ttsFallbackCount:1,micErrorCount:1,aiRequestFailureCount:1,ttsFallbackReason:undefined,ttsProviderDeviation:undefined,reflection:null,systemEvents:[{type:'session_start',timestamp:after+3600000},{type:'ai_request_failure',timestamp:after+3610000,value:'503'},{type:'mic_error',timestamp:after+3620000,value:'network'},{type:'tts_provider',timestamp:after+3625000,value:'device-fallback'},{type:'session_finish',timestamp:after+3659000}]})];
 const data=buildResearchExportDataSets(raw as any);
 assert.deepEqual(Object.keys(data).sort(),['codebook','expressions','personas','sessions','utterances'].sort());
 assert.equal(data.sessions.length,3);assert.equal(data.personas.length,20);

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { ReflectionAnswers, ResearchSystemEvent, calculateCanonicalStats, isAIStudentId, maskHistoryForStorage } from '../dataContract';
 import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, PersonaLabelCondition, VisualVocabularyItem } from '../types';
 import { getPersonaResearchMetadata } from '../data/personaResearch';
-import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, queryCollectionByStringRange, setDocument } from './firestore';
+import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, queryCollectionByStringRange, queryCollectionFieldsByStringRange, queryCollectionLatest, setDocument } from './firestore';
 import { resolveTtsRuntimeMetadata } from './ttsRuntimeMetadata';
 import {
   normalizeSchoolCondition,
@@ -530,6 +530,9 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
   const distinctTtsProviders = Array.from(new Set(ttsProviderEvents));
   const ttsActualProvider = distinctTtsProviders.length === 0 ? 'not_observed' : distinctTtsProviders.length === 1 ? distinctTtsProviders[0] : 'mixed';
   const ttsFallbackCount = events.filter((event) => event.type === 'tts_fallback_from' && event.value === 'azure-speech').length;
+  const aiTurnCount = safeHistory.filter((message) => message.sender === 'ai').length;
+  const micErrorCount = events.filter((event) => event.type === 'mic_error').length;
+  const aiRequestFailureCount = events.filter((event) => event.type === 'ai_request_failure').length;
   const ttsLatencyRaw = Number(latestEvent('tts_latency_ms'));
   const ttsProviderObserved = ttsActualProvider === 'not_observed' ? 0 : 1;
   const ttsProviderDeviation: number | '' = ttsActualProvider === 'not_observed' ? '' : ttsActualProvider === 'azure-speech' ? 0 : 1;
@@ -549,11 +552,12 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
     studentSelectedSpeechRate: Number(args.studentSelectedSpeechRate || 1), effectiveTtsSpeechRate: Number(latestEvent('tts_effective_rate') || args.effectiveTtsSpeechRate || args.studentSelectedSpeechRate || 1), personaDictionaryVersion: personaMeta.personaDictionaryVersion,
     targetDurationMinutes: args.targetDurationMinutes, actualDurationSeconds: stats.actualDurationSeconds,
     startedAt: new Date(args.startedAt).toISOString(), endedAt: new Date(args.endedAt).toISOString(), localDate,
-    lifetimeSessionNumber, dailySessionNumber, totalTurns: stats.totalTurns, totalChildWords: stats.totalChildWords,
+    lifetimeSessionNumber, dailySessionNumber, totalTurns: stats.totalTurns, aiTurnCount,
+    dialogueUtteranceCount: stats.totalTurns + aiTurnCount, totalChildWords: stats.totalChildWords,
     uniqueVocabularyCount: stats.uniqueVocabularyCount,
     childUniqueWordTypes: stats.childUniqueWordTypes, meanChildWordsPerTurn: stats.meanChildWordsPerTurn, maxChildWordsPerTurn: stats.maxChildWordsPerTurn,
     childQuestionCount: stats.childQuestionCount, childReciprocalQuestionCount: stats.childReciprocalQuestionCount, childRepairCount: stats.childRepairCount, childReasonExpressionCount: stats.childReasonExpressionCount,
-    history: safeHistory, systemEvents: events,
+    micErrorCount, aiRequestFailureCount, history: safeHistory, systemEvents: events,
     encounteredVocab: args.encounteredVocab.slice(0, 200).map((item) => ({ id: item.id, word: item.word, japanese: item.japanese, category: item.category })),
     reflection: args.reflection || null, updatedAt: new Date().toISOString(), createdAt: existing?.createdAt || new Date().toISOString(),
     retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000),
@@ -623,6 +627,32 @@ export async function getSessionsForManagementByLocalDateRange(start?: unknown, 
 
 export async function getAllSessionsForManagement(): Promise<Record<string, any>[]> {
   return getSessionsForManagementByLocalDateRange();
+}
+
+const DASHBOARD_SESSION_FIELDS = [
+  'sessionId','studentId','researchId','classId','aiStudentId','personaId','personaCountry','topic','targetDurationMinutes',
+  'actualDurationSeconds','startedAt','endedAt','localDate','schemaVersion','totalTurns','totalChildWords','reflection',
+  'aiTurnCount','dialogueUtteranceCount',
+  'personaLabelCondition','assignedPartnerId','assignedPartnerCountry','assignmentAnnouncedAt','ttsFallbackCount','micErrorCount',
+  'aiRequestFailureCount','gradeLevel','schoolCondition','studySiteId','studyStartDate','formalStudyParticipant',
+];
+
+export async function getDashboardSessionsForManagementByLocalDateRange(start?: unknown, end?: unknown): Promise<Record<string, any>[]> {
+  const from = managementDateBoundary(start);
+  const to = managementDateBoundary(end);
+  const [sessions, students] = await Promise.all([
+    queryCollectionFieldsByStringRange(SESSION_COLLECTION, 'localDate', from, to, DASHBOARD_SESSION_FIELDS),
+    getStudentRecordsForManagement(),
+  ]);
+  return managementSessionsWithAssignments(sessions, students);
+}
+
+export async function getRecentSessionsForManagement(limit = 100): Promise<Record<string, any>[]> {
+  const [sessions, students] = await Promise.all([
+    queryCollectionLatest(SESSION_COLLECTION, 'startedAt', limit, DASHBOARD_SESSION_FIELDS),
+    getStudentRecordsForManagement(),
+  ]);
+  return managementSessionsWithAssignments(sessions, students);
 }
 
 export async function getResearchSessionsByResearchIdForManagement(researchId: string): Promise<Record<string, any>[]> {

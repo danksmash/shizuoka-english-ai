@@ -499,18 +499,115 @@ function normalizedCountry(value: unknown): string {
   return aliases[raw] || raw;
 }
 
+function dashboardTimestampMs(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = typeof value === 'string' && value.trim() ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function dashboardTokyoParts(value: unknown): { date:string; time:string; valid:boolean } {
+  const ms = dashboardTimestampMs(value);
+  if (!ms) return { date:'', time:'', valid:false };
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone:'Asia/Tokyo', year:'numeric', month:'2-digit', day:'2-digit',
+    hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23',
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(new Date(ms)).map((part) => [part.type, part.value]));
+  return { date:`${parts.year}-${parts.month}-${parts.day}`, time:`${parts.hour}:${parts.minute}:${parts.second}`, valid:true };
+}
+
+/** Dashboard-only session rows. Deliberately never reads history or systemEvents. */
+export function buildResearchDashboardSessionRows(rawSessions: Record<string, any>[]): Row[] {
+  const sessions = rawSessions.filter(isResearchTargetSession);
+  const startsByClass = new Map<string, number[]>();
+  for (const session of sessions) {
+    const classId = String(session.classId || '');
+    const started = dashboardTimestampMs(session.startedAt) || dashboardTimestampMs(session.endedAt);
+    if (!classId || !started) continue;
+    const starts = startsByClass.get(classId) || [];
+    starts.push(started); startsByClass.set(classId, starts);
+  }
+  for (const starts of startsByClass.values()) starts.sort((a,b) => a-b);
+  const countNear = (starts:number[], value:number, radius:number) => starts.filter((item) => Math.abs(item-value) <= radius).length;
+  return sessions.map((session) => {
+    const persona = RESEARCH_PERSONAS.find((item) => item.id === String(session.personaId || session.aiStudentId || ''));
+    const startedMs = dashboardTimestampMs(session.startedAt) || dashboardTimestampMs(session.endedAt);
+    const started = dashboardTokyoParts(startedMs);
+    const ended = dashboardTokyoParts(session.endedAt || session.startedAt);
+    const classId = String(session.classId || '');
+    const classStarts = startsByClass.get(classId) || [];
+    const same5 = startedMs ? countNear(classStarts, startedMs, 5*60_000) : 0;
+    const same10 = startedMs ? countNear(classStarts, startedMs, 10*60_000) : 0;
+    const usage = started.valid && classId ? (same5 >= 8 || same10 >= 12 ? 'group_like' : 'individual_like') : 'unknown';
+    const childTurns = Math.max(0, Number(session.totalTurns || 0));
+    const storedAiTurns = Number(session.aiTurnCount);
+    const aiTurns = Number.isFinite(storedAiTurns) && storedAiTurns >= 0
+      ? storedAiTurns
+      : childTurns > 0 ? childTurns + 1 : 0;
+    const childWords = Math.max(0, Number(session.totalChildWords || 0));
+    const hasCore = Boolean(session.sessionId && session.researchId && childTurns > 0);
+    const hasReflection = Boolean(session.reflection && typeof session.reflection === 'object');
+    const completed = Boolean(session.endedAt) && hasCore;
+    const quality = !hasCore ? 'missing_core' : !completed ? 'interrupted' : !hasReflection ? 'missing_reflection' : 'complete';
+    const grade = session.gradeLevel || (classId.startsWith('5-') ? 5 : classId.startsWith('6-') ? 6 : '');
+    return {
+      research_id:session.researchId || '', site_id:session.studySiteId || '', school_condition:session.schoolCondition || '',
+      formal_study_participant:session.formalStudyParticipant === true ? 1 : 0, study_start_date:session.studyStartDate || '',
+      class_id:classId, session_id:session.sessionId || '', grade_level:grade,
+      local_date:session.localDate || started.date, local_start_time:started.time, local_end_time:ended.time,
+      local_started_at:started.valid ? `${started.date} ${started.time}` : '', local_ended_at:ended.valid ? `${ended.date} ${ended.time}` : '',
+      persona_id:session.personaId || session.aiStudentId || '', persona_country:session.personaCountry || persona?.country || '',
+      persona_label_condition:session.personaLabelCondition || 'shown', assigned_partner_country:session.assignedPartnerCountry || '',
+      assignment_announced_at:session.assignmentAnnouncedAt || '', topic:session.topic || '',
+      child_total_words:childWords, child_turn_count:childTurns, ai_turn_count:aiTurns,
+      dialogue_utterance_count:childTurns+aiTurns, target_duration_minutes:session.targetDurationMinutes || 0,
+      actual_duration_seconds:session.actualDurationSeconds || 0,
+      reflection_scale_version:session.reflection?.scaleVersion || (session.reflection ? 'legacy-135' : ''),
+      reflection_understood_partner:session.reflection?.understoodPartner ?? '', reflection_conveyed_ideas:session.reflection?.conveyedIdeas ?? '',
+      reflection_noticed_language_culture:session.reflection?.noticedLanguageCulture ?? '',
+      same_class_starts_5min:same5, same_class_starts_10min:same10, usage_context_inferred:usage,
+      data_quality_flag:quality, mic_error_count:Number(session.micErrorCount || 0),
+      tts_fallback_count:Number(session.ttsFallbackCount || 0), ai_request_failure_count:Number(session.aiRequestFailureCount || 0),
+    };
+  });
+}
+
+export function buildResearchTopExpressions(rawSessions: Record<string, any>[], query: ResearchFilterQuery = {}) {
+  const targetSessions = rawSessions.filter(isResearchTargetSession);
+  const technical = buildResearchDataSets(targetSessions);
+  const allowed = new Set(filterSessions(buildResearchDashboardSessionRows(targetSessions), query).map((row) => String(row.session_id || '')));
+  const top = new Map<string, { count:number; source:string }>();
+  for (const row of technical.expressions) {
+    if (row.speaker !== 'child' || !allowed.has(String(row.session_id || ''))) continue;
+    const expression = String(row.expression || '').trim();
+    if (!expression) continue;
+    const key = `${String(row.dictionary_source || '')}:${expression.toLowerCase()}`;
+    const current = top.get(key) || { count:0, source:String(row.dictionary_source || '') };
+    current.count += 1; top.set(key, current);
+  }
+  return [...top.entries()].map(([key,value]) => ({ expression:key.split(':').slice(1).join(':'), count:value.count, source:value.source }))
+    .sort((a,b) => b.count-a.count).slice(0,10);
+}
+
+export function buildResearchRecentSessions(rawSessions: Record<string, any>[], query: ResearchFilterQuery = {}, limit = 20) {
+  const rows = filterSessions(buildResearchDashboardSessionRows(rawSessions), query);
+  const personaNames = new Map(personaRows().map((row) => [String(row.persona_id), String(row.name)]));
+  return rows.sort((a,b) => String(b.local_started_at || '').localeCompare(String(a.local_started_at || ''))).slice(0,limit).map((row) => ({
+    session_id:row.session_id || '', local_started_at:row.local_started_at || '', research_id:row.research_id || '', persona_id:row.persona_id || '',
+    persona_name:personaNames.get(String(row.persona_id || '')) || '', topic:topicLabel(String(row.topic || '')),
+    target_duration_minutes:row.target_duration_minutes || '', data_quality_flag:row.data_quality_flag || '', child_total_words:row.child_total_words ?? null,
+  }));
+}
+
 export function buildResearchDashboardData(
   rawSessions: Record<string, any>[],
   query: ResearchFilterQuery = {},
   options: { includeInternal?: boolean } = {},
 ) {
-  const targetSessions = rawSessions.filter(isResearchTargetSession);
-  const technical = buildResearchDataSets(targetSessions);
-  const allData = buildResearchExportDataSetsFromTechnical(technical);
+  const allData: ExportDataSets = {
+    sessions:buildResearchDashboardSessionRows(rawSessions), utterances:[], expressions:[], personas:personaRows(), codebook:buildCodebookRows(),
+  };
   const data = filterResearchExportDataSets(allData, query);
-  const allowedSessionIds = new Set(data.sessions.map((row) => String(row.session_id || '')));
-  const filteredTechnicalEvents = technical.system_events.filter((row) => allowedSessionIds.has(String(row.session_id || '')));
-  const filteredTechnicalExpressions = technical.expressions.filter((row) => allowedSessionIds.has(String(row.session_id || '')));
 
   const participants = new Set(data.sessions.map((row) => String(row.research_id || '')).filter(Boolean));
   const complete = data.sessions.filter((row) => String(row.data_quality_flag || '') === 'complete').length;
@@ -568,33 +665,13 @@ export function buildResearchDashboardData(
     }
     return [...map.entries()].map(([label,value]) => ({ label,value })).sort((a,b) => b.value - a.value || a.label.localeCompare(b.label,'ja'));
   };
-  const personaNames = new Map(data.personas.map((row) => [String(row.persona_id), String(row.name)]));
   const personaUsageCounts = new Map(counts('persona_id').map((item) => [item.label, item.value]));
   const personaUsage = RESEARCH_PERSONAS.map((persona) => ({ label: persona.name, value: personaUsageCounts.get(persona.id) || 0 }));
 
-  const topMap = new Map<string, { count:number; source:string }>();
-  for (const row of filteredTechnicalExpressions.filter((item) => item.speaker === 'child')) {
-    const expression = String(row.expression || '').trim();
-    if (!expression) continue;
-    const key = `${String(row.dictionary_source || '')}:${expression.toLowerCase()}`;
-    const current = topMap.get(key) || { count:0, source:String(row.dictionary_source || '') };
-    current.count += 1;
-    topMap.set(key, current);
-  }
-  const topExpressions = [...topMap.entries()]
-    .map(([key,value]) => ({ expression:key.split(':').slice(1).join(':'), count:value.count, source:value.source }))
-    .sort((a,b) => b.count - a.count)
-    .slice(0,10);
-
   const quality = counts('data_quality_flag');
-  let aiFailures = 0; let micErrors = 0; let ttsFallbacks = 0;
-  for (const row of filteredTechnicalEvents) {
-    const type = String(row.event_type || '');
-    const value = String(row.event_value || '');
-    if (type === 'ai_request_failure') aiFailures += 1;
-    if (type === 'mic_error') micErrors += 1;
-    if (type === 'tts_provider' && /device|fallback/i.test(value)) ttsFallbacks += 1;
-  }
+  const aiFailures = data.sessions.reduce((sum,row) => sum + Number(row.ai_request_failure_count || 0), 0);
+  const micErrors = data.sessions.reduce((sum,row) => sum + Number(row.mic_error_count || 0), 0);
+  const ttsFallbacks = data.sessions.reduce((sum,row) => sum + Number(row.tts_fallback_count || 0), 0);
   const systemQuality = [
     { label:'AI応答失敗', value:aiFailures },
     { label:'マイクエラー', value:micErrors },
@@ -627,15 +704,6 @@ export function buildResearchDashboardData(
   }
   const individualDays = new Set(individualSessions.map((row) => `${String(row.research_id || '')}|${String(row.local_date || '')}`).filter((value) => !value.endsWith('|')));
   const individualTotalSeconds = individualSessions.reduce((sum,row) => sum + Math.max(0, Number(row.actual_duration_seconds || 0)), 0);
-
-  const recentSessions = [...data.sessions]
-    .sort((a,b) => String(b.local_started_at || '').localeCompare(String(a.local_started_at || '')))
-    .slice(0,50)
-    .map((row) => ({
-      session_id:row.session_id || '', local_started_at:row.local_started_at || '', research_id:row.research_id || '', persona_id:row.persona_id || '',
-      persona_name:personaNames.get(String(row.persona_id || '')) || '', topic:topicLabel(String(row.topic || '')),
-      target_duration_minutes:row.target_duration_minutes || '', data_quality_flag:row.data_quality_flag || '',
-    }));
 
   const seriesRows = (source: Map<string, SeriesBucket>) => [...source.entries()]
     .sort(([a],[b]) => a.localeCompare(b))
@@ -710,7 +778,7 @@ export function buildResearchDashboardData(
     metrics:{
       participantCount:participants.size,
       totalSessions:data.sessions.length,
-      childUtteranceCount:data.utterances.filter((row) => row.speaker === 'child').length,
+      childUtteranceCount:data.sessions.reduce((sum,row) => sum + Number(row.child_turn_count || 0), 0),
       meanChildWordsPerMinute,
       completeRate:data.sessions.length ? round((complete / data.sessions.length) * 100,1) : 0,
       latestAt,
@@ -739,8 +807,8 @@ export function buildResearchDashboardData(
     charts:{ daily:chartRows, cumulativeDaily:cumulativeDailyRows, aggregation, personas:personaUsage },
     dataQuality:quality,
     systemQuality,
-    topExpressions,
-    recentSessions,
+    topExpressions:[],
+    recentSessions:[],
     exportFiles:([
       ['sessions','sessions.csv','匿名ID・日時・Persona・担当留学生・発話量・振り返り・利用文脈・再現性','縦断・告知前後・担当国選択・専有関連分析'],
       ['utterances','utterances.csv','児童・AIの匿名化された全発話と相互行為フラグ','発話内容・repair・応答性・専有の再判定'],
