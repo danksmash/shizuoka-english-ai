@@ -698,13 +698,16 @@ export async function getDailyAggregateDashboardSessionsForManagementByLocalDate
 ): Promise<Record<string, any>[]> {
   const from = managementDateBoundary(start);
   const to = managementDateBoundary(end);
-  const [documents, students, pending] = await Promise.all([
+  const [documents, students] = await Promise.all([
     (from || to)
       ? queryCollectionByStringRange(RESEARCH_DAILY_AGGREGATE_COLLECTION, 'localDate', from, to)
       : listCollection(RESEARCH_DAILY_AGGREGATE_COLLECTION, 1000),
     getStudentRecordsForManagement(),
-    queryCollection(SESSION_COLLECTION, 'aggregateSyncStatus', 'pending', 1),
   ]);
+  // Check pending after the aggregate snapshot is read. If a canonical session
+  // is created during the aggregate read window, its pending marker is then
+  // visible here and forces a safe canonical fallback for this request.
+  const pending = await queryCollection(SESSION_COLLECTION, 'aggregateSyncStatus', 'pending', 1);
   if (pending.length) throw new Error('RESEARCH_DAILY_AGGREGATE_PENDING_SESSIONS');
   const selected = documents.filter((document) => {
     const date = dailyAggregateDocumentDate(document);
