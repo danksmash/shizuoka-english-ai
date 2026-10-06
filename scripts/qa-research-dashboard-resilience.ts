@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   isTransientResearchDashboardReadError,
+  readResearchDashboardSessionsWithFallback,
   researchDashboardReadPlan,
   retryResearchDashboardRead,
 } from '../src/server/researchDashboardResilientRuntime';
@@ -80,12 +81,40 @@ await assert.rejects(
 );
 assert.equal(permanentAttempts, 1, 'permanent errors must not be retried');
 
+
+let canonicalShouldNotRun = 0;
+const aggregatePreferred = await readResearchDashboardSessionsWithFallback(undefined, undefined, {
+  aggregate: async () => [aggregateOnlySession],
+  canonical: async () => { canonicalShouldNotRun += 1; return []; },
+});
+assert.equal(aggregatePreferred.source, 'daily_aggregate');
+assert.equal(aggregatePreferred.sessions.length, 1);
+assert.equal(canonicalShouldNotRun, 0, 'healthy aggregate data must avoid canonical session expansion');
+
+const pendingFallback = await readResearchDashboardSessionsWithFallback(undefined, undefined, {
+  aggregate: async () => { throw new Error('RESEARCH_DAILY_AGGREGATE_PENDING_SESSIONS'); },
+  canonical: async () => [aggregateOnlySession],
+});
+assert.equal(pendingFallback.source, 'canonical_fallback');
+assert.equal(pendingFallback.sessions.length, 1);
+assert.match(pendingFallback.aggregateError, /PENDING_SESSIONS/);
+
+const emptyFallback = await readResearchDashboardSessionsWithFallback('2099-01-01', '2099-01-01', {
+  aggregate: async () => [],
+  canonical: async () => [],
+});
+assert.equal(emptyFallback.source, 'canonical_fallback');
+assert.equal(emptyFallback.aggregateError, 'empty_aggregate');
+
 const resilientSource = fs.readFileSync('src/server/researchDashboardResilientRuntime.ts', 'utf8');
 assert.ok(resilientSource.includes("warnings: ['lesson_reflections_unavailable']"), 'Reflection failure must degrade partially, not blank the dashboard');
-assert.ok(resilientSource.includes('getDashboardSessionsForManagementByLocalDateRange(start, end)'), 'Dashboard reads must use projected session fields scoped by localDate');
+assert.ok(resilientSource.includes('getDailyAggregateDashboardSessionsForManagementByLocalDateRange'), 'Dashboard must prefer the daily aggregate summary path');
+assert.ok(resilientSource.includes('getDashboardSessionsForManagementByLocalDateRange'), 'Dashboard must retain the projected canonical fallback');
+assert.ok(resilientSource.includes("source: 'daily_aggregate'"), 'Dashboard must identify successful aggregate reads');
+assert.ok(resilientSource.includes("source: 'canonical_fallback'"), 'Dashboard must identify safe canonical fallback reads');
 assert.ok(resilientSource.includes('getReflectionRecordsForTeacherDateRange(start, end)'), 'Lesson Reflection dashboard reads must use the requested date range');
 assert.ok(resilientSource.includes("const PILOT_B_OFFICIAL_DATE = '2026-09-09'"), 'Pilot B official date must be encoded in the dashboard read plan');
-assert.ok(resilientSource.includes('loadSessionsResilient(readPlan.start, readPlan.end)'), 'Dashboard must apply the read plan before Firestore session expansion');
+assert.ok(resilientSource.includes('readResearchDashboardSessionsWithFallback(readPlan.start, readPlan.end)'), 'Dashboard must apply the read plan to the aggregate-first session snapshot');
 assert.ok(resilientSource.includes('readPlan.loadStudySchedules'), 'Study schedule reads must be conditional on Phase applicability');
 assert.ok(
   resilientSource.includes('res.locals.researchDashboardSessions = analysisSessions'),
@@ -97,6 +126,8 @@ assert.ok(resilientSource.includes("body.success === false"), 'Phase enrichment 
 assert.ok(resilientSource.includes('isManualResearchExcludedSessionId'), 'Manual research exclusions must be applied before dashboard and Phase analysis');
 assert.ok(resilientSource.includes('effectiveStart:'), 'Dashboard timing logs must expose the effective read boundary');
 assert.ok(resilientSource.includes('schedulesLoaded:'), 'Dashboard timing logs must expose whether Study 1 schedules were required');
+assert.ok(resilientSource.includes('sessionSource:'), 'Dashboard timing logs must expose aggregate versus canonical fallback source');
+assert.ok(resilientSource.includes('aggregateError:'), 'Dashboard timing logs must expose why aggregate fallback occurred without changing the UI');
 
 const firestoreSource = fs.readFileSync('src/server/firestore.ts', 'utf8');
 assert.ok(firestoreSource.includes('queryCollectionByStringRange'), 'Firestore helper must support server-side localDate range reads');
