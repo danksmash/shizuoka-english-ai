@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 export type ManualResearchExclusionReason = 'participant_identity_uncertain_id_shared';
 
 export interface ManualResearchExclusion {
@@ -29,7 +30,18 @@ export const MANUAL_RESEARCH_EXCLUSIONS: readonly ManualResearchExclusion[] = [
   },
 ] as const;
 
-const MANUAL_EXCLUSION_BY_SESSION = new Map(MANUAL_RESEARCH_EXCLUSIONS.map((row) => [row.sessionId, row]));
+function aggregateSessionKey(sessionId: string): string {
+  return `s_${crypto.createHash('sha256').update(sessionId).digest('hex').slice(0, 32)}`;
+}
+
+const MANUAL_EXCLUSION_BY_SESSION = new Map<string, ManualResearchExclusion>();
+for (const row of MANUAL_RESEARCH_EXCLUSIONS) {
+  MANUAL_EXCLUSION_BY_SESSION.set(row.sessionId, row);
+  // Daily aggregate rows deliberately use a one-way session key. Recognize
+  // that key as the same research-cleaning decision without storing the raw
+  // session id in the aggregate collection.
+  MANUAL_EXCLUSION_BY_SESSION.set(aggregateSessionKey(row.sessionId), row);
+}
 
 export function getManualResearchExclusion(sessionId: unknown): ManualResearchExclusion | null {
   const id = typeof sessionId === 'string' ? sessionId : '';
