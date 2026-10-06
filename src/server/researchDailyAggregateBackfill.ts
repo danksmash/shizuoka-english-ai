@@ -1,4 +1,4 @@
-import { listCollection, listCollectionFields, setDocumentsBatch } from './firestore';
+import { listCollection, listCollectionFields, patchDocumentField, setDocumentsBatch } from './firestore';
 import { getStudentRecordsForManagement, managementSessionsWithAssignments } from './persistence';
 import { buildResearchDashboardData, type ResearchFilterQuery } from './researchDashboard';
 import {
@@ -11,7 +11,7 @@ import {
 } from './researchDailyAggregates';
 
 const SESSION_COLLECTION = 'sessions';
-const SOURCE_FIELDS = RESEARCH_DASHBOARD_SESSION_FIELDS;
+const SOURCE_FIELDS = [...RESEARCH_DASHBOARD_SESSION_FIELDS, 'aggregateSyncStatus'];
 
 async function sourceSessions() {
   const [sessions, students] = await Promise.all([
@@ -107,6 +107,21 @@ export async function auditResearchDailyAggregateBackfill() {
   };
 }
 
+async function markPendingAggregateSessionsSyncedAfterAuditedBackfill(
+  source: Record<string, any>[],
+) {
+  // Only clear pending markers that were present in the exact source snapshot
+  // used to build and audit this backfill. Sessions created concurrently after
+  // sourceSessions() must remain pending until their own shadow write succeeds
+  // or a later audited backfill includes them.
+  for (const session of source) {
+    if (session.aggregateSyncStatus !== 'pending') continue;
+    const id = String(session.sessionId || (typeof session._name === 'string' ? session._name.split('/').at(-1) || '' : ''));
+    if (!id) throw new Error('RESEARCH_DAILY_AGGREGATE_PENDING_SESSION_ID_MISSING');
+    await patchDocumentField(SESSION_COLLECTION, id, 'aggregateSyncStatus', 'synced');
+  }
+}
+
 export async function backfillResearchDailyAggregates() {
   const sessions = await sourceSessions();
   const expected = buildResearchDailyAggregateDocuments(sessions);
@@ -121,5 +136,9 @@ export async function backfillResearchDailyAggregates() {
       expected.slice(index, index + 5).map((row) => ({ id: row.localDate, data: row })),
     );
   }
-  return auditResearchDailyAggregateBackfill();
+  const audit = await auditResearchDailyAggregateBackfill();
+  if (audit.cutoverReady) {
+    await markPendingAggregateSessionsSyncedAfterAuditedBackfill(sessions);
+  }
+  return audit;
 }

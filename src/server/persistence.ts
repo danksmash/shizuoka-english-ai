@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { ReflectionAnswers, ResearchSystemEvent, calculateCanonicalStats, isAIStudentId, maskHistoryForStorage } from '../dataContract';
 import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, PersonaLabelCondition, VisualVocabularyItem } from '../types';
 import { getPersonaResearchMetadata } from '../data/personaResearch';
-import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, queryCollectionByStringRange, queryCollectionFieldsByStringRange, queryCollectionLatest, setDocument } from './firestore';
+import { createDocumentIfAbsent, getDocument, listCollection, patchDocumentField, queryCollection, queryCollectionByStringRange, queryCollectionFieldsByStringRange, queryCollectionLatest, setDocument } from './firestore';
 import { resolveTtsRuntimeMetadata } from './ttsRuntimeMetadata';
 import {
   RESEARCH_DAILY_AGGREGATE_COLLECTION,
@@ -567,13 +567,14 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
     micErrorCount, aiRequestFailureCount, history: safeHistory, systemEvents: events,
     encounteredVocab: args.encounteredVocab.slice(0, 200).map((item) => ({ id: item.id, word: item.word, japanese: item.japanese, category: item.category })),
     reflection: args.reflection || null, updatedAt: new Date().toISOString(), createdAt: existing?.createdAt || new Date().toISOString(),
+    aggregateSyncStatus: 'pending',
     retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000),
   };
   await setDocument(SESSION_COLLECTION, args.sessionId, document);
   try {
     // The canonical management dashboard resolves study-participant metadata
     // from the current student record. Keep the rebuildable aggregate shadow
-    // aligned at write time without changing the immutable session document.
+    // aligned at write time without changing research interpretation.
     await syncResearchDailyAggregateContribution(existing, {
       ...document,
       formalStudyParticipant: args.formalStudyParticipant === true,
@@ -581,6 +582,11 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
       schoolCondition: normalizeSchoolCondition(args.schoolCondition),
       studyStartDate: normalizeStudyStartDate(args.studyStartDate),
     });
+    // Pending is written atomically with the canonical session. It is cleared
+    // only after the aggregate contribution is safely persisted. Therefore a
+    // shadow-write failure can never silently make the aggregate dashboard
+    // appear complete.
+    await patchDocumentField(SESSION_COLLECTION, args.sessionId, 'aggregateSyncStatus', 'synced');
   } catch (error: any) {
     // Aggregates are a rebuildable shadow index. Never make the canonical
     // session save fail after the source document has already been persisted.
@@ -682,9 +688,9 @@ function dailyAggregateDocumentDate(document: Record<string, any>): string {
 }
 
 /**
- * Aggregate shadow reader for cutover verification. It is intentionally kept
- * separate from the live dashboard read path until cutover is explicitly
- * enabled after the remaining guards pass.
+ * Aggregate-first Research Dashboard reader. Correctness is guarded by the
+ * canonical aggregateSyncStatus marker; the resilient runtime falls back to
+ * the projected canonical-session path whenever this reader is unhealthy.
  */
 export async function getDailyAggregateDashboardSessionsForManagementByLocalDateRange(
   start?: unknown,
@@ -693,9 +699,16 @@ export async function getDailyAggregateDashboardSessionsForManagementByLocalDate
   const from = managementDateBoundary(start);
   const to = managementDateBoundary(end);
   const [documents, students] = await Promise.all([
-    listCollection(RESEARCH_DAILY_AGGREGATE_COLLECTION, 1000),
+    (from || to)
+      ? queryCollectionByStringRange(RESEARCH_DAILY_AGGREGATE_COLLECTION, 'localDate', from, to)
+      : listCollection(RESEARCH_DAILY_AGGREGATE_COLLECTION, 1000),
     getStudentRecordsForManagement(),
   ]);
+  // Check pending after the aggregate snapshot is read. If a canonical session
+  // is created during the aggregate read window, its pending marker is then
+  // visible here and forces a safe canonical fallback for this request.
+  const pending = await queryCollection(SESSION_COLLECTION, 'aggregateSyncStatus', 'pending', 1);
+  if (pending.length) throw new Error('RESEARCH_DAILY_AGGREGATE_PENDING_SESSIONS');
   const selected = documents.filter((document) => {
     const date = dailyAggregateDocumentDate(document);
     if (!date) return false;
