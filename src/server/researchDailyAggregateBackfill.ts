@@ -3,7 +3,6 @@ import { getDashboardSessionsForManagementByLocalDateRange } from './persistence
 import { buildResearchDashboardData, type ResearchFilterQuery } from './researchDashboard';
 import {
   RESEARCH_DAILY_AGGREGATE_COLLECTION,
-  RESEARCH_DASHBOARD_SESSION_FIELDS,
   auditResearchDailyAggregateDocuments,
   buildResearchDailyAggregateDocuments,
   researchDailyAggregateCapacity,
