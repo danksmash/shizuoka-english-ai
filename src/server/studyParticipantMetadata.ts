@@ -62,6 +62,42 @@ function normalizedStudyStartDate(value: unknown): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
 }
 
+function keyValueConfig(raw: string, fallback: string): Map<string, string> {
+  const source = String(raw || fallback);
+  const out = new Map<string, string>();
+  for (const item of source.split(',')) {
+    const index = item.indexOf('=');
+    if (index < 1) continue;
+    const key = item.slice(0, index).trim().toUpperCase();
+    const value = item.slice(index + 1).trim();
+    if (key && value) out.set(key, value);
+  }
+  return out;
+}
+
+function configuredComparisonFallback(
+  classId: string,
+  attendanceNumber: number | '',
+  active: unknown,
+): { startDate: string; participantCount: number } | null {
+  if (active === false || !validComparisonClassId(classId)) return null;
+  const configuredClasses = new Set(
+    String(process.env.STUDY_COMPARISON_CLASS_IDS || '6-C1')
+      .split(',')
+      .map((value) => value.trim().toUpperCase())
+      .filter((value) => validComparisonClassId(value)),
+  );
+  if (!configuredClasses.has(classId)) return null;
+  const startDates = keyValueConfig(process.env.STUDY_COMPARISON_START_DATES || '', '6-C1=2026-10-06');
+  const participantCounts = keyValueConfig(process.env.STUDY_COMPARISON_PARTICIPANT_COUNTS || '', '6-C1=28');
+  const startDate = normalizedStudyStartDate(startDates.get(classId));
+  const participantCount = Number(participantCounts.get(classId) || 0);
+  const attendance = Number(attendanceNumber);
+  if (!startDate || !Number.isInteger(participantCount) || participantCount < 1) return null;
+  if (!Number.isInteger(attendance) || attendance < 1 || attendance > participantCount) return null;
+  return { startDate, participantCount };
+}
+
 export function normalizeStudyParticipantMetadata(
   record: Record<string, any> | undefined,
   fallback: { studentId?: string; classId?: string; attendanceNumber?: number | '' } = {},
@@ -91,6 +127,17 @@ export function normalizeStudyParticipantMetadata(
       schoolCondition: explicitCondition,
       gradeLevel,
       studyStartDate: normalizedStudyStartDate(record?.studyStartDate),
+    };
+  }
+
+  const comparisonFallback = configuredComparisonFallback(classId, attendanceNumber as number | '', record?.active);
+  if (comparisonFallback && gradeLevel) {
+    return {
+      formalStudyParticipant: true,
+      studySiteId: 'site_b',
+      schoolCondition: 'comparison',
+      gradeLevel,
+      studyStartDate: normalizedStudyStartDate(record?.studyStartDate) || comparisonFallback.startDate,
     };
   }
 
