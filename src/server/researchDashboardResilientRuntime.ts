@@ -4,7 +4,10 @@ import {
   normalizeFormalResearchExportQuery,
   type ResearchFilterQuery,
 } from './researchDashboard';
-import { getDashboardSessionsForManagementByLocalDateRange } from './persistence';
+import {
+  getDailyAggregateDashboardSessionsForManagementByLocalDateRange,
+  getDashboardSessionsForManagementByLocalDateRange,
+} from './persistence';
 import { getAllReflectionRecordsForTeacher, getReflectionRecordsForTeacherDateRange } from './reflectionPersistence';
 import {
   buildResearchLessonReflectionCodebookRows,
@@ -112,8 +115,48 @@ async function loadStudySchedulesResilient(): Promise<StudyScheduleRecord[]> {
   return retryResearchDashboardRead('study_schedules', () => getAllStudySchedules());
 }
 
+export type ResearchDashboardSessionReadResult = {
+  sessions: Record<string, any>[];
+  source: 'daily_aggregate' | 'canonical_fallback';
+  aggregateError: string;
+};
+
+export async function readResearchDashboardSessionsWithFallback(
+  start?: unknown,
+  end?: unknown,
+  readers: {
+    aggregate?: (start?: unknown, end?: unknown) => Promise<Record<string, any>[]>;
+    canonical?: (start?: unknown, end?: unknown) => Promise<Record<string, any>[]>;
+  } = {},
+): Promise<ResearchDashboardSessionReadResult> {
+  const aggregateReader = readers.aggregate || getDailyAggregateDashboardSessionsForManagementByLocalDateRange;
+  const canonicalReader = readers.canonical || getDashboardSessionsForManagementByLocalDateRange;
+  try {
+    const aggregateSessions = await retryResearchDashboardRead(
+      'daily_aggregates_and_students',
+      () => aggregateReader(start, end),
+    );
+    if (aggregateSessions.length > 0) {
+      return { sessions: aggregateSessions, source: 'daily_aggregate', aggregateError: '' };
+    }
+    const canonicalSessions = await retryResearchDashboardRead(
+      'sessions_and_students_fallback',
+      () => canonicalReader(start, end),
+    );
+    return { sessions: canonicalSessions, source: 'canonical_fallback', aggregateError: 'empty_aggregate' };
+  } catch (error) {
+    const aggregateError = errorText(error);
+    console.warn('Research dashboard aggregate read fallback', { aggregateError });
+    const canonicalSessions = await retryResearchDashboardRead(
+      'sessions_and_students_fallback',
+      () => canonicalReader(start, end),
+    );
+    return { sessions: canonicalSessions, source: 'canonical_fallback', aggregateError };
+  }
+}
+
 async function loadSessionsResilient(start?: unknown, end?: unknown): Promise<Record<string, any>[]> {
-  return retryResearchDashboardRead('sessions_and_students', () => getDashboardSessionsForManagementByLocalDateRange(start, end));
+  return (await readResearchDashboardSessionsWithFallback(start, end)).sessions;
 }
 
 async function loadOptionalReflections(start?: unknown, end?: unknown): Promise<{ records: Awaited<ReturnType<typeof getAllReflectionRecordsForTeacher>>; warnings: string[] }> {
@@ -141,12 +184,13 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     const schedulePromise = readPlan.loadStudySchedules
       ? loadStudySchedulesResilient()
       : Promise.resolve([] as StudyScheduleRecord[]);
-    const [schedules, sessions, reflectionSnapshot] = await Promise.all([
+    const [schedules, sessionSnapshot, reflectionSnapshot] = await Promise.all([
       schedulePromise,
-      loadSessionsResilient(readPlan.start, readPlan.end),
+      readResearchDashboardSessionsWithFallback(readPlan.start, readPlan.end),
       loadOptionalReflections(readPlan.start, readPlan.end),
     ]);
     const readMs = Date.now() - readStartedAt;
+    const sessions = sessionSnapshot.sessions;
 
     const analysisSessions = sessions.filter((session) => !isManualResearchExcludedSessionId(session.sessionId));
     const phaseSessionsRaw = filterSessionsForStudyPhase(sessions, schedules, studyPhase);
@@ -195,6 +239,8 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
       auditMs: 0,
       phaseMs,
       loadedSessions: sessions.length,
+      sessionSource: sessionSnapshot.source,
+      aggregateError: sessionSnapshot.aggregateError,
       loadedReflections: reflectionSnapshot.records.length,
       start: typeof query.start === 'string' ? query.start : '',
       end: typeof query.end === 'string' ? query.end : '',
