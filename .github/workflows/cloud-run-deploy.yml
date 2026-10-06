@@ -347,6 +347,92 @@ jobs:
             rm -f "$tts_headers" "$tts_audio"
           done
 
+      - name: One-shot audited research aggregate backfill
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, 'ops: run audited research aggregate backfill')
+        run: |
+          set -euo pipefail
+          PROJECT_ID="shizuoka-english-ai"
+          REGION="asia-northeast1"
+          JOB_NAME="research-daily-aggregate-backfill"
+
+          RUNTIME_SA=$(gcloud run services describe shizuoka-english-ai \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(spec.template.spec.serviceAccountName)')
+          if [ -z "$RUNTIME_SA" ]; then
+            PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
+            RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+          fi
+          IMAGE=$(gcloud run services describe shizuoka-english-ai \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(spec.template.spec.containers[0].image)')
+          test -n "$RUNTIME_SA"
+          test -n "$IMAGE"
+
+          cleanup() {
+            gcloud run jobs delete "$JOB_NAME" \
+              --project "$PROJECT_ID" \
+              --region "$REGION" \
+              --quiet >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          gcloud run jobs deploy "$JOB_NAME" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$IMAGE" \
+            --service-account "$RUNTIME_SA" \
+            --command /app/node_modules/.bin/tsx \
+            --args scripts/run-research-daily-aggregate-backfill.ts \
+            --tasks 1 \
+            --max-retries 0 \
+            --task-timeout 10m \
+            --memory 512Mi \
+            --quiet
+
+          gcloud run jobs execute "$JOB_NAME" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --wait
+
+          BACKFILL_LOG=""
+          for attempt in 1 2 3 4 5; do
+            BACKFILL_LOG=$(gcloud logging read \
+              "resource.type=cloud_run_job AND resource.labels.job_name=$JOB_NAME AND textPayload:RESEARCH_DAILY_AGGREGATE_BACKFILL_RESULT=" \
+              --project "$PROJECT_ID" \
+              --freshness=15m \
+              --limit=10 \
+              --order=desc \
+              --format='value(textPayload)' | grep 'RESEARCH_DAILY_AGGREGATE_BACKFILL_RESULT=' | head -n 1 || true)
+            if [ -n "$BACKFILL_LOG" ]; then
+              break
+            fi
+            sleep 3
+          done
+          test -n "$BACKFILL_LOG"
+          echo "$BACKFILL_LOG"
+
+          BACKFILL_JSON="${BACKFILL_LOG#RESEARCH_DAILY_AGGREGATE_BACKFILL_RESULT=}"
+          BACKFILL_JSON="$BACKFILL_JSON" python3 - <<'PY'
+          import json, os
+          data = json.loads(os.environ['BACKFILL_JSON'])
+          assert data.get('matches') is True, data
+          assert data.get('dashboardParity', {}).get('matches') is True, data
+          assert data.get('cutoverReady') is True, data
+          print(json.dumps({
+              'sourceSessions': data.get('sourceSessions'),
+              'expectedDates': data.get('expectedDates'),
+              'actualDates': data.get('actualDates'),
+              'expectedContributions': data.get('expectedContributions'),
+              'actualContributions': data.get('actualContributions'),
+              'dashboardParity': data.get('dashboardParity'),
+              'expectedCapacity': data.get('expectedCapacity'),
+              'actualCapacity': data.get('actualCapacity'),
+              'cutoverReady': data.get('cutoverReady'),
+          }, ensure_ascii=False))
+          PY
+
       - name: Mark Cloud Run deployment verified
         if: success()
         env:
