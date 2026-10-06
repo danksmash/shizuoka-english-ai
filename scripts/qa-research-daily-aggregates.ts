@@ -191,6 +191,7 @@ assert.ok(auth.includes("path.startsWith('/research.daily-aggregates/')"));
 assert.ok(routes.includes("req.body?.confirm !== CONFIRMATION"), 'backfill must require explicit confirmation');
 assert.ok(routes.includes("requireManagementRole(['researcher'])"));
 assert.ok(backfill.includes('listCollectionFields(SESSION_COLLECTION, SOURCE_FIELDS, 1000)'), 'backfill must use projected paginated reads');
+assert.ok(backfill.includes("const SOURCE_FIELDS = [...RESEARCH_DASHBOARD_SESSION_FIELDS, 'aggregateSyncStatus'];"), 'backfill source snapshot must include pending sync state so it clears only sessions actually covered by that snapshot');
 assert.ok(backfill.includes('getStudentRecordsForManagement()'), 'backfill must join the same current study metadata as the live dashboard');
 assert.ok(backfill.includes('managementSessionsWithAssignments(normalized, students)'), 'backfill must reuse the live management metadata join');
 assert.ok(backfill.includes('RESEARCH_DASHBOARD_SESSION_FIELDS'), 'backfill and live dashboard must share one projection contract');
@@ -199,6 +200,7 @@ assert.ok(backfill.includes('cutoverReady'), 'aggregate cutover must have an exp
 assert.ok(backfill.includes('researchDailyAggregateCapacity'), 'aggregate audit must report document-capacity headroom');
 assert.ok(backfill.includes('markPendingAggregateSessionsSyncedAfterAuditedBackfill'), 'audited backfill must repair pending synchronization markers');
 assert.ok(backfill.includes('if (audit.cutoverReady)'), 'pending markers must clear only after full parity and capacity gates pass');
+assert.ok(backfill.includes('markPendingAggregateSessionsSyncedAfterAuditedBackfill(sessions)'), 'backfill must clear pending markers from its own source snapshot, never from concurrently created sessions');
 assert.ok(persistence.includes('const DASHBOARD_SESSION_FIELDS = RESEARCH_DASHBOARD_SESSION_FIELDS;'), 'live dashboard projection must share the aggregate field contract');
 assert.ok(persistence.includes('studentByResearchId.get'), 'aggregate rows must refresh current study metadata without studentId');
 assert.ok(persistence.includes('getDailyAggregateDashboardSessionsForManagementByLocalDateRange'), 'guarded aggregate reader must exist before cutover');
