@@ -1,0 +1,178 @@
+name: One-time configure 5-3 visitor countries 2026-10-06
+
+on:
+  push:
+    branches:
+      - ops/configure-5-3-visitor-countries-20261006
+    paths:
+      - '.github/workflows/one-time-configure-5-3-visitor-countries-20261006.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Wait for recipient-specificity production build
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_URL="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app"
+          EXPECTED_BUILD="f4cee78c1b4a"
+          ok=0
+          for attempt in $(seq 1 60); do
+            health="$(curl --silent --show-error --max-time 15 "$API_URL/api/health" || true)"
+            if printf '%s' "$health" | grep -q "\"build\":\"$EXPECTED_BUILD\""; then
+              ok=1
+              break
+            fi
+            sleep 10
+          done
+          test "$ok" = "1"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
+
+      - name: Safely configure class-level Phase 2 visitor countries
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          python3 - <<'PY'
+          import json, os, urllib.parse, urllib.request
+          from datetime import datetime, timezone
+
+          token=os.environ['ACCESS_TOKEN']
+          doc_url='https://firestore.googleapis.com/v1/projects/shizuoka-english-ai/databases/(default)/documents/study_schedules/5-3'
+          desired=['Germany','Hungary','Lithuania','Poland']
+          desired_counts={'Germany':2,'Hungary':2,'Lithuania':1,'Poland':1}
+
+          def decode(v):
+              if not isinstance(v,dict): return None
+              if 'stringValue' in v: return v['stringValue']
+              if 'booleanValue' in v: return bool(v['booleanValue'])
+              if 'integerValue' in v: return int(v['integerValue'])
+              if 'doubleValue' in v: return float(v['doubleValue'])
+              if 'timestampValue' in v: return v['timestampValue']
+              if 'nullValue' in v: return None
+              if 'arrayValue' in v: return [decode(x) for x in v['arrayValue'].get('values',[])]
+              if 'mapValue' in v: return {k:decode(x) for k,x in v['mapValue'].get('fields',{}).items()}
+              return None
+
+          def encode(v):
+              if v is None: return {'nullValue':None}
+              if isinstance(v,bool): return {'booleanValue':v}
+              if isinstance(v,int): return {'integerValue':str(v)}
+              if isinstance(v,float): return {'doubleValue':v}
+              if isinstance(v,str): return {'stringValue':v}
+              if isinstance(v,list): return {'arrayValue':{'values':[encode(x) for x in v]}}
+              if isinstance(v,dict): return {'mapValue':{'fields':{k:encode(x) for k,x in v.items()}}}
+              return {'stringValue':str(v)}
+
+          def request(url, method='GET', body=None):
+              headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'}
+              data=json.dumps(body).encode() if body is not None else None
+              req=urllib.request.Request(url,data=data,headers=headers,method=method)
+              with urllib.request.urlopen(req,timeout=30) as r:
+                  return json.load(r)
+
+          doc=request(doc_url)
+          fields={k:decode(v) for k,v in doc.get('fields',{}).items()}
+          before={
+              'classId': fields.get('classId','5-3'),
+              'revision': fields.get('revision',0),
+              'appStartDate': fields.get('appStartDate',''),
+              'nationalityRevealDate': fields.get('nationalityRevealDate',''),
+              'announcedVisitorCountries': fields.get('announcedVisitorCountries',[]),
+              'announcedVisitorCountryCounts': fields.get('announcedVisitorCountryCounts',{}),
+              'videoViewDate': fields.get('videoViewDate',''),
+              'assignmentRevealDate': fields.get('assignmentRevealDate',''),
+              'exchangeDate': fields.get('exchangeDate',''),
+          }
+          print('BEFORE',json.dumps(before,ensure_ascii=False,sort_keys=True))
+
+          if str(before['nationalityRevealDate'])!='2026-10-06':
+              raise SystemExit('SAFETY_ABORT: 5-3 nationalityRevealDate is not 2026-10-06')
+          if str(before['assignmentRevealDate'] or ''):
+              raise SystemExit('SAFETY_ABORT: assignmentRevealDate is already set; Phase 3 may have started')
+
+          existing=list(before['announcedVisitorCountries'] or [])
+          existing_counts=dict(before['announcedVisitorCountryCounts'] or {})
+          if existing:
+              if existing!=desired or existing_counts!=desired_counts:
+                  raise SystemExit('SAFETY_ABORT: existing visitor-country configuration differs from requested values')
+              print('NO_OP: desired visitor-country configuration already present')
+              raise SystemExit(0)
+
+          revision=int(before['revision'] or 0)+1
+          now=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
+          actor='chatgpt-recipient-specificity-migration'
+          snapshot={
+              'revision':revision,
+              'appStartDate':str(before['appStartDate'] or ''),
+              'nationalityRevealDate':'2026-10-06',
+              'announcedVisitorCountries':desired,
+              'announcedVisitorCountryCounts':desired_counts,
+              'videoViewDate':str(before['videoViewDate'] or ''),
+              'assignmentRevealDate':'',
+              'exchangeDate':str(before['exchangeDate'] or ''),
+              'updatedAt':now,
+              'updatedBy':actor,
+          }
+          history=list(fields.get('history') or [])
+          history=(history+[snapshot])[-100:]
+
+          patch_fields={
+              'announcedVisitorCountries':desired,
+              'announcedVisitorCountryCounts':desired_counts,
+              'revision':revision,
+              'updatedAt':now,
+              'updatedBy':actor,
+              'history':history,
+          }
+          mask=[
+              'announcedVisitorCountries',
+              'announcedVisitorCountryCounts',
+              'revision',
+              'updatedAt',
+              'updatedBy',
+              'history',
+          ]
+          query='&'.join('updateMask.fieldPaths='+urllib.parse.quote(x,safe='') for x in mask)
+          update_time=doc.get('updateTime','')
+          if not update_time:
+              raise SystemExit('SAFETY_ABORT: Firestore updateTime missing')
+          url=doc_url+'?'+query+'&currentDocument.updateTime='+urllib.parse.quote(update_time,safe='')
+          body={'fields':{k:encode(v) for k,v in patch_fields.items()}}
+          request(url,'PATCH',body)
+
+          after_doc=request(doc_url)
+          after_fields={k:decode(v) for k,v in after_doc.get('fields',{}).items()}
+          after={
+              'classId':after_fields.get('classId','5-3'),
+              'revision':after_fields.get('revision',0),
+              'nationalityRevealDate':after_fields.get('nationalityRevealDate',''),
+              'announcedVisitorCountries':after_fields.get('announcedVisitorCountries',[]),
+              'announcedVisitorCountryCounts':after_fields.get('announcedVisitorCountryCounts',{}),
+              'assignmentRevealDate':after_fields.get('assignmentRevealDate',''),
+          }
+          print('AFTER',json.dumps(after,ensure_ascii=False,sort_keys=True))
+          assert after['nationalityRevealDate']=='2026-10-06'
+          assert after['announcedVisitorCountries']==desired
+          assert after['announcedVisitorCountryCounts']==desired_counts
+          assert not after['assignmentRevealDate']
+          assert int(after['revision'])==revision
+          PY
