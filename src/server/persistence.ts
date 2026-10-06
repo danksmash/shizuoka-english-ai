@@ -4,6 +4,7 @@ import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, 
 import { getPersonaResearchMetadata } from '../data/personaResearch';
 import { createDocumentIfAbsent, getDocument, listCollection, queryCollection, queryCollectionByStringRange, queryCollectionFieldsByStringRange, queryCollectionLatest, setDocument } from './firestore';
 import { resolveTtsRuntimeMetadata } from './ttsRuntimeMetadata';
+import { syncResearchDailyAggregateContribution } from './researchDailyAggregates';
 import {
   normalizeSchoolCondition,
   normalizeStudyGradeLevel,
@@ -563,6 +564,16 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
     retentionExpiresAt: new Date(args.endedAt + retentionDays() * 24 * 60 * 60 * 1000),
   };
   await setDocument(SESSION_COLLECTION, args.sessionId, document);
+  try {
+    await syncResearchDailyAggregateContribution(existing, document);
+  } catch (error: any) {
+    // Aggregates are a rebuildable shadow index. Never make the canonical
+    // session save fail after the source document has already been persisted.
+    console.error('Research daily aggregate shadow write failed', {
+      sessionId: args.sessionId,
+      message: error?.message,
+    });
+  }
   return document;
 }
 
