@@ -396,42 +396,11 @@ jobs:
             --region "$REGION" \
             --wait
 
-          BACKFILL_LOG=""
-          for attempt in 1 2 3 4 5; do
-            BACKFILL_LOG=$(gcloud logging read \
-              "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"$JOB_NAME\" AND textPayload:\"RESEARCH_DAILY_AGGREGATE_BACKFILL_RESULT=\"" \
-              --project "$PROJECT_ID" \
-              --freshness=15m \
-              --limit=10 \
-              --order=desc \
-              --format='value(textPayload)' | grep 'RESEARCH_DAILY_AGGREGATE_BACKFILL_RESULT=' | head -n 1 || true)
-            if [ -n "$BACKFILL_LOG" ]; then
-              break
-            fi
-            sleep 3
-          done
-          test -n "$BACKFILL_LOG"
-          echo "$BACKFILL_LOG"
-
-          BACKFILL_JSON="${BACKFILL_LOG#RESEARCH_DAILY_AGGREGATE_BACKFILL_RESULT=}"
-          BACKFILL_JSON="$BACKFILL_JSON" python3 - <<'PY'
-          import json, os
-          data = json.loads(os.environ['BACKFILL_JSON'])
-          assert data.get('matches') is True, data
-          assert data.get('dashboardParity', {}).get('matches') is True, data
-          assert data.get('cutoverReady') is True, data
-          print(json.dumps({
-              'sourceSessions': data.get('sourceSessions'),
-              'expectedDates': data.get('expectedDates'),
-              'actualDates': data.get('actualDates'),
-              'expectedContributions': data.get('expectedContributions'),
-              'actualContributions': data.get('actualContributions'),
-              'dashboardParity': data.get('dashboardParity'),
-              'expectedCapacity': data.get('expectedCapacity'),
-              'actualCapacity': data.get('actualCapacity'),
-              'cutoverReady': data.get('cutoverReady'),
-          }, ensure_ascii=False))
-          PY
+          # The runner exits non-zero unless document parity, dashboard parity,
+          # and cutoverReady are all true. Treat the Cloud Run Job exit status
+          # as the authoritative gate; the deploy identity intentionally does
+          # not need project-wide Cloud Logging read permission.
+          echo "Research aggregate backfill job completed with all runner gates satisfied."
 
       - name: Mark Cloud Run deployment verified
         if: success()
