@@ -203,14 +203,19 @@ export async function saveStudySchedule(input: StudyScheduleInput, updatedBy: st
   if (!Number.isInteger(expectedRevision) || expectedRevision < 0) throw new Error('INVALID_EXPECTED_REVISION');
   if (expectedRevision !== current.revision) throw new Error('STUDY_SCHEDULE_REVISION_CONFLICT');
 
-  const announcedVisitorCountries = normalizeVisitorCountries(input.announcedVisitorCountries);
-  const announcedVisitorCountryCounts = normalizeVisitorCountryCounts(input.announcedVisitorCountryCounts, announcedVisitorCountries);
+  const hasVisitorCountries = Object.prototype.hasOwnProperty.call(input, 'announcedVisitorCountries');
+  const announcedVisitorCountries = hasVisitorCountries
+    ? normalizeVisitorCountries(input.announcedVisitorCountries)
+    : current.announcedVisitorCountries;
+  const announcedVisitorCountryCounts = Object.prototype.hasOwnProperty.call(input, 'announcedVisitorCountryCounts')
+    ? normalizeVisitorCountryCounts(input.announcedVisitorCountryCounts, announcedVisitorCountries)
+    : normalizeVisitorCountryCounts(current.announcedVisitorCountryCounts, announcedVisitorCountries);
   const nextDates = {
-    appStartDate: normalizeStudyDate(input.appStartDate),
-    nationalityRevealDate: normalizeStudyDate(input.nationalityRevealDate),
-    videoViewDate: normalizeStudyDate(input.videoViewDate),
-    assignmentRevealDate: normalizeStudyDate(input.assignmentRevealDate),
-    exchangeDate: normalizeStudyDate(input.exchangeDate),
+    appStartDate: Object.prototype.hasOwnProperty.call(input, 'appStartDate') ? normalizeStudyDate(input.appStartDate) : current.appStartDate,
+    nationalityRevealDate: Object.prototype.hasOwnProperty.call(input, 'nationalityRevealDate') ? normalizeStudyDate(input.nationalityRevealDate) : current.nationalityRevealDate,
+    videoViewDate: Object.prototype.hasOwnProperty.call(input, 'videoViewDate') ? normalizeStudyDate(input.videoViewDate) : current.videoViewDate,
+    assignmentRevealDate: Object.prototype.hasOwnProperty.call(input, 'assignmentRevealDate') ? normalizeStudyDate(input.assignmentRevealDate) : current.assignmentRevealDate,
+    exchangeDate: Object.prototype.hasOwnProperty.call(input, 'exchangeDate') ? normalizeStudyDate(input.exchangeDate) : current.exchangeDate,
   };
   validateStudyScheduleOrder(nextDates);
 
