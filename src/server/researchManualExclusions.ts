@@ -1,3 +1,4 @@
+import { researchDailyContributionKey } from './researchDailyAggregates';
 export type ManualResearchExclusionReason = 'participant_identity_uncertain_id_shared';
 
 export interface ManualResearchExclusion {
@@ -29,7 +30,11 @@ export const MANUAL_RESEARCH_EXCLUSIONS: readonly ManualResearchExclusion[] = [
   },
 ] as const;
 
-const MANUAL_EXCLUSION_BY_SESSION = new Map(MANUAL_RESEARCH_EXCLUSIONS.map((row) => [row.sessionId, row]));
+const MANUAL_EXCLUSION_BY_SESSION = new Map<string, ManualResearchExclusion>();
+for (const row of MANUAL_RESEARCH_EXCLUSIONS) {
+  MANUAL_EXCLUSION_BY_SESSION.set(row.sessionId, row);
+  MANUAL_EXCLUSION_BY_SESSION.set(researchDailyContributionKey(row.sessionId), row);
+}
 
 export function getManualResearchExclusion(sessionId: unknown): ManualResearchExclusion | null {
   const id = typeof sessionId === 'string' ? sessionId : '';
