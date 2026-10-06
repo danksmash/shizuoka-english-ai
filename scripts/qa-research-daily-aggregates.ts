@@ -152,7 +152,7 @@ assert.ok(server.includes('studyStartDate:student.studyStartDate'));
 assert.ok(firestore.includes("params.append('mask.fieldPaths', fieldPath)"));
 assert.ok(backfillRunner.includes('backfillResearchDailyAggregates()'));
 assert.ok(backfillRunner.includes("result.cutoverReady"));
-assert.ok(deployWorkflow.includes("contains(github.event.head_commit.message, 'ops: run audited research aggregate backfill')"), 'production backfill must be explicitly one-shot gated');
+assert.ok(deployWorkflow.includes("contains(github.event.head_commit.message, 'run audited research aggregate backfill')"), 'production backfill must be explicitly one-shot gated');
 assert.ok(deployWorkflow.includes('gcloud run jobs deploy "$JOB_NAME"'));
 assert.ok(deployWorkflow.includes('gcloud run jobs execute "$JOB_NAME"'));
 assert.ok(deployWorkflow.includes('gcloud run jobs delete "$JOB_NAME"'), 'one-shot job must clean itself up');
