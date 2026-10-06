@@ -118,8 +118,12 @@ jobs:
 
           students=list_collection('students')
           class_students=[s for s in students if str(s.get('classId') or '')=='5-3' and s.get('active') is not False]
+          formal_students=[s for s in class_students if s.get('formalStudyParticipant') is True]
+          reserve_students=[s for s in class_students if s.get('formalStudyParticipant') is not True]
           student_audit={
               'active_5_3_students':len(class_students),
+              'formal_study_participants':len(formal_students),
+              'nonformal_or_reserve_active':len(reserve_students),
               'with_assigned_partner_country':sum(bool(str(s.get('assignedPartnerCountry') or '').strip()) for s in class_students),
               'with_assigned_partner_id':sum(bool(str(s.get('assignedPartnerId') or '').strip()) for s in class_students),
               'with_assignment_announced_at':sum(bool(str(s.get('assignmentAnnouncedAt') or '').strip()) for s in class_students),
@@ -129,8 +133,19 @@ jobs:
           sessions=list_collection('sessions')
           target=[s for s in sessions if str(s.get('classId') or '')=='5-3' and str(s.get('localDate') or '')=='2026-10-06']
           by_country=collections.Counter(str(s.get('personaCountry') or '').strip() for s in target if str(s.get('personaCountry') or '').strip())
+          def child_turns(s):
+              hist=s.get('history') or []
+              return sum(1 for m in hist if isinstance(m,dict) and str(m.get('sender') or '')=='child' and str(m.get('englishText') or '').strip())
+          formal_target=[s for s in target if s.get('formalStudyParticipant') is True]
+          child_valid=[s for s in formal_target if child_turns(s)>=1]
+          valid_by_country=collections.Counter(str(s.get('personaCountry') or '').strip() for s in child_valid if str(s.get('personaCountry') or '').strip())
           session_audit={
               'sessions_5_3_2026_10_06':len(target),
+              'formal_sessions':len(formal_target),
+              'formal_unique_research_ids':len(set(str(s.get('researchId') or '') for s in formal_target if str(s.get('researchId') or ''))),
+              'formal_with_child_utterance':len(child_valid),
+              'formal_child_valid_visitor_sessions':sum(valid_by_country[c] for c in expected_countries),
+              'formal_child_valid_visitor_country_counts':{c:valid_by_country[c] for c in expected_countries},
               'with_assigned_partner_country':sum(bool(str(s.get('assignedPartnerCountry') or '').strip()) for s in target),
               'with_assigned_partner_id':sum(bool(str(s.get('assignedPartnerId') or '').strip()) for s in target),
               'with_assignment_announced_at':sum(bool(str(s.get('assignmentAnnouncedAt') or '').strip()) for s in target),
@@ -144,6 +159,8 @@ jobs:
           assert session_audit['with_assigned_partner_id']==0
           assert session_audit['with_assignment_announced_at']==0
           assert student_audit['with_assignment_announced_at']==0
+          assert student_audit['formal_study_participants']==24
+          assert student_audit['nonformal_or_reserve_active']==1
 
           # Verify no current schedule history entry incorrectly binds assignment reveal to nationality reveal.
           history=sched.get('history') or []
