@@ -560,7 +560,7 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
     targetDurationMinutes: args.targetDurationMinutes, actualDurationSeconds: stats.actualDurationSeconds,
     startedAt: new Date(args.startedAt).toISOString(), endedAt: new Date(args.endedAt).toISOString(), localDate,
     lifetimeSessionNumber, dailySessionNumber, totalTurns: stats.totalTurns, aiTurnCount,
-    dialogueUtteranceCount: stats.totalTurns + aiTurnCount, totalChildWords: stats.totalChildWords,
+    dialogueUtteranceCount: stats.totalTurns + aiTurnCount, dialogueTurnMetricSource: 'canonical_history_v1', totalChildWords: stats.totalChildWords,
     uniqueVocabularyCount: stats.uniqueVocabularyCount,
     childUniqueWordTypes: stats.childUniqueWordTypes, meanChildWordsPerTurn: stats.meanChildWordsPerTurn, maxChildWordsPerTurn: stats.maxChildWordsPerTurn,
     childQuestionCount: stats.childQuestionCount, childReciprocalQuestionCount: stats.childReciprocalQuestionCount, childRepairCount: stats.childRepairCount, childReasonExpressionCount: stats.childReasonExpressionCount,

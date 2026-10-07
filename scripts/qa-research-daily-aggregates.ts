@@ -24,6 +24,7 @@ const base = {
   startedAt: '2026-10-07T01:00:00.000Z', endedAt: '2026-10-07T01:03:00.000Z',
   personaLabelCondition: 'shown', assignedPartnerCountry: 'United States', assignmentAnnouncedAt: '2026-10-06T00:00:00.000Z',
   actualDurationSeconds: 180, totalTurns: 8, totalChildWords: 42, aiTurnCount: 9,
+  dialogueUtteranceCount: 17, dialogueTurnMetricSource: 'canonical_history_v1',
   micErrorCount: 1, ttsFallbackCount: 0, aiRequestFailureCount: 0,
   reflection: { scaleVersion: '4point-v1', understoodPartner: 3, conveyedIdeas: 4, noticedLanguageCulture: 2 },
   updatedAt: '2026-10-07T01:03:00.000Z',
@@ -37,6 +38,19 @@ assert.equal('studentId' in contribution, false, 'daily aggregate values must no
 assert.equal(contribution.schoolCondition, 'intervention');
 assert.equal(contribution.topic, 'intro');
 assert.equal(contribution.reflectionScaleVersion, '4point-v1');
+assert.equal(contribution.aiTurnCount, 9);
+assert.equal(contribution.dialogueUtteranceCount, 17);
+assert.equal(contribution.dialogueTurnMetricSource, 'canonical_history_v1');
+const missingTurnContribution = buildResearchDailyContribution({
+  ...base,
+  sessionId:'legacy-missing-turns',
+  aiTurnCount:undefined,
+  dialogueUtteranceCount:undefined,
+  dialogueTurnMetricSource:'unavailable_history_missing',
+});
+assert.equal(missingTurnContribution.aiTurnCount, null, 'missing AI turns must remain missing, never become zero');
+assert.equal(missingTurnContribution.dialogueUtteranceCount, null, 'missing dialogue turns must remain missing, never become child-only totals');
+
 assert.ok(RESEARCH_DASHBOARD_SESSION_FIELDS.includes('updatedAt'));
 assert.equal(researchDailyContributionKey('session-1'), researchDailyContributionKey('session-1'));
 assert.notEqual(researchDailyContributionKey('session-1'), researchDailyContributionKey('session-2'));
@@ -166,6 +180,9 @@ assert.equal(reconstructed[0].sessionId, researchDailyContributionKey('session-1
 assert.equal(reconstructed[0].schoolCondition, 'intervention');
 assert.equal(reconstructed[0].topic, 'intro');
 assert.equal(reconstructed[0].totalChildWords, 42);
+assert.equal(reconstructed[0].aiTurnCount, 9);
+assert.equal(reconstructed[0].dialogueUtteranceCount, 17);
+assert.equal(reconstructed[0].dialogueTurnMetricSource, 'canonical_history_v1');
 assert.equal(reconstructed[0].reflection?.scaleVersion, '4point-v1');
 assert.equal('studentId' in reconstructed[0], false, 'reconstructed dashboard rows must remain anonymous');
 
@@ -196,6 +213,8 @@ assert.ok(backfill.includes('getStudentRecordsForManagement()'), 'backfill must 
 assert.ok(backfill.includes('managementSessionsWithAssignments(normalized, students)'), 'backfill must reuse the live management metadata join');
 assert.ok(backfill.includes('RESEARCH_DASHBOARD_SESSION_FIELDS'), 'backfill and live dashboard must share one projection contract');
 assert.ok(backfill.includes('dashboardParity'), 'backfill audit must compare dashboard output parity');
+assert.ok(backfill.includes('turnSeriesParity'), 'backfill audit must compare the class cumulative turns/min series');
+assert.ok(backfill.includes('buildCumulativeTurnsByClass'), 'aggregate cutover must validate the exact derived turn chart, not only the core dashboard payload');
 assert.ok(backfill.includes('cutoverReady'), 'aggregate cutover must have an explicit readiness gate');
 assert.ok(backfill.includes('researchDailyAggregateCapacity'), 'aggregate audit must report document-capacity headroom');
 assert.ok(backfill.includes('markPendingAggregateSessionsSyncedAfterAuditedBackfill'), 'audited backfill must repair pending synchronization markers');
@@ -215,8 +234,11 @@ assert.ok(server.includes('formalStudyParticipant:student.formalStudyParticipant
 assert.ok(server.includes('schoolCondition:student.schoolCondition'));
 assert.ok(server.includes('studyStartDate:student.studyStartDate'));
 assert.ok(firestore.includes("params.append('mask.fieldPaths', fieldPath)"));
+assert.ok(firestore.includes('export async function patchDocumentsBatch'), 'historical derived metrics must use safe update-mask batch writes');
 assert.ok(backfillRunner.includes('backfillResearchDailyAggregates()'));
 assert.ok(backfillRunner.includes("result.cutoverReady"));
+assert.ok(backfillRunner.includes('result.turnSeriesParity?.matches'), 'production backfill gate must require turn-series parity');
+assert.ok(backfillRunner.includes('repairResearchTurnMetricsFromStoredHistory()'), 'production backfill must repair legacy exact turns before rebuilding aggregates');
 assert.ok(backfillRunner.includes('RESEARCH_DAILY_AGGREGATE_BACKFILL_ABORTED_CAPACITY'), 'runner must abort before unsafe aggregate writes');
 assert.ok(deployWorkflow.includes("contains(github.event.head_commit.message, 'run audited research aggregate backfill')"), 'production backfill must be explicitly one-shot gated');
 assert.ok(deployWorkflow.includes('gcloud run jobs deploy "$JOB_NAME"'));

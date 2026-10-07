@@ -1,6 +1,12 @@
 import { listCollection, listCollectionFields, patchDocumentField, setDocumentsBatch } from './firestore';
 import { getStudentRecordsForManagement, managementSessionsWithAssignments } from './persistence';
-import { buildResearchDashboardData, type ResearchFilterQuery } from './researchDashboard';
+import {
+  buildResearchDashboardData,
+  buildResearchDashboardSessionRows,
+  filterResearchSessionRows,
+  type ResearchFilterQuery,
+} from './researchDashboard';
+import { buildCumulativeTurnsByClass } from './researchDailyClassStackRuntime';
 import {
   RESEARCH_DAILY_AGGREGATE_COLLECTION,
   RESEARCH_DASHBOARD_SESSION_FIELDS,
@@ -68,6 +74,24 @@ function dashboardParityCases(sessions: Record<string, any>[]) {
   return cases;
 }
 
+function auditTurnSeriesParity(source: Record<string, any>[], aggregateDocuments: Record<string, any>[]) {
+  const aggregateSessions = researchDailyAggregateDocumentsToDashboardSessions(aggregateDocuments);
+  const differences: Array<{ label: string }> = [];
+  const cases = dashboardParityCases(source);
+  for (const item of cases) {
+    const expectedRows = filterResearchSessionRows(buildResearchDashboardSessionRows(source), item.query);
+    const actualRows = filterResearchSessionRows(buildResearchDashboardSessionRows(aggregateSessions), item.query);
+    const expected = buildCumulativeTurnsByClass(expectedRows);
+    const actual = buildCumulativeTurnsByClass(actualRows);
+    if (stable(expected) !== stable(actual)) differences.push({ label:item.label });
+  }
+  return {
+    matches: differences.length === 0,
+    cases: cases.map((item) => item.label),
+    differences,
+  };
+}
+
 function auditDashboardParity(source: Record<string, any>[], aggregateDocuments: Record<string, any>[]) {
   const aggregateSessions = researchDailyAggregateDocumentsToDashboardSessions(aggregateDocuments);
   const differences: Array<{ label: string }> = [];
@@ -93,14 +117,16 @@ export async function auditResearchDailyAggregateBackfill() {
   const expected = buildResearchDailyAggregateDocuments(sessions);
   const documentParity = auditResearchDailyAggregateDocuments(expected, actual);
   const dashboardParity = auditDashboardParity(sessions, actual);
+  const turnSeriesParity = auditTurnSeriesParity(sessions, actual);
   const expectedCapacity = researchDailyAggregateCapacity(expected);
   const actualCapacity = researchDailyAggregateCapacity(actual);
-  const matches = documentParity.matches && dashboardParity.matches;
+  const matches = documentParity.matches && dashboardParity.matches && turnSeriesParity.matches;
   return {
     sourceSessions: sessions.length,
     ...documentParity,
     matches,
     dashboardParity,
+    turnSeriesParity,
     expectedCapacity,
     actualCapacity,
     cutoverReady: matches && !expectedCapacity.nearDocumentLimit,
