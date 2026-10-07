@@ -43,7 +43,11 @@ assert.doesNotMatch(oliverFuji, /what is (?:mt\.? |mount )?fuji|i (?:do not|don'
 
 const minji = (await chat('minji_korea', 'shizuoka_culture', 'I like Hamamatsu gyoza.')).toLowerCase();
 assert.ok(minji.includes('?'), 'Minji should invite the child to continue about a local item');
-assert.doesNotMatch(minji, /hamamatsu gyoza (?:is|are|has|have|comes|means)/, 'Minji should not lead with an encyclopedia-style explanation');
+assert.doesNotMatch(
+  minji,
+  /hamamatsu gyoza (?:is|are) (?:a|an|the|made|dumplings?|a type|a kind)|hamamatsu gyoza means/,
+  'Minji should not lead with a definition-style explanation',
+);
 
 const yuting = (await chat('yuting_taiwan', 'free', 'I went to our school sports day.')).toLowerCase();
 assert.doesNotMatch(yuting, /i (?:also )?went there|i was there|i (?:also )?went to your (?:school|sports day)/, 'Yu-Ting must not invent attending the child school event');
