@@ -35,6 +35,8 @@ assert.match(sentBody, /授業内のみ｜累積平均（セッション単位�
 assert.match(sentBody, /turns\.innerHTML=classSeriesSvg\(charts\.cumulativeTurnsByClass/);
 assert.match(sentBody, /words\.innerHTML=classSeriesSvg\(charts\.cumulativeWordsByClass/);
 assert.match(sentBody, /function conditionColors\(condition\)/);
+assert.match(sentBody, /#c2410c.*#ea580c.*#f97316.*#fb923c.*#9a3412.*#fdba74/);
+assert.doesNotMatch(sentBody, /#047857.*#059669.*#10b981.*#34d399.*#065f46.*#6ee7b7/);
 assert.match(sentBody, /function classShape\(classId\)/);
 assert.match(sentBody, /stroke-width="'\+LINE_WIDTH\+'"/);
 assert.doesNotMatch(sentBody, /patchTurnsLineWidth/);
