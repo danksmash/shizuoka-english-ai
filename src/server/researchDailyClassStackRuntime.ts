@@ -168,7 +168,7 @@ export function buildCumulativeTurnsByClass(
       && item.turnsPerMinute !== null
       && (!lessonOnly || (
         lessonSessionIds.has(String(item.row.session_id || ''))
-        && dialogueAnalysisEligible(item.row.data_quality_flag)
+        && dialogueAnalysisEligible(item.row.data_quality_flag, item.row.child_turn_count)
       )));
 
   const dates = [...new Set((lessonOnly ? sessions : validSessions)
@@ -410,9 +410,8 @@ function injectResearchDailyClassStack(html: string): string {
     latestCharts=charts||latestCharts;
     if(!latestCharts)return;
     var rows=Array.isArray(latestCharts.dailyClassStack)?latestCharts.dailyClassStack:[];
-    var latestDate=latestDateFromRows(rows);
     var visibleRows=filterRowsByRange(rows,selectedRange);
-    var visibleTurns=filterSeriesByRange(latestCharts.cumulativeTurnsByClass||[],selectedRange,latestDate);
+    var visibleTurns=Array.isArray(latestCharts.cumulativeTurnsByClass)?latestCharts.cumulativeTurnsByClass:[];
     var title=document.getElementById('chartDailyTitle');
     var chart=document.getElementById('chartDaily');
     var turns=document.getElementById('chartTurns');
