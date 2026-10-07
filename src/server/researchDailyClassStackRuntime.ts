@@ -124,19 +124,19 @@ export function buildDailyClassStackRows(
   };
 }
 
-function sessionDialogueTurns(row: Row): number | null {
-  const utteranceCount = Number(row.dialogue_utterance_count);
-  if (Number.isFinite(utteranceCount) && utteranceCount > 0) return utteranceCount;
+function explicitNonNegative(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
 
-  const childTurns = Number(row.child_turn_count);
-  const aiTurns = Number(row.ai_turn_count);
-  if (
-    Number.isFinite(childTurns)
-    && childTurns >= 0
-    && Number.isFinite(aiTurns)
-    && aiTurns >= 0
-    && childTurns + aiTurns > 0
-  ) {
+function sessionDialogueTurns(row: Row): number | null {
+  const utteranceCount = explicitNonNegative(row.dialogue_utterance_count);
+  if (utteranceCount !== null && utteranceCount > 0) return utteranceCount;
+
+  const childTurns = explicitNonNegative(row.child_turn_count);
+  const aiTurns = explicitNonNegative(row.ai_turn_count);
+  if (childTurns !== null && aiTurns !== null && childTurns + aiTurns > 0) {
     return childTurns + aiTurns;
   }
   return null;
