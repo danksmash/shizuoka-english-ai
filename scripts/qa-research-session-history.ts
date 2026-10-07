@@ -68,6 +68,10 @@ assert.ok(html.includes("child_total_words"), 'history-side recent rows must pre
 assert.ok(html.includes("openHistory(upper,'')"), 'exact research_id search must open full history even when it is outside the recent 50 rows');
 assert.ok(html.includes('全セッション一覧'));
 assert.ok(html.includes("api('research.session-history'"));
+assert.ok(html.includes("try{var data=await api('research.session-history',{researchId:researchId});renderHistory(data,sessionId);"), 'opening a participant must always fetch the latest saved session history');
+assert.equal(html.includes('historyCache=new Map()'), false, 'participant session-history responses must not be browser-cached');
+assert.equal(html.includes('historyCache.get('), false, 'reopening a participant must not reuse stale session-history data');
+assert.equal(html.includes('historyCache.set('), false, 'participant session-history responses must not be retained across opens');
 assert.ok(html.includes("api('research.session-detail'"));
 assert.ok(html.includes("api('research.sessions'"));
 assert.ok(html.includes('さらに50件'));
