@@ -32,8 +32,12 @@ assert.match(sentBody, /lessonCumulativeReflection/);
 assert.match(sentBody, /reflectionSvg/);
 assert.match(sentBody, /observed===false/);
 assert.match(sentBody, /授業内のみ｜累積平均（セッション単位）｜授業外利用は除外/);
-assert.match(sentBody, /patchTurnsLineWidth/);
+assert.match(sentBody, /turns\.innerHTML=classSeriesSvg\(charts\.cumulativeTurnsByClass/);
+assert.match(sentBody, /words\.innerHTML=classSeriesSvg\(charts\.cumulativeWordsByClass/);
+assert.match(sentBody, /function conditionColors\(condition\)/);
+assert.match(sentBody, /function classShape\(classId\)/);
 assert.match(sentBody, /stroke-width="'\+LINE_WIDTH\+'"/);
+assert.doesNotMatch(sentBody, /patchTurnsLineWidth/);
 
 const serverEntry = fs.readFileSync(new URL('../server-entry.ts', import.meta.url), 'utf8');
 assert.match(serverEntry, /withResearchDashboardChartUnification/);
