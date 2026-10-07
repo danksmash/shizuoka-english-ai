@@ -1,6 +1,8 @@
 import type { RequestHandler } from 'express';
 import {
+  buildCumulativeLessonReflectionRows,
   buildResearchDashboardData,
+  filterResearchSessionRows,
   normalizeFormalResearchExportQuery,
   type ResearchFilterQuery,
 } from './researchDashboard';
@@ -31,6 +33,7 @@ import {
   MANUAL_RESEARCH_EXCLUSIONS,
   isManualResearchExcludedSessionId,
 } from './researchManualExclusions';
+import { getAllAnalysisSessionOverrides } from './researchAnalysisSessions';
 
 type PhaseAwareResearchQuery = ResearchFilterQuery & { studyPhase?: unknown; dataset?: unknown };
 
@@ -174,6 +177,21 @@ async function loadOptionalReflections(start?: unknown, end?: unknown): Promise<
   }
 }
 
+async function loadOptionalLessonContextOverrides(): Promise<{ records: Awaited<ReturnType<typeof getAllAnalysisSessionOverrides>>; warnings: string[] }> {
+  try {
+    return {
+      records: await retryResearchDashboardRead('lesson_context_overrides', () => getAllAnalysisSessionOverrides()),
+      warnings: [],
+    };
+  } catch (error: any) {
+    console.error('Research dashboard lesson-context override read failed', { message: error?.message });
+    return {
+      records: [],
+      warnings: ['lesson_context_overrides_unavailable'],
+    };
+  }
+}
+
 const resilientDashboardHandler: RequestHandler = async (req, res) => {
   const requestStartedAt = Date.now();
   try {
@@ -184,10 +202,11 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     const schedulePromise = readPlan.loadStudySchedules
       ? loadStudySchedulesResilient()
       : Promise.resolve([] as StudyScheduleRecord[]);
-    const [schedules, sessionSnapshot, reflectionSnapshot] = await Promise.all([
+    const [schedules, sessionSnapshot, reflectionSnapshot, lessonOverrideSnapshot] = await Promise.all([
       schedulePromise,
       readResearchDashboardSessionsWithFallback(readPlan.start, readPlan.end),
       loadOptionalReflections(readPlan.start, readPlan.end),
+      loadOptionalLessonContextOverrides(),
     ]);
     const readMs = Date.now() - readStartedAt;
     const sessions = sessionSnapshot.sessions;
@@ -216,12 +235,30 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     delete filters.labelConditions;
     const dashboardWarnings = [
       ...reflectionSnapshot.warnings,
+      ...lessonOverrideSnapshot.warnings,
       ...(manualExcludedCount > 0 ? [`manual_research_exclusions:${manualExcludedCount}`] : []),
       'session_audit_details_lazy',
     ];
 
     const phaseStartedAt = Date.now();
     const preparedPhaseSessions = Array.isArray(dashboardInternal.exportSessions) ? dashboardInternal.exportSessions : [];
+    const lessonOverrideBySession = new Map(
+      lessonOverrideSnapshot.records
+        .filter((row) => ['in_lesson','outside_lesson','unknown'].includes(String(row.lessonContextFinal || '')))
+        .map((row) => [String(row.sessionId || ''), String(row.lessonContextFinal || '')]),
+    );
+    const lessonSessionIds = new Set<string>(
+      preparedPhaseSessions
+        .filter((row: any) => {
+          const sessionId = String(row.session_id || '');
+          const finalContext = lessonOverrideBySession.get(sessionId) || String(row.lesson_context_inferred || 'unknown');
+          return finalContext === 'in_lesson';
+        })
+        .map((row: any) => String(row.session_id || ''))
+        .filter((sessionId: string) => Boolean(sessionId)),
+    );
+    const filteredPreparedPhaseSessions = filterResearchSessionRows(preparedPhaseSessions, query);
+    const lessonCumulativeReflection = buildCumulativeLessonReflectionRows(filteredPreparedPhaseSessions, lessonSessionIds);
     const phaseComparison = preparedPhaseSessions.length || analysisSessions.length === 0
       ? buildConsistentPhaseComparisonFromExportSessions(preparedPhaseSessions, schedules, query)
       : buildConsistentPhaseComparison(analysisSessions, schedules, query);
@@ -230,6 +267,7 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     res.locals.researchDashboardSessions = analysisSessions;
     res.locals.researchDashboardSchedules = schedules;
     res.locals.researchDashboardExportSessions = preparedPhaseSessions;
+    res.locals.researchDashboardLessonSessionIds = lessonSessionIds;
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Server-Timing', `reads;dur=${readMs}, dashboard;dur=${dashboardMs}, audit;dur=0;desc="lazy", phase;dur=${phaseMs}, core;dur=${totalMs}`);
     console.info('Research dashboard timing', {
@@ -252,6 +290,10 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     });
     return res.json({
       ...dashboard,
+      charts: {
+        ...dashboard.charts,
+        lessonCumulativeReflection,
+      },
       dataQuality: manualExcludedCount > 0
         ? [...dashboard.dataQuality, { label: '研究分析対象外: 手動除外', value: manualExcludedCount }]
         : dashboard.dataQuality,

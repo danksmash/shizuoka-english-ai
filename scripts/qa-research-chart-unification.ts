@@ -28,7 +28,10 @@ assert.match(sentBody, /ensureSeparateCards/);
 assert.match(sentBody, /research-turns-card/);
 assert.match(sentBody, /daily-class-stack-card/);
 assert.match(sentBody, /cumulativeWordsByClass/);
+assert.match(sentBody, /lessonCumulativeReflection/);
 assert.match(sentBody, /reflectionSvg/);
+assert.match(sentBody, /observed===false/);
+assert.match(sentBody, /授業内のみ｜累積平均（セッション単位）｜授業外利用は除外/);
 assert.match(sentBody, /patchTurnsLineWidth/);
 assert.match(sentBody, /stroke-width="'\+LINE_WIDTH\+'"/);
 

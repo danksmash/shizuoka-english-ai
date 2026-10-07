@@ -8,6 +8,7 @@ import {
   filterSessionsForStudyPhase,
   normalizeStudyPhaseFilter,
 } from './researchPhaseRuntime';
+import { dialogueAnalysisEligible } from './researchAnalysisEligibility';
 
 type Row = Record<string, unknown>;
 type PhaseAwareQuery = ResearchFilterQuery & { studyPhase?: unknown };
@@ -16,6 +17,7 @@ type ClassWordsPoint = {
   date: string;
   value: number | null;
   n: number;
+  observed?: boolean;
 };
 
 type ClassWordsSeries = {
@@ -69,7 +71,11 @@ function normalizeSchoolCondition(value: unknown): 'intervention' | 'comparison'
   return 'unknown';
 }
 
-export function buildCumulativeWordsByClass(sessions: Row[]): ClassWordsSeries[] {
+export function buildCumulativeWordsByClass(
+  sessions: Row[],
+  lessonSessionIds?: ReadonlySet<string>,
+): ClassWordsSeries[] {
+  const lessonOnly = lessonSessionIds !== undefined;
   const validSessions = sessions
     .map((row) => ({
       row,
@@ -77,9 +83,16 @@ export function buildCumulativeWordsByClass(sessions: Row[]): ClassWordsSeries[]
       date: String(row.local_date || '').trim(),
       wpm: sessionWordsPerMinute(row),
     }))
-    .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.date) && item.wpm !== null);
+    .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.date)
+      && item.wpm !== null
+      && (!lessonOnly || (
+        lessonSessionIds.has(String(item.row.session_id || ''))
+        && dialogueAnalysisEligible(item.row.data_quality_flag)
+      )));
 
-  const dates = [...new Set(validSessions.map((item) => item.date))].sort();
+  const dates = [...new Set((lessonOnly ? sessions : validSessions)
+    .map((item: any) => String((item.row || item).local_date || item.date || '').trim())
+    .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)))].sort();
   const classIds = [...new Set(validSessions.map((item) => item.classId))].sort(compareClassIds);
 
   return classIds.map((classId) => {
@@ -97,6 +110,7 @@ export function buildCumulativeWordsByClass(sessions: Row[]): ClassWordsSeries[]
         date,
         value: n > 0 ? Math.round((sum / n) * 100) / 100 : null,
         n,
+        observed: classRows.some((item) => item.date === date),
       };
     });
     return {
@@ -130,11 +144,17 @@ function enhanceDashboardJson(req: any, res: any, body: any): any {
   if (!body || body.success === false || !body.charts) return body;
   const sessions = dashboardFilteredExportSessions(req, res);
   if (!sessions) return body;
+  const lessonSessionIds = res.locals.researchDashboardLessonSessionIds instanceof Set
+    ? res.locals.researchDashboardLessonSessionIds as Set<string>
+    : new Set(sessions
+      .filter((row) => String(row.lesson_context_inferred || '') === 'in_lesson')
+      .map((row) => String(row.session_id || ''))
+      .filter(Boolean));
   return {
     ...body,
     charts: {
       ...body.charts,
-      cumulativeWordsByClass: buildCumulativeWordsByClass(sessions),
+      cumulativeWordsByClass: buildCumulativeWordsByClass(sessions, lessonSessionIds),
     },
   };
 }
@@ -190,11 +210,11 @@ function injectWordsByClassChart(html: string): string {
       var condition=s.school_condition==='comparison'?'comparison':'intervention',palette=conditionColors(condition),color=palette[counts[condition]++%palette.length],shape=shapeForClassId(s.class_id),points=[];
       (s.points||[]).forEach(function(p){if(valid(p.value))points.push(x(p.date)+','+y(Number(p.value)))});
       if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>';
-      (s.points||[]).forEach(function(p){if(!valid(p.value))return;var title=String(p.date||'')+' '+String(s.label||s.class_id||'')+': '+fmt(Number(p.value))+' 語/分 (n='+Number(p.n||0)+')';out+=marker(shape,x(p.date),y(Number(p.value)),color,title)});
+      (s.points||[]).forEach(function(p){if(!valid(p.value)||p.observed===false)return;var title=String(p.date||'')+' '+String(s.label||s.class_id||'')+': '+fmt(Number(p.value))+' 語/分 (n='+Number(p.n||0)+')';out+=marker(shape,x(p.date),y(Number(p.value)),color,title)});
       var col=si%3,row=Math.floor(si/3),lx=left+col*132,ly=15+row*21;
       out+='<line x1="'+lx+'" y1="'+ly+'" x2="'+(lx+18)+'" y2="'+ly+'" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round"/>'+marker(shape,lx+9,ly,color,'')+'<text x="'+(lx+24)+'" y="'+(ly+4)+'" class="svg-label" style="font-size:11px;fill:#10224a">'+escapeHtml(s.label||s.class_id||'')+'</text>';
     });
-    out+='<text x="'+left+'" y="'+(h-3)+'" class="svg-label" style="font-size:9.5px;fill:#64748b">各点＝当日までの学級別有効セッション累積平均｜実践校＝青系・比較校＝緑系</text>';
+    out+='<text x="'+left+'" y="'+(h-3)+'" class="svg-label" style="font-size:9.5px;fill:#64748b">授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜実践校＝青系・比較校＝緑系</text>';
     return out+'</svg>';
   }
   var previousRenderDashboard=renderDashboard;
