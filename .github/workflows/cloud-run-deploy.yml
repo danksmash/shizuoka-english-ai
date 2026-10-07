@@ -153,7 +153,9 @@ jobs:
             echo 'Research Dashboard E-layout must not stretch the analysis column.' >&2
             exit 1
           fi
-          grep -q '最大20件をこの枠内でスクロール' <<<"$management_html"
+          grep -q 'セッション一覧（選択日の全件）' <<<"$management_html"
+          grep -q 'id="recentDate"' <<<"$management_html"
+          grep -q 'sessionDate' <<<"$management_html"
           grep -q 'restoreCachedDashboard(currentResearcherUsername)' <<<"$management_html"
           grep -q 'onchange=markDashboardFiltersPending' <<<"$management_html"
           if grep -q 'onchange=scheduleDashboardReload' <<<"$management_html"; then
