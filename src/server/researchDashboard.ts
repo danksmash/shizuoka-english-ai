@@ -529,6 +529,22 @@ export function buildResearchDashboardSessionRows(rawSessions: Record<string, an
   }
   for (const starts of startsByClass.values()) starts.sort((a,b) => a-b);
   const countNear = (starts:number[], value:number, radius:number) => starts.filter((item) => Math.abs(item-value) <= radius).length;
+  const lessonAnchors = new Map<string, number[]>();
+  for (const session of sessions) {
+    const classId = String(session.classId || '');
+    const startedMs = dashboardTimestampMs(session.startedAt) || dashboardTimestampMs(session.endedAt);
+    if (!classId || !startedMs) continue;
+    const started = dashboardTokyoParts(startedMs);
+    if (!started.valid) continue;
+    const classStarts = startsByClass.get(classId) || [];
+    const same5 = countNear(classStarts, startedMs, 5*60_000);
+    const same10 = countNear(classStarts, startedMs, 10*60_000);
+    if (same5 < 8 && same10 < 12) continue;
+    const key = `${classId}|${started.date}`;
+    const anchors = lessonAnchors.get(key) || [];
+    anchors.push(startedMs);
+    lessonAnchors.set(key, anchors);
+  }
   return sessions.map((session) => {
     const persona = RESEARCH_PERSONAS.find((item) => item.id === String(session.personaId || session.aiStudentId || ''));
     const startedMs = dashboardTimestampMs(session.startedAt) || dashboardTimestampMs(session.endedAt);
@@ -539,6 +555,15 @@ export function buildResearchDashboardSessionRows(rawSessions: Record<string, an
     const same5 = startedMs ? countNear(classStarts, startedMs, 5*60_000) : 0;
     const same10 = startedMs ? countNear(classStarts, startedMs, 10*60_000) : 0;
     const usage = started.valid && classId ? (same5 >= 8 || same10 >= 12 ? 'group_like' : 'individual_like') : 'unknown';
+    const anchors = started.valid && classId ? (lessonAnchors.get(`${classId}|${started.date}`) || []) : [];
+    const nearestLessonAnchorMs = anchors.length && startedMs
+      ? Math.min(...anchors.map((anchor) => Math.abs(anchor - startedMs)))
+      : Number.POSITIVE_INFINITY;
+    const lessonContext = !anchors.length
+      ? 'unknown'
+      : nearestLessonAnchorMs <= 45*60_000
+        ? 'in_lesson'
+        : 'outside_lesson';
     const childTurns = Math.max(0, Number(session.totalTurns || 0));
     const optionalNonNegative = (value: unknown): number | null => {
       if (value === null || value === undefined || value === '') return null;
@@ -574,7 +599,7 @@ export function buildResearchDashboardSessionRows(rawSessions: Record<string, an
       reflection_scale_version:session.reflection?.scaleVersion || (session.reflection ? 'legacy-135' : ''),
       reflection_understood_partner:session.reflection?.understoodPartner ?? '', reflection_conveyed_ideas:session.reflection?.conveyedIdeas ?? '',
       reflection_noticed_language_culture:session.reflection?.noticedLanguageCulture ?? '',
-      same_class_starts_5min:same5, same_class_starts_10min:same10, usage_context_inferred:usage,
+      same_class_starts_5min:same5, same_class_starts_10min:same10, usage_context_inferred:usage, lesson_context_inferred:lessonContext,
       data_quality_flag:quality, mic_error_count:Number(session.micErrorCount || 0),
       tts_fallback_count:Number(session.ttsFallbackCount || 0), ai_request_failure_count:Number(session.aiRequestFailureCount || 0),
     };
@@ -606,6 +631,52 @@ export function buildResearchRecentSessions(rawSessions: Record<string, any>[], 
     persona_name:personaNames.get(String(row.persona_id || '')) || '', topic:topicLabel(String(row.topic || '')),
     target_duration_minutes:row.target_duration_minutes || '', data_quality_flag:row.data_quality_flag || '', child_total_words:row.child_total_words ?? null,
   }));
+}
+
+export function buildCumulativeLessonReflectionRows(
+  sessions: Row[],
+  lessonSessionIds: ReadonlySet<string>,
+) {
+  const dates = [...new Set(sessions
+    .map((row) => String(row.local_date || ''))
+    .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)))]
+    .sort();
+  const rowsByDate = new Map<string, Row[]>();
+  for (const row of sessions) {
+    const date = String(row.local_date || '');
+    const sessionId = String(row.session_id || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !lessonSessionIds.has(sessionId)) continue;
+    const rows = rowsByDate.get(date) || [];
+    rows.push(row);
+    rowsByDate.set(date, rows);
+  }
+  const sums = [0,0,0];
+  const counts = [0,0,0];
+  return dates.map((date) => {
+    const observed = [false,false,false];
+    for (const row of rowsByDate.get(date) || []) {
+      if (String(row.data_quality_flag || '') !== 'complete' || String(row.reflection_scale_version || '') !== '4point-v1') continue;
+      [row.reflection_understood_partner,row.reflection_conveyed_ideas,row.reflection_noticed_language_culture].forEach((value, index) => {
+        const rating = Number(value);
+        if (![1,2,3,4].includes(rating)) return;
+        sums[index] += rating;
+        counts[index] += 1;
+        observed[index] = true;
+      });
+    }
+    return {
+      date,
+      reflection_understood:counts[0] ? round(sums[0] / counts[0], 2) : null,
+      reflection_understood_n:counts[0],
+      reflection_understood_observed:observed[0],
+      reflection_conveyed:counts[1] ? round(sums[1] / counts[1], 2) : null,
+      reflection_conveyed_n:counts[1],
+      reflection_conveyed_observed:observed[1],
+      reflection_culture:counts[2] ? round(sums[2] / counts[2], 2) : null,
+      reflection_culture_n:counts[2],
+      reflection_culture_observed:observed[2],
+    };
+  });
 }
 
 export function buildResearchDashboardData(
