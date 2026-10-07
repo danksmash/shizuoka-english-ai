@@ -6,7 +6,7 @@ import {
   researchDashboardReadPlan,
   retryResearchDashboardRead,
 } from '../src/server/researchDashboardResilientRuntime';
-import { buildResearchDashboardData, buildResearchDashboardSessionRows } from '../src/server/researchDashboard';
+import { buildResearchDashboardData, buildResearchDashboardSessionRows, buildResearchRecentSessions } from '../src/server/researchDashboard';
 import { researcherRouteAllowed } from '../src/server/auth';
 
 const aggregateOnlySession:any = {
@@ -21,6 +21,17 @@ const aggregateDashboard:any = buildResearchDashboardData([aggregateOnlySession]
 assert.equal(aggregateDashboard.metrics.totalSessions,1);
 assert.equal(aggregateDashboard.metrics.childUtteranceCount,2);
 assert.equal(aggregateDashboard.metrics.meanChildWordsPerMinute,12);
+
+const selectedDaySessions:any[] = Array.from({ length: 101 }, (_value, index) => ({
+  ...aggregateOnlySession,
+  sessionId:`selected-day-${String(index + 1).padStart(3,'0')}`,
+  researchId:`R-DAY-${String(index + 1).padStart(3,'0')}`,
+  startedAt:new Date(Date.parse('2026-10-08T00:00:00.000Z') + index * 10_000).toISOString(),
+  endedAt:new Date(Date.parse('2026-10-08T00:01:00.000Z') + index * 10_000).toISOString(),
+  localDate:'2026-10-08',
+}));
+assert.equal(buildResearchRecentSessions(selectedDaySessions, {}).length, 101, 'selected-day session summary must not truncate rows above 20/50/100');
+assert.equal(buildResearchRecentSessions(selectedDaySessions, {}, 20).length, 20, 'legacy bounded callers must still be able to request 20 rows');
 
 const clusteredLessonSessions:any[] = Array.from({ length: 15 }, (_value, index) => ({
   ...aggregateOnlySession,
