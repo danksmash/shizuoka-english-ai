@@ -256,7 +256,7 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
           const sessionId = String(row.session_id || '');
           const override = overrideRecordBySession.get(sessionId);
           const finalContext = lessonOverrideBySession.get(sessionId) || String(row.lesson_context_inferred || 'unknown');
-          const manuallyExcluded = Boolean(override) && !Boolean((override as any).analysisIncluded);
+          const manuallyExcluded = Boolean(override) && (override as any).analysisIncluded === false;
           return !manuallyExcluded && finalContext === 'in_lesson';
         })
         .map((row: any) => String(row.session_id || ''))
