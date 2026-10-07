@@ -9,10 +9,12 @@ import { buildRq2Candidates, RQ2_CANDIDATE_RULE_VERSION } from '../src/server/re
 import { buildRq3Candidates } from '../src/server/researchRq3Analysis';
 import type { StudyScheduleRecord } from '../src/server/studySchedulePersistence';
 
-assert.equal(dialogueAnalysisEligible('complete'), true);
-assert.equal(dialogueAnalysisEligible('missing_reflection'), true);
-assert.equal(dialogueAnalysisEligible('interrupted'), false);
-assert.equal(dialogueAnalysisEligible('missing_core'), false);
+assert.equal(dialogueAnalysisEligible('complete', 2), true);
+assert.equal(dialogueAnalysisEligible('missing_reflection', 2), true);
+assert.equal(dialogueAnalysisEligible('interrupted', 2), true);
+assert.equal(dialogueAnalysisEligible('missing_core', 2), true);
+assert.equal(dialogueAnalysisEligible('interrupted', 0), false);
+assert.equal(dialogueAnalysisEligible('missing_core', 0), false);
 assert.equal(reflectionAnalysisEligible('complete'), true);
 assert.equal(reflectionAnalysisEligible('missing_reflection'), false);
 assert.equal(effectivePersonaSelectionEligible(0), false);
@@ -76,6 +78,29 @@ assert.equal(rq2.length, 1, 'missing_reflection must remain eligible for RQ2 dia
 assert.equal(rq2[0].dataQualityFlag, 'missing_reflection');
 assert.equal(rq2[0].candidateRuleVersion, RQ2_CANDIDATE_RULE_VERSION);
 
+const interrupted = {
+  ...dialogueSession(
+    's-interrupted-with-speech',
+    '2026-10-01T10:05:00+09:00',
+    { reflection: false },
+  ),
+  schemaVersion: 4,
+  systemEvents: [],
+};
+const interruptedRq2 = buildRq2Candidates([interrupted], [schedule], { lessonOnly: false });
+assert.equal(interruptedRq2.length, 1, 'interrupted session with a real child utterance must remain eligible for dialogue analysis');
+assert.equal(interruptedRq2[0].dataQualityFlag, 'interrupted');
+
+const zeroSpeechRq2 = buildRq2Candidates([{
+  ...dialogueSession(
+    's-zero-speech-rq2',
+    '2026-10-01T10:07:00+09:00',
+    { child: false, reflection: false },
+  ),
+  schemaVersion: 4,
+}], [schedule], { lessonOnly: false });
+assert.equal(zeroSpeechRq2.length, 0, 'exploratory session with zero child utterances must not enter dialogue analysis');
+
 const rq3 = buildRq3Candidates([missingReflection], [schedule], [{
   session_id: 's-missing-reflection',
   site_id: 'site_a',
@@ -127,4 +152,4 @@ assert.equal(zeroChoice.rapid_restart_flag, 1);
 assert.equal(realChoice.effective_selection_included, 1);
 assert.equal(realChoice.selection_order_valid, 1);
 
-console.log('Research analysis eligibility v2 QA: PASS');
+console.log('Research analysis eligibility v3 QA: PASS');
