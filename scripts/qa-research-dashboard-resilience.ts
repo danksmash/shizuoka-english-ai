@@ -139,6 +139,8 @@ const resilientSource = fs.readFileSync('src/server/researchDashboardResilientRu
 assert.ok(resilientSource.includes("warnings: ['lesson_reflections_unavailable']"), 'Reflection failure must degrade partially, not blank the dashboard');
 assert.ok(resilientSource.includes("warnings: ['lesson_context_overrides_unavailable']"), 'Lesson-context override failure must fall back to inferred context without blanking the dashboard');
 assert.ok(resilientSource.includes('getAllAnalysisSessionOverrides'), 'Lesson-only trend charts must honor formal lesson-context overrides');
+assert.ok(resilientSource.includes('manuallyExcluded'), 'Lesson-only trend charts must honor explicit analysisIncluded=false overrides');
+assert.ok(resilientSource.includes('analysisIncluded'), 'Manual analysis inclusion decisions must be visible to lesson-chart gating');
 assert.ok(resilientSource.includes('researchDashboardLessonSessionIds'), 'Dashboard wrappers must share one final in-lesson session set');
 assert.ok(resilientSource.includes('buildCumulativeLessonReflectionRows'), 'Reflection trend must be rebuilt from in-lesson sessions only');
 assert.ok(resilientSource.includes('getDailyAggregateDashboardSessionsForManagementByLocalDateRange'), 'Dashboard must prefer the daily aggregate summary path');

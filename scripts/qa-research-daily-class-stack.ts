@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   buildCumulativeTurnsByClass,
   buildDailyClassStackRows,
@@ -202,6 +203,59 @@ assert.equal(
   lessonReflection.find((row) => row.date === '2026-10-02')?.reflection_conveyed,
   2,
   'home reflection must not enter the lesson-only cumulative mean',
+);
+
+const dialogueEligibilitySessions = [
+  {
+    session_id:'eligible-complete', local_date:'2026-10-01', class_id:'5-3', data_quality_flag:'complete',
+    dialogue_utterance_count:10, child_turn_count:5, ai_turn_count:5, actual_duration_seconds:60, child_total_words:10,
+  },
+  {
+    session_id:'eligible-interrupted', local_date:'2026-10-02', class_id:'5-3', data_quality_flag:'interrupted',
+    dialogue_utterance_count:8, child_turn_count:4, ai_turn_count:4, actual_duration_seconds:60, child_total_words:8,
+  },
+  {
+    session_id:'eligible-missing-core-with-speech', local_date:'2026-10-03', class_id:'5-3', data_quality_flag:'missing_core',
+    dialogue_utterance_count:6, child_turn_count:3, ai_turn_count:3, actual_duration_seconds:60, child_total_words:6,
+  },
+  {
+    session_id:'exploratory-zero-speech', local_date:'2026-10-04', class_id:'5-3', data_quality_flag:'missing_core',
+    dialogue_utterance_count:1, child_turn_count:0, ai_turn_count:1, actual_duration_seconds:60, child_total_words:0,
+  },
+];
+const dialogueEligibilityIds = new Set(dialogueEligibilitySessions.map((row) => row.session_id));
+const eligibilityTurns = buildCumulativeTurnsByClass(dialogueEligibilitySessions, dialogueEligibilityIds);
+assert.deepEqual(
+  eligibilityTurns[0].points.map((point) => [point.date,point.n,point.observed]),
+  [
+    ['2026-10-01',1,true],
+    ['2026-10-02',2,true],
+    ['2026-10-03',3,true],
+    ['2026-10-04',3,false],
+  ],
+  'interrupted/missing_core sessions with child speech must remain in dialogue trends, while zero-speech exploration is excluded',
+);
+const eligibilityWords = buildCumulativeWordsByClass(dialogueEligibilitySessions, dialogueEligibilityIds);
+assert.deepEqual(
+  eligibilityWords[0].points.map((point) => [point.date,point.n,point.observed]),
+  [
+    ['2026-10-01',1,true],
+    ['2026-10-02',2,true],
+    ['2026-10-03',3,true],
+    ['2026-10-04',3,false],
+  ],
+  'WPM trend must use the same child-speech eligibility rule as turn trend',
+);
+
+const dailyRuntimeSource = fs.readFileSync(new URL('../src/server/researchDailyClassStackRuntime.ts', import.meta.url), 'utf8');
+assert.ok(
+  dailyRuntimeSource.includes('var visibleTurns=Array.isArray(latestCharts.cumulativeTurnsByClass)?latestCharts.cumulativeTurnsByClass:[];'),
+  'turn trend must remain full-range even when daily-session bars use a 7/14/30-day display filter',
+);
+assert.equal(
+  dailyRuntimeSource.includes('filterSeriesByRange(latestCharts.cumulativeTurnsByClass'),
+  false,
+  'daily-session range control must not crop the cumulative turn trend',
 );
 
 console.log('Research daily class-stacked session + lesson-only cumulative trend chart QA passed.');

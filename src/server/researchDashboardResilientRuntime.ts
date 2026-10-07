@@ -247,12 +247,17 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
         .filter((row) => ['in_lesson','outside_lesson','unknown'].includes(String(row.lessonContextFinal || '')))
         .map((row) => [String(row.sessionId || ''), String(row.lessonContextFinal || '')]),
     );
+    const overrideRecordBySession = new Map(
+      lessonOverrideSnapshot.records.map((row) => [String(row.sessionId || ''), row]),
+    );
     const lessonSessionIds = new Set<string>(
       preparedPhaseSessions
         .filter((row: any) => {
           const sessionId = String(row.session_id || '');
+          const override = overrideRecordBySession.get(sessionId);
           const finalContext = lessonOverrideBySession.get(sessionId) || String(row.lesson_context_inferred || 'unknown');
-          return finalContext === 'in_lesson';
+          const manuallyExcluded = Boolean(override) && (override as any).analysisIncluded === false;
+          return !manuallyExcluded && finalContext === 'in_lesson';
         })
         .map((row: any) => String(row.session_id || ''))
         .filter((sessionId: string) => Boolean(sessionId)),
