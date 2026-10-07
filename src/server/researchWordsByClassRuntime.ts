@@ -168,7 +168,7 @@ function injectWordsByClassChart(html: string): string {
   function valid(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))}
   function conditionColors(condition){
     return condition==='comparison'
-      ? ['#047857','#059669','#10b981','#34d399','#065f46','#6ee7b7']
+      ? ['#c2410c','#ea580c','#f97316','#fb923c','#9a3412','#fdba74']
       : ['#1d4ed8','#2563eb','#3b82f6','#60a5fa','#1e40af','#93c5fd'];
   }
   function shapeForClassId(classId){
