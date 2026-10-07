@@ -540,10 +540,18 @@ export function buildResearchDashboardSessionRows(rawSessions: Record<string, an
     const same10 = startedMs ? countNear(classStarts, startedMs, 10*60_000) : 0;
     const usage = started.valid && classId ? (same5 >= 8 || same10 >= 12 ? 'group_like' : 'individual_like') : 'unknown';
     const childTurns = Math.max(0, Number(session.totalTurns || 0));
-    const storedAiTurns = Number(session.aiTurnCount);
-    const aiTurns = Number.isFinite(storedAiTurns) && storedAiTurns >= 0
-      ? storedAiTurns
-      : childTurns > 0 ? childTurns + 1 : 0;
+    const optionalNonNegative = (value: unknown): number | null => {
+      if (value === null || value === undefined || value === '') return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+    };
+    const aiTurns = optionalNonNegative(session.aiTurnCount);
+    const storedDialogueTurns = optionalNonNegative(session.dialogueUtteranceCount);
+    const dialogueTurns = storedDialogueTurns !== null
+      ? storedDialogueTurns
+      : aiTurns !== null && childTurns > 0
+        ? childTurns + aiTurns
+        : null;
     const childWords = Math.max(0, Number(session.totalChildWords || 0));
     const hasCore = Boolean(session.sessionId && session.researchId && childTurns > 0);
     const hasReflection = Boolean(session.reflection && typeof session.reflection === 'object');
@@ -560,7 +568,8 @@ export function buildResearchDashboardSessionRows(rawSessions: Record<string, an
       persona_label_condition:session.personaLabelCondition || 'shown', assigned_partner_country:session.assignedPartnerCountry || '',
       assignment_announced_at:session.assignmentAnnouncedAt || '', topic:session.topic || '',
       child_total_words:childWords, child_turn_count:childTurns, ai_turn_count:aiTurns,
-      dialogue_utterance_count:childTurns+aiTurns, target_duration_minutes:session.targetDurationMinutes || 0,
+      dialogue_utterance_count:dialogueTurns, dialogue_turn_metric_source:session.dialogueTurnMetricSource || '',
+      target_duration_minutes:session.targetDurationMinutes || 0,
       actual_duration_seconds:session.actualDurationSeconds || 0,
       reflection_scale_version:session.reflection?.scaleVersion || (session.reflection ? 'legacy-135' : ''),
       reflection_understood_partner:session.reflection?.understoodPartner ?? '', reflection_conveyed_ideas:session.reflection?.conveyedIdeas ?? '',
