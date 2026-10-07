@@ -12,7 +12,7 @@ export const RESEARCH_DAILY_AGGREGATE_COLLECTION = 'research_daily_aggregates';
 export const RESEARCH_DASHBOARD_SESSION_FIELDS = [
   'sessionId','studentId','researchId','classId','aiStudentId','personaId','personaCountry','topic','targetDurationMinutes',
   'actualDurationSeconds','startedAt','endedAt','localDate','schemaVersion','totalTurns','totalChildWords','reflection',
-  'aiTurnCount','dialogueUtteranceCount',
+  'aiTurnCount','dialogueUtteranceCount','dialogueTurnMetricSource',
   'personaLabelCondition','assignedPartnerId','assignedPartnerCountry','assignmentAnnouncedAt','ttsFallbackCount','micErrorCount',
   'aiRequestFailureCount','gradeLevel','schoolCondition','studySiteId','studyStartDate','formalStudyParticipant','updatedAt',
 ];
@@ -38,7 +38,9 @@ export type ResearchDailyContribution = {
   actualDurationSeconds: number;
   totalTurns: number;
   totalChildWords: number;
-  aiTurnCount: number;
+  aiTurnCount: number | null;
+  dialogueUtteranceCount: number | null;
+  dialogueTurnMetricSource: string;
   micErrorCount: number;
   ttsFallbackCount: number;
   aiRequestFailureCount: number;
@@ -56,6 +58,12 @@ function text(value: unknown, max = 160): string {
 function nonNegative(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function optionalNonNegative(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function gradeLevel(value: unknown): number | null {
@@ -99,7 +107,9 @@ export function buildResearchDailyContribution(session: Record<string, any>): Re
     actualDurationSeconds: nonNegative(session.actualDurationSeconds),
     totalTurns: nonNegative(session.totalTurns),
     totalChildWords: nonNegative(session.totalChildWords),
-    aiTurnCount: nonNegative(session.aiTurnCount),
+    aiTurnCount: optionalNonNegative(session.aiTurnCount),
+    dialogueUtteranceCount: optionalNonNegative(session.dialogueUtteranceCount),
+    dialogueTurnMetricSource: text(session.dialogueTurnMetricSource, 80),
     micErrorCount: nonNegative(session.micErrorCount),
     ttsFallbackCount: nonNegative(session.ttsFallbackCount),
     aiRequestFailureCount: nonNegative(session.aiRequestFailureCount),
@@ -204,7 +214,9 @@ export function researchDailyAggregateDocumentsToDashboardSessions(
         actualDurationSeconds: nonNegative(contribution.actualDurationSeconds),
         totalTurns: nonNegative(contribution.totalTurns),
         totalChildWords: nonNegative(contribution.totalChildWords),
-        aiTurnCount: nonNegative(contribution.aiTurnCount),
+        aiTurnCount: optionalNonNegative(contribution.aiTurnCount),
+        dialogueUtteranceCount: optionalNonNegative(contribution.dialogueUtteranceCount),
+        dialogueTurnMetricSource: text(contribution.dialogueTurnMetricSource, 80),
         micErrorCount: nonNegative(contribution.micErrorCount),
         ttsFallbackCount: nonNegative(contribution.ttsFallbackCount),
         aiRequestFailureCount: nonNegative(contribution.aiRequestFailureCount),
