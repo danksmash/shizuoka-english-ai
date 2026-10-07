@@ -101,6 +101,17 @@ const turnSessions = [
   },
 ];
 
+turnSessions.push(
+  {
+    local_date:'2026-09-20',
+    class_id:'5-2',
+    dialogue_utterance_count:null,
+    child_turn_count:4,
+    ai_turn_count:null,
+    actual_duration_seconds:120,
+  },
+);
+
 const turns = buildCumulativeTurnsByClass(turnSessions);
 assert.deepEqual(turns.map((series) => series.class_id), ['5-1','5-3']);
 
@@ -125,5 +136,8 @@ assert.deepEqual(
   ],
   'invalid zero-duration sessions must not alter cumulative turns/minute',
 );
+
+const class52 = turns.find((series) => series.class_id === '5-2');
+assert.equal(class52, undefined, 'missing AI/dialogue counts must be excluded instead of being coerced to child-only turns');
 
 console.log('Research daily class-stacked session + cumulative turns/min chart QA passed.');
