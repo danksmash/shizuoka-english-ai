@@ -3,10 +3,14 @@ import { detectPersonaProfileExpressions, getPersonaResearchMetadata, PERSONA_DI
 import { detectVocabularyInText } from '../data/vocabulary56';
 import type { ChatMessage, VisualVocabularyItem } from '../types';
 import { maskChildMessageForResearch } from '../utils/privacy';
+import {
+  buildResearchLessonContextDecisions,
+  RESEARCH_LESSON_CONTEXT_RULE_VERSION,
+  type ResearchLessonContext,
+} from './researchLessonContext';
 
 export type ResearchDatasetName = 'sessions' | 'turns' | 'expressions' | 'system_events';
 type UsageContext = 'group_like' | 'individual_like' | 'unknown';
-type LessonContext = 'in_lesson' | 'outside_lesson' | 'unknown';
 type ContextMeta = {
   localDate: string;
   localStartTime: string;
@@ -15,13 +19,15 @@ type ContextMeta = {
   localEndedAt: string;
   sameClassStarts5Min: number;
   sameClassStarts10Min: number;
+  sameClassUniqueParticipants10Min: number;
+  lessonClusterStartLocal: string;
+  lessonContextRuleVersion: string;
   usageContext: UsageContext;
-  lessonContext: LessonContext;
+  lessonContext: ResearchLessonContext;
 };
 
 const CLASS_CLUSTER_5_MIN = 8;
 const CLASS_CLUSTER_10_MIN = 12;
-const LESSON_CLUSTER_RADIUS_MINUTES = 45;
 
 function timestampMs(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -111,28 +117,23 @@ function buildContextMeta(sessions: Record<string, any>[]): Map<string, ContextM
       localEndedAt: end.valid ? `${end.date} ${end.time}` : '',
       sameClassStarts5Min: same5,
       sameClassStarts10Min: same10,
+      sameClassUniqueParticipants10Min: 0,
+      lessonClusterStartLocal: '',
+      lessonContextRuleVersion: RESEARCH_LESSON_CONTEXT_RULE_VERSION,
       usageContext,
       lessonContext: 'unknown',
     });
   }
 
-  const lessonAnchors = new Map<string, number[]>();
+  const lessonDecisions = buildResearchLessonContextDecisions(sessions);
   for (const item of items) {
     const meta = result.get(item.sessionId);
-    if (!meta || meta.usageContext !== 'group_like' || !meta.localDate || !item.classId || item.startMs <= 0) continue;
-    const key = `${item.classId}|${meta.localDate}`;
-    const anchors = lessonAnchors.get(key) || [];
-    anchors.push(item.startMs);
-    lessonAnchors.set(key, anchors);
-  }
-  const lessonRadiusMs = LESSON_CLUSTER_RADIUS_MINUTES * 60_000;
-  for (const item of items) {
-    const meta = result.get(item.sessionId);
-    if (!meta || !meta.localDate || !item.classId || item.startMs <= 0) continue;
-    const anchors = lessonAnchors.get(`${item.classId}|${meta.localDate}`) || [];
-    if (!anchors.length) continue;
-    const nearest = Math.min(...anchors.map((anchor) => Math.abs(anchor - item.startMs)));
-    meta.lessonContext = nearest <= lessonRadiusMs ? 'in_lesson' : 'outside_lesson';
+    const decision = lessonDecisions.get(item.sessionId);
+    if (!meta || !decision) continue;
+    meta.sameClassUniqueParticipants10Min = decision.sameClassUniqueParticipants10Min;
+    meta.lessonClusterStartLocal = decision.lessonClusterStartLocal;
+    meta.lessonContextRuleVersion = decision.lessonContextRuleVersion;
+    meta.lessonContext = decision.lessonContext;
   }
   return result;
 }
@@ -254,7 +255,9 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
     const sessionId = String(session.sessionId || '');
     const meta = context.get(sessionId) || {
       localDate: '', localStartTime: '', localEndTime: '', localStartedAt: '', localEndedAt: '',
-      sameClassStarts5Min: 0, sameClassStarts10Min: 0, usageContext: 'unknown' as UsageContext, lessonContext: 'unknown' as LessonContext,
+      sameClassStarts5Min: 0, sameClassStarts10Min: 0, sameClassUniqueParticipants10Min: 0,
+      lessonClusterStartLocal: '', lessonContextRuleVersion: RESEARCH_LESSON_CONTEXT_RULE_VERSION,
+      usageContext: 'unknown' as UsageContext, lessonContext: 'unknown' as ResearchLessonContext,
     };
     const history = sessionHistory(session);
     const communication = analyzeChildCommunication(history);
@@ -286,7 +289,10 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
       academic_year: session.academicYear || academicYearFromDate(meta.localDate), grade_level: session.gradeLevel || gradeFromClassId(session.classId),
       local_date: meta.localDate, local_start_time: meta.localStartTime, local_end_time: meta.localEndTime,
       local_started_at: meta.localStartedAt, local_ended_at: meta.localEndedAt,
-      same_class_starts_5min: meta.sameClassStarts5Min, same_class_starts_10min: meta.sameClassStarts10Min, usage_context_inferred: meta.usageContext, lesson_context_inferred: meta.lessonContext,
+      same_class_starts_5min: meta.sameClassStarts5Min, same_class_starts_10min: meta.sameClassStarts10Min,
+      same_class_unique_participants_10min: meta.sameClassUniqueParticipants10Min,
+      lesson_cluster_start_local: meta.lessonClusterStartLocal, lesson_context_rule_version: meta.lessonContextRuleVersion,
+      usage_context_inferred: meta.usageContext, lesson_context_inferred: meta.lessonContext,
       lifetime_session_number: sequenceNumbers.get(sessionId)?.lifetime || 0, daily_session_number: sequenceNumbers.get(sessionId)?.daily || 0,
       source_lifetime_session_number: session.lifetimeSessionNumber || 0, source_daily_session_number: session.dailySessionNumber || 0,
       days_since_previous_session: previousDays.get(sessionId) ?? '',

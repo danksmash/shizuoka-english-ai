@@ -1,5 +1,9 @@
 import { AI_STUDENTS_MASTER_LIST, TARGET_20_AI_STUDENT_IDS } from '../data/curriculum';
 import { buildResearchDataSets } from './researchExport';
+import {
+  buildResearchLessonContextDecisions,
+  RESEARCH_LESSON_CONTEXT_RULE_VERSION,
+} from './researchLessonContext';
 
 export type ResearchExportDatasetName = 'sessions' | 'utterances' | 'expressions' | 'personas' | 'codebook';
 export type ResearchFilterQuery = {
@@ -18,7 +22,7 @@ export type ResearchFilterQuery = {
 type Row = Record<string, unknown>;
 type ExportDataSets = Record<ResearchExportDatasetName, Row[]>;
 
-export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v7';
+export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v8';
 
 const RESEARCH_PERSONAS = TARGET_20_AI_STUDENT_IDS.map((id) => {
   const persona = AI_STUDENTS_MASTER_LIST.find((item) => item.id === id);
@@ -45,7 +49,8 @@ export const RESEARCH_EXPORT_HEADERS: Record<ResearchExportDatasetName, string[]
     'child_repair_count','child_reason_expression_count',
     'target_duration_minutes','actual_duration_seconds',
     'reflection_scale_version','reflection_understood_partner','reflection_conveyed_ideas','reflection_noticed_language_culture',
-    'same_class_starts_5min','same_class_starts_10min','usage_context_inferred','lesson_context_inferred',
+    'same_class_starts_5min','same_class_starts_10min','same_class_unique_participants_10min',
+    'lesson_cluster_start_local','lesson_context_rule_version','usage_context_inferred','lesson_context_inferred',
     'persona_label_condition','country_label_visible','accent_label_visible','flag_visible',
     'help_open_count','vocab_bank_open_count',
     'speech_rate_change_count','student_selected_speech_rate',
@@ -117,10 +122,13 @@ const FIELD_DEFINITION: Record<string, string> = {
   reflection_understood_partner:'相手の話を聞いて分かる振り返り',
   reflection_conveyed_ideas:'自分の考えを伝える振り返り',
   reflection_noticed_language_culture:'新しい言葉や文化に気づいた振り返り',
-  same_class_starts_5min:'当該開始時刻の前後5分以内に開始した同学級セッション数（当該sessionを含む）',
-  same_class_starts_10min:'当該開始時刻の前後10分以内に開始した同学級セッション数（当該sessionを含む）',
-  usage_context_inferred:'同学級の開始時刻の集中度だけから推定した一斉利用らしさ／個別利用らしさ',
-  lesson_context_inferred:'同学級同日の一斉利用クラスターを基準に、その前後45分以内を授業内、それ以外を授業外として推定した利用文脈。クラスターを特定できない場合はunknown',
+  same_class_starts_5min:'当該開始時刻の前後5分以内に開始した同学級セッション数（当該sessionを含む。旧利用集中指標）',
+  same_class_starts_10min:'当該開始時刻の前後10分以内に開始した同学級セッション数（当該sessionを含む。旧利用集中指標）',
+  same_class_unique_participants_10min:'当該開始時刻から10分以内に利用開始した同学級の異なるresearch_id数。同一児童の複数sessionは1名として数える',
+  lesson_cluster_start_local:'同一学級・同一日で異なる児童15名以上が10分以内に開始した最初の授業クラスターの開始日時（日本時間）',
+  lesson_context_rule_version:'授業内／授業外の自動判定規則の版',
+  usage_context_inferred:'同学級の開始時刻の集中度だけから推定した一斉利用らしさ／個別利用らしさ（旧補助指標）',
+  lesson_context_inferred:'同一学級・同一日で異なる児童15名以上が10分以内に開始した最初のクラスター開始から45分以内を授業内、それ以外を授業外として推定。学級・開始時刻が欠損する場合のみunknown',
   persona_label_condition:'Personaの国等のラベル提示条件',
   country_label_visible:'国ラベル表示の有無',
   accent_label_visible:'アクセント関連ラベル表示の有無',
@@ -196,6 +204,7 @@ const ALLOWED_VALUES: Record<string, string> = {
   reflection_noticed_language_culture:'legacy-135: 1 | 3 | 5 / 4point-v1: 1 | 2 | 3 | 4',
   usage_context_inferred:'group_like | individual_like | unknown',
   lesson_context_inferred:'in_lesson | outside_lesson | unknown',
+  lesson_context_rule_version:RESEARCH_LESSON_CONTEXT_RULE_VERSION,
   persona_label_condition:'shown | hidden',
   country_label_visible:'0 | 1', accent_label_visible:'0 | 1', flag_visible:'0 | 1', session_completed:'0 | 1',
   student_selected_speech_rate:'0.75–1.25',
@@ -219,7 +228,7 @@ const NUMERIC_FIELDS = new Set([
   'mean_child_words_per_turn','max_child_words_per_turn','child_unique_word_types','child_turn_count','ai_turn_count',
   'dialogue_utterance_count','child_repair_count','child_reason_expression_count','target_duration_minutes','actual_duration_seconds',
   'reflection_conveyed_ideas','reflection_understood_partner','reflection_noticed_language_culture','same_class_starts_5min',
-  'same_class_starts_10min','country_label_visible','accent_label_visible','flag_visible','help_open_count','vocab_bank_open_count',
+  'same_class_starts_10min','same_class_unique_participants_10min','country_label_visible','accent_label_visible','flag_visible','help_open_count','vocab_bank_open_count',
   'speech_rate_change_count','student_selected_speech_rate','tts_provider_observed','tts_provider_event_count','tts_fallback_count','tts_provider_deviation','schema_version','session_completed','mic_error_count','turn_sequence','speaker_turn_number',
   'is_question','is_reciprocal_question','is_repair','is_reason_expression','formal_study_participant',
 ]);
@@ -529,22 +538,7 @@ export function buildResearchDashboardSessionRows(rawSessions: Record<string, an
   }
   for (const starts of startsByClass.values()) starts.sort((a,b) => a-b);
   const countNear = (starts:number[], value:number, radius:number) => starts.filter((item) => Math.abs(item-value) <= radius).length;
-  const lessonAnchors = new Map<string, number[]>();
-  for (const session of sessions) {
-    const classId = String(session.classId || '');
-    const startedMs = dashboardTimestampMs(session.startedAt) || dashboardTimestampMs(session.endedAt);
-    if (!classId || !startedMs) continue;
-    const started = dashboardTokyoParts(startedMs);
-    if (!started.valid) continue;
-    const classStarts = startsByClass.get(classId) || [];
-    const same5 = countNear(classStarts, startedMs, 5*60_000);
-    const same10 = countNear(classStarts, startedMs, 10*60_000);
-    if (same5 < 8 && same10 < 12) continue;
-    const key = `${classId}|${started.date}`;
-    const anchors = lessonAnchors.get(key) || [];
-    anchors.push(startedMs);
-    lessonAnchors.set(key, anchors);
-  }
+  const lessonDecisions = buildResearchLessonContextDecisions(sessions);
   return sessions.map((session) => {
     const persona = RESEARCH_PERSONAS.find((item) => item.id === String(session.personaId || session.aiStudentId || ''));
     const startedMs = dashboardTimestampMs(session.startedAt) || dashboardTimestampMs(session.endedAt);
@@ -555,15 +549,8 @@ export function buildResearchDashboardSessionRows(rawSessions: Record<string, an
     const same5 = startedMs ? countNear(classStarts, startedMs, 5*60_000) : 0;
     const same10 = startedMs ? countNear(classStarts, startedMs, 10*60_000) : 0;
     const usage = started.valid && classId ? (same5 >= 8 || same10 >= 12 ? 'group_like' : 'individual_like') : 'unknown';
-    const anchors = started.valid && classId ? (lessonAnchors.get(`${classId}|${started.date}`) || []) : [];
-    const nearestLessonAnchorMs = anchors.length && startedMs
-      ? Math.min(...anchors.map((anchor) => Math.abs(anchor - startedMs)))
-      : Number.POSITIVE_INFINITY;
-    const lessonContext = !anchors.length
-      ? 'unknown'
-      : nearestLessonAnchorMs <= 45*60_000
-        ? 'in_lesson'
-        : 'outside_lesson';
+    const lessonDecision = lessonDecisions.get(String(session.sessionId || ''));
+    const lessonContext = lessonDecision?.lessonContext || 'unknown';
     const childTurns = Math.max(0, Number(session.totalTurns || 0));
     const optionalNonNegative = (value: unknown): number | null => {
       if (value === null || value === undefined || value === '') return null;
@@ -599,7 +586,11 @@ export function buildResearchDashboardSessionRows(rawSessions: Record<string, an
       reflection_scale_version:session.reflection?.scaleVersion || (session.reflection ? 'legacy-135' : ''),
       reflection_understood_partner:session.reflection?.understoodPartner ?? '', reflection_conveyed_ideas:session.reflection?.conveyedIdeas ?? '',
       reflection_noticed_language_culture:session.reflection?.noticedLanguageCulture ?? '',
-      same_class_starts_5min:same5, same_class_starts_10min:same10, usage_context_inferred:usage, lesson_context_inferred:lessonContext,
+      same_class_starts_5min:same5, same_class_starts_10min:same10,
+      same_class_unique_participants_10min:lessonDecision?.sameClassUniqueParticipants10Min || 0,
+      lesson_cluster_start_local:lessonDecision?.lessonClusterStartLocal || '',
+      lesson_context_rule_version:lessonDecision?.lessonContextRuleVersion || RESEARCH_LESSON_CONTEXT_RULE_VERSION,
+      usage_context_inferred:usage, lesson_context_inferred:lessonContext,
       data_quality_flag:quality, mic_error_count:Number(session.micErrorCount || 0),
       tts_fallback_count:Number(session.ttsFallbackCount || 0), ai_request_failure_count:Number(session.aiRequestFailureCount || 0),
     };

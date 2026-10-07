@@ -5,6 +5,10 @@ import { detectVocabularyInText } from '../data/vocabulary56';
 import type { ChatMessage } from '../types';
 import { maskChildMessageForResearch } from '../utils/privacy';
 import { filterResearchSessionRows, type ResearchFilterQuery } from './researchDashboard';
+import {
+  buildResearchLessonContextDecisions,
+  RESEARCH_LESSON_CONTEXT_RULE_VERSION,
+} from './researchLessonContext';
 import { filterSessionsForStudyPhase } from './researchPhaseRuntime';
 import type { StudyScheduleRecord } from './studySchedulePersistence';
 
@@ -15,7 +19,6 @@ export type FastStreamingPreparation = {
 const TARGET_PERSONAS = new Set<string>(TARGET_20_AI_STUDENT_IDS as readonly string[]);
 const CLASS_CLUSTER_5_MIN = 8;
 const CLASS_CLUSTER_10_MIN = 12;
-const LESSON_CLUSTER_RADIUS_MS = 45 * 60_000;
 const TOKYO_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
   hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
@@ -57,15 +60,6 @@ function upperBound(values: number[], target: number) {
   return left;
 }
 
-function nearestDistance(sorted: number[], target: number): number {
-  if (!sorted.length) return Number.POSITIVE_INFINITY;
-  const index = lowerBound(sorted, target);
-  let best = Number.POSITIVE_INFINITY;
-  if (index < sorted.length) best = Math.min(best, Math.abs(sorted[index] - target));
-  if (index > 0) best = Math.min(best, Math.abs(sorted[index - 1] - target));
-  return best;
-}
-
 function isTargetSession(session: Record<string, any>): boolean {
   return TARGET_PERSONAS.has(String(session.personaId || session.aiStudentId || ''));
 }
@@ -94,7 +88,7 @@ export function buildFastStreamingPreparation(
 
   const contextBySessionId = new Map<string, Record<string, any>>();
   const itemDate = new Map<string, string>();
-  const lessonAnchors = new Map<string, number[]>();
+  const lessonDecisions = buildResearchLessonContextDecisions(sessions);
   for (const item of items) {
     const start = tokyoParts(item.startMs);
     const end = tokyoParts(item.session.endedAt || item.session.startedAt);
@@ -104,6 +98,7 @@ export function buildFastStreamingPreparation(
     const usage = start.valid && item.classId
       ? (same5 >= CLASS_CLUSTER_5_MIN || same10 >= CLASS_CLUSTER_10_MIN ? 'group_like' : 'individual_like')
       : 'unknown';
+    const lessonDecision = lessonDecisions.get(item.sessionId);
     itemDate.set(item.sessionId, start.date);
     contextBySessionId.set(item.sessionId, {
       local_date: start.date,
@@ -113,27 +108,15 @@ export function buildFastStreamingPreparation(
       local_ended_at: end.valid ? `${end.date} ${end.time}` : '',
       same_class_starts_5min: same5,
       same_class_starts_10min: same10,
+      same_class_unique_participants_10min: lessonDecision?.sameClassUniqueParticipants10Min || 0,
+      lesson_cluster_start_local: lessonDecision?.lessonClusterStartLocal || '',
+      lesson_context_rule_version: lessonDecision?.lessonContextRuleVersion || RESEARCH_LESSON_CONTEXT_RULE_VERSION,
       usage_context_inferred: usage,
-      lesson_context_inferred: 'unknown',
+      lesson_context_inferred: lessonDecision?.lessonContext || 'unknown',
       lifetime_session_number: 0,
       daily_session_number: 0,
       days_since_previous_session: '',
     });
-    if (usage === 'group_like' && start.date && item.classId && item.startMs > 0) {
-      const key = `${item.classId}|${start.date}`;
-      const anchors = lessonAnchors.get(key) || [];
-      anchors.push(item.startMs);
-      lessonAnchors.set(key, anchors);
-    }
-  }
-  for (const anchors of lessonAnchors.values()) anchors.sort((a, b) => a - b);
-  for (const item of items) {
-    const context = contextBySessionId.get(item.sessionId);
-    const date = itemDate.get(item.sessionId) || '';
-    if (!context || !date || !item.classId || item.startMs <= 0) continue;
-    const anchors = lessonAnchors.get(`${item.classId}|${date}`) || [];
-    if (nearestDistance(anchors, item.startMs) <= LESSON_CLUSTER_RADIUS_MS) context.lesson_context_inferred = 'in_lesson';
-    else if (anchors.length) context.lesson_context_inferred = 'outside_lesson';
   }
 
   const byResearchId = new Map<string, typeof items>();
