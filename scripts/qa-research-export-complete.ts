@@ -21,19 +21,48 @@ const data=buildResearchExportDataSets(raw as any);
 assert.deepEqual(Object.keys(data).sort(),['codebook','expressions','personas','sessions','utterances'].sort());
 assert.equal(data.sessions.length,3);assert.equal(data.personas.length,20);
 for(const dataset of ['sessions','utterances','expressions','personas','codebook'] as const){for(const row of data[dataset])assert.deepEqual(Object.keys(row),RESEARCH_EXPORT_HEADERS[dataset]);assert.ok(serializeResearchCsv(data[dataset],dataset).startsWith('\uFEFF'));}
-for(const required of ['assigned_partner_id','assigned_partner_country','assignment_announced_at','reflection_scale_version','same_class_starts_5min','same_class_starts_10min','usage_context_inferred','lesson_context_inferred','session_finish_reason','mic_error_count','tts_telemetry_version','tts_primary_provider','tts_actual_provider','tts_provider_observed','tts_provider_event_count','tts_fallback_count','tts_fallback_reason','tts_provider_deviation'])assert.ok(RESEARCH_EXPORT_HEADERS.sessions.includes(required));
+for(const required of ['assigned_partner_id','assigned_partner_country','assignment_announced_at','reflection_scale_version','same_class_starts_5min','same_class_starts_10min','same_class_unique_participants_10min','lesson_cluster_start_local','lesson_context_rule_version','usage_context_inferred','lesson_context_inferred','session_finish_reason','mic_error_count','tts_telemetry_version','tts_primary_provider','tts_actual_provider','tts_provider_observed','tts_provider_event_count','tts_fallback_count','tts_fallback_reason','tts_provider_deviation'])assert.ok(RESEARCH_EXPORT_HEADERS.sessions.includes(required));
 for(const removed of ['ai_model','ai_input_tokens','accent_circle','world_englishes_circle','tts_provider','tts_voice_name','tts_language_code','school_hours_flag','weekday_flag','classification_rule_version'])assert.equal(RESEARCH_EXPORT_HEADERS.sessions.includes(removed),false,removed+' must not be formal research data');
 assert.equal(RESEARCH_EXPORT_HEADERS.personas.includes('world_englishes_circle'),false);assert.equal(RESEARCH_EXPORT_HEADERS.personas.includes('tts_voice_name'),false);
 const beforeRow=data.sessions.find(r=>r.session_id==='before')!;assert.equal(beforeRow.research_schema_version,RESEARCH_EXPORT_SCHEMA_VERSION);assert.equal(beforeRow.session_finish_reason,'unspecified');assert.equal(beforeRow.mic_error_count,0);assert.equal(beforeRow.assigned_partner_country,'United States');assert.equal(beforeRow.help_open_count,1);assert.equal(beforeRow.vocab_bank_open_count,1);assert.equal(beforeRow.tts_telemetry_version,'cors-visible-v1');assert.equal(beforeRow.tts_primary_provider,'azure-speech');assert.equal(beforeRow.tts_actual_provider,'azure-speech');assert.equal(beforeRow.tts_provider_observed,1);assert.equal(beforeRow.tts_provider_deviation,0);assert.equal(beforeRow.reflection_scale_version,'4point-v1');const legacyRow=data.sessions.find(r=>r.session_id==='other')!;assert.equal(legacyRow.tts_telemetry_version,'legacy_unreliable');assert.equal(legacyRow.tts_actual_provider,'not_observed');assert.equal(legacyRow.tts_provider_observed,0);assert.equal(legacyRow.tts_fallback_count,0);assert.equal(legacyRow.tts_provider_deviation,'');
 const clusterStart=Date.parse('2026-09-10T01:00:00Z');
-const clusterRaw=Array.from({length:8},(_,i)=>make(`cluster-${i}`,clusterStart+i*20_000,{researchId:`RC${i}`,studentId:`SC${i}`,classId:'5-1'}));
+const clusterRaw=Array.from({length:15},(_,i)=>make(`cluster-${i}`,clusterStart+i*20_000,{researchId:`RC${i}`,studentId:`SC${i}`,classId:'5-1'}));
 clusterRaw.push(make('retry-in-lesson',clusterStart+30*60_000,{researchId:'RCR',studentId:'SCR',classId:'5-1'}));
 clusterRaw.push(make('home-later',clusterStart+3*60*60_000,{researchId:'RCH',studentId:'SCH',classId:'5-1'}));
+const secondHomeCluster=Array.from({length:15},(_,i)=>make(`home-cluster-${i}`,clusterStart+3*60*60_000+i*15_000,{researchId:`RH${i}`,studentId:`SH${i}`,classId:'5-1'}));
+clusterRaw.push(...secondHomeCluster);
 const clustered=buildResearchExportDataSets(clusterRaw as any);
-assert.equal(clustered.sessions.find(r=>r.session_id==='cluster-0')?.usage_context_inferred,'group_like');
+const clusterFirst=clustered.sessions.find(r=>r.session_id==='cluster-0')!;
+assert.equal(clusterFirst.usage_context_inferred,'group_like');
+assert.equal(clusterFirst.same_class_unique_participants_10min,15);
+assert.equal(clusterFirst.lesson_context_rule_version,'lesson-context-2026-v2');
+assert.equal(clusterFirst.lesson_cluster_start_local,'2026-09-10 10:00:00');
 assert.equal(clustered.sessions.find(r=>r.session_id==='retry-in-lesson')?.usage_context_inferred,'individual_like');
 assert.equal(clustered.sessions.find(r=>r.session_id==='retry-in-lesson')?.lesson_context_inferred,'in_lesson');
 assert.equal(clustered.sessions.find(r=>r.session_id==='home-later')?.lesson_context_inferred,'outside_lesson');
+assert.ok(secondHomeCluster.every((session)=>clustered.sessions.find(r=>r.session_id===session.sessionId)?.lesson_context_inferred==='outside_lesson'),'second same-day home cluster must not create a second lesson');
+
+const repeatedChildBase=Date.parse('2026-09-11T01:00:00Z');
+const fourteenUnique=Array.from({length:14},(_,i)=>make(`u14-${i}`,repeatedChildBase+i*20_000,{researchId:`RU${i}`,studentId:`SU${i}`,classId:'5-2'}));
+const repeatedSameChild=Array.from({length:12},(_,i)=>make(`repeat-${i}`,repeatedChildBase+40_000+i*10_000,{researchId:'RU0',studentId:'SU0',classId:'5-2'}));
+const repeatedData=buildResearchExportDataSets([...fourteenUnique,...repeatedSameChild] as any);
+assert.equal(repeatedData.sessions.find(r=>r.session_id==='u14-0')?.same_class_unique_participants_10min,14);
+assert.ok(repeatedData.sessions.every(r=>r.lesson_context_inferred==='outside_lesson'),'14 unique children plus repeated sessions from one child must stay outside_lesson');
+
+const exactWindowBase=Date.parse('2026-09-12T01:00:00Z');
+const exactWindow=Array.from({length:15},(_,i)=>make(`exact-${i}`,exactWindowBase+(i===14?10*60_000:i*20_000),{researchId:`RE${i}`,studentId:`SE${i}`,classId:'5-3'}));
+const exactData=buildResearchExportDataSets(exactWindow as any);
+assert.equal(exactData.sessions.find(r=>r.session_id==='exact-0')?.same_class_unique_participants_10min,15);
+assert.equal(exactData.sessions.find(r=>r.session_id==='exact-0')?.lesson_context_inferred,'in_lesson','exactly 10 minutes must qualify');
+
+const overWindow=exactWindow.map((session:any)=>({...session}));
+overWindow[14]={...overWindow[14],sessionId:'over-14',researchId:'RO14',studentId:'SO14',startedAt:new Date(exactWindowBase+10*60_000+1).toISOString(),endedAt:new Date(exactWindowBase+10*60_000+120001).toISOString()};
+const overData=buildResearchExportDataSets(overWindow as any);
+assert.ok(overData.sessions.every(r=>r.lesson_context_inferred==='outside_lesson'),'15th unique child after 10 minutes must not qualify');
+
+const missingIdRows=Array.from({length:15},(_,i)=>make(`missing-id-${i}`,exactWindowBase+i*15_000,{researchId:i===14?'':`RM${i}`,studentId:`SM${i}`,classId:'6-1'}));
+const missingIdData=buildResearchExportDataSets(missingIdRows as any);
+assert.ok(missingIdData.sessions.every(r=>r.lesson_context_inferred==='outside_lesson'),'missing research_id must not count toward the 15-child threshold');
 assert.ok(data.utterances.every(u=>data.sessions.some(s=>s.session_id===u.session_id)));assert.ok(data.expressions.every(e=>data.utterances.some(u=>u.utterance_id===e.utterance_id)));
 const dashboard=buildResearchDashboardData(raw as any,{});assert.equal(dashboard.charts.personas.length,20);assert.equal(dashboard.researchIndicators.beforeAnnouncementSessions,1);assert.equal(dashboard.researchIndicators.afterAnnouncementSessions,2);assert.equal(dashboard.researchIndicators.assignedCountryPersonaMatchedSessions,1);assert.equal(dashboard.researchIndicators.assignedCountryPersonaSharePercent,50);assert.ok(dashboard.systemQuality.some(r=>r.label==='AI応答失敗'&&r.value===1));assert.ok(dashboard.systemQuality.some(r=>r.label==='TTSフォールバック'&&r.value===1));
 const formula=serializeResearchCsv([{english_text_anonymized:'=1+1'}] as any,'utterances');assert.ok(formula.includes("\"'=1+1\""));
