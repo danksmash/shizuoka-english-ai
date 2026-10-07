@@ -230,11 +230,11 @@ const managementPage = fs.readFileSync('src/server/managementPage.ts', 'utf8');
 assert.ok(managementPage.includes('dashboardController.abort()'), 'a new dashboard request must abort the previous request');
 assert.ok(managementPage.includes('表現分析を読み込む'), 'expression analysis must require an explicit user action');
 assert.ok(managementPage.includes('async function loadRecentSessionsForDashboard'), 'recent-session loading must have an isolated failure boundary');
-assert.ok(managementPage.includes('最新セッションの読み込みに失敗しました'), 'recent-session failure must be shown only in the recent-session area');
+assert.ok(managementPage.includes('選択日のセッションを読み込めません'), 'selected-day session failure must be shown only in the session-list area');
 const loadDashboardStart = managementPage.indexOf('async function loadDashboard()');
 const loadDashboardEnd = managementPage.indexOf('function markDashboardFiltersPending', loadDashboardStart);
 const loadDashboardSource = managementPage.slice(loadDashboardStart, loadDashboardEnd);
-assert.ok(loadDashboardSource.includes('await loadRecentSessionsForDashboard(params,signal,seq)'), 'dashboard must invoke the isolated recent-session loader after the core result is rendered');
+assert.ok(loadDashboardSource.includes('await loadRecentSessionsForDashboard(params,latestDate)'), 'dashboard must invoke the isolated selected-day loader after the core result is rendered');
 assert.equal(loadDashboardSource.includes('/api/management/research.recent-sessions'), false, 'core dashboard try/catch must not own the recent-session request directly');
 
 const auditRoute = fs.readFileSync('src/server/researchSessionAuditRoutes.ts', 'utf8');
