@@ -58,6 +58,13 @@ assert.ok(html.includes('rshRecentSearch'));
 assert.ok(html.includes('rshOpenSearchBtn'));
 assert.ok(html.includes('履歴を開く'));
 assert.ok(html.includes("e.key==='Enter'"));
+assert.ok(html.includes("window.__researchSessionHistorySyncRecent=syncLazyRecentRows"), 'lazy recent-session results must update the history explorer state');
+assert.ok(html.includes("data-rsh-bound"), 'recent/all-session rows must use idempotent event delegation that survives tbody redraws');
+assert.ok(html.includes("root.addEventListener('click'"), 'row click history opening must be delegated from the persistent tbody');
+assert.ok(html.includes("root.addEventListener('keydown'"), 'Enter/Space history opening must survive lazy row replacement');
+assert.ok(html.includes("recentWordText"), 'history-side search redraw must preserve the current child-word-count column');
+assert.ok(html.includes("child_total_words"), 'history-side recent rows must preserve child word counts after filtering');
+
 assert.ok(html.includes("openHistory(upper,'')"), 'exact research_id search must open full history even when it is outside the recent 50 rows');
 assert.ok(html.includes('全セッション一覧'));
 assert.ok(html.includes("api('research.session-history'"));
@@ -81,6 +88,11 @@ assert.ok(html.includes('grid-template-columns:max-content 44px minmax(0,1fr)'),
 assert.ok(html.includes('.rsh-time{white-space:nowrap;font-variant-numeric:tabular-nums'),'dialogue time must stay on one line with stable numeric spacing');
 assert.ok(html.includes('class="rsh-time"'),'dialogue timestamps must use the dedicated non-overlapping time cell');
 assert.equal(html.includes('grid-template-columns:48px 44px minmax(0,1fr)'),false,'the old too-narrow fixed time column must not return');
+
+const managementPageSource = fs.readFileSync('src/server/managementPage.ts', 'utf8');
+assert.ok(managementPageSource.includes('syncRecentRowsWithHistory(rows)'), 'lazy recent renderer must explicitly notify the history explorer');
+assert.ok(managementPageSource.includes('__researchSessionHistorySyncRecent'), 'management page must call the injected history sync hook after lazy rows render');
+assert.ok(managementPageSource.includes('setTimeout(sync,0)'), 'history sync must tolerate the injected runtime loading immediately after the base management script');
 
 const dashboardSource = fs.readFileSync('src/server/researchDashboard.ts', 'utf8');
 const lazyRouteSource = fs.readFileSync('src/server/researchDashboardLazyRoutes.ts', 'utf8');
