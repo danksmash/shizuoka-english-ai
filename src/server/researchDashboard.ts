@@ -614,10 +614,14 @@ export function buildResearchTopExpressions(rawSessions: Record<string, any>[], 
     .sort((a,b) => b.count-a.count).slice(0,10);
 }
 
-export function buildResearchRecentSessions(rawSessions: Record<string, any>[], query: ResearchFilterQuery = {}, limit = 20) {
-  const rows = filterSessions(buildResearchDashboardSessionRows(rawSessions), query);
+export function buildResearchRecentSessions(rawSessions: Record<string, any>[], query: ResearchFilterQuery = {}, limit?: number) {
+  const rows = filterSessions(buildResearchDashboardSessionRows(rawSessions), query)
+    .sort((a,b) => String(b.local_started_at || '').localeCompare(String(a.local_started_at || '')));
+  const selectedRows = Number.isFinite(limit) && Number(limit) > 0
+    ? rows.slice(0, Math.trunc(Number(limit)))
+    : rows;
   const personaNames = new Map(personaRows().map((row) => [String(row.persona_id), String(row.name)]));
-  return rows.sort((a,b) => String(b.local_started_at || '').localeCompare(String(a.local_started_at || ''))).slice(0,limit).map((row) => ({
+  return selectedRows.map((row) => ({
     session_id:row.session_id || '', local_started_at:row.local_started_at || '', research_id:row.research_id || '', persona_id:row.persona_id || '',
     persona_name:personaNames.get(String(row.persona_id || '')) || '', topic:topicLabel(String(row.topic || '')),
     target_duration_minutes:row.target_duration_minutes || '', data_quality_flag:row.data_quality_flag || '', child_total_words:row.child_total_words ?? null,

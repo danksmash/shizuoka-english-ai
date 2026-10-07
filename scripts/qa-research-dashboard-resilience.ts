@@ -6,7 +6,7 @@ import {
   researchDashboardReadPlan,
   retryResearchDashboardRead,
 } from '../src/server/researchDashboardResilientRuntime';
-import { buildResearchDashboardData, buildResearchDashboardSessionRows } from '../src/server/researchDashboard';
+import { buildResearchDashboardData, buildResearchDashboardSessionRows, buildResearchRecentSessions } from '../src/server/researchDashboard';
 import { researcherRouteAllowed } from '../src/server/auth';
 
 const aggregateOnlySession:any = {
@@ -21,6 +21,17 @@ const aggregateDashboard:any = buildResearchDashboardData([aggregateOnlySession]
 assert.equal(aggregateDashboard.metrics.totalSessions,1);
 assert.equal(aggregateDashboard.metrics.childUtteranceCount,2);
 assert.equal(aggregateDashboard.metrics.meanChildWordsPerMinute,12);
+
+const selectedDaySessions:any[] = Array.from({ length: 101 }, (_value, index) => ({
+  ...aggregateOnlySession,
+  sessionId:`selected-day-${String(index + 1).padStart(3,'0')}`,
+  researchId:`R-DAY-${String(index + 1).padStart(3,'0')}`,
+  startedAt:new Date(Date.parse('2026-10-08T00:00:00.000Z') + index * 10_000).toISOString(),
+  endedAt:new Date(Date.parse('2026-10-08T00:01:00.000Z') + index * 10_000).toISOString(),
+  localDate:'2026-10-08',
+}));
+assert.equal(buildResearchRecentSessions(selectedDaySessions, {}).length, 101, 'selected-day session summary must not truncate rows above 20/50/100');
+assert.equal(buildResearchRecentSessions(selectedDaySessions, {}, 20).length, 20, 'legacy bounded callers must still be able to request 20 rows');
 
 const clusteredLessonSessions:any[] = Array.from({ length: 15 }, (_value, index) => ({
   ...aggregateOnlySession,
@@ -199,8 +210,9 @@ assert.ok(dashboardSource.includes('export function buildResearchTopExpressions'
 
 const lazyRoutes = fs.readFileSync('src/server/researchDashboardLazyRoutes.ts', 'utf8');
 assert.ok(lazyRoutes.includes("router.get('/research.expressions-summary'"), 'expression summary must have a dedicated lazy endpoint');
-assert.ok(lazyRoutes.includes("router.get('/research.recent-sessions'"), 'recent sessions must have a dedicated bounded endpoint');
-assert.ok(lazyRoutes.includes('buildResearchRecentSessions(selected, query, 20)'), 'recent endpoint must return at most 20 rows');
+assert.ok(lazyRoutes.includes("router.get('/research.recent-sessions'"), 'session summaries must have a dedicated lazy endpoint');
+assert.ok(lazyRoutes.includes('getDashboardSessionsForManagementByLocalDateRange(requestedDate, requestedDate)'), 'selected-day endpoint must query only that localDate with projected dashboard fields');
+assert.ok(lazyRoutes.includes('buildResearchRecentSessions(selected, effectiveQuery, requestedDate ? undefined : 20)'), 'selected-day endpoint must return all matching summaries while legacy callers remain bounded');
 
 const researcherRouteFiles = fs.readdirSync('src/server').filter((name) => name.endsWith('.ts'));
 const researcherRoutePattern = /router\.(?:get|post|put|patch|delete)\(\s*(['"])([^'"]+)\1\s*,\s*requireManagementRole\(\['researcher'\]\)/g;
@@ -229,11 +241,11 @@ const managementPage = fs.readFileSync('src/server/managementPage.ts', 'utf8');
 assert.ok(managementPage.includes('dashboardController.abort()'), 'a new dashboard request must abort the previous request');
 assert.ok(managementPage.includes('表現分析を読み込む'), 'expression analysis must require an explicit user action');
 assert.ok(managementPage.includes('async function loadRecentSessionsForDashboard'), 'recent-session loading must have an isolated failure boundary');
-assert.ok(managementPage.includes('最新セッションの読み込みに失敗しました'), 'recent-session failure must be shown only in the recent-session area');
+assert.ok(managementPage.includes('選択日のセッションを読み込めません'), 'selected-day session failure must be shown only in the session-list area');
 const loadDashboardStart = managementPage.indexOf('async function loadDashboard()');
 const loadDashboardEnd = managementPage.indexOf('function markDashboardFiltersPending', loadDashboardStart);
 const loadDashboardSource = managementPage.slice(loadDashboardStart, loadDashboardEnd);
-assert.ok(loadDashboardSource.includes('await loadRecentSessionsForDashboard(params,signal,seq)'), 'dashboard must invoke the isolated recent-session loader after the core result is rendered');
+assert.ok(loadDashboardSource.includes('await loadRecentSessionsForDashboard(params,latestDate)'), 'dashboard must invoke the isolated selected-day loader after the core result is rendered');
 assert.equal(loadDashboardSource.includes('/api/management/research.recent-sessions'), false, 'core dashboard try/catch must not own the recent-session request directly');
 
 const auditRoute = fs.readFileSync('src/server/researchSessionAuditRoutes.ts', 'utf8');
