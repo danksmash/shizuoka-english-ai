@@ -42,6 +42,7 @@ export type ClassTurnsPoint = {
 export type ClassTurnsSeries = {
   class_id: string;
   label: string;
+  school_condition: 'intervention' | 'comparison' | 'unknown';
   points: ClassTurnsPoint[];
 };
 
@@ -79,6 +80,14 @@ function compareClassIds(a: string, b: string): number {
     if (aa[index] !== bb[index]) return Number(aa[index]) - Number(bb[index]);
   }
   return String(aa[3]).localeCompare(String(bb[3]), 'ja');
+}
+
+function normalizeSchoolCondition(value: unknown, classId: string): 'intervention' | 'comparison' | 'unknown' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'intervention' || normalized === 'comparison') return normalized;
+  if (/^[1-9]-C[1-9]$/i.test(classId)) return 'comparison';
+  if (/^[1-9]-[1-9]$/.test(classId)) return 'intervention';
+  return 'unknown';
 }
 
 export function buildDailyClassStackRows(
@@ -178,6 +187,10 @@ export function buildCumulativeTurnsByClass(
 
   return classIds.map((classId) => {
     const classRows = validSessions.filter((item) => item.classId === classId);
+    const condition = normalizeSchoolCondition(
+      classRows.find((item) => item.row.school_condition)?.row.school_condition,
+      classId,
+    );
     let sum = 0;
     let n = 0;
     const points = dates.map((date) => {
@@ -196,6 +209,7 @@ export function buildCumulativeTurnsByClass(
     return {
       class_id: classId,
       label: researchClassLabel(classId),
+      school_condition: condition,
       points,
     };
   });

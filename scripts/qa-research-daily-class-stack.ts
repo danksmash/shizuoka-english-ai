@@ -143,6 +143,20 @@ assert.deepEqual(
 const class52 = turns.find((series) => series.class_id === '5-2');
 assert.equal(class52, undefined, 'missing AI/dialogue counts must be excluded instead of being coerced to child-only turns');
 
+const comparisonTurns = buildCumulativeTurnsByClass([
+  {
+    local_date:'2026-09-18',
+    class_id:'6-C1',
+    school_condition:'comparison',
+    dialogue_utterance_count:16,
+    child_turn_count:8,
+    ai_turn_count:8,
+    actual_duration_seconds:120,
+  },
+]);
+assert.equal(comparisonTurns[0]?.school_condition, 'comparison', 'comparison-school turn series must carry school_condition for orange chart styling');
+assert.equal(comparisonTurns[0]?.label, '6年比較1組');
+
 const lessonTrendSessions = [
   {
     session_id:'lesson-1', local_date:'2026-10-01', class_id:'5-1', data_quality_flag:'complete',
