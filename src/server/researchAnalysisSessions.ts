@@ -16,7 +16,7 @@ import {
 } from './researchAnalysisEligibility';
 
 export const RESEARCH_ANALYSIS_SESSION_OVERRIDE_COLLECTION = 'research_analysis_session_overrides';
-export const ANALYSIS_SESSION_SCHEMA_VERSION = 'analysis-session-2026-v2';
+export const ANALYSIS_SESSION_SCHEMA_VERSION = 'analysis-session-2026-v3';
 
 export const ANALYSIS_SESSION_HEADERS = [
   'analysis_schema_version',
@@ -165,7 +165,8 @@ export async function buildAnalysisSessionRows(
     const purposeDefaultIncluded = !structuralReason && inferred === 'in_lesson';
     const purposeRequestedIncluded = override ? Boolean(override.analysisIncluded) : purposeDefaultIncluded;
     const dataQualityFlag = String(row.data_quality_flag || '');
-    const dialogueEligible = dialogueAnalysisEligible(dataQualityFlag);
+    const childTurnCount = Math.max(0, Number(row.child_turn_count || 0));
+    const dialogueEligible = dialogueAnalysisEligible(dataQualityFlag, childTurnCount);
     const reflectionEligible = reflectionAnalysisEligible(dataQualityFlag);
     const dialogueIncluded = !structuralReason
       && dialogueEligible
@@ -177,7 +178,7 @@ export async function buildAnalysisSessionRows(
       && lessonContextFinal === 'in_lesson';
     const dialogueExclusionReason = dialogueIncluded ? '' : finalExclusionReason({
       structuralReason,
-      qualityReason: qualityExclusionReason(dataQualityFlag, 'dialogue'),
+      qualityReason: qualityExclusionReason(dataQualityFlag, 'dialogue', childTurnCount),
       overridePresent: Boolean(override),
       requestedIncluded: purposeRequestedIncluded,
       lessonContextFinal,
