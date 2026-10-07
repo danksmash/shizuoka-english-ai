@@ -8,6 +8,7 @@ import {
   filterSessionsForStudyPhase,
   normalizeStudyPhaseFilter,
 } from './researchPhaseRuntime';
+import { dialogueAnalysisEligible } from './researchAnalysisEligibility';
 
 type Row = Record<string, unknown>;
 type Aggregation = 'daily' | 'weekly';
@@ -35,6 +36,7 @@ export type ClassTurnsPoint = {
   date: string;
   value: number | null;
   n: number;
+  observed?: boolean;
 };
 
 export type ClassTurnsSeries = {
@@ -150,7 +152,11 @@ function sessionTurnsPerMinute(row: Row): number | null {
   return turns * 60 / seconds;
 }
 
-export function buildCumulativeTurnsByClass(sessions: Row[]): ClassTurnsSeries[] {
+export function buildCumulativeTurnsByClass(
+  sessions: Row[],
+  lessonSessionIds?: ReadonlySet<string>,
+): ClassTurnsSeries[] {
+  const lessonOnly = lessonSessionIds !== undefined;
   const validSessions = sessions
     .map((row) => ({
       row,
@@ -158,9 +164,16 @@ export function buildCumulativeTurnsByClass(sessions: Row[]): ClassTurnsSeries[]
       date: String(row.local_date || '').trim(),
       turnsPerMinute: sessionTurnsPerMinute(row),
     }))
-    .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.date) && item.turnsPerMinute !== null);
+    .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.date)
+      && item.turnsPerMinute !== null
+      && (!lessonOnly || (
+        lessonSessionIds.has(String(item.row.session_id || ''))
+        && dialogueAnalysisEligible(item.row.data_quality_flag)
+      )));
 
-  const dates = [...new Set(validSessions.map((item) => item.date))].sort();
+  const dates = [...new Set((lessonOnly ? sessions : validSessions)
+    .map((item: any) => String((item.row || item).local_date || item.date || '').trim())
+    .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)))].sort();
   const classIds = [...new Set(validSessions.map((item) => item.classId))].sort(compareClassIds);
 
   return classIds.map((classId) => {
@@ -177,6 +190,7 @@ export function buildCumulativeTurnsByClass(sessions: Row[]): ClassTurnsSeries[]
         date,
         value: n > 0 ? Math.round((sum / n) * 100) / 100 : null,
         n,
+        observed: classRows.some((item) => item.date === date),
       };
     });
     return {
@@ -245,13 +259,20 @@ function enhanceDashboardJson(req: any, res: any, body: any): any {
     }
   }
 
+  const lessonSessionIds = res.locals.researchDashboardLessonSessionIds instanceof Set
+    ? res.locals.researchDashboardLessonSessionIds as Set<string>
+    : new Set(filteredSessions
+      .filter((row) => String(row.lesson_context_inferred || '') === 'in_lesson')
+      .map((row) => String(row.session_id || ''))
+      .filter(Boolean));
+
   return {
     ...body,
     charts: {
       ...body.charts,
       dailyClassStack: stack.rows,
       dailyClassLegend: stack.legend,
-      cumulativeTurnsByClass: buildCumulativeTurnsByClass(filteredSessions),
+      cumulativeTurnsByClass: buildCumulativeTurnsByClass(filteredSessions, lessonSessionIds),
       dailyClassStackMatchesTotal: dashboardAggregation === 'daily' ? true : null,
     },
   };
@@ -369,11 +390,11 @@ function injectResearchDailyClassStack(html: string): string {
       var color=classColor(item.class_id),points=[];
       (item.points||[]).forEach(function(point){if(valid(point.value))points.push(x(point.date)+','+y(Number(point.value)))});
       if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
-      (item.points||[]).forEach(function(point){if(!valid(point.value))return;var title=String(point.date||'')+' '+String(item.label||item.class_id||'')+': '+fmt(Number(point.value))+' ターン/分 (n='+Number(point.n||0)+')';out+='<circle cx="'+x(point.date)+'" cy="'+y(Number(point.value))+'" r="3.2" fill="#fff" stroke="'+color+'" stroke-width="1.8"><title>'+h(title)+'</title></circle>'});
+      (item.points||[]).forEach(function(point){if(!valid(point.value)||point.observed===false)return;var title=String(point.date||'')+' '+String(item.label||item.class_id||'')+': '+fmt(Number(point.value))+' ターン/分 (n='+Number(point.n||0)+')';out+='<circle cx="'+x(point.date)+'" cy="'+y(Number(point.value))+'" r="3.2" fill="#fff" stroke="'+color+'" stroke-width="1.8"><title>'+h(title)+'</title></circle>'});
       var col=index%3,row=Math.floor(index/3),lx=left+col*132,ly=12+row*18;
       out+='<line x1="'+lx+'" y1="'+ly+'" x2="'+(lx+16)+'" y2="'+ly+'" stroke="'+color+'" stroke-width="2"/><circle cx="'+(lx+8)+'" cy="'+ly+'" r="2.8" fill="#fff" stroke="'+color+'" stroke-width="1.5"/><text x="'+(lx+21)+'" y="'+(ly+4)+'" class="svg-label" style="font-size:10px;fill:#10224a">'+h(item.label||item.class_id||'')+'</text>';
     });
-    out+='<text x="'+left+'" y="'+(hgt-3)+'" class="svg-label" style="font-size:9px;fill:#64748b">各点＝当日までの有効セッション累積平均｜ターン＝児童＋AI発話</text>';
+    out+='<text x="'+left+'" y="'+(hgt-3)+'" class="svg-label" style="font-size:9px;fill:#64748b">授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜ターン＝児童＋AI発話</text>';
     return out+'</svg>';
   }
   function updateRangeButtons(){
