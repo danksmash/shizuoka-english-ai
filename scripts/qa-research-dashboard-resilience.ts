@@ -6,7 +6,7 @@ import {
   researchDashboardReadPlan,
   retryResearchDashboardRead,
 } from '../src/server/researchDashboardResilientRuntime';
-import { buildResearchDashboardData } from '../src/server/researchDashboard';
+import { buildResearchDashboardData, buildResearchDashboardSessionRows } from '../src/server/researchDashboard';
 import { researcherRouteAllowed } from '../src/server/auth';
 
 const aggregateOnlySession:any = {
@@ -21,6 +21,34 @@ const aggregateDashboard:any = buildResearchDashboardData([aggregateOnlySession]
 assert.equal(aggregateDashboard.metrics.totalSessions,1);
 assert.equal(aggregateDashboard.metrics.childUtteranceCount,2);
 assert.equal(aggregateDashboard.metrics.meanChildWordsPerMinute,12);
+
+const clusteredLessonSessions:any[] = Array.from({ length: 8 }, (_value, index) => ({
+  ...aggregateOnlySession,
+  sessionId:`lesson-cluster-${index + 1}`,
+  researchId:`R-LESSON-${index + 1}`,
+  startedAt:new Date(Date.parse('2026-10-01T01:00:00.000Z') + index * 20_000).toISOString(),
+  endedAt:new Date(Date.parse('2026-10-01T01:01:00.000Z') + index * 20_000).toISOString(),
+  localDate:'2026-10-01',
+}));
+const homeSession:any = {
+  ...aggregateOnlySession,
+  sessionId:'home-later',
+  researchId:'R-HOME',
+  startedAt:'2026-10-01T04:00:00.000Z',
+  endedAt:'2026-10-01T04:01:00.000Z',
+  localDate:'2026-10-01',
+};
+const lessonContextRows = buildResearchDashboardSessionRows([...clusteredLessonSessions, homeSession]);
+assert.equal(
+  lessonContextRows.find((row) => row.session_id === 'lesson-cluster-1')?.lesson_context_inferred,
+  'in_lesson',
+  'same-class lesson cluster must be inferred as in_lesson',
+);
+assert.equal(
+  lessonContextRows.find((row) => row.session_id === 'home-later')?.lesson_context_inferred,
+  'outside_lesson',
+  'same-day individual home use outside the lesson radius must remain outside_lesson',
+);
 
 assert.equal(isTransientResearchDashboardReadError(new Error('FIRESTORE_LIST_503:backend unavailable')), true);
 assert.equal(isTransientResearchDashboardReadError(new Error('FIRESTORE_GET_429:quota')), true);
@@ -109,6 +137,10 @@ assert.equal(emptyFallback.aggregateError, 'empty_aggregate');
 
 const resilientSource = fs.readFileSync('src/server/researchDashboardResilientRuntime.ts', 'utf8');
 assert.ok(resilientSource.includes("warnings: ['lesson_reflections_unavailable']"), 'Reflection failure must degrade partially, not blank the dashboard');
+assert.ok(resilientSource.includes("warnings: ['lesson_context_overrides_unavailable']"), 'Lesson-context override failure must fall back to inferred context without blanking the dashboard');
+assert.ok(resilientSource.includes('getAllAnalysisSessionOverrides'), 'Lesson-only trend charts must honor formal lesson-context overrides');
+assert.ok(resilientSource.includes('researchDashboardLessonSessionIds'), 'Dashboard wrappers must share one final in-lesson session set');
+assert.ok(resilientSource.includes('buildCumulativeLessonReflectionRows'), 'Reflection trend must be rebuilt from in-lesson sessions only');
 assert.ok(resilientSource.includes('getDailyAggregateDashboardSessionsForManagementByLocalDateRange'), 'Dashboard must prefer the daily aggregate summary path');
 assert.ok(resilientSource.includes('getDashboardSessionsForManagementByLocalDateRange'), 'Dashboard must retain the projected canonical fallback');
 assert.ok(resilientSource.includes("source: 'daily_aggregate'"), 'Dashboard must identify successful aggregate reads');
