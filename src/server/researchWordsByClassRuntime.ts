@@ -87,7 +87,7 @@ export function buildCumulativeWordsByClass(
       && item.wpm !== null
       && (!lessonOnly || (
         lessonSessionIds.has(String(item.row.session_id || ''))
-        && dialogueAnalysisEligible(item.row.data_quality_flag)
+        && dialogueAnalysisEligible(item.row.data_quality_flag, item.row.child_turn_count)
       )));
 
   const dates = [...new Set((lessonOnly ? sessions : validSessions)
