@@ -4,6 +4,8 @@ import {
   buildDailyClassStackRows,
   researchClassLabel,
 } from '../src/server/researchDailyClassStackRuntime';
+import { buildCumulativeWordsByClass } from '../src/server/researchWordsByClassRuntime';
+import { buildCumulativeLessonReflectionRows } from '../src/server/researchDashboard';
 
 const sessions = [
   { local_date:'2026-09-17', class_id:'5-1' },
@@ -140,4 +142,66 @@ assert.deepEqual(
 const class52 = turns.find((series) => series.class_id === '5-2');
 assert.equal(class52, undefined, 'missing AI/dialogue counts must be excluded instead of being coerced to child-only turns');
 
-console.log('Research daily class-stacked session + cumulative turns/min chart QA passed.');
+const lessonTrendSessions = [
+  {
+    session_id:'lesson-1', local_date:'2026-10-01', class_id:'5-1', data_quality_flag:'complete',
+    dialogue_utterance_count:12, child_turn_count:6, ai_turn_count:6, actual_duration_seconds:120,
+    child_total_words:20, reflection_scale_version:'4point-v1',
+    reflection_understood_partner:3, reflection_conveyed_ideas:2, reflection_noticed_language_culture:3,
+  },
+  {
+    session_id:'home-1', local_date:'2026-10-02', class_id:'5-1', data_quality_flag:'complete',
+    dialogue_utterance_count:40, child_turn_count:20, ai_turn_count:20, actual_duration_seconds:120,
+    child_total_words:100, reflection_scale_version:'4point-v1',
+    reflection_understood_partner:4, reflection_conveyed_ideas:4, reflection_noticed_language_culture:4,
+  },
+  {
+    session_id:'lesson-2', local_date:'2026-10-03', class_id:'5-1', data_quality_flag:'missing_reflection',
+    dialogue_utterance_count:20, child_turn_count:10, ai_turn_count:10, actual_duration_seconds:120,
+    child_total_words:40, reflection_scale_version:'',
+    reflection_understood_partner:'', reflection_conveyed_ideas:'', reflection_noticed_language_culture:'',
+  },
+];
+const lessonIds = new Set(['lesson-1','lesson-2']);
+
+const lessonTurns = buildCumulativeTurnsByClass(lessonTrendSessions, lessonIds);
+assert.deepEqual(
+  lessonTurns[0].points.map((point) => [point.date,point.value,point.n,point.observed]),
+  [
+    ['2026-10-01',6,1,true],
+    ['2026-10-02',6,1,false],
+    ['2026-10-03',8,2,true],
+  ],
+  'home-use day must carry forward the previous in-lesson turn mean without changing n',
+);
+
+const lessonWords = buildCumulativeWordsByClass(lessonTrendSessions, lessonIds);
+assert.deepEqual(
+  lessonWords[0].points.map((point) => [point.date,point.value,point.n,point.observed]),
+  [
+    ['2026-10-01',10,1,true],
+    ['2026-10-02',10,1,false],
+    ['2026-10-03',15,2,true],
+  ],
+  'home-use day must not affect the cumulative in-lesson word-rate mean',
+);
+
+const lessonReflection = buildCumulativeLessonReflectionRows(lessonTrendSessions, lessonIds);
+assert.deepEqual(
+  lessonReflection.map((row) => [
+    row.date,row.reflection_understood,row.reflection_understood_n,row.reflection_understood_observed,
+  ]),
+  [
+    ['2026-10-01',3,1,true],
+    ['2026-10-02',3,1,false],
+    ['2026-10-03',3,1,false],
+  ],
+  'reflection trend must carry forward across home use and sessions without a valid reflection',
+);
+assert.equal(
+  lessonReflection.find((row) => row.date === '2026-10-02')?.reflection_conveyed,
+  2,
+  'home reflection must not enter the lesson-only cumulative mean',
+);
+
+console.log('Research daily class-stacked session + lesson-only cumulative trend chart QA passed.');
