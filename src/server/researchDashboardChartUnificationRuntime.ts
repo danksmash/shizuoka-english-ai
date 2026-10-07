@@ -53,7 +53,7 @@ function injectResearchDashboardChartUnification(html: string): string {
     var every=Math.max(1,Math.ceil(dates.length/7));dates.forEach(function(date,i){if(i%every===0||i===dates.length-1)out+='<text x="'+x(date)+'" y="'+(h-19)+'" text-anchor="middle" class="unified-line-axis">'+esc(String(date).slice(5))+'</text>'});
     var counts={intervention:0,comparison:0,unknown:0};
     list.forEach(function(s,si){
-      var condition=s.school_condition==='comparison'?'comparison':'intervention',palette=conditionColors(condition),color=palette[counts[condition]++%palette.length],shape=classShape(s.class_id),points=[];
+      var isComparison=s.school_condition==='comparison'||/^[1-9]-C[1-9]$/i.test(String(s.class_id||'')),condition=isComparison?'comparison':'intervention',palette=conditionColors(condition),color=palette[counts[condition]++%palette.length],shape=classShape(s.class_id),points=[];
       (s.points||[]).forEach(function(p){if(valid(p.value))points.push(x(p.date)+','+y(Number(p.value)))});
       if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round" stroke-linejoin="round"/>';
       (s.points||[]).forEach(function(p){if(!valid(p.value)||p.observed===false)return;var title=String(p.date||'')+' '+String(s.label||s.class_id||'')+': '+fmt(Number(p.value))+' '+unit+' (n='+Number(p.n||0)+')';out+=marker(shape,x(p.date),y(Number(p.value)),color,title)});
