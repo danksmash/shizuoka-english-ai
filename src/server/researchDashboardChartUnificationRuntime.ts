@@ -118,27 +118,21 @@ function injectResearchDashboardChartUnification(html: string): string {
     if(words)words.classList.add('unified-line-chart');
     if(reflection)reflection.classList.add('unified-line-chart');
   }
-  function patchTurnsLineWidth(){
-    var svg=document.querySelector('#chartTurns svg');if(!svg)return;
-    Array.prototype.forEach.call(svg.querySelectorAll('polyline'),function(el){el.setAttribute('stroke-width',String(LINE_WIDTH))});
-    Array.prototype.forEach.call(svg.querySelectorAll('line'),function(el){var stroke=String(el.getAttribute('stroke')||'').toLowerCase();if(stroke&&stroke!=='#dfe7f2')el.setAttribute('stroke-width',String(LINE_WIDTH))});
-  }
   function renderUnified(d){
     ensureSeparateCards();
     var charts=(d&&d.charts)||{};
+    var turns=document.getElementById('chartTurns');
+    if(turns&&Array.isArray(charts.cumulativeTurnsByClass))turns.innerHTML=classSeriesSvg(charts.cumulativeTurnsByClass,'ターン/分','1分あたり平均ターン数学級別累積平均','授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜ターン＝児童＋AI発話｜実践校＝青系・比較校＝緑系');
     var words=document.getElementById('chartWords');
     if(words&&Array.isArray(charts.cumulativeWordsByClass))words.innerHTML=classSeriesSvg(charts.cumulativeWordsByClass,'語/分','1分あたり平均発話語数学級別累積平均','授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜実践校＝青系・比較校＝緑系');
     var wordsTitle=document.getElementById('chartWordsTitle');if(wordsTitle)wordsTitle.textContent='1分あたり平均発話語数（学級別・累積平均・日別）';
     var reflection=document.getElementById('chartReflection');var cumulative=charts.lessonCumulativeReflection||charts.cumulativeDaily||charts.daily||[];
     if(reflection)reflection.innerHTML=reflectionSvg(cumulative);
-    patchTurnsLineWidth();
   }
   ensureSeparateCards();
   var previousRenderDashboard=renderDashboard;
   renderDashboard=function(d,appliedQuery){previousRenderDashboard(d,appliedQuery);renderUnified(d)};
   window.renderDashboard=renderDashboard;
-  var turns=document.getElementById('chartTurns');
-  if(turns&&window.MutationObserver)new MutationObserver(function(){patchTurnsLineWidth()}).observe(turns,{childList:true,subtree:true});
 })();
 </script>`;
 
