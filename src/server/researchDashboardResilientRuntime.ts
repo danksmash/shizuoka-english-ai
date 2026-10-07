@@ -247,7 +247,7 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
         .filter((row) => ['in_lesson','outside_lesson','unknown'].includes(String(row.lessonContextFinal || '')))
         .map((row) => [String(row.sessionId || ''), String(row.lessonContextFinal || '')]),
     );
-    const lessonSessionIds = new Set(
+    const lessonSessionIds = new Set<string>(
       preparedPhaseSessions
         .filter((row: any) => {
           const sessionId = String(row.session_id || '');
@@ -255,7 +255,7 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
           return finalContext === 'in_lesson';
         })
         .map((row: any) => String(row.session_id || ''))
-        .filter(Boolean),
+        .filter((sessionId: string) => Boolean(sessionId)),
     );
     const filteredPreparedPhaseSessions = filterResearchSessionRows(preparedPhaseSessions, query);
     const lessonCumulativeReflection = buildCumulativeLessonReflectionRows(filteredPreparedPhaseSessions, lessonSessionIds);
