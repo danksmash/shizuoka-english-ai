@@ -4,7 +4,7 @@ import { filterManualResearchExcludedSessions } from './researchManualExclusions
 import { dialogueAnalysisEligible } from './researchAnalysisEligibility';
 import { analysisPeriodForLocalDate, phaseForLocalDate, type StudyScheduleRecord } from './studySchedulePersistence';
 
-export const RQ2_CANDIDATE_RULE_VERSION = 'rq2-candidate-2026-v2';
+export const RQ2_CANDIDATE_RULE_VERSION = 'rq2-candidate-2026-v3';
 
 export const RQ2_STRATA = [
   'intervention_phase1',
@@ -101,7 +101,8 @@ export function buildRq2Candidates(
     const sessionId = String(session.sessionId || '');
     const row = sessionRows.get(sessionId);
     const dataQualityFlag = String(row?.data_quality_flag || '');
-    if (!row || !dialogueAnalysisEligible(dataQualityFlag)) continue;
+    const childTurnCount = Math.max(0, Number(row?.child_turn_count || 0));
+    if (!row || !dialogueAnalysisEligible(dataQualityFlag, childTurnCount)) continue;
     const localDate = String(row.local_date || localDateOf(session));
     const scope = researchDataScopeForRow({
       class_id: row.class_id || session.classId || '',
