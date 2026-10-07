@@ -28,6 +28,8 @@ const beforeRow=data.sessions.find(r=>r.session_id==='before')!;assert.equal(bef
 const clusterStart=Date.parse('2026-09-10T01:00:00Z');
 const clusterRaw=Array.from({length:15},(_,i)=>make(`cluster-${i}`,clusterStart+i*20_000,{researchId:`RC${i}`,studentId:`SC${i}`,classId:'5-1'}));
 clusterRaw.push(make('retry-in-lesson',clusterStart+30*60_000,{researchId:'RCR',studentId:'SCR',classId:'5-1'}));
+clusterRaw.push(make('lesson-boundary-exact',clusterStart+45*60_000,{researchId:'RB45',studentId:'SB45',classId:'5-1'}));
+clusterRaw.push(make('lesson-boundary-over',clusterStart+45*60_000+1,{researchId:'RB45X',studentId:'SB45X',classId:'5-1'}));
 clusterRaw.push(make('home-later',clusterStart+3*60*60_000,{researchId:'RCH',studentId:'SCH',classId:'5-1'}));
 const secondHomeCluster=Array.from({length:15},(_,i)=>make(`home-cluster-${i}`,clusterStart+3*60*60_000+i*15_000,{researchId:`RH${i}`,studentId:`SH${i}`,classId:'5-1'}));
 clusterRaw.push(...secondHomeCluster);
@@ -39,6 +41,8 @@ assert.equal(clusterFirst.lesson_context_rule_version,'lesson-context-2026-v2');
 assert.equal(clusterFirst.lesson_cluster_start_local,'2026-09-10 10:00:00');
 assert.equal(clustered.sessions.find(r=>r.session_id==='retry-in-lesson')?.usage_context_inferred,'individual_like');
 assert.equal(clustered.sessions.find(r=>r.session_id==='retry-in-lesson')?.lesson_context_inferred,'in_lesson');
+assert.equal(clustered.sessions.find(r=>r.session_id==='lesson-boundary-exact')?.lesson_context_inferred,'in_lesson','exactly 45 minutes after lesson start must remain in_lesson');
+assert.equal(clustered.sessions.find(r=>r.session_id==='lesson-boundary-over')?.lesson_context_inferred,'outside_lesson','more than 45 minutes after lesson start must be outside_lesson');
 assert.equal(clustered.sessions.find(r=>r.session_id==='home-later')?.lesson_context_inferred,'outside_lesson');
 assert.ok(secondHomeCluster.every((session)=>clustered.sessions.find(r=>r.session_id===session.sessionId)?.lesson_context_inferred==='outside_lesson'),'second same-day home cluster must not create a second lesson');
 
@@ -63,6 +67,16 @@ assert.ok(overData.sessions.every(r=>r.lesson_context_inferred==='outside_lesson
 const missingIdRows=Array.from({length:15},(_,i)=>make(`missing-id-${i}`,exactWindowBase+i*15_000,{researchId:i===14?'':`RM${i}`,studentId:`SM${i}`,classId:'6-1'}));
 const missingIdData=buildResearchExportDataSets(missingIdRows as any);
 assert.ok(missingIdData.sessions.every(r=>r.lesson_context_inferred==='outside_lesson'),'missing research_id must not count toward the 15-child threshold');
+
+const mixedClassRows=[
+  ...Array.from({length:8},(_,i)=>make(`mix-a-${i}`,exactWindowBase+i*20_000,{researchId:`RMA${i}`,studentId:`SMA${i}`,classId:'5-1'})),
+  ...Array.from({length:7},(_,i)=>make(`mix-b-${i}`,exactWindowBase+i*20_000,{researchId:`RMB${i}`,studentId:`SMB${i}`,classId:'5-2'})),
+];
+const mixedClassData=buildResearchExportDataSets(mixedClassRows as any);
+assert.ok(mixedClassData.sessions.every(r=>r.lesson_context_inferred==='outside_lesson'),'participants from different classes must never be combined into one lesson cluster');
+
+const unknownContext=buildResearchExportDataSets([make('unknown-context',exactWindowBase,{researchId:'RUNK',studentId:'SUNK',classId:'',startedAt:''})] as any);
+assert.equal(unknownContext.sessions[0]?.lesson_context_inferred,'unknown','missing class/time must remain unknown rather than outside_lesson');
 assert.ok(data.utterances.every(u=>data.sessions.some(s=>s.session_id===u.session_id)));assert.ok(data.expressions.every(e=>data.utterances.some(u=>u.utterance_id===e.utterance_id)));
 const dashboard=buildResearchDashboardData(raw as any,{});assert.equal(dashboard.charts.personas.length,20);assert.equal(dashboard.researchIndicators.beforeAnnouncementSessions,1);assert.equal(dashboard.researchIndicators.afterAnnouncementSessions,2);assert.equal(dashboard.researchIndicators.assignedCountryPersonaMatchedSessions,1);assert.equal(dashboard.researchIndicators.assignedCountryPersonaSharePercent,50);assert.ok(dashboard.systemQuality.some(r=>r.label==='AI応答失敗'&&r.value===1));assert.ok(dashboard.systemQuality.some(r=>r.label==='TTSフォールバック'&&r.value===1));
 const formula=serializeResearchCsv([{english_text_anonymized:'=1+1'}] as any,'utterances');assert.ok(formula.includes("\"'=1+1\""));
