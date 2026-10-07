@@ -22,7 +22,7 @@ assert.equal(aggregateDashboard.metrics.totalSessions,1);
 assert.equal(aggregateDashboard.metrics.childUtteranceCount,2);
 assert.equal(aggregateDashboard.metrics.meanChildWordsPerMinute,12);
 
-const clusteredLessonSessions:any[] = Array.from({ length: 8 }, (_value, index) => ({
+const clusteredLessonSessions:any[] = Array.from({ length: 15 }, (_value, index) => ({
   ...aggregateOnlySession,
   sessionId:`lesson-cluster-${index + 1}`,
   researchId:`R-LESSON-${index + 1}`,
@@ -42,12 +42,27 @@ const lessonContextRows = buildResearchDashboardSessionRows([...clusteredLessonS
 assert.equal(
   lessonContextRows.find((row) => row.session_id === 'lesson-cluster-1')?.lesson_context_inferred,
   'in_lesson',
-  'same-class lesson cluster must be inferred as in_lesson',
+  '15 unique same-class participants inside 10 minutes must be inferred as in_lesson',
+);
+assert.equal(
+  lessonContextRows.find((row) => row.session_id === 'lesson-cluster-1')?.same_class_unique_participants_10min,
+  15,
+  'dashboard must expose the same unique-participant count used by formal research export',
+);
+assert.equal(
+  lessonContextRows.find((row) => row.session_id === 'lesson-cluster-1')?.lesson_context_rule_version,
+  'lesson-context-2026-v2',
 );
 assert.equal(
   lessonContextRows.find((row) => row.session_id === 'home-later')?.lesson_context_inferred,
   'outside_lesson',
-  'same-day individual home use outside the lesson radius must remain outside_lesson',
+  'same-day individual home use after the 45-minute lesson window must remain outside_lesson',
+);
+
+const fourteenOnly = buildResearchDashboardSessionRows(clusteredLessonSessions.slice(0,14));
+assert.ok(
+  fourteenOnly.every((row) => row.lesson_context_inferred === 'outside_lesson'),
+  '14 unique children must not be enough to infer a lesson',
 );
 
 assert.equal(isTransientResearchDashboardReadError(new Error('FIRESTORE_LIST_503:backend unavailable')), true);
