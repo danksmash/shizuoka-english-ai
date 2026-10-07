@@ -199,8 +199,9 @@ assert.ok(dashboardSource.includes('export function buildResearchTopExpressions'
 
 const lazyRoutes = fs.readFileSync('src/server/researchDashboardLazyRoutes.ts', 'utf8');
 assert.ok(lazyRoutes.includes("router.get('/research.expressions-summary'"), 'expression summary must have a dedicated lazy endpoint');
-assert.ok(lazyRoutes.includes("router.get('/research.recent-sessions'"), 'recent sessions must have a dedicated bounded endpoint');
-assert.ok(lazyRoutes.includes('buildResearchRecentSessions(selected, query, 20)'), 'recent endpoint must return at most 20 rows');
+assert.ok(lazyRoutes.includes("router.get('/research.recent-sessions'"), 'session summaries must have a dedicated lazy endpoint');
+assert.ok(lazyRoutes.includes('getDashboardSessionsForManagementByLocalDateRange(requestedDate, requestedDate)'), 'selected-day endpoint must query only that localDate with projected dashboard fields');
+assert.ok(lazyRoutes.includes('buildResearchRecentSessions(selected, effectiveQuery, requestedDate ? undefined : 20)'), 'selected-day endpoint must return all matching summaries while legacy callers remain bounded');
 
 const researcherRouteFiles = fs.readdirSync('src/server').filter((name) => name.endsWith('.ts'));
 const researcherRoutePattern = /router\.(?:get|post|put|patch|delete)\(\s*(['"])([^'"]+)\1\s*,\s*requireManagementRole\(\['researcher'\]\)/g;
