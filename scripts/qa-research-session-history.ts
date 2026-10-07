@@ -104,6 +104,8 @@ const lazyRouteSource = fs.readFileSync('src/server/researchDashboardLazyRoutes.
 assert.ok(lazyRouteSource.includes('getDashboardSessionsForManagementByLocalDateRange(requestedDate, requestedDate)'), 'selected-day session list must query only that localDate with projected dashboard fields');
 assert.ok(lazyRouteSource.includes('buildResearchRecentSessions(selected, effectiveQuery, requestedDate ? undefined : 20)'), 'selected-day callers must receive all matching summaries while legacy callers stay bounded');
 assert.ok(managementPageSource.includes("p.set('sessionDate',date)"), 'day navigation must request the selected date explicitly');
+assert.ok(managementPageSource.includes('latestRecentSessionDate'), 'initial day view must derive from the latest session local date');
+assert.ok(managementPageSource.includes('cumulativeDaily'), 'initial day view must prefer daily local_date data over session end time');
 assert.ok(managementPageSource.includes('id="recentPrevDay"') && managementPageSource.includes('id="recentNextDay"') && managementPageSource.includes('id="recentDate"'), 'day navigation controls must be present');
 assert.ok(dashboardSource.includes('session_id:row.session_id'), 'recent rows need session_id for direct detail opening');
 
