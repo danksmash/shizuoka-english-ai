@@ -56,7 +56,7 @@ function injectResearchDashboardChartUnification(html: string): string {
       var condition=s.school_condition==='comparison'?'comparison':'intervention',palette=conditionColors(condition),color=palette[counts[condition]++%palette.length],shape=classShape(s.class_id),points=[];
       (s.points||[]).forEach(function(p){if(valid(p.value))points.push(x(p.date)+','+y(Number(p.value)))});
       if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round" stroke-linejoin="round"/>';
-      (s.points||[]).forEach(function(p){if(!valid(p.value))return;var title=String(p.date||'')+' '+String(s.label||s.class_id||'')+': '+fmt(Number(p.value))+' '+unit+' (n='+Number(p.n||0)+')';out+=marker(shape,x(p.date),y(Number(p.value)),color,title)});
+      (s.points||[]).forEach(function(p){if(!valid(p.value)||p.observed===false)return;var title=String(p.date||'')+' '+String(s.label||s.class_id||'')+': '+fmt(Number(p.value))+' '+unit+' (n='+Number(p.n||0)+')';out+=marker(shape,x(p.date),y(Number(p.value)),color,title)});
       var col=si%3,row=Math.floor(si/3),lx=left+col*132,ly=12+row*18;
       out+='<line x1="'+lx+'" y1="'+ly+'" x2="'+(lx+16)+'" y2="'+ly+'" stroke="'+color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round"/>'+marker(shape,lx+8,ly,color,'')+'<text x="'+(lx+21)+'" y="'+(ly+4)+'" class="unified-line-legend">'+esc(s.label||s.class_id||'')+'</text>';
     });
@@ -66,9 +66,9 @@ function injectResearchDashboardChartUnification(html: string): string {
   function reflectionSvg(rows){
     rows=Array.isArray(rows)?rows:[];
     var series=[
-      {key:'reflection_understood',n:'reflection_understood_n',label:'相手の話を聞いて分かる',color:'#2774ee',shape:'circle',legendX:56,legendY:12},
-      {key:'reflection_conveyed',n:'reflection_conveyed_n',label:'自分の考えを伝える',color:'#20a567',shape:'square',legendX:245,legendY:12},
-      {key:'reflection_culture',n:'reflection_culture_n',label:'新しい言葉や文化に気づいた',color:'#f59e0b',shape:'diamond',legendX:56,legendY:30}
+      {key:'reflection_understood',n:'reflection_understood_n',observed:'reflection_understood_observed',label:'相手の話を聞いて分かる',color:'#2774ee',shape:'circle',legendX:56,legendY:12},
+      {key:'reflection_conveyed',n:'reflection_conveyed_n',observed:'reflection_conveyed_observed',label:'自分の考えを伝える',color:'#20a567',shape:'square',legendX:245,legendY:12},
+      {key:'reflection_culture',n:'reflection_culture_n',observed:'reflection_culture_observed',label:'新しい言葉や文化に気づいた',color:'#f59e0b',shape:'diamond',legendX:56,legendY:30}
     ];
     var has=rows.some(function(r){return series.some(function(s){return valid(r[s.key])})});
     var w=W,h=H,left=LEFT,right=RIGHT,bottom=BOTTOM,top=48,plotW=w-left-right,plotH=h-top-bottom;
@@ -81,10 +81,10 @@ function injectResearchDashboardChartUnification(html: string): string {
     series.forEach(function(item,si){
       var segment=[],segments=[];rows.forEach(function(r,i){if(valid(r[item.key])){var off=offsets(r)[si];segment.push(x(i)+','+(y(Number(r[item.key]))+off))}else if(segment.length){segments.push(segment);segment=[]}});if(segment.length)segments.push(segment);
       segments.forEach(function(points){if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+item.color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round" stroke-linejoin="round"/>'});
-      rows.forEach(function(r,i){if(!valid(r[item.key]))return;var off=offsets(r)[si],value=Math.round(Number(r[item.key])*100)/100,count=Number(r[item.n]||0),title=String(r.date||'')+' '+item.label+': 平均 '+value+' (n='+count+')';out+=marker(item.shape,x(i),y(Number(r[item.key]))+off,item.color,title)});
+      rows.forEach(function(r,i){if(!valid(r[item.key])||r[item.observed]===false)return;var off=offsets(r)[si],value=Math.round(Number(r[item.key])*100)/100,count=Number(r[item.n]||0),title=String(r.date||'')+' '+item.label+': 平均 '+value+' (n='+count+')';out+=marker(item.shape,x(i),y(Number(r[item.key]))+off,item.color,title)});
       out+='<line x1="'+item.legendX+'" y1="'+item.legendY+'" x2="'+(item.legendX+16)+'" y2="'+item.legendY+'" stroke="'+item.color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round"/>'+marker(item.shape,item.legendX+8,item.legendY,item.color,'')+'<text x="'+(item.legendX+21)+'" y="'+(item.legendY+4)+'" class="unified-line-legend">'+esc(item.label)+'</text>';
     });
-    out+='<text x="'+left+'" y="'+(h-3)+'" class="unified-line-note">4件法｜各点＝当日までの有効回答の累積平均</text>';
+    out+='<text x="'+left+'" y="'+(h-3)+'" class="unified-line-note">4件法｜授業内のみ｜累積平均（セッション単位）｜授業外利用は除外</text>';
     return out+'</svg>';
   }
   function ensureSeparateCards(){
@@ -127,9 +127,9 @@ function injectResearchDashboardChartUnification(html: string): string {
     ensureSeparateCards();
     var charts=(d&&d.charts)||{};
     var words=document.getElementById('chartWords');
-    if(words&&Array.isArray(charts.cumulativeWordsByClass))words.innerHTML=classSeriesSvg(charts.cumulativeWordsByClass,'語/分','1分あたり平均発話語数学級別累積平均','各点＝当日までの学級別有効セッション累積平均｜実践校＝青系・比較校＝緑系');
+    if(words&&Array.isArray(charts.cumulativeWordsByClass))words.innerHTML=classSeriesSvg(charts.cumulativeWordsByClass,'語/分','1分あたり平均発話語数学級別累積平均','授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜実践校＝青系・比較校＝緑系');
     var wordsTitle=document.getElementById('chartWordsTitle');if(wordsTitle)wordsTitle.textContent='1分あたり平均発話語数（学級別・累積平均・日別）';
-    var reflection=document.getElementById('chartReflection');var cumulative=charts.cumulativeDaily||charts.daily||[];
+    var reflection=document.getElementById('chartReflection');var cumulative=charts.lessonCumulativeReflection||charts.cumulativeDaily||charts.daily||[];
     if(reflection)reflection.innerHTML=reflectionSvg(cumulative);
     patchTurnsLineWidth();
   }
