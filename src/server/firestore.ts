@@ -170,6 +170,32 @@ export async function patchDocumentField(
   if (!response.ok) throw new Error(`FIRESTORE_PATCH_FIELD_${response.status}:${(await response.text()).slice(0, 500)}`);
 }
 
+export async function patchDocumentsBatch(
+  collection: string,
+  documents: Array<{ id: string; data: Record<string, unknown> }>,
+): Promise<void> {
+  if (!documents.length) return;
+  if (documents.length > 500) throw new Error('FIRESTORE_BATCH_TOO_LARGE');
+  const writes = documents.map(({ id, data }) => {
+    const entries = Object.entries(data).filter(([, value]) => value !== undefined);
+    if (!entries.length) throw new Error('FIRESTORE_BATCH_PATCH_EMPTY');
+    return {
+      update: {
+        name: documentResourceName(collection, id),
+        fields: Object.fromEntries(entries.map(([key, value]) => [key, toFirestoreValue(value)])),
+      },
+      updateMask: {
+        fieldPaths: entries.map(([key]) => key),
+      },
+    };
+  });
+  const response = await firestoreFetch(':commit', {
+    method: 'POST',
+    body: JSON.stringify({ writes }),
+  });
+  if (!response.ok) throw new Error(`FIRESTORE_BATCH_PATCH_${response.status}:${(await response.text()).slice(0, 500)}`);
+}
+
 export async function deleteDocumentField(collection: string, id: string, fieldPath: string): Promise<void> {
   const segments = fieldPath.split('.').filter(Boolean);
   if (!segments.length || segments.some((segment) => !/^[A-Za-z0-9_]+$/.test(segment))) {
