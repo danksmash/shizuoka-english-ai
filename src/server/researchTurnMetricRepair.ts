@@ -144,6 +144,8 @@ export async function repairResearchTurnMetricsFromStoredHistory() {
     patches.push({
       id,
       data: {
+        aiTurnCount: null,
+        dialogueUtteranceCount: null,
         dialogueTurnMetricSource: result.status === 'unavailable_history'
           ? 'unavailable_history_missing'
           : result.status === 'unavailable_child_mismatch'
