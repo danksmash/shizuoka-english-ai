@@ -70,10 +70,11 @@ function qualityForSession(session: Row): string {
   const events = Array.isArray(session.systemEvents) ? session.systemEvents : [];
   const hasReflection = Boolean(session.reflection && typeof session.reflection === 'object');
   const hasFinish = events.some((event: any) => event && event.type === 'session_finish');
+  const interrupted = String(session.sessionStatus || '') === 'interrupted' || events.some((event: any) => event?.type === 'session_interrupted');
   const schemaVersion = Number(session.schemaVersion || 0);
-  const dialogueCompleted = hasFinish
+  const dialogueCompleted = !interrupted && (hasFinish
     || (Boolean(session.endedAt) && hasReflection)
-    || (Boolean(session.endedAt) && schemaVersion < 3 && child.length > 0);
+    || (Boolean(session.endedAt) && schemaVersion < 3 && child.length > 0));
   if (!session.sessionId || !session.researchId || history.length === 0 || child.length === 0) return 'missing_core';
   if (!dialogueCompleted) return 'interrupted';
   if (!hasReflection) return 'missing_reflection';
