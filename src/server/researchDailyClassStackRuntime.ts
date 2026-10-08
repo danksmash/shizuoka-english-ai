@@ -315,8 +315,8 @@ function injectResearchDailyClassStack(html: string): string {
   const script = `<script id="researchDailyClassStack">
 (function(){
   var fixedColors={
-    '5-1':'#2563eb','5-2':'#16a34a','5-3':'#f59e0b',
-    '6-1':'#7c3aed','6-2':'#dc2626','6-3':'#0891b2',
+    '5-1':'#1d4ed8','5-2':'#2563eb','5-3':'#3b82f6',
+    '6-1':'#60a5fa','6-2':'#1e40af','6-3':'#93c5fd',
     'unknown':'#94a3b8'
   };
   var fallbackColors=['#0f766e','#9333ea','#be123c','#4f46e5','#15803d','#c2410c','#0369a1','#a16207','#6d28d9','#047857'];
@@ -325,6 +325,7 @@ function injectResearchDailyClassStack(html: string): string {
 
   function classColor(classId){
     var id=String(classId||'unknown');
+    if(/^[1-9]-C[1-9]$/i.test(id))return '#f59e0b';
     if(fixedColors[id])return fixedColors[id];
     var hash=0;for(var i=0;i<id.length;i+=1)hash=((hash*31)+id.charCodeAt(i))>>>0;
     return fallbackColors[hash%fallbackColors.length];
@@ -432,7 +433,8 @@ function injectResearchDailyClassStack(html: string): string {
     var turns=document.getElementById('chartTurns');
     if(title)title.textContent='日別セッション数（学級別内訳）';
     if(chart)chart.innerHTML=stackedClassBars(visibleRows,latestCharts.dailyClassLegend||[]);
-    if(turns)turns.innerHTML=turnsByClassSvg(visibleTurns);
+    // The unified renderer owns turns when installed; avoid a transient legacy palette.
+    if(turns&&!window.__researchDashboardUnifiedChartsV2)turns.innerHTML=turnsByClassSvg(visibleTurns);
     updateRangeButtons();
   }
   function bindRangeControls(){
