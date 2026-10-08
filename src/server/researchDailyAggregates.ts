@@ -36,6 +36,10 @@ export type ResearchDailyContribution = {
   assignedPartnerCountry: string;
   assignmentAnnouncedAt: string;
   actualDurationSeconds: number;
+  activeDialogueSeconds: number | null;
+  wallDurationSeconds: number | null;
+  durationQuality: string;
+  sessionStatus: string;
   totalTurns: number;
   totalChildWords: number;
   aiTurnCount: number | null;
