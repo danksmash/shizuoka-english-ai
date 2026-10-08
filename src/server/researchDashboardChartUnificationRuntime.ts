@@ -42,7 +42,7 @@ function injectResearchDashboardChartUnification(html: string): string {
   function classSeriesSvg(series,unit,aria,note){
     var list=(Array.isArray(series)?series:[]).filter(function(s){return Array.isArray(s.points)&&s.points.some(function(p){return valid(p.value)})});
     var w=W,h=H,left=LEFT,right=RIGHT,bottom=BOTTOM;
-    if(!list.length)return '<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="'+esc(aria)+'"><text x="230" y="122" text-anchor="middle" class="unified-line-axis">データなし</text></svg>';
+    if(!list.length)return '<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="'+esc(aria)+'"><text x="230" y="122" text-anchor="middle" class="unified-line-axis">データなし</text></svg><div class="unified-line-footnote" role="note">'+esc(note)+'</div>';
     var dates=[];list.forEach(function(s){s.points.forEach(function(p){if(dates.indexOf(p.date)<0)dates.push(p.date)})});dates.sort();
     var values=[];list.forEach(function(s){s.points.forEach(function(p){if(valid(p.value))values.push(Number(p.value))})});
     var rawMin=Math.min.apply(null,values),rawMax=Math.max.apply(null,values),rawRange=Math.max(0,rawMax-rawMin);
@@ -87,7 +87,7 @@ function injectResearchDashboardChartUnification(html: string): string {
     var has=rows.some(function(r){return series.some(function(s){return valid(r[s.key])})});
     var w=W,h=H,left=LEFT,right=RIGHT,bottom=BOTTOM,top=48,plotW=w-left-right,plotH=h-top-bottom;
     var out='<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="AI対話ふりかえり平均 4件法">';
-    if(!rows.length||!has)return out+'<text x="230" y="122" text-anchor="middle" class="unified-line-axis">データなし</text></svg>';
+    if(!rows.length||!has)return out+'<text x="230" y="122" text-anchor="middle" class="unified-line-axis">データなし</text></svg><div class="unified-line-footnote" role="note">4件法｜授業内のみ｜累積平均（セッション単位）｜授業外利用は除外</div>';
     var x=function(i){return left+(rows.length<=1?plotW/2:i*plotW/(rows.length-1))},y=function(v){return top+plotH-(Number(v)-1)*plotH/3};
     var offsets=function(r){var result=[0,0,0],groups={};series.forEach(function(s,si){if(!valid(r[s.key]))return;var key=Number(r[s.key]).toFixed(6);(groups[key]||(groups[key]=[])).push(si)});Object.keys(groups).forEach(function(key){var group=groups[key];if(group.length===2){result[group[0]]=-2.5;result[group[1]]=2.5}else if(group.length>=3){result[group[0]]=-3.5;result[group[1]]=0;result[group[2]]=3.5}});return result};
     [1,2,3,4].forEach(function(tick){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="unified-line-axis">'+tick+'</text>'});
