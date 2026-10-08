@@ -225,7 +225,8 @@ function injectWordsByClassChart(html: string): string {
     if(!Array.isArray(series))return;
     var title=document.getElementById('chartWordsTitle'),chart=document.getElementById('chartWords');
     if(title)title.textContent='1分あたり平均発話語数（学級別・累積平均・日別）';
-    if(chart)chart.innerHTML=wordsByClassSvg(series);
+    // Unified renderer owns the words chart; suppress redundant legacy redraw.
+    if(chart&&!window.__researchDashboardUnifiedChartsV2)chart.innerHTML=wordsByClassSvg(series);
   };
   window.renderDashboard=renderDashboard;
 })();

@@ -4,7 +4,7 @@ function injectResearchDashboardChartUnification(html: string): string {
   if (!html.includes('id="chartTurns"') || html.includes('researchDashboardChartUnification')) return html;
 
   const style = `<style id="researchDashboardChartUnificationStyle">
-.research-chart-left-stack{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:14px;min-width:0;align-self:stretch}.research-chart-left-stack>.chart-card{min-height:0;height:100%}.research-chart-left-stack .unified-daily-card{display:flex;flex-direction:column}.research-chart-left-stack .unified-daily-card #chartDaily{flex:1 1 auto;min-height:0}.research-turns-card{display:flex;flex-direction:column}.research-turns-card #chartTurns{flex:1 1 auto;min-height:0}.unified-line-chart svg{display:block;min-width:460px;width:100%;height:100%}.research-turns-card h3{margin:0 0 12px;font-size:18px}.unified-line-chart text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}.unified-line-axis{font-size:10px;fill:#425878;font-weight:700}.unified-line-legend{font-size:10px;fill:#10224a;font-weight:800}.unified-line-note{font-size:9px;fill:#64748b;font-weight:700}@media(max-width:760px){.research-chart-left-stack{grid-template-rows:auto auto}.research-chart-left-stack>.chart-card{min-height:390px;height:auto}.unified-line-chart svg{min-width:460px}}
+.research-chart-left-stack{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:14px;min-width:0;align-self:stretch}.research-chart-left-stack>.chart-card{min-height:0;height:100%}.research-chart-left-stack .unified-daily-card{display:flex;flex-direction:column}.research-chart-left-stack .unified-daily-card #chartDaily{flex:1 1 auto;min-height:0}.research-turns-card{display:flex;flex-direction:column}.research-turns-card #chartTurns{flex:1 1 auto;min-height:0}.unified-line-chart{display:flex;flex-direction:column;align-items:stretch;gap:5px;overflow-x:auto;overflow-y:visible}.unified-line-chart svg{display:block;min-width:460px;width:100%;height:auto;flex:1 1 auto;min-height:0}.unified-line-footnote{flex:0 0 auto;min-width:460px;margin:0;padding:1px 2px 3px;font-size:11px;line-height:1.5;color:#64748b;font-weight:700;white-space:normal;overflow-wrap:anywhere}.research-chart-left-stack .chart-card h3,.charts>.chart-card h3{font-size:18px;line-height:1.35;margin:0 0 10px}.research-turns-card h3{margin:0 0 12px;font-size:18px}.unified-line-chart text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}.unified-line-axis{font-size:10px;fill:#425878;font-weight:700}.unified-line-legend{font-size:11px;fill:#10224a;font-weight:800}@media(max-width:760px){.research-chart-left-stack{grid-template-rows:auto auto}.research-chart-left-stack>.chart-card{min-height:390px;height:auto}.unified-line-chart svg{min-width:460px}}
 </style>`;
 
   const script = `<script id="researchDashboardChartUnification">
@@ -17,10 +17,17 @@ function injectResearchDashboardChartUnification(html: string): string {
     var factor=scaled<=1?1:scaled<=2?2:scaled<=2.5?2.5:scaled<=5?5:10;
     return factor*power;
   }
-  function conditionColors(condition){
-    return condition==='comparison'
-      ? ['#f59e0b']
-      : ['#1d4ed8','#2563eb','#3b82f6','#60a5fa','#1e40af','#93c5fd'];
+  // Stable identity-to-color mapping: never assign colors by filtered list order.
+  // The comparison orange exactly matches the culture-reflection series.
+  var classColors={'5-1':'#1d4ed8','5-2':'#2563eb','5-3':'#3b82f6',
+    '6-1':'#60a5fa','6-2':'#1e40af','6-3':'#93c5fd'};
+  var otherInterventionColors=['#1d4ed8','#2563eb','#3b82f6','#60a5fa','#1e40af','#93c5fd'];
+  function classColor(classId,condition){
+    var id=String(classId||'').trim();
+    if(condition==='comparison'||/^[1-9]-C[1-9]$/i.test(id))return '#f59e0b';
+    if(classColors[id])return classColors[id];
+    var hash=0;for(var i=0;i<id.length;i++)hash=((hash*31)+id.charCodeAt(i))>>>0;
+    return otherInterventionColors[hash%otherInterventionColors.length];
   }
   function classShape(classId){
     var m=String(classId||'').match(/(?:C)?([1-9])$/i),n=m?Number(m[1]):1;
@@ -35,7 +42,7 @@ function injectResearchDashboardChartUnification(html: string): string {
   function classSeriesSvg(series,unit,aria,note){
     var list=(Array.isArray(series)?series:[]).filter(function(s){return Array.isArray(s.points)&&s.points.some(function(p){return valid(p.value)})});
     var w=W,h=H,left=LEFT,right=RIGHT,bottom=BOTTOM;
-    if(!list.length)return '<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="'+esc(aria)+'"><text x="230" y="122" text-anchor="middle" class="unified-line-axis">データなし</text></svg>';
+    if(!list.length)return '<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="'+esc(aria)+'"><text x="230" y="122" text-anchor="middle" class="unified-line-axis">データなし</text></svg><div class="unified-line-footnote" role="note">'+esc(note)+'</div>';
     var dates=[];list.forEach(function(s){s.points.forEach(function(p){if(dates.indexOf(p.date)<0)dates.push(p.date)})});dates.sort();
     var values=[];list.forEach(function(s){s.points.forEach(function(p){if(valid(p.value))values.push(Number(p.value))})});
     var rawMin=Math.min.apply(null,values),rawMax=Math.max.apply(null,values),rawRange=Math.max(0,rawMax-rawMin);
@@ -60,17 +67,15 @@ function injectResearchDashboardChartUnification(html: string): string {
     var out='<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="'+esc(aria)+'">';
     for(var tick=axisMin,guard=0;tick<=axisMax+step*.001&&guard<10;tick+=step,guard+=1){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="unified-line-axis">'+esc(unit==='語/分'?String(Math.round(tick*100)/100):fmt(tick))+'</text>'}
     var every=Math.max(1,Math.ceil(dates.length/7));dates.forEach(function(date,i){if(i%every===0||i===dates.length-1)out+='<text x="'+x(date)+'" y="'+(h-19)+'" text-anchor="middle" class="unified-line-axis">'+esc(String(date).slice(5))+'</text>'});
-    var counts={intervention:0,comparison:0,unknown:0};
     list.forEach(function(s,si){
-      var isComparison=s.school_condition==='comparison'||/^[1-9]-C[1-9]$/i.test(String(s.class_id||'')),condition=isComparison?'comparison':'intervention',palette=conditionColors(condition),color=palette[counts[condition]++%palette.length],shape=classShape(s.class_id),points=[];
+      var isComparison=s.school_condition==='comparison'||/^[1-9]-C[1-9]$/i.test(String(s.class_id||'')),condition=isComparison?'comparison':'intervention',color=classColor(s.class_id,condition),shape=classShape(s.class_id),points=[];
       (s.points||[]).forEach(function(p){if(valid(p.value)&&p.observed!==false)points.push(x(p.date)+','+y(Number(p.value)))});
       if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round" stroke-linejoin="round"/>';
       (s.points||[]).forEach(function(p){if(!valid(p.value)||p.observed===false)return;var title=String(p.date||'')+' '+String(s.label||s.class_id||'')+': '+fmt(Number(p.value))+' '+unit+' (n='+Number(p.n||0)+')';out+=marker(shape,x(p.date),y(Number(p.value)),color,title)});
       var col=si%3,row=Math.floor(si/3),lx=left+col*132,ly=12+row*18;
       out+='<line x1="'+lx+'" y1="'+ly+'" x2="'+(lx+16)+'" y2="'+ly+'" stroke="'+color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round"/>'+marker(shape,lx+8,ly,color,'')+'<text x="'+(lx+21)+'" y="'+(ly+4)+'" class="unified-line-legend">'+esc(s.label||s.class_id||'')+'</text>';
     });
-    out+='<text x="'+left+'" y="'+(h-3)+'" class="unified-line-note">'+esc(note)+'</text>';
-    return out+'</svg>';
+    return out+'</svg><div class="unified-line-footnote" role="note">'+esc(note)+'</div>';
   }
   function reflectionSvg(rows){
     rows=Array.isArray(rows)?rows:[];
@@ -82,7 +87,7 @@ function injectResearchDashboardChartUnification(html: string): string {
     var has=rows.some(function(r){return series.some(function(s){return valid(r[s.key])})});
     var w=W,h=H,left=LEFT,right=RIGHT,bottom=BOTTOM,top=48,plotW=w-left-right,plotH=h-top-bottom;
     var out='<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="AI対話ふりかえり平均 4件法">';
-    if(!rows.length||!has)return out+'<text x="230" y="122" text-anchor="middle" class="unified-line-axis">データなし</text></svg>';
+    if(!rows.length||!has)return out+'<text x="230" y="122" text-anchor="middle" class="unified-line-axis">データなし</text></svg><div class="unified-line-footnote" role="note">4件法｜授業内のみ｜累積平均（セッション単位）｜授業外利用は除外</div>';
     var x=function(i){return left+(rows.length<=1?plotW/2:i*plotW/(rows.length-1))},y=function(v){return top+plotH-(Number(v)-1)*plotH/3};
     var offsets=function(r){var result=[0,0,0],groups={};series.forEach(function(s,si){if(!valid(r[s.key]))return;var key=Number(r[s.key]).toFixed(6);(groups[key]||(groups[key]=[])).push(si)});Object.keys(groups).forEach(function(key){var group=groups[key];if(group.length===2){result[group[0]]=-2.5;result[group[1]]=2.5}else if(group.length>=3){result[group[0]]=-3.5;result[group[1]]=0;result[group[2]]=3.5}});return result};
     [1,2,3,4].forEach(function(tick){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="unified-line-axis">'+tick+'</text>'});
@@ -93,8 +98,7 @@ function injectResearchDashboardChartUnification(html: string): string {
       rows.forEach(function(r,i){if(!valid(r[item.key])||r[item.observed]===false)return;var off=offsets(r)[si],value=Math.round(Number(r[item.key])*100)/100,count=Number(r[item.n]||0),title=String(r.date||'')+' '+item.label+': 平均 '+value+' (n='+count+')';out+=marker(item.shape,x(i),y(Number(r[item.key]))+off,item.color,title)});
       out+='<line x1="'+item.legendX+'" y1="'+item.legendY+'" x2="'+(item.legendX+16)+'" y2="'+item.legendY+'" stroke="'+item.color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round"/>'+marker(item.shape,item.legendX+8,item.legendY,item.color,'')+'<text x="'+(item.legendX+21)+'" y="'+(item.legendY+4)+'" class="unified-line-legend">'+esc(item.label)+'</text>';
     });
-    out+='<text x="'+left+'" y="'+(h-3)+'" class="unified-line-note">4件法｜授業内のみ｜累積平均（セッション単位）｜授業外利用は除外</text>';
-    return out+'</svg>';
+    return out+'</svg><div class="unified-line-footnote" role="note">4件法｜授業内のみ｜累積平均（セッション単位）｜授業外利用は除外</div>';
   }
   function ensureSeparateCards(){
     var daily=document.getElementById('chartDaily'),turns=document.getElementById('chartTurns');
@@ -131,13 +135,14 @@ function injectResearchDashboardChartUnification(html: string): string {
     ensureSeparateCards();
     var charts=(d&&d.charts)||{};
     var turns=document.getElementById('chartTurns');
-    if(turns&&Array.isArray(charts.cumulativeTurnsByClass))turns.innerHTML=classSeriesSvg(charts.cumulativeTurnsByClass,'ターン/分','1分あたり平均ターン数学級別累積平均','授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜ターン＝児童＋AI発話｜実践校＝青系・比較校＝緑系');
+    if(turns&&Array.isArray(charts.cumulativeTurnsByClass))turns.innerHTML=classSeriesSvg(charts.cumulativeTurnsByClass,'ターン/分','1分あたり平均ターン数学級別累積平均','授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜ターン＝児童＋AI発話｜実践校＝青系・比較校＝オレンジ');
     var words=document.getElementById('chartWords');
-    if(words&&Array.isArray(charts.cumulativeWordsByClass))words.innerHTML=classSeriesSvg(charts.cumulativeWordsByClass,'語/分','1分あたり平均発話語数学級別累積平均','授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜実践校＝青系・比較校＝緑系');
+    if(words&&Array.isArray(charts.cumulativeWordsByClass))words.innerHTML=classSeriesSvg(charts.cumulativeWordsByClass,'語/分','1分あたり平均発話語数学級別累積平均','授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜実践校＝青系・比較校＝オレンジ');
     var wordsTitle=document.getElementById('chartWordsTitle');if(wordsTitle)wordsTitle.textContent='1分あたり平均発話語数（学級別・累積平均・日別）';
     var reflection=document.getElementById('chartReflection');var cumulative=charts.lessonCumulativeReflection||charts.cumulativeDaily||charts.daily||[];
     if(reflection)reflection.innerHTML=reflectionSvg(cumulative);
   }
+  window.__researchDashboardUnifiedChartsV2=true;
   ensureSeparateCards();
   var previousRenderDashboard=renderDashboard;
   renderDashboard=function(d,appliedQuery){previousRenderDashboard(d,appliedQuery);renderUnified(d)};
