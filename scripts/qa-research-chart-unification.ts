@@ -70,11 +70,16 @@ assert.doesNotMatch(polish, /setAttribute\('stroke-width','2\.25'\)/);
 const injectedScript = sentBody.match(/<script id="researchDashboardChartUnification">([\s\S]*?)<\/script>/)?.[1];
 assert.ok(injectedScript, 'unified chart browser script should be injected');
 const reflectionElement = { innerHTML: '' };
+const wordElement = { innerHTML: '' };
+const turnElement = { innerHTML: '' };
 const browser: any = {
   window: {},
   document: {
     getElementById(id: string) {
-      return id === 'chartReflection' ? reflectionElement : null;
+      if (id === 'chartReflection') return reflectionElement;
+      if (id === 'chartWords') return wordElement;
+      if (id === 'chartTurns') return turnElement;
+      return null;
     },
   },
   renderDashboard() {},
@@ -121,5 +126,40 @@ const singleRow = gapRows.map((row, i) => ({
 browser.window.renderDashboard({ charts: { lessonCumulativeReflection: singleRow } });
 assert.doesNotMatch(reflectionElement.innerHTML, /<polyline /, 'a single observed date must not draw a line');
 assert.equal((reflectionElement.innerHTML.match(/<title>/g) || []).length, 3, 'single day has only 3 marks');
+
+
+// With the same observed values, word/min uses a tighter automatic axis while
+// turn/min keeps the prior shared renderer's original y-axis behavior.
+const axisNumbers = (svg: string) => [...svg.matchAll(/<text x="39" y="[^"]+" text-anchor="middle" class="unified-line-axis">([^<]+)<\/text>/g)]
+  .map(match => Number(match[1]));
+const wordExample = [
+  { class_id: '5-2', label: '5年2組', school_condition: 'intervention', points: [
+    {date:'2026-10-07',value:9.3,n:1,observed:true},
+  ] },
+  { class_id: '5-3', label: '5年3組', school_condition: 'intervention', points: [
+    {date:'2026-09-17',value:13.7,n:1,observed:true},
+  ] },
+];
+browser.window.renderDashboard({ charts: {
+  cumulativeWordsByClass: wordExample,
+  cumulativeTurnsByClass: wordExample,
+} });
+assert.deepEqual(axisNumbers(wordElement.innerHTML), [9,10,11,12,13,14],
+  'word/min y-axis should fit representative values 9.3–13.7 instead of 6–16');
+assert.deepEqual(axisNumbers(turnElement.innerHTML), [6,8,10,12,14,16],
+  'turn/min y-axis must remain unchanged');
+assert.match(wordElement.innerHTML, /9\.3 語\/分/, 'low observed word value must be retained');
+assert.match(wordElement.innerHTML, /13\.7 語\/分/, 'high observed word value must be retained');
+
+const laterWords = [{ class_id: '5-3', label: '5年3組', school_condition: 'intervention', points: [
+  {date:'2026-10-08',value:24.1,n:1,observed:true},
+  {date:'2026-10-09',value:24.8,n:2,observed:true},
+]}];
+browser.window.renderDashboard({ charts: { cumulativeWordsByClass: laterWords } });
+const laterTicks = axisNumbers(wordElement.innerHTML);
+assert.ok(laterTicks[0] <= 24.1 && laterTicks.at(-1)! >= 24.8,
+  'future word/min values must remain inside an automatically expanded axis');
+assert.ok(laterTicks.at(-1)! - laterTicks[0] < 3,
+  'small future word/min differences should not get excessively padded');
 
 console.log('Research dashboard chart unification QA: PASS');
