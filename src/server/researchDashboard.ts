@@ -1,5 +1,6 @@
 import { AI_STUDENTS_MASTER_LIST, TARGET_20_AI_STUDENT_IDS } from '../data/curriculum';
 import { buildResearchDataSets } from './researchExport';
+import { assessResearchDuration, rateEligibleDurationSeconds } from './researchDurationQuality';
 import {
   buildResearchLessonContextDecisions,
   RESEARCH_LESSON_CONTEXT_RULE_VERSION,
@@ -690,7 +691,7 @@ export function buildResearchDashboardData(
   const sessionWordsPerMinute = (row: Row): number | null => {
     if (String(row.data_quality_flag || '') === 'missing_core') return null;
     const words = Number(row.child_total_words);
-    const seconds = Number(row.actual_duration_seconds);
+    const seconds = rateEligibleDurationSeconds(row);
     const childTurns = Number(row.child_turn_count);
     if (!Number.isFinite(words) || words < 0 || !Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(childTurns) || childTurns <= 0) return null;
     return words * 60 / seconds;
@@ -712,7 +713,7 @@ export function buildResearchDashboardData(
     const bucket = target.get(key) || { sessions:0, words:[], childWords:0, durationSeconds:0, reflections:[[],[],[]] as [number[],number[],number[]] };
     bucket.sessions += 1;
     const words = Number(row.child_total_words);
-    const seconds = Number(row.actual_duration_seconds);
+    const seconds = rateEligibleDurationSeconds(row);
     if (Number.isFinite(words)) bucket.words.push(words);
     if (Number.isFinite(words) && Number.isFinite(seconds) && seconds > 0) {
       bucket.childWords += words; bucket.durationSeconds += seconds;
@@ -744,6 +745,14 @@ export function buildResearchDashboardData(
   const personaUsage = RESEARCH_PERSONAS.map((persona) => ({ label: persona.name, value: personaUsageCounts.get(persona.id) || 0 }));
 
   const quality = counts('data_quality_flag');
+  const durationAudit = { invalid: 0, needs_review: 0 };
+  for (const row of data.sessions) {
+    const assessment = assessResearchDuration(row);
+    if (assessment.quality === 'invalid') durationAudit.invalid += 1;
+    if (assessment.quality === 'needs_review') durationAudit.needs_review += 1;
+  }
+  if (durationAudit.invalid > 0) quality.push({ label: '時間異常（無効）', value: durationAudit.invalid });
+  if (durationAudit.needs_review > 0) quality.push({ label: '時間異常（要確認）', value: durationAudit.needs_review });
   const aiFailures = data.sessions.reduce((sum,row) => sum + Number(row.ai_request_failure_count || 0), 0);
   const micErrors = data.sessions.reduce((sum,row) => sum + Number(row.mic_error_count || 0), 0);
   const ttsFallbacks = data.sessions.reduce((sum,row) => sum + Number(row.tts_fallback_count || 0), 0);
@@ -778,7 +787,7 @@ export function buildResearchDashboardData(
     }
   }
   const individualDays = new Set(individualSessions.map((row) => `${String(row.research_id || '')}|${String(row.local_date || '')}`).filter((value) => !value.endsWith('|')));
-  const individualTotalSeconds = individualSessions.reduce((sum,row) => sum + Math.max(0, Number(row.actual_duration_seconds || 0)), 0);
+  const individualTotalSeconds = individualSessions.reduce((sum,row) => sum + (rateEligibleDurationSeconds(row) || 0), 0);
 
   const seriesRows = (source: Map<string, SeriesBucket>) => [...source.entries()]
     .sort(([a],[b]) => a.localeCompare(b))
