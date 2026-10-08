@@ -1,5 +1,6 @@
 import { TARGET_20_AI_STUDENT_IDS } from '../data/curriculum';
 import { analyzeChildCommunication } from '../dataContract';
+import { assessResearchDuration } from './researchDurationQuality';
 import { getPersonaResearchMetadata } from '../data/personaResearch';
 import type { ChatMessage } from '../types';
 import {
@@ -70,6 +71,7 @@ export function buildFastStreamingSessionRowsForPage(
       ? 'missing_core'
       : !dialogueCompleted ? 'interrupted' : !hasReflection ? 'missing_reflection' : 'complete';
     const sessionStatus = hasInterrupted ? 'interrupted' : dialogueCompleted ? (hasReflection ? 'complete' : 'dialogue_complete') : 'in_progress_or_interrupted';
+    const durationAssessment = assessResearchDuration(session);
     const persona = getPersonaResearchMetadata(String(session.personaId || session.aiStudentId || ''));
     const ttsTelemetryVersion = String(session.ttsTelemetryVersion || '');
     const ttsTelemetryReliable = ttsTelemetryVersion === 'cors-visible-v1';
@@ -109,6 +111,11 @@ export function buildFastStreamingSessionRowsForPage(
       child_reason_expression_count: communication.childReasonExpressionCount,
       target_duration_minutes: session.targetDurationMinutes || 0,
       actual_duration_seconds: session.actualDurationSeconds || 0,
+      wall_duration_seconds: session.wallDurationSeconds ?? '',
+      active_dialogue_seconds: session.activeDialogueSeconds ?? '',
+      duration_quality: durationAssessment.quality,
+      duration_quality_reason: durationAssessment.reason,
+      analysis_duration_seconds: durationAssessment.seconds ?? '',
       reflection_scale_version: session.reflection?.scaleVersion || (session.reflection ? 'legacy-135' : ''),
       reflection_understood_partner: session.reflection?.understoodPartner ?? '',
       reflection_conveyed_ideas: session.reflection?.conveyedIdeas ?? '',
