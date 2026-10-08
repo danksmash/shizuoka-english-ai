@@ -693,7 +693,7 @@ export function buildResearchDashboardData(
     const words = Number(row.child_total_words);
     const seconds = rateEligibleDurationSeconds(row);
     const childTurns = Number(row.child_turn_count);
-    if (!Number.isFinite(words) || words < 0 || !Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(childTurns) || childTurns <= 0) return null;
+    if (!Number.isFinite(words) || words < 0 || seconds === null || !Number.isFinite(childTurns) || childTurns <= 0) return null;
     return words * 60 / seconds;
   };
   const sessionWpmValues = data.sessions.map(sessionWordsPerMinute).filter((value): value is number => value !== null);
@@ -715,7 +715,7 @@ export function buildResearchDashboardData(
     const words = Number(row.child_total_words);
     const seconds = rateEligibleDurationSeconds(row);
     if (Number.isFinite(words)) bucket.words.push(words);
-    if (Number.isFinite(words) && Number.isFinite(seconds) && seconds > 0) {
+    if (Number.isFinite(words) && seconds !== null && seconds > 0) {
       bucket.childWords += words; bucket.durationSeconds += seconds;
     }
     if (String(row.reflection_scale_version || '') === '4point-v1') {
