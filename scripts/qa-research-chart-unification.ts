@@ -24,7 +24,9 @@ assert.match(sentBody, /W=460,H=245,LEFT=56,RIGHT=15,BOTTOM=43,LINE_WIDTH=1\.6/)
 assert.match(sentBody, /unified-line-axis/);
 assert.match(sentBody, /font-size:10px/);
 assert.match(sentBody, /unified-line-legend/);
-assert.match(sentBody, /font-size:9px/);
+assert.match(sentBody, /unified-line-footnote\{[^}]*font-size:11px/);
+assert.doesNotMatch(sentBody, /class=\\"unified-line-note\\"/);
+assert.match(sentBody, /unified-line-chart\{display:flex;flex-direction:column/);
 assert.match(sentBody, /ensureSeparateCards/);
 assert.match(sentBody, /research-turns-card/);
 assert.match(sentBody, /daily-class-stack-card/);
@@ -38,9 +40,12 @@ assert.match(sentBody, /if\(valid\(r\[item\.key\]\)&&r\[item\.observed\]!==false
 assert.match(sentBody, /授業内のみ｜累積平均（セッション単位）｜授業外利用は除外/);
 assert.match(sentBody, /turns\.innerHTML=classSeriesSvg\(charts\.cumulativeTurnsByClass/);
 assert.match(sentBody, /words\.innerHTML=classSeriesSvg\(charts\.cumulativeWordsByClass/);
-assert.match(sentBody, /function conditionColors\(condition\)/);
+assert.match(sentBody, /function classColor\(classId,condition\)/);
+assert.match(sentBody, /'5-1':'#1d4ed8'/);
+assert.match(sentBody, /'5-2':'#2563eb'/);
+assert.match(sentBody, /'5-3':'#3b82f6'/);
 assert.match(sentBody, /school_condition==='comparison'\|\|\/\^\[1-9\]-C\[1-9\]\$\/i/);
-assert.match(sentBody, /condition==='comparison'[\s\S]*\? \['#f59e0b'\]/);
+assert.match(sentBody, /condition==='comparison'\|\|\/\^\[1-9\]-C\[1-9\]\$\/i\.test\(id\)\)return '#f59e0b'/);
 assert.match(sentBody, /label:'新しい言葉や文化に気づいた',color:'#f59e0b'/);
 assert.doesNotMatch(sentBody, /#c2410c|#ea580c|#f97316|#fb923c|#9a3412|#fdba74/);
 assert.doesNotMatch(sentBody, /#047857|#059669|#10b981|#34d399|#065f46|#6ee7b7/);
@@ -150,6 +155,9 @@ assert.deepEqual(axisNumbers(turnElement.innerHTML), [6,8,10,12,14,16],
   'turn/min y-axis must remain unchanged');
 assert.match(wordElement.innerHTML, /9\.3 語\/分/, 'low observed word value must be retained');
 assert.match(wordElement.innerHTML, /13\.7 語\/分/, 'high observed word value must be retained');
+assert.match(wordElement.innerHTML, /<div class="unified-line-footnote" role="note">/);
+assert.match(turnElement.innerHTML, /実践校＝青系・比較校＝オレンジ/);
+assert.match(reflectionElement.innerHTML, /<div class="unified-line-footnote" role="note">/);
 
 const laterWords = [{ class_id: '5-3', label: '5年3組', school_condition: 'intervention', points: [
   {date:'2026-10-08',value:24.1,n:1,observed:true},
@@ -161,5 +169,26 @@ assert.ok(laterTicks[0] <= 24.1 && laterTicks.at(-1)! >= 24.8,
   'future word/min values must remain inside an automatically expanded axis');
 assert.ok(laterTicks.at(-1)! - laterTicks[0] < 3,
   'small future word/min differences should not get excessively padded');
+
+
+const colorValue = (html: string, hex: string) => html.includes('stroke="'+hex+'"');
+const stableSeries = [
+  {class_id:'5-1',label:'5年1組',school_condition:'intervention',points:[{date:'2026-09-17',value:10,n:1,observed:true},{date:'2026-09-25',value:11,n:2,observed:true}]},
+  {class_id:'5-2',label:'5年2組',school_condition:'intervention',points:[{date:'2026-09-17',value:9,n:1,observed:true},{date:'2026-09-25',value:10,n:2,observed:true}]},
+  {class_id:'5-3',label:'5年3組',school_condition:'intervention',points:[{date:'2026-09-17',value:12,n:1,observed:true},{date:'2026-09-25',value:13,n:2,observed:true}]},
+  {class_id:'6-C1',label:'6年比較1組',school_condition:'comparison',points:[{date:'2026-09-17',value:11,n:1,observed:true},{date:'2026-09-25',value:12,n:2,observed:true}]},
+];
+browser.window.renderDashboard({charts:{cumulativeWordsByClass:stableSeries,cumulativeTurnsByClass:stableSeries}});
+const allColors = {words:wordElement.innerHTML,turns:turnElement.innerHTML};
+for (const html of [allColors.words,allColors.turns]) {
+  assert.ok(colorValue(html,'#1d4ed8') && colorValue(html,'#2563eb') && colorValue(html,'#3b82f6'), 'three intervention classes retain distinct stable blues');
+  assert.ok(colorValue(html,'#f59e0b'), 'comparison must use culture-series orange');
+}
+browser.window.renderDashboard({charts:{cumulativeWordsByClass:[stableSeries[2],stableSeries[3]],cumulativeTurnsByClass:[stableSeries[2],stableSeries[3]]}});
+for (const html of [wordElement.innerHTML,turnElement.innerHTML]) {
+  assert.ok(colorValue(html,'#3b82f6') && colorValue(html,'#f59e0b'), 'filtered redraw cannot recolor the same class');
+  assert.doesNotMatch(html, /<text[^>]*class="unified-line-note"/, 'footnote must not clip inside SVG');
+  assert.match(html, /<\/svg><div class="unified-line-footnote" role="note">/, 'footnote must follow the graph, not overlap chart axis');
+}
 
 console.log('Research dashboard chart unification QA: PASS');
