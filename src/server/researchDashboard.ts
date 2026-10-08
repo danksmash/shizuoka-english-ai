@@ -568,7 +568,9 @@ export function buildResearchDashboardSessionRows(rawSessions: Record<string, an
     const childWords = Math.max(0, Number(session.totalChildWords || 0));
     const hasCore = Boolean(session.sessionId && session.researchId && childTurns > 0);
     const hasReflection = Boolean(session.reflection && typeof session.reflection === 'object');
-    const completed = Boolean(session.endedAt) && hasCore;
+    const explicitStatus = String(session.sessionStatus || '');
+    const completed = hasCore && (explicitStatus === 'completed'
+      || (!explicitStatus && Boolean(session.endedAt)));
     const quality = !hasCore ? 'missing_core' : !completed ? 'interrupted' : !hasReflection ? 'missing_reflection' : 'complete';
     const grade = session.gradeLevel || (classId.startsWith('5-') ? 5 : classId.startsWith('6-') ? 6 : '');
     return {
@@ -584,6 +586,8 @@ export function buildResearchDashboardSessionRows(rawSessions: Record<string, an
       dialogue_utterance_count:dialogueTurns, dialogue_turn_metric_source:session.dialogueTurnMetricSource || '',
       target_duration_minutes:session.targetDurationMinutes || 0,
       actual_duration_seconds:session.actualDurationSeconds || 0,
+      duration_quality:session.durationQuality || '',
+      session_status_recorded: explicitStatus,
       reflection_scale_version:session.reflection?.scaleVersion || (session.reflection ? 'legacy-135' : ''),
       reflection_understood_partner:session.reflection?.understoodPartner ?? '', reflection_conveyed_ideas:session.reflection?.conveyedIdeas ?? '',
       reflection_noticed_language_culture:session.reflection?.noticedLanguageCulture ?? '',
