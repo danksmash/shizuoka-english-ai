@@ -43,6 +43,7 @@ const apiUrl = (path: string) => `${API_BASE_URL}${path}`;
 const PERSONA_LABEL_CONDITION: 'shown' | 'hidden' = import.meta.env.VITE_PERSONA_LABEL_CONDITION === 'hidden' ? 'hidden' : 'shown';
 const LABELS_VISIBLE = PERSONA_LABEL_CONDITION === 'shown';
 const CONTEXTUAL_ASR_ENABLED = import.meta.env.VITE_CONTEXTUAL_ASR_ENABLED !== 'false';
+const INTERRUPT_TIMEOUT_MS = 30_000;
 const ASR_DIAGNOSTICS_ENABLED = import.meta.env.DEV || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('asrDebug') === '1');
 const emptySpeechSnapshot = (): StableSpeechSnapshot => ({
   finalText: '',
@@ -70,6 +71,9 @@ export default function App() {
   const [latestVocabItem, setLatestVocabItem] = useState<VisualVocabularyItem | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(60);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [interruptionNotice, setInterruptionNotice] = useState('');
+  const lastTimerTickAtRef = useRef(0);
+  const hiddenAtRef = useRef(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [mood, setMood] = useState<CharacterMood>('greeting');
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -180,6 +184,9 @@ export default function App() {
     chatAbortControllerRef.current?.abort();
     chatAbortControllerRef.current = null;
     dialogueActiveRef.current = true;
+    setInterruptionNotice('');
+    lastTimerTickAtRef.current = Date.now();
+    hiddenAtRef.current = 0;
     setProfile(newProfile); profileRef.current = newProfile;
     const startedAt = Date.now();
     const nextSessionId = newSessionId();
@@ -202,7 +209,7 @@ export default function App() {
     const initialHistory = [starterMessage];
     setMessages(initialHistory); messagesRef.current = initialHistory; setPhase('dialogue');
     if (learningDataEnabled && code && nextSessionId) {
-      void enqueueSessionSnapshot({ sessionId: nextSessionId, learningCode: code, aiStudentId: newProfile.selectedAiStudentId, topic: newProfile.selectedTopic, targetDurationMinutes: newProfile.selectedDurationMinutes, startedAt, endedAt: startedAt, history: initialHistory, encounteredVocab: [], systemEvents: systemEventsRef.current, personaLabelCondition: PERSONA_LABEL_CONDITION, countryLabelVisible: LABELS_VISIBLE, accentLabelVisible: LABELS_VISIBLE, flagVisible: LABELS_VISIBLE, studentSelectedSpeechRate: speechRateRef.current, effectiveTtsSpeechRate: effectiveTtsRateRef.current }).catch(() => undefined);
+      void enqueueSessionSnapshot({ sessionId: nextSessionId, learningCode: code, aiStudentId: newProfile.selectedAiStudentId, topic: newProfile.selectedTopic, targetDurationMinutes: newProfile.selectedDurationMinutes, startedAt, endedAt: startedAt, activeDialogueSeconds: 0, history: initialHistory, encounteredVocab: [], systemEvents: systemEventsRef.current, personaLabelCondition: PERSONA_LABEL_CONDITION, countryLabelVisible: LABELS_VISIBLE, accentLabelVisible: LABELS_VISIBLE, flagVisible: LABELS_VISIBLE, studentSelectedSpeechRate: speechRateRef.current, effectiveTtsSpeechRate: effectiveTtsRateRef.current }).catch(() => undefined);
     }
     setTimeout(() => {
       if (dialogueActiveRef.current && soundEnabledRef.current) {
@@ -216,16 +223,75 @@ export default function App() {
     }, 600);
   };
 
+  const handleInterruptDialogue = (reason: 'background_timeout' | 'timer_gap') => {
+    if (!dialogueActiveRef.current) return;
+    dialogueActiveRef.current = false;
+    chatAbortControllerRef.current?.abort();
+    chatAbortControllerRef.current = null;
+    stopSpeaking();
+    recognitionRef.current?.cancel();
+    recognitionRef.current = null;
+    setIsRecording(false); setIsListening(false); setIsFinalizingSpeech(false);
+    setIsAiResponding(false);
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (farewellSafetyTimerRef.current) { clearTimeout(farewellSafetyTimerRef.current); farewellSafetyTimerRef.current = null; }
+    sessionEndedAtRef.current = Date.now();
+    recordResearchEvent('session_interrupted', reason);
+    // Preserve the last confirmed utterances without creating a farewell,
+    // a fake normal finish event or a fabricated reflection.
+    const current = profileRef.current;
+    if (learningDataEnabled && learningCode && sessionId) {
+      void enqueueSessionSnapshot({
+        sessionId, learningCode, aiStudentId: current.selectedAiStudentId,
+        topic: current.selectedTopic, targetDurationMinutes: current.selectedDurationMinutes,
+        startedAt: sessionStartedAtRef.current, endedAt: sessionEndedAtRef.current,
+        activeDialogueSeconds: elapsedSecondsRef.current,
+        history: messagesRef.current, encounteredVocab: encounteredVocabRef.current,
+        systemEvents: systemEventsRef.current,
+        personaLabelCondition: PERSONA_LABEL_CONDITION,
+        countryLabelVisible: LABELS_VISIBLE, accentLabelVisible: LABELS_VISIBLE, flagVisible: LABELS_VISIBLE,
+        studentSelectedSpeechRate: speechRateRef.current, effectiveTtsSpeechRate: effectiveTtsRateRef.current,
+      }).catch((error) => console.warn('Interrupted session checkpoint unavailable:', error));
+    }
+    setInterruptionNotice('対話が途中で終了しました。もう一度、対話を始めましょう。');
+    setPhase('setup');
+  };
+
   useEffect(() => {
     if (phase !== 'dialogue') { if (timerRef.current) clearInterval(timerRef.current); return; }
+    lastTimerTickAtRef.current = Date.now();
+    const onVisibilityChange = () => {
+      if (!dialogueActiveRef.current) return;
+      if (document.hidden) {
+        if (!hiddenAtRef.current) hiddenAtRef.current = Date.now();
+        return;
+      }
+      if (hiddenAtRef.current) {
+        const hiddenDuration = Date.now() - hiddenAtRef.current;
+        hiddenAtRef.current = 0;
+        lastTimerTickAtRef.current = Date.now();
+        if (hiddenDuration >= INTERRUPT_TIMEOUT_MS) handleInterruptDialogue('background_timeout');
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pageshow', onVisibilityChange);
     timerRef.current = setInterval(() => {
+      if (!dialogueActiveRef.current || document.hidden) return;
+      const now = Date.now();
+      const gap = now - lastTimerTickAtRef.current;
+      lastTimerTickAtRef.current = now;
+      if (gap >= INTERRUPT_TIMEOUT_MS) { handleInterruptDialogue('timer_gap'); return; }
       setRemainingSeconds((prev) => {
         if (prev <= 1) { clearInterval(timerRef.current!); void handleFinishDialogue('timer'); return 0; }
         return prev - 1;
       });
       setElapsedSeconds((prev) => { const next = prev + 1; elapsedSecondsRef.current = next; return next; });
     }, 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pageshow', onVisibilityChange);
+    };
   }, [phase]);
 
   const stopRecordingInternal = () => {
@@ -295,7 +361,7 @@ export default function App() {
         });
         const updatedHistory = [...translatedHistory, aiMsg]; setMessages(updatedHistory); messagesRef.current=updatedHistory;
         if (learningDataEnabled && learningCode && sessionId) {
-          void enqueueSessionSnapshot({ sessionId, learningCode, aiStudentId: currentProf.selectedAiStudentId, topic: currentProf.selectedTopic, targetDurationMinutes: currentProf.selectedDurationMinutes, startedAt: sessionStartedAtRef.current, endedAt: Date.now(), history: updatedHistory, encounteredVocab: encounteredVocabRef.current, systemEvents: systemEventsRef.current, personaLabelCondition: PERSONA_LABEL_CONDITION, countryLabelVisible: LABELS_VISIBLE, accentLabelVisible: LABELS_VISIBLE, flagVisible: LABELS_VISIBLE, studentSelectedSpeechRate: speechRateRef.current, effectiveTtsSpeechRate: effectiveTtsRateRef.current }).catch(() => undefined);
+          void enqueueSessionSnapshot({ sessionId, learningCode, aiStudentId: currentProf.selectedAiStudentId, topic: currentProf.selectedTopic, targetDurationMinutes: currentProf.selectedDurationMinutes, startedAt: sessionStartedAtRef.current, endedAt: Date.now(), activeDialogueSeconds: elapsedSecondsRef.current, history: updatedHistory, encounteredVocab: encounteredVocabRef.current, systemEvents: systemEventsRef.current, personaLabelCondition: PERSONA_LABEL_CONDITION, countryLabelVisible: LABELS_VISIBLE, accentLabelVisible: LABELS_VISIBLE, flagVisible: LABELS_VISIBLE, studentSelectedSpeechRate: speechRateRef.current, effectiveTtsSpeechRate: effectiveTtsRateRef.current }).catch(() => undefined);
         }
         setMood((aiMood as CharacterMood) || 'speaking'); playAiVoice(reply);
       } else throw new Error('API response unsuccessful');
@@ -438,7 +504,7 @@ export default function App() {
       const snapshotPayload = {
         sessionId, learningCode, aiStudentId: currentProf.selectedAiStudentId, topic: currentProf.selectedTopic,
         targetDurationMinutes: currentProf.selectedDurationMinutes, startedAt: sessionStartedAtRef.current,
-        endedAt: sessionEndedAtRef.current || Date.now(), history: finalMessages, encounteredVocab: encounteredVocabRef.current, systemEvents: systemEventsRef.current, personaLabelCondition: PERSONA_LABEL_CONDITION, countryLabelVisible: LABELS_VISIBLE, accentLabelVisible: LABELS_VISIBLE, flagVisible: LABELS_VISIBLE, studentSelectedSpeechRate: speechRateRef.current, effectiveTtsSpeechRate: effectiveTtsRateRef.current,
+        endedAt: sessionEndedAtRef.current || Date.now(), activeDialogueSeconds: reason === 'timer' ? Math.max(elapsedSecondsRef.current, currentProf.selectedDurationMinutes * 60) : elapsedSecondsRef.current, history: finalMessages, encounteredVocab: encounteredVocabRef.current, systemEvents: systemEventsRef.current, personaLabelCondition: PERSONA_LABEL_CONDITION, countryLabelVisible: LABELS_VISIBLE, accentLabelVisible: LABELS_VISIBLE, flagVisible: LABELS_VISIBLE, studentSelectedSpeechRate: speechRateRef.current, effectiveTtsSpeechRate: effectiveTtsRateRef.current,
       };
       initialSessionSaveRef.current = enqueueSessionSnapshot(snapshotPayload)
         .catch((error) => { console.warn('Initial research session snapshot unavailable:', error); });
@@ -461,7 +527,7 @@ export default function App() {
         await enqueueSessionSnapshot({
           sessionId, learningCode, aiStudentId: profileRef.current.selectedAiStudentId, topic: profileRef.current.selectedTopic,
           targetDurationMinutes: profileRef.current.selectedDurationMinutes, startedAt: sessionStartedAtRef.current,
-          endedAt: sessionEndedAtRef.current || Date.now(), history: messagesRef.current, encounteredVocab: encounteredVocabRef.current, reflection: answers, systemEvents: systemEventsRef.current, personaLabelCondition: PERSONA_LABEL_CONDITION, countryLabelVisible: LABELS_VISIBLE, accentLabelVisible: LABELS_VISIBLE, flagVisible: LABELS_VISIBLE, studentSelectedSpeechRate: speechRateRef.current, effectiveTtsSpeechRate: effectiveTtsRateRef.current,
+          endedAt: sessionEndedAtRef.current || Date.now(), activeDialogueSeconds: elapsedSecondsRef.current, history: messagesRef.current, encounteredVocab: encounteredVocabRef.current, reflection: answers, systemEvents: systemEventsRef.current, personaLabelCondition: PERSONA_LABEL_CONDITION, countryLabelVisible: LABELS_VISIBLE, accentLabelVisible: LABELS_VISIBLE, flagVisible: LABELS_VISIBLE, studentSelectedSpeechRate: speechRateRef.current, effectiveTtsSpeechRate: effectiveTtsRateRef.current,
         });
         setReflectionSaveMessage('学習履歴に保存しました。');
       } catch (error) {
@@ -490,7 +556,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-800 flex flex-col">
-      {phase==='setup' && <SetupScreen onStartDialogue={handleStartDialogue} learningDataEnabled={learningDataEnabled} onValidateLearningCode={validateLearningCode} labelCondition={PERSONA_LABEL_CONDITION}/>} 
+      {phase==='setup' && <>{interruptionNotice && <div role="alert" className="mx-auto mt-3 max-w-3xl w-full rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-center font-bold text-amber-900">{interruptionNotice}</div>}<SetupScreen onStartDialogue={handleStartDialogue} learningDataEnabled={learningDataEnabled} onValidateLearningCode={validateLearningCode} labelCondition={PERSONA_LABEL_CONDITION}/></>} 
       {phase==='dialogue' && (
         <div className="flex-1 flex flex-col min-h-[100dvh] lg:h-screen lg:overflow-hidden">
           <Header labelCondition={PERSONA_LABEL_CONDITION} studentName={profile.name} learningId={learningCode} aiStudentName={currentAiStudent.name} aiStudentFlag={currentAiStudent.flag} remainingSeconds={remainingSeconds} totalDurationSeconds={profile.selectedDurationMinutes*60} turnCount={turnCount} wordCount={totalChildWords} soundEnabled={soundEnabled} onToggleSound={()=>{if(soundEnabled)stopSpeaking();setSoundEnabled(!soundEnabled);}} onFinishEarly={()=>{ void handleFinishDialogue('user_early'); }}/>

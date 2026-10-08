@@ -32,7 +32,7 @@ import {
   serializeQuestionnaireCsv,
 } from './questionnaireResearch';
 
-export const PHASE_RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v9';
+export const PHASE_RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v10';
 export const PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION = 10;
 
 export const PHASE_IDS = ['phase1', 'phase2', 'phase3', 'phase4'] as const;

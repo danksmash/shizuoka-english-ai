@@ -1,5 +1,6 @@
 import { AI_STUDENTS_MASTER_LIST, TARGET_20_AI_STUDENT_IDS } from '../data/curriculum';
 import { buildResearchDataSets } from './researchExport';
+import { assessResearchDuration, rateEligibleDurationSeconds } from './researchDurationQuality';
 import {
   buildResearchLessonContextDecisions,
   RESEARCH_LESSON_CONTEXT_RULE_VERSION,
@@ -22,7 +23,7 @@ export type ResearchFilterQuery = {
 type Row = Record<string, unknown>;
 type ExportDataSets = Record<ResearchExportDatasetName, Row[]>;
 
-export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v8';
+export const RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v10';
 
 const RESEARCH_PERSONAS = TARGET_20_AI_STUDENT_IDS.map((id) => {
   const persona = AI_STUDENTS_MASTER_LIST.find((item) => item.id === id);
@@ -47,7 +48,7 @@ export const RESEARCH_EXPORT_HEADERS: Record<ResearchExportDatasetName, string[]
     'child_total_words','mean_child_words_per_turn','max_child_words_per_turn','child_unique_word_types',
     'child_turn_count','ai_turn_count','dialogue_utterance_count',
     'child_repair_count','child_reason_expression_count',
-    'target_duration_minutes','actual_duration_seconds',
+    'target_duration_minutes','actual_duration_seconds','wall_duration_seconds','active_dialogue_seconds','duration_quality','duration_quality_reason','analysis_duration_seconds',
     'reflection_scale_version','reflection_understood_partner','reflection_conveyed_ideas','reflection_noticed_language_culture',
     'same_class_starts_5min','same_class_starts_10min','same_class_unique_participants_10min',
     'lesson_cluster_start_local','lesson_context_rule_version','usage_context_inferred','lesson_context_inferred',
@@ -117,7 +118,12 @@ const FIELD_DEFINITION: Record<string, string> = {
   child_repair_count:'聞き返し・理解困難表現等のrepair数',
   child_reason_expression_count:'because等の理由表現数',
   target_duration_minutes:'児童が選択した対話時間（分）',
-  actual_duration_seconds:'実際の対話経過時間（秒）',
+  actual_duration_seconds:'保存された対話時間（秒）。2026-10-09以降の新規計測では活動時間、それ以前の記録では壁時計時間（最大3600秒）',
+  wall_duration_seconds:'開始から終了までの壁時計時間（最大3600秒）。旧データは空欄',
+  active_dialogue_seconds:'画面が活動状態で確認できた対話時間。旧データは空欄',
+  duration_quality:'時間指標の品質判定。Persona選択や発話内容の有効性とは別',
+  duration_quality_reason:'時間指標の品質判定理由',
+  analysis_duration_seconds:'WPM・ターン数/分の分母に使用できる秒数。時間に疑義があるときは空欄',
   reflection_scale_version:'AI対話直後の3項目自己評価で使用した尺度版',
   reflection_understood_partner:'相手の話を聞いて分かる振り返り',
   reflection_conveyed_ideas:'自分の考えを伝える振り返り',
@@ -197,6 +203,7 @@ const ALLOWED_VALUES: Record<string, string> = {
   study_start_date:'YYYY-MM-DD | blank',
   persona_gender:'male | female', gender:'male | female',
   target_duration_minutes:'1 | 2 | 3 | 5',
+  duration_quality:'valid | needs_review | invalid',
   topic:'intro | favorites | shizuoka_culture | talents | daily_routine | free',
   reflection_scale_version:'legacy-135 | 4point-v1 | blank',
   reflection_understood_partner:'legacy-135: 1 | 3 | 5 / 4point-v1: 1 | 2 | 3 | 4',
@@ -226,7 +233,7 @@ const ALLOWED_VALUES: Record<string, string> = {
 const NUMERIC_FIELDS = new Set([
   'grade_level','lifetime_session_number','daily_session_number','days_since_previous_session','child_total_words',
   'mean_child_words_per_turn','max_child_words_per_turn','child_unique_word_types','child_turn_count','ai_turn_count',
-  'dialogue_utterance_count','child_repair_count','child_reason_expression_count','target_duration_minutes','actual_duration_seconds',
+  'dialogue_utterance_count','child_repair_count','child_reason_expression_count','target_duration_minutes','actual_duration_seconds','wall_duration_seconds','active_dialogue_seconds','analysis_duration_seconds',
   'reflection_conveyed_ideas','reflection_understood_partner','reflection_noticed_language_culture','same_class_starts_5min',
   'same_class_starts_10min','same_class_unique_participants_10min','country_label_visible','accent_label_visible','flag_visible','help_open_count','vocab_bank_open_count',
   'speech_rate_change_count','student_selected_speech_rate','tts_provider_observed','tts_provider_event_count','tts_fallback_count','tts_provider_deviation','schema_version','session_completed','mic_error_count','turn_sequence','speaker_turn_number',
@@ -567,8 +574,11 @@ export function buildResearchDashboardSessionRows(rawSessions: Record<string, an
     const childWords = Math.max(0, Number(session.totalChildWords || 0));
     const hasCore = Boolean(session.sessionId && session.researchId && childTurns > 0);
     const hasReflection = Boolean(session.reflection && typeof session.reflection === 'object');
-    const completed = Boolean(session.endedAt) && hasCore;
+    const explicitStatus = String(session.sessionStatus || '');
+    const completed = hasCore && (explicitStatus === 'completed'
+      || (!explicitStatus && Boolean(session.endedAt)));
     const quality = !hasCore ? 'missing_core' : !completed ? 'interrupted' : !hasReflection ? 'missing_reflection' : 'complete';
+    const durationAssessment = assessResearchDuration(session);
     const grade = session.gradeLevel || (classId.startsWith('5-') ? 5 : classId.startsWith('6-') ? 6 : '');
     return {
       research_id:session.researchId || '', site_id:session.studySiteId || '', school_condition:session.schoolCondition || '',
@@ -583,6 +593,12 @@ export function buildResearchDashboardSessionRows(rawSessions: Record<string, an
       dialogue_utterance_count:dialogueTurns, dialogue_turn_metric_source:session.dialogueTurnMetricSource || '',
       target_duration_minutes:session.targetDurationMinutes || 0,
       actual_duration_seconds:session.actualDurationSeconds || 0,
+      wall_duration_seconds:session.wallDurationSeconds ?? '',
+      active_dialogue_seconds:session.activeDialogueSeconds ?? '',
+      duration_quality:durationAssessment.quality,
+      duration_quality_reason:durationAssessment.reason,
+      analysis_duration_seconds:durationAssessment.seconds ?? '',
+      session_status_recorded: explicitStatus,
       reflection_scale_version:session.reflection?.scaleVersion || (session.reflection ? 'legacy-135' : ''),
       reflection_understood_partner:session.reflection?.understoodPartner ?? '', reflection_conveyed_ideas:session.reflection?.conveyedIdeas ?? '',
       reflection_noticed_language_culture:session.reflection?.noticedLanguageCulture ?? '',
@@ -690,9 +706,9 @@ export function buildResearchDashboardData(
   const sessionWordsPerMinute = (row: Row): number | null => {
     if (String(row.data_quality_flag || '') === 'missing_core') return null;
     const words = Number(row.child_total_words);
-    const seconds = Number(row.actual_duration_seconds);
+    const seconds = rateEligibleDurationSeconds(row);
     const childTurns = Number(row.child_turn_count);
-    if (!Number.isFinite(words) || words < 0 || !Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(childTurns) || childTurns <= 0) return null;
+    if (!Number.isFinite(words) || words < 0 || seconds === null || !Number.isFinite(childTurns) || childTurns <= 0) return null;
     return words * 60 / seconds;
   };
   const sessionWpmValues = data.sessions.map(sessionWordsPerMinute).filter((value): value is number => value !== null);
@@ -712,9 +728,9 @@ export function buildResearchDashboardData(
     const bucket = target.get(key) || { sessions:0, words:[], childWords:0, durationSeconds:0, reflections:[[],[],[]] as [number[],number[],number[]] };
     bucket.sessions += 1;
     const words = Number(row.child_total_words);
-    const seconds = Number(row.actual_duration_seconds);
+    const seconds = rateEligibleDurationSeconds(row);
     if (Number.isFinite(words)) bucket.words.push(words);
-    if (Number.isFinite(words) && Number.isFinite(seconds) && seconds > 0) {
+    if (Number.isFinite(words) && seconds !== null && seconds > 0) {
       bucket.childWords += words; bucket.durationSeconds += seconds;
     }
     if (String(row.reflection_scale_version || '') === '4point-v1') {
@@ -744,6 +760,14 @@ export function buildResearchDashboardData(
   const personaUsage = RESEARCH_PERSONAS.map((persona) => ({ label: persona.name, value: personaUsageCounts.get(persona.id) || 0 }));
 
   const quality = counts('data_quality_flag');
+  const durationAudit = { invalid: 0, needs_review: 0 };
+  for (const row of data.sessions) {
+    const assessment = assessResearchDuration(row);
+    if (assessment.quality === 'invalid') durationAudit.invalid += 1;
+    if (assessment.quality === 'needs_review') durationAudit.needs_review += 1;
+  }
+  if (durationAudit.invalid > 0) quality.push({ label: '時間異常（無効）', value: durationAudit.invalid });
+  if (durationAudit.needs_review > 0) quality.push({ label: '時間異常（要確認）', value: durationAudit.needs_review });
   const aiFailures = data.sessions.reduce((sum,row) => sum + Number(row.ai_request_failure_count || 0), 0);
   const micErrors = data.sessions.reduce((sum,row) => sum + Number(row.mic_error_count || 0), 0);
   const ttsFallbacks = data.sessions.reduce((sum,row) => sum + Number(row.tts_fallback_count || 0), 0);
@@ -778,7 +802,7 @@ export function buildResearchDashboardData(
     }
   }
   const individualDays = new Set(individualSessions.map((row) => `${String(row.research_id || '')}|${String(row.local_date || '')}`).filter((value) => !value.endsWith('|')));
-  const individualTotalSeconds = individualSessions.reduce((sum,row) => sum + Math.max(0, Number(row.actual_duration_seconds || 0)), 0);
+  const individualTotalSeconds = individualSessions.reduce((sum,row) => sum + (rateEligibleDurationSeconds(row) || 0), 0);
 
   const seriesRows = (source: Map<string, SeriesBucket>) => [...source.entries()]
     .sort(([a],[b]) => a.localeCompare(b))

@@ -122,7 +122,7 @@ for (const field of [
   assert.ok(PHASE_SESSION_EXPORT_HEADERS.includes(field as any));
   assert.ok(PHASE_CODEBOOK_ROWS.some((row) => row.variable === field));
 }
-assert.equal(PHASE_RESEARCH_EXPORT_SCHEMA_VERSION, 'research-2026-v9');
+assert.equal(PHASE_RESEARCH_EXPORT_SCHEMA_VERSION, 'research-2026-v10');
 assert.equal(PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION, 10);
 
 let capturedHtml = '';

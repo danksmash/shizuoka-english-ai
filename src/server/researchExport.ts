@@ -1,4 +1,5 @@
 import { analyzeChildCommunication, countEnglishWords } from '../dataContract';
+import { assessResearchDuration } from './researchDurationQuality';
 import { detectPersonaProfileExpressions, getPersonaResearchMetadata, PERSONA_DICTIONARY_VERSION } from '../data/personaResearch';
 import { detectVocabularyInText } from '../data/vocabulary56';
 import type { ChatMessage, VisualVocabularyItem } from '../types';
@@ -266,16 +267,18 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
     const systemEvents = Array.isArray(session.systemEvents) ? session.systemEvents : [];
     const hasReflection = Boolean(session.reflection && typeof session.reflection === 'object');
     const hasFinish = systemEvents.some((event: any) => event?.type === 'session_finish');
+    const hasInterrupted = String(session.sessionStatus || '') === 'interrupted' || systemEvents.some((event: any) => event?.type === 'session_interrupted');
     const schemaVersion = Number(session.schemaVersion || 0);
-    const dialogueCompleted = hasFinish || (Boolean(session.endedAt) && hasReflection) || (Boolean(session.endedAt) && schemaVersion < 3 && childMessages.length > 0);
+    const dialogueCompleted = !hasInterrupted && (hasFinish || (Boolean(session.endedAt) && hasReflection) || (Boolean(session.endedAt) && schemaVersion < 3 && childMessages.length > 0));
     const dataQuality = !sessionId || !session.researchId || history.length === 0 || childMessages.length === 0
       ? 'missing_core'
       : !dialogueCompleted ? 'interrupted' : !hasReflection ? 'missing_reflection' : 'complete';
-    const sessionStatus = dialogueCompleted ? (hasReflection ? 'complete' : 'dialogue_complete') : 'in_progress_or_interrupted';
+    const sessionStatus = hasInterrupted ? 'interrupted' : dialogueCompleted ? (hasReflection ? 'complete' : 'dialogue_complete') : 'in_progress_or_interrupted';
     const finishEvent = [...systemEvents].reverse().find((event: any) => event?.type === 'session_finish');
     const sessionFinishReason = hasFinish ? String(finishEvent?.value || 'unspecified') : '';
     const micErrorCount = systemEvents.filter((event: any) => event?.type === 'mic_error').length;
     const persona = getPersonaResearchMetadata(String(session.personaId || session.aiStudentId || ''));
+    const durationAssessment = assessResearchDuration(session);
     const ttsTelemetryVersion = String(session.ttsTelemetryVersion || '');
     const ttsTelemetryReliable = ttsTelemetryVersion === 'cors-visible-v1';
 
@@ -314,7 +317,13 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
       persona_default_voice_rate: session.personaDefaultVoiceRate ?? persona.defaultVoiceRate, student_selected_speech_rate: session.studentSelectedSpeechRate ?? 1,
       effective_tts_speech_rate: session.effectiveTtsSpeechRate ?? 1, persona_dictionary_version: session.personaDictionaryVersion || PERSONA_DICTIONARY_VERSION,
       ai_student_id: session.aiStudentId || '', topic: session.topic || '', target_duration_minutes: session.targetDurationMinutes || 0,
-      actual_duration_seconds: session.actualDurationSeconds || 0, child_turn_count: communication.totalTurns, child_total_words: communication.totalChildWords,
+      actual_duration_seconds: session.actualDurationSeconds || 0,
+      wall_duration_seconds: session.wallDurationSeconds ?? '',
+      active_dialogue_seconds: session.activeDialogueSeconds ?? '',
+      duration_quality: durationAssessment.quality,
+      duration_quality_reason: durationAssessment.reason,
+      analysis_duration_seconds: durationAssessment.seconds ?? '',
+      child_turn_count: communication.totalTurns, child_total_words: communication.totalChildWords,
       total_turns: communication.totalTurns, total_child_words: communication.totalChildWords, mean_child_words_per_turn: communication.meanChildWordsPerTurn,
       max_child_words_per_turn: communication.maxChildWordsPerTurn, child_unique_word_types: communication.childUniqueWordTypes,
       child_question_count: communication.childQuestionCount, child_reciprocal_question_count: communication.childReciprocalQuestionCount,

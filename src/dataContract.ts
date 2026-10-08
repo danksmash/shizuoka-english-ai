@@ -26,7 +26,7 @@ export interface ReflectionAnswers {
 }
 
 export const RESEARCH_SYSTEM_EVENT_TYPES = [
-  'session_start','session_finish','reflection_submit','mic_start','mic_stop_send','mic_error',
+  'session_start','session_finish','session_interrupted','reflection_submit','mic_start','mic_stop_send','mic_error',
   'text_input_open','text_message_send','help_open','help_phrase_select','ai_replay','vocab_bank_open',
   'vocab_audio_play','speech_rate_change','ai_response_latency_ms','ai_request_failure',
   'ai_model','ai_input_tokens','ai_output_tokens','ai_cache_read_tokens','ai_cache_creation_tokens','tts_provider','tts_effective_rate',
@@ -48,6 +48,7 @@ export interface SessionSaveInput {
   targetDurationMinutes: DialogueDurationMinutes;
   startedAt: number;
   endedAt: number;
+  activeDialogueSeconds?: number;
   history: ChatMessage[];
   encounteredVocab?: VisualVocabularyItem[];
   reflection?: ReflectionAnswers;
@@ -225,10 +226,12 @@ export function validateSessionSaveInput(body: unknown): { ok: true; value: Sess
   if (!/^[A-Za-z0-9_-]{8,120}$/.test(sessionId)) return { ok: false, error: 'INVALID_SESSION_ID' };
   const startedAt = Number(source.startedAt); const endedAt = Number(source.endedAt);
   if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt) || endedAt < startedAt) return { ok: false, error: 'INVALID_TIME_RANGE' };
+  const activeSeconds = source.activeDialogueSeconds === undefined ? undefined : Number(source.activeDialogueSeconds);
+  if (activeSeconds !== undefined && (!Number.isFinite(activeSeconds) || activeSeconds < 0 || activeSeconds > 600)) return { ok: false, error: 'INVALID_ACTIVE_DURATION' };
   const history = canonicalizeHistory(source.history, source.topic);
   return { ok: true, value: {
     sessionId, learningCode, aiStudentId: source.aiStudentId, topic: source.topic, targetDurationMinutes: source.targetDurationMinutes,
-    startedAt, endedAt, history,
+    startedAt, endedAt, activeDialogueSeconds: activeSeconds, history,
     encounteredVocab: Array.isArray(source.encounteredVocab) ? (source.encounteredVocab as VisualVocabularyItem[]).slice(0, 200) : [],
     reflection: parseReflectionAnswers(source.reflection),
     systemEvents: parseResearchSystemEvents(source.systemEvents),
