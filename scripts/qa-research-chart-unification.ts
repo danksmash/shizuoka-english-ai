@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { runInNewContext } from 'node:vm';
 import { withResearchDashboardChartUnification } from '../src/server/researchDashboardChartUnificationRuntime';
 
 let sentBody = '';
@@ -62,5 +63,63 @@ const polish = fs.readFileSync(
 assert.match(polish, /setAttribute\('stroke-width','1\.6'\)/);
 assert.match(polish, /setAttribute\('stroke-width','1\.8'\)/);
 assert.doesNotMatch(polish, /setAttribute\('stroke-width','2\.25'\)/);
+
+
+// Render the actual injected browser script, not only its text, so missing-day
+// cumulative averages cannot silently split a trend again.
+const injectedScript = sentBody.match(/<script id="researchDashboardChartUnification">([\s\S]*?)<\/script>/)?.[1];
+assert.ok(injectedScript, 'unified chart browser script should be injected');
+const reflectionElement = { innerHTML: '' };
+const browser: any = {
+  window: {},
+  document: {
+    getElementById(id: string) {
+      return id === 'chartReflection' ? reflectionElement : null;
+    },
+  },
+  renderDashboard() {},
+};
+runInNewContext(injectedScript, browser);
+
+function reflectionTestRow(date: string, observed: boolean, a: number, b: number, c: number) {
+  return {
+    date,
+    reflection_understood: a,
+    reflection_understood_n: observed ? 2 : 0,
+    reflection_understood_observed: observed,
+    reflection_conveyed: b,
+    reflection_conveyed_n: observed ? 2 : 0,
+    reflection_conveyed_observed: observed,
+    reflection_culture: c,
+    reflection_culture_n: observed ? 2 : 0,
+    reflection_culture_observed: observed,
+  };
+}
+const gapRows = [
+  reflectionTestRow('2026-09-17', true, 2.6, 2.8, 2.4),
+  reflectionTestRow('2026-09-18', false, 2.6, 2.8, 2.4),
+  reflectionTestRow('2026-09-19', true, 2.8, 2.9, 2.5),
+  reflectionTestRow('2026-09-20', false, 2.8, 2.9, 2.5),
+  reflectionTestRow('2026-09-21', true, 2.9, 3.0, 2.7),
+];
+browser.window.renderDashboard({ charts: { lessonCumulativeReflection: gapRows } });
+const gapSvg = reflectionElement.innerHTML;
+const observedPaths = [...gapSvg.matchAll(/<polyline points="([^"]+)"/g)];
+assert.equal(observedPaths.length, 3, 'all three reflection trends must be continuous');
+for (const path of observedPaths) {
+  const xPositions = path[1].split(' ').map(point => Number(point.split(',')[0]));
+  assert.deepEqual(xPositions, [56, 250.5, 445], 'connect observed dates 1, 3, 5 without filling gaps');
+}
+assert.equal((gapSvg.match(/<title>/g) || []).length, 9, 'draw 3 marks per item on observed days only');
+
+const singleRow = gapRows.map((row, i) => ({
+  ...row,
+  reflection_understood_observed: i === 0,
+  reflection_conveyed_observed: i === 0,
+  reflection_culture_observed: i === 0,
+}));
+browser.window.renderDashboard({ charts: { lessonCumulativeReflection: singleRow } });
+assert.doesNotMatch(reflectionElement.innerHTML, /<polyline /, 'a single observed date must not draw a line');
+assert.equal((reflectionElement.innerHTML.match(/<title>/g) || []).length, 3, 'single day has only 3 marks');
 
 console.log('Research dashboard chart unification QA: PASS');
