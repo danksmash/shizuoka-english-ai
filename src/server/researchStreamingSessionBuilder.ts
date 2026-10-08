@@ -61,14 +61,15 @@ export function buildFastStreamingSessionRowsForPage(
     const hasReflection = Boolean(session.reflection && typeof session.reflection === 'object');
     const finishEvent = [...systemEvents].reverse().find((event: any) => event?.type === 'session_finish');
     const hasFinish = Boolean(finishEvent);
+    const hasInterrupted = String(session.sessionStatus || '') === 'interrupted' || systemEvents.some((event: any) => event?.type === 'session_interrupted');
     const schemaVersion = Number(session.schemaVersion || 0);
-    const dialogueCompleted = hasFinish
+    const dialogueCompleted = !hasInterrupted && (hasFinish
       || (Boolean(session.endedAt) && hasReflection)
-      || (Boolean(session.endedAt) && schemaVersion < 3 && childTurns > 0);
+      || (Boolean(session.endedAt) && schemaVersion < 3 && childTurns > 0));
     const dataQuality = !sessionId || !session.researchId || history.length === 0 || childTurns === 0
       ? 'missing_core'
       : !dialogueCompleted ? 'interrupted' : !hasReflection ? 'missing_reflection' : 'complete';
-    const sessionStatus = dialogueCompleted ? (hasReflection ? 'complete' : 'dialogue_complete') : 'in_progress_or_interrupted';
+    const sessionStatus = hasInterrupted ? 'interrupted' : dialogueCompleted ? (hasReflection ? 'complete' : 'dialogue_complete') : 'in_progress_or_interrupted';
     const persona = getPersonaResearchMetadata(String(session.personaId || session.aiStudentId || ''));
     const ttsTelemetryVersion = String(session.ttsTelemetryVersion || '');
     const ttsTelemetryReliable = ttsTelemetryVersion === 'cors-visible-v1';
