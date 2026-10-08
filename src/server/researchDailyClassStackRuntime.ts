@@ -158,7 +158,7 @@ function sessionTurnsPerMinute(row: Row): number | null {
   const turns = sessionDialogueTurns(row);
   const seconds = rateEligibleDurationSeconds(row);
   if (turns === null) return null;
-  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  if (seconds === null) return null;
   return turns * 60 / seconds;
 }
 
