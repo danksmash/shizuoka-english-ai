@@ -9,6 +9,7 @@ import {
 import { researchDataScopeForRow } from './researchDashboard';
 import { filterSessionsForStudyPhase, normalizeStudyPhaseFilter } from './researchPhaseRuntime';
 import { getAllStudySchedules } from './studySchedulePersistence';
+import { assessResearchDuration } from './researchDurationQuality';
 
 type Row = Record<string, any>;
 
@@ -24,6 +25,8 @@ export interface ResearchSessionHistorySummary {
   topic_label: string;
   target_duration_minutes: number;
   actual_duration_seconds: number;
+  duration_quality: string;
+  duration_quality_reason: string;
   total_turns: number;
   total_child_words: number;
   data_quality_flag: string;
@@ -86,6 +89,7 @@ function personaName(personaId: string): string {
 }
 
 export function buildResearchSessionHistorySummary(session: Row): ResearchSessionHistorySummary {
+  const durationAssessment = assessResearchDuration(session);
   const personaId = safeText(session.personaId || session.aiStudentId, 80);
   const topic = safeText(session.topic, 80);
   return {
@@ -100,6 +104,8 @@ export function buildResearchSessionHistorySummary(session: Row): ResearchSessio
     topic_label: TOPIC_LABELS[topic] || topic,
     target_duration_minutes: Math.max(0, Number(session.targetDurationMinutes || 0)),
     actual_duration_seconds: Math.max(0, Number(session.actualDurationSeconds || 0)),
+    duration_quality: durationAssessment.quality,
+    duration_quality_reason: durationAssessment.reason,
     total_turns: Math.max(0, Number(session.totalTurns || 0)),
     total_child_words: Math.max(0, Number(session.totalChildWords || 0)),
     data_quality_flag: qualityForSession(session),
@@ -353,9 +359,9 @@ const HISTORY_SCRIPT = `<script id="researchSessionHistoryScript">
   function openPanel(){h$('rshBackdrop').classList.add('open');h$('rshPanel').classList.add('open')}
   function closePanel(){h$('rshBackdrop').classList.remove('open');h$('rshPanel').classList.remove('open')}
   async function openHistory(researchId,sessionId){ensureUi();openPanel();h$('rshPanelTitle').textContent='research_id '+researchId;h$('rshPanelSub').textContent='匿名化された同一児童のAI対話履歴';h$('rshPanelStatus').className='status';h$('rshPanelStatus').textContent='履歴を読み込んでいます…';h$('rshHistoryList').innerHTML='';h$('rshSessionDetail').innerHTML='セッション詳細を読み込んでいます…';try{var data=await api('research.session-history',{researchId:researchId});renderHistory(data,sessionId);h$('rshPanelStatus').textContent='保存されている対話 '+String(data.count||0)+'回';if(sessionId)loadDetail(researchId,sessionId)}catch(e){h$('rshPanelStatus').textContent='履歴を読み込めません: '+e.message;h$('rshPanelStatus').className='status error';h$('rshSessionDetail').innerHTML=''}}
-  function renderHistory(data,selected){var list=Array.isArray(data.sessions)?data.sessions:[];var root=h$('rshHistoryList');root.innerHTML=list.map(function(r){var active=r.session_id===selected?' active':'';return '<button type="button" class="rsh-history-button'+active+'" data-session="'+esc(r.session_id)+'"><div class="rsh-history-main"><span>第'+esc(r.lifetime_session_number||'?')+'回　'+esc(fmt(r.started_at))+'</span><span>'+esc(r.persona_name||r.persona_id)+'</span></div><div class="rsh-history-sub">'+esc(r.topic_label||r.topic)+'　'+esc(duration(r.actual_duration_seconds))+'　'+esc(r.total_child_words)+'語　'+esc(r.data_quality_flag)+'</div></button>'}).join('')||'<div class="muted">保存された対話はありません。</div>';Array.prototype.forEach.call(root.querySelectorAll('button[data-session]'),function(btn){btn.onclick=function(){Array.prototype.forEach.call(root.querySelectorAll('.rsh-history-button'),function(x){x.classList.remove('active')});btn.classList.add('active');loadDetail(data.researchId,btn.dataset.session||'')}})}
+  function renderHistory(data,selected){var list=Array.isArray(data.sessions)?data.sessions:[];var root=h$('rshHistoryList');root.innerHTML=list.map(function(r){var active=r.session_id===selected?' active':'';return '<button type="button" class="rsh-history-button'+active+'" data-session="'+esc(r.session_id)+'"><div class="rsh-history-main"><span>第'+esc(r.lifetime_session_number||'?')+'回　'+esc(fmt(r.started_at))+'</span><span>'+esc(r.persona_name||r.persona_id)+'</span></div><div class="rsh-history-sub">'+esc(r.topic_label||r.topic)+'　'+esc(duration(r.actual_duration_seconds))+(r.duration_quality!=='valid'?'［時間要確認］':'')+'　'+esc(r.total_child_words)+'語　'+esc(r.data_quality_flag)+'</div></button>'}).join('')||'<div class="muted">保存された対話はありません。</div>';Array.prototype.forEach.call(root.querySelectorAll('button[data-session]'),function(btn){btn.onclick=function(){Array.prototype.forEach.call(root.querySelectorAll('.rsh-history-button'),function(x){x.classList.remove('active')});btn.classList.add('active');loadDetail(data.researchId,btn.dataset.session||'')}})}
   async function loadDetail(researchId,sessionId){var root=h$('rshSessionDetail');root.innerHTML='セッション詳細を読み込んでいます…';try{var data=detailCache.get(sessionId);if(!data){data=await api('research.session-detail',{researchId:researchId,sessionId:sessionId});detailCache.set(sessionId,data)}renderDetail(data.session)}catch(e){root.innerHTML='<div class="error">セッション詳細を読み込めません: '+esc(e.message)+'</div>'}}
-  function renderDetail(s){if(!s){h$('rshSessionDetail').innerHTML='データなし';return}var transcript=(s.transcript||[]).map(function(r){var child=String(r.sender||'')==='child';return '<div class="rsh-utterance"><span class="rsh-time">'+esc(clock(r.timestamp))+'</span><span class="rsh-speaker '+(child?'rsh-child':'rsh-ai')+'">'+(child?'児童':'AI')+'</span><span>'+esc(r.english_text)+(r.japanese_text?'<span class="rsh-ja">'+esc(r.japanese_text)+'</span>':'')+'</span></div>'}).join('')||'<div class="muted">発話ログなし</div>';var reflection=s.reflection?'<div class="rsh-reflection"><b>振り返り</b>　伝える '+esc(s.reflection.conveyed_ideas)+' / 聞いて分かる '+esc(s.reflection.understood_partner)+' / 言葉・文化 '+esc(s.reflection.noticed_language_culture)+'</div>':'<div class="rsh-reflection">振り返りなし</div>';var events=(s.system_events||[]).map(function(e){return '<div class="rsh-event"><span>'+esc(clock(e.timestamp))+'</span><b>'+esc(e.type)+'</b><span>'+esc(e.value)+'</span></div>'}).join('');h$('rshSessionDetail').innerHTML='<div class="rsh-detail-meta"><span>session_id<b>'+esc(s.session_id)+'</b></span><span>日時<b>'+esc(fmt(s.started_at))+'</b></span><span>Persona<b>'+esc(s.persona_name||s.persona_id)+'</b></span><span>テーマ<b>'+esc(s.topic_label||s.topic)+'</b></span><span>対話時間<b>'+esc(duration(s.actual_duration_seconds))+'</b></span><span>児童発話語数<b>'+esc(s.total_child_words)+'語</b></span><span>ターン<b>'+esc(s.total_turns)+'</b></span><span>品質<b>'+esc(s.data_quality_flag)+'</b></span></div><div><b style="font-size:11px;color:#174aa8">対話ログ</b>'+transcript+'</div>'+reflection+(events?'<details class="rsh-events"><summary>systemEvents '+String((s.system_events||[]).length)+'件</summary>'+events+'</details>':'')}
+  function renderDetail(s){if(!s){h$('rshSessionDetail').innerHTML='データなし';return}var transcript=(s.transcript||[]).map(function(r){var child=String(r.sender||'')==='child';return '<div class="rsh-utterance"><span class="rsh-time">'+esc(clock(r.timestamp))+'</span><span class="rsh-speaker '+(child?'rsh-child':'rsh-ai')+'">'+(child?'児童':'AI')+'</span><span>'+esc(r.english_text)+(r.japanese_text?'<span class="rsh-ja">'+esc(r.japanese_text)+'</span>':'')+'</span></div>'}).join('')||'<div class="muted">発話ログなし</div>';var reflection=s.reflection?'<div class="rsh-reflection"><b>振り返り</b>　伝える '+esc(s.reflection.conveyed_ideas)+' / 聞いて分かる '+esc(s.reflection.understood_partner)+' / 言葉・文化 '+esc(s.reflection.noticed_language_culture)+'</div>':'<div class="rsh-reflection">振り返りなし</div>';var events=(s.system_events||[]).map(function(e){return '<div class="rsh-event"><span>'+esc(clock(e.timestamp))+'</span><b>'+esc(e.type)+'</b><span>'+esc(e.value)+'</span></div>'}).join('');h$('rshSessionDetail').innerHTML='<div class="rsh-detail-meta"><span>session_id<b>'+esc(s.session_id)+'</b></span><span>日時<b>'+esc(fmt(s.started_at))+'</b></span><span>Persona<b>'+esc(s.persona_name||s.persona_id)+'</b></span><span>テーマ<b>'+esc(s.topic_label||s.topic)+'</b></span><span>対話時間<b>'+esc(duration(s.actual_duration_seconds))+'</b></span><span>時間品質<b>'+esc(s.duration_quality==='valid'?'有効':'要確認／無効')+'</b></span><span>児童発話語数<b>'+esc(s.total_child_words)+'語</b></span><span>ターン<b>'+esc(s.total_turns)+'</b></span><span>品質<b>'+esc(s.data_quality_flag)+'</b></span></div><div><b style="font-size:11px;color:#174aa8">対話ログ</b>'+transcript+'</div>'+reflection+(events?'<details class="rsh-events"><summary>systemEvents '+String((s.system_events||[]).length)+'件</summary>'+events+'</details>':'')}
   function currentFilters(){try{var p=(typeof appliedFilterQuery==='string'&&appliedFilterQuery)?new URLSearchParams(appliedFilterQuery):(typeof filterParams==='function'?filterParams():new URLSearchParams());return Object.fromEntries(p.entries())}catch(_e){return{}}}
   function openAll(){ensureUi();allRows=[];allNext=null;h$('rshAllSearch').value='';h$('rshAllModal').classList.add('open');loadAll(false)}
   function closeAll(){h$('rshAllModal').classList.remove('open')}
