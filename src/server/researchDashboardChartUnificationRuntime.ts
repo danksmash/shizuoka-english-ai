@@ -54,7 +54,7 @@ function injectResearchDashboardChartUnification(html: string): string {
     var counts={intervention:0,comparison:0,unknown:0};
     list.forEach(function(s,si){
       var isComparison=s.school_condition==='comparison'||/^[1-9]-C[1-9]$/i.test(String(s.class_id||'')),condition=isComparison?'comparison':'intervention',palette=conditionColors(condition),color=palette[counts[condition]++%palette.length],shape=classShape(s.class_id),points=[];
-      (s.points||[]).forEach(function(p){if(valid(p.value))points.push(x(p.date)+','+y(Number(p.value)))});
+      (s.points||[]).forEach(function(p){if(valid(p.value)&&p.observed!==false)points.push(x(p.date)+','+y(Number(p.value)))});
       if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round" stroke-linejoin="round"/>';
       (s.points||[]).forEach(function(p){if(!valid(p.value)||p.observed===false)return;var title=String(p.date||'')+' '+String(s.label||s.class_id||'')+': '+fmt(Number(p.value))+' '+unit+' (n='+Number(p.n||0)+')';out+=marker(shape,x(p.date),y(Number(p.value)),color,title)});
       var col=si%3,row=Math.floor(si/3),lx=left+col*132,ly=12+row*18;
@@ -79,7 +79,7 @@ function injectResearchDashboardChartUnification(html: string): string {
     [1,2,3,4].forEach(function(tick){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="unified-line-axis">'+tick+'</text>'});
     var every=Math.max(1,Math.ceil(rows.length/7));rows.forEach(function(r,i){if(i%every===0||i===rows.length-1)out+='<text x="'+x(i)+'" y="'+(h-19)+'" text-anchor="middle" class="unified-line-axis">'+esc(String(r.date||'').slice(5))+'</text>'});
     series.forEach(function(item,si){
-      var segment=[],segments=[];rows.forEach(function(r,i){if(valid(r[item.key])){var off=offsets(r)[si];segment.push(x(i)+','+(y(Number(r[item.key]))+off))}else if(segment.length){segments.push(segment);segment=[]}});if(segment.length)segments.push(segment);
+      var segment=[],segments=[];rows.forEach(function(r,i){if(valid(r[item.key])&&r[item.observed]!==false){var off=offsets(r)[si];segment.push(x(i)+','+(y(Number(r[item.key]))+off))}else if(segment.length){segments.push(segment);segment=[]}});if(segment.length)segments.push(segment);
       segments.forEach(function(points){if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+item.color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round" stroke-linejoin="round"/>'});
       rows.forEach(function(r,i){if(!valid(r[item.key])||r[item.observed]===false)return;var off=offsets(r)[si],value=Math.round(Number(r[item.key])*100)/100,count=Number(r[item.n]||0),title=String(r.date||'')+' '+item.label+': 平均 '+value+' (n='+count+')';out+=marker(item.shape,x(i),y(Number(r[item.key]))+off,item.color,title)});
       out+='<line x1="'+item.legendX+'" y1="'+item.legendY+'" x2="'+(item.legendX+16)+'" y2="'+item.legendY+'" stroke="'+item.color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round"/>'+marker(item.shape,item.legendX+8,item.legendY,item.color,'')+'<text x="'+(item.legendX+21)+'" y="'+(item.legendY+4)+'" class="unified-line-legend">'+esc(item.label)+'</text>';

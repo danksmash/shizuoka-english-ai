@@ -31,6 +31,9 @@ assert.match(sentBody, /cumulativeWordsByClass/);
 assert.match(sentBody, /lessonCumulativeReflection/);
 assert.match(sentBody, /reflectionSvg/);
 assert.match(sentBody, /observed===false/);
+// Cumulative values can be carried forward for API consumers, but unobserved dates must not create line vertices.
+assert.match(sentBody, /if\(valid\(p\.value\)&&p\.observed!==false\)points\.push/);
+assert.match(sentBody, /if\(valid\(r\[item\.key\]\)&&r\[item\.observed\]!==false\)/);
 assert.match(sentBody, /授業内のみ｜累積平均（セッション単位）｜授業外利用は除外/);
 assert.match(sentBody, /turns\.innerHTML=classSeriesSvg\(charts\.cumulativeTurnsByClass/);
 assert.match(sentBody, /words\.innerHTML=classSeriesSvg\(charts\.cumulativeWordsByClass/);
