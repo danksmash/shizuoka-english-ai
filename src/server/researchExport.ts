@@ -1,4 +1,5 @@
 import { analyzeChildCommunication, countEnglishWords } from '../dataContract';
+import { assessResearchDuration } from './researchDurationQuality';
 import { detectPersonaProfileExpressions, getPersonaResearchMetadata, PERSONA_DICTIONARY_VERSION } from '../data/personaResearch';
 import { detectVocabularyInText } from '../data/vocabulary56';
 import type { ChatMessage, VisualVocabularyItem } from '../types';
@@ -277,6 +278,7 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
     const sessionFinishReason = hasFinish ? String(finishEvent?.value || 'unspecified') : '';
     const micErrorCount = systemEvents.filter((event: any) => event?.type === 'mic_error').length;
     const persona = getPersonaResearchMetadata(String(session.personaId || session.aiStudentId || ''));
+    const durationAssessment = assessResearchDuration(session);
     const ttsTelemetryVersion = String(session.ttsTelemetryVersion || '');
     const ttsTelemetryReliable = ttsTelemetryVersion === 'cors-visible-v1';
 
@@ -315,7 +317,13 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
       persona_default_voice_rate: session.personaDefaultVoiceRate ?? persona.defaultVoiceRate, student_selected_speech_rate: session.studentSelectedSpeechRate ?? 1,
       effective_tts_speech_rate: session.effectiveTtsSpeechRate ?? 1, persona_dictionary_version: session.personaDictionaryVersion || PERSONA_DICTIONARY_VERSION,
       ai_student_id: session.aiStudentId || '', topic: session.topic || '', target_duration_minutes: session.targetDurationMinutes || 0,
-      actual_duration_seconds: session.actualDurationSeconds || 0, child_turn_count: communication.totalTurns, child_total_words: communication.totalChildWords,
+      actual_duration_seconds: session.actualDurationSeconds || 0,
+      wall_duration_seconds: session.wallDurationSeconds ?? '',
+      active_dialogue_seconds: session.activeDialogueSeconds ?? '',
+      duration_quality: durationAssessment.quality,
+      duration_quality_reason: durationAssessment.reason,
+      analysis_duration_seconds: durationAssessment.seconds ?? '',
+      child_turn_count: communication.totalTurns, child_total_words: communication.totalChildWords,
       total_turns: communication.totalTurns, total_child_words: communication.totalChildWords, mean_child_words_per_turn: communication.meanChildWordsPerTurn,
       max_child_words_per_turn: communication.maxChildWordsPerTurn, child_unique_word_types: communication.childUniqueWordTypes,
       child_question_count: communication.childQuestionCount, child_reciprocal_question_count: communication.childReciprocalQuestionCount,
