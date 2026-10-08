@@ -44,12 +44,21 @@ function injectResearchDashboardChartUnification(html: string): string {
     var step=niceStep(axisMax-axisMin),pad=Math.max(step*.6,(axisMax-axisMin)*.06);
     axisMin=Math.max(0,Math.floor((axisMin-pad)/step)*step);axisMax=Math.ceil((axisMax+pad)/step)*step;
     if(axisMax-axisMin<.8)axisMax=axisMin+Math.ceil(.8/step)*step;
+    // Word/min only: use a data-fitted y-axis so modest changes remain readable.
+    // Keep the existing turn/min axis behavior and the measured values unchanged.
+    if(unit==='語/分'){
+      var wordRange=rawMax-rawMin,wordPad=Math.max(.2,wordRange*.05);
+      step=niceStep((wordRange+wordPad*2)*.75);
+      axisMin=Math.max(0,Math.floor((rawMin-wordPad)/step)*step);
+      axisMax=Math.ceil((rawMax+wordPad)/step)*step;
+      if(axisMax<=axisMin)axisMax=axisMin+step;
+    }
     var legendRows=Math.ceil(list.length/3),top=18+legendRows*18,plotH=h-top-bottom,plotW=w-left-right;
     var x=function(date){var i=dates.indexOf(date);return left+(dates.length<=1?plotW/2:i*plotW/(dates.length-1))};
     var y=function(v){return top+plotH-(Number(v)-axisMin)*plotH/(axisMax-axisMin||1)};
     var fmt=function(v){return Math.abs(v-Math.round(v))<1e-9?String(Math.round(v)):String(Math.round(v*10)/10)};
     var out='<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="'+esc(aria)+'">';
-    for(var tick=axisMin,guard=0;tick<=axisMax+step*.001&&guard<10;tick+=step,guard+=1){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="unified-line-axis">'+esc(fmt(tick))+'</text>'}
+    for(var tick=axisMin,guard=0;tick<=axisMax+step*.001&&guard<10;tick+=step,guard+=1){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="unified-line-axis">'+esc(unit==='語/分'?String(Math.round(tick*100)/100):fmt(tick))+'</text>'}
     var every=Math.max(1,Math.ceil(dates.length/7));dates.forEach(function(date,i){if(i%every===0||i===dates.length-1)out+='<text x="'+x(date)+'" y="'+(h-19)+'" text-anchor="middle" class="unified-line-axis">'+esc(String(date).slice(5))+'</text>'});
     var counts={intervention:0,comparison:0,unknown:0};
     list.forEach(function(s,si){
