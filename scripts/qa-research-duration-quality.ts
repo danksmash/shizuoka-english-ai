@@ -41,6 +41,18 @@ const interrupted = buildResearchSessionHistorySummary({
 });
 assert.equal(interrupted.data_quality_flag, 'interrupted');
 assert.equal(interrupted.actual_duration_seconds, 80);
+const cappedHistory = buildResearchSessionHistorySummary({
+  sessionId: 'session_capped_12345678', researchId: 'RTEST001',
+  aiStudentId: 'emma_usa', topic: 'intro', startedAt: '2026-10-08T00:00:00.000Z',
+  endedAt: '2026-10-08T01:00:00.000Z',
+  actualDurationSeconds: 3600, targetDurationMinutes: 2, totalTurns: 2, totalChildWords: 26,
+  history: baseInput.history, systemEvents: [{ type: 'session_finish', timestamp: 2_000_000 }],
+  schemaVersion: 4,
+});
+assert.equal(cappedHistory.duration_quality, 'invalid');
+assert.equal(cappedHistory.duration_quality_reason, 'wall_clock_3600_cap');
+assert.equal(interrupted.duration_quality, 'valid');
+
 
 const app = readFileSync('src/App.tsx', 'utf8');
 const persistence = readFileSync('src/server/persistence.ts', 'utf8');
