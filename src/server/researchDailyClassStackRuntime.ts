@@ -9,6 +9,7 @@ import {
   normalizeStudyPhaseFilter,
 } from './researchPhaseRuntime';
 import { dialogueAnalysisEligible } from './researchAnalysisEligibility';
+import { rateEligibleDurationSeconds } from './researchDurationQuality';
 
 type Row = Record<string, unknown>;
 type Aggregation = 'daily' | 'weekly';
@@ -155,7 +156,7 @@ function sessionDialogueTurns(row: Row): number | null {
 
 function sessionTurnsPerMinute(row: Row): number | null {
   const turns = sessionDialogueTurns(row);
-  const seconds = Number(row.actual_duration_seconds);
+  const seconds = rateEligibleDurationSeconds(row);
   if (turns === null) return null;
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
   return turns * 60 / seconds;
