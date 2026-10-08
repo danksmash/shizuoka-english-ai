@@ -9,6 +9,7 @@ import {
   normalizeStudyPhaseFilter,
 } from './researchPhaseRuntime';
 import { dialogueAnalysisEligible } from './researchAnalysisEligibility';
+import { rateEligibleDurationSeconds } from './researchDurationQuality';
 
 type Row = Record<string, unknown>;
 type PhaseAwareQuery = ResearchFilterQuery & { studyPhase?: unknown };
@@ -57,7 +58,7 @@ function compareClassIds(a: string, b: string): number {
 
 function sessionWordsPerMinute(row: Row): number | null {
   const words = Number(row.child_total_words);
-  const seconds = Number(row.actual_duration_seconds);
+  const seconds = rateEligibleDurationSeconds(row);
   const childTurns = Number(row.child_turn_count);
   if (!Number.isFinite(words) || words < 0) return null;
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
