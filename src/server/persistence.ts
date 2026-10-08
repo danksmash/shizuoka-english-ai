@@ -507,7 +507,7 @@ function gradeLevelForClassId(classId: string): number | '' {
 
 export interface SaveCanonicalSessionArgs {
   sessionId: string; studentId: string; researchId: string; classId?: string; aiStudentId: AIStudentId; topic: DialogueTopic;
-  targetDurationMinutes: DialogueDurationMinutes; startedAt: number; endedAt: number; history: ChatMessage[];
+  targetDurationMinutes: DialogueDurationMinutes; startedAt: number; endedAt: number; activeDialogueSeconds?: number; history: ChatMessage[];
   encounteredVocab: VisualVocabularyItem[]; reflection?: ReflectionAnswers; systemEvents?: ResearchSystemEvent[];
   personaLabelCondition?: PersonaLabelCondition; countryLabelVisible?: boolean; accentLabelVisible?: boolean; flagVisible?: boolean;
   studentSelectedSpeechRate?: number; effectiveTtsSpeechRate?: number;
@@ -529,6 +529,11 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
   const currentClassId = normalizeClassId(args.classId);
   const personaMeta = getPersonaResearchMetadata(args.aiStudentId);
   const events = (args.systemEvents || []).slice(0, 500);
+  const sessionStatus = events.some((event) => event.type === 'session_interrupted')
+    ? 'interrupted' : events.some((event) => event.type === 'session_finish') ? 'completed' : 'in_progress';
+  const activeSeconds = args.activeDialogueSeconds;
+  const measuredActiveDuration = Number.isFinite(activeSeconds) && activeSeconds !== undefined && activeSeconds >= 0 && activeSeconds <= 600;
+  const actualDurationSeconds = measuredActiveDuration ? Math.round(activeSeconds!) : stats.actualDurationSeconds;
   const eventValues = (type: string) => events.filter((event) => event.type === type).map((event) => Number(event.value || 0)).filter(Number.isFinite);
   const sumEvent = (type: string) => eventValues(type).reduce((sum, value) => sum + value, 0);
   const latestEvent = (type: string) => [...events].reverse().find((event) => event.type === type)?.value || '';
@@ -557,7 +562,11 @@ export async function saveCanonicalSession(args: SaveCanonicalSessionArgs) {
     ttsLatencyMs: Number.isFinite(ttsLatencyRaw) && ttsLatencyRaw >= 0 ? Math.round(ttsLatencyRaw) : 0, ttsProviderDeviation,
     personaVoiceGender: personaMeta.voiceGender, personaVoicePitch: personaMeta.voicePitch, personaDefaultVoiceRate: personaMeta.defaultVoiceRate,
     studentSelectedSpeechRate: Number(args.studentSelectedSpeechRate || 1), effectiveTtsSpeechRate: Number(latestEvent('tts_effective_rate') || args.effectiveTtsSpeechRate || args.studentSelectedSpeechRate || 1), personaDictionaryVersion: personaMeta.personaDictionaryVersion,
-    targetDurationMinutes: args.targetDurationMinutes, actualDurationSeconds: stats.actualDurationSeconds,
+    targetDurationMinutes: args.targetDurationMinutes, actualDurationSeconds,
+    activeDialogueSeconds: measuredActiveDuration ? actualDurationSeconds : null,
+    wallDurationSeconds: stats.actualDurationSeconds,
+    durationQuality: measuredActiveDuration ? (sessionStatus === 'in_progress' ? 'needs_review' : 'valid') : '',
+    sessionStatus,
     startedAt: new Date(args.startedAt).toISOString(), endedAt: new Date(args.endedAt).toISOString(), localDate,
     lifetimeSessionNumber, dailySessionNumber, totalTurns: stats.totalTurns, aiTurnCount,
     dialogueUtteranceCount: stats.totalTurns + aiTurnCount, dialogueTurnMetricSource: 'canonical_history_v1', totalChildWords: stats.totalChildWords,
