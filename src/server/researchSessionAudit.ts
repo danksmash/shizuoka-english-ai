@@ -103,11 +103,12 @@ function sessionQuality(session: Record<string, any>): ResearchSessionQuality {
   const childMessages = history.filter((message) => message.sender === 'child' && String(message.englishText || '').trim());
   const events = Array.isArray(session.systemEvents) ? session.systemEvents : [];
   const hasFinish = events.some((event: any) => event?.type === 'session_finish');
+  const interrupted = String(session.sessionStatus || '') === 'interrupted' || events.some((event: any) => event?.type === 'session_interrupted');
   const hasReflection = Boolean(session.reflection && typeof session.reflection === 'object');
   const schemaVersion = Number(session.schemaVersion || 0);
-  const dialogueCompleted = hasFinish
+  const dialogueCompleted = !interrupted && (hasFinish
     || (Boolean(session.endedAt) && hasReflection)
-    || (Boolean(session.endedAt) && schemaVersion < 3 && childMessages.length > 0);
+    || (Boolean(session.endedAt) && schemaVersion < 3 && childMessages.length > 0));
   if (!sessionId || !researchId || history.length === 0 || childMessages.length === 0) return 'missing_core';
   if (!dialogueCompleted) return 'interrupted';
   if (!hasReflection) return 'missing_reflection';
