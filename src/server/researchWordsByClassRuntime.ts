@@ -61,7 +61,7 @@ function sessionWordsPerMinute(row: Row): number | null {
   const seconds = rateEligibleDurationSeconds(row);
   const childTurns = Number(row.child_turn_count);
   if (!Number.isFinite(words) || words < 0) return null;
-  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  if (seconds === null) return null;
   if (!Number.isFinite(childTurns) || childTurns <= 0) return null;
   return words * 60 / seconds;
 }
