@@ -266,12 +266,13 @@ export function buildResearchDataSets(sessions: Record<string, any>[]) {
     const systemEvents = Array.isArray(session.systemEvents) ? session.systemEvents : [];
     const hasReflection = Boolean(session.reflection && typeof session.reflection === 'object');
     const hasFinish = systemEvents.some((event: any) => event?.type === 'session_finish');
+    const hasInterrupted = String(session.sessionStatus || '') === 'interrupted' || systemEvents.some((event: any) => event?.type === 'session_interrupted');
     const schemaVersion = Number(session.schemaVersion || 0);
-    const dialogueCompleted = hasFinish || (Boolean(session.endedAt) && hasReflection) || (Boolean(session.endedAt) && schemaVersion < 3 && childMessages.length > 0);
+    const dialogueCompleted = !hasInterrupted && (hasFinish || (Boolean(session.endedAt) && hasReflection) || (Boolean(session.endedAt) && schemaVersion < 3 && childMessages.length > 0));
     const dataQuality = !sessionId || !session.researchId || history.length === 0 || childMessages.length === 0
       ? 'missing_core'
       : !dialogueCompleted ? 'interrupted' : !hasReflection ? 'missing_reflection' : 'complete';
-    const sessionStatus = dialogueCompleted ? (hasReflection ? 'complete' : 'dialogue_complete') : 'in_progress_or_interrupted';
+    const sessionStatus = hasInterrupted ? 'interrupted' : dialogueCompleted ? (hasReflection ? 'complete' : 'dialogue_complete') : 'in_progress_or_interrupted';
     const finishEvent = [...systemEvents].reverse().find((event: any) => event?.type === 'session_finish');
     const sessionFinishReason = hasFinish ? String(finishEvent?.value || 'unspecified') : '';
     const micErrorCount = systemEvents.filter((event: any) => event?.type === 'mic_error').length;
