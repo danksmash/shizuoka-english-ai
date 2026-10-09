@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { withResearchDashboardChartUnification } from '../src/server/researchDashboardChartUnificationRuntime';
+import { withResearchWordsByClassRuntime } from '../src/server/researchWordsByClassRuntime';
+import { withResearchDailyClassStack } from '../src/server/researchDailyClassStackRuntime';
+import { withResearchReflectionChartPolish } from '../src/server/researchReflectionChartPolishRuntime';
+import { managementPageHtml } from '../src/server/managementPage';
 
 let sentBody = '';
 const res: any = {
@@ -42,11 +46,11 @@ assert.match(sentBody, /授業内のみ｜累積平均（セッション単位�
 assert.match(sentBody, /turns\.innerHTML=classSeriesSvg\(charts\.cumulativeTurnsByClass/);
 assert.match(sentBody, /words\.innerHTML=classSeriesSvg\(charts\.cumulativeWordsByClass/);
 assert.match(sentBody, /function classColor\(classId,condition\)/);
-assert.match(sentBody, /"5-1":"#0072B2"/);
-assert.match(sentBody, /"5-2":"#009E73"/);
-assert.match(sentBody, /"5-3":"#7851A9"/);
-assert.match(sentBody, /"6-C1":"#D55E00"/);
-assert.match(sentBody, /"6-C2":"#C54A89"/);
+assert.match(sentBody, /"5-1":"#3B82F6"/);
+assert.match(sentBody, /"5-2":"#10B981"/);
+assert.match(sentBody, /"5-3":"#A855F7"/);
+assert.match(sentBody, /"6-C1":"#F59E0B"/);
+assert.match(sentBody, /"6-C2":"#EC4899"/);
 assert.match(sentBody, /school_condition==='comparison'\|\|\/\^\[1-9\]-C\[1-9\]\$\/i/);
 assert.match(sentBody, /label:'新しい言葉や文化に気づいた',color:'#f59e0b'/);
 assert.match(sentBody, /if\(id==='5-3'\)return 'triangle'/);
@@ -186,16 +190,81 @@ const stableSeries = [
 browser.window.renderDashboard({charts:{cumulativeWordsByClass:stableSeries,cumulativeTurnsByClass:stableSeries}});
 const allColors = {words:wordElement.innerHTML,turns:turnElement.innerHTML};
 for (const html of [allColors.words,allColors.turns]) {
-  assert.ok(colorValue(html,'#0072B2') && colorValue(html,'#009E73') && colorValue(html,'#7851A9'), 'all three intervention classes use distinct color families');
-  assert.ok(colorValue(html,'#D55E00') && colorValue(html,'#C54A89'), 'both comparison classes have their own distinct stable colors');
+  assert.ok(colorValue(html,'#3B82F6') && colorValue(html,'#10B981') && colorValue(html,'#A855F7'), 'all three intervention classes use distinct color families');
+  assert.ok(colorValue(html,'#F59E0B') && colorValue(html,'#EC4899'), 'both comparison classes have their own distinct stable colors');
   assert.match(html, /<polygon points=/, 'triangle and diamond markers remain visible');
   assert.match(html, /<path d="M/, 'cross marker remains visible');
 }
 browser.window.renderDashboard({charts:{cumulativeWordsByClass:[stableSeries[2],stableSeries[3]],cumulativeTurnsByClass:[stableSeries[2],stableSeries[3]]}});
 for (const html of [wordElement.innerHTML,turnElement.innerHTML]) {
-  assert.ok(colorValue(html,'#7851A9') && colorValue(html,'#D55E00'), 'filtered redraw cannot recolor the same class');
+  assert.ok(colorValue(html,'#A855F7') && colorValue(html,'#F59E0B'), 'filtered redraw cannot recolor the same class');
   assert.doesNotMatch(html, /<text[^>]*class="unified-line-note"/, 'footnote must not clip inside SVG');
   assert.match(html, /<\/svg><div class="unified-line-footnote" role="note">/, 'footnote must follow the graph, not overlap chart axis');
 }
+
+
+// Regression: reproduce production's nested /management response wrappers, not
+// just a standalone isolated chart script. Confirm all injected renderers exist.
+let productionHtml='';
+const response:any={send(body:unknown){productionHtml=String(body);return body}};
+let pageHandler:any=(_req:any,res:any)=>res.send(managementPageHtml());
+pageHandler=withResearchDailyClassStack('/management',pageHandler);
+pageHandler=withResearchWordsByClassRuntime('/management',pageHandler);
+pageHandler=withResearchDashboardChartUnification('/management',pageHandler);
+pageHandler=withResearchReflectionChartPolish('/management',pageHandler);
+pageHandler({} as any,response,()=>{});
+for(const id of ['researchDailyClassStack','researchWordsByClassRuntime','researchDashboardChartUnification','researchReflectionChartPolish']){
+  assert.ok(productionHtml.includes('id="'+id+'"'), 'production response must inject '+id);
+}
+assert.ok(
+  productionHtml.indexOf('id="researchDailyClassStack"') < productionHtml.indexOf('id="researchWordsByClassRuntime"') &&
+  productionHtml.indexOf('id="researchWordsByClassRuntime"') < productionHtml.indexOf('id="researchDashboardChartUnification"'),
+  'shared chart renderer must load after legacy handlers',
+);
+const legacySource=productionHtml.match(/<script id="researchWordsByClassRuntime">([\s\S]*?)<\/script>/)?.[1];
+assert.ok(legacySource, 'legacy words script must remain a safe fallback');
+const fallbackWords={innerHTML:''};
+const legacyBrowser:any={
+  window:{__researchDashboardUnifiedChartsV2:false},
+  document:{getElementById(id:string){
+    if(id==='chartWords')return fallbackWords;
+    if(id==='chartWordsTitle')return {textContent:''};
+    return null;
+  }},
+  renderDashboard(){},
+};
+runInNewContext(legacySource,legacyBrowser);
+legacyBrowser.window.renderDashboard({charts:{cumulativeWordsByClass:stableSeries}});
+for(const hex of ['#3B82F6','#10B981','#A855F7','#F59E0B','#EC4899']){
+  assert.ok(fallbackWords.innerHTML.includes('stroke="'+hex+'"'), 'fallback words renderer must match class palette: '+hex);
+}
+assert.match(fallbackWords.innerHTML,/色＝学級別に固定/);
+// With missing lesson dates, vertices must be only the measured dates, not carried-forward plateaus.
+const sparseSeries=[{class_id:'5-1',label:'5年1組',school_condition:'intervention',points:[
+  {date:'2026-10-01',value:10,n:1,observed:true},
+  {date:'2026-10-02',value:10,n:1,observed:false},
+  {date:'2026-10-03',value:12,n:2,observed:true},
+  {date:'2026-10-04',value:12,n:2,observed:false},
+  {date:'2026-10-05',value:14,n:3,observed:true},
+]}];
+legacyBrowser.window.renderDashboard({charts:{cumulativeWordsByClass:sparseSeries}});
+browser.window.renderDashboard({charts:{cumulativeTurnsByClass:sparseSeries,cumulativeWordsByClass:sparseSeries}});
+for(const html of [fallbackWords.innerHTML,wordElement.innerHTML,turnElement.innerHTML]){
+  const points=html.match(/<polyline points="([^"]+)"/)?.[1].split(' ')||[];
+  assert.equal(points.length,3,'connect only 3 measured days, without horizontal filler segments');
+}
+assert.doesNotMatch(productionHtml,/function conditionColors\(/,'no obsolete index-based palette remains');
+// Alternating collisions must not create spurious bends in a constant reflection series.
+const constantWithCollisions=[
+  reflectionTestRow('2026-10-01',true,2.8,2.8,2.4),
+  reflectionTestRow('2026-10-02',true,2.8,2.5,2.8),
+  reflectionTestRow('2026-10-03',true,2.8,2.8,2.8),
+];
+browser.window.renderDashboard({charts:{lessonCumulativeReflection:constantWithCollisions}});
+const firstPolyline=reflectionElement.innerHTML.match(/<polyline points="([^"]+)"/)?.[1]||'';
+const ys=firstPolyline.split(' ').map(point=>Number(point.split(',')[1]));
+assert.equal(new Set(ys).size,1,'equal reflection values must form a true horizontal straight line');
+const polishScript=fs.readFileSync(new URL('../src/server/researchReflectionChartPolishRuntime.ts',import.meta.url),'utf8');
+assert.doesNotMatch(polishScript,/offsets\[index\]|translate\('\+\(offsets/,'markers must never move away from actual vertices');
 
 console.log('Research dashboard chart unification QA: PASS');
