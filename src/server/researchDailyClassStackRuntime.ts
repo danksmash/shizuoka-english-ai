@@ -1,4 +1,5 @@
 import { RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT } from './researchClassChartPalette';
+import { RESEARCH_DATE_TICK_BROWSER_SCRIPT } from './researchChartDateTicks';
 import type { RequestHandler } from 'express';
 import {
   buildResearchExportDataSets,
@@ -315,6 +316,7 @@ function injectResearchDailyClassStack(html: string): string {
 
   const script = `<script id="researchDailyClassStack">
 (function(){
+${RESEARCH_DATE_TICK_BROWSER_SCRIPT}
   // Use the exact same class palette as the two cumulative line charts.
 ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
   var selectedRange='14';
@@ -409,7 +411,7 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
     var fmt=function(value){return Math.abs(value-Math.round(value))<1e-9?String(Math.round(value)):String(Math.round(value*10)/10)};
     var out='<svg viewBox="0 0 '+w+' '+hgt+'" role="img" aria-label="1分あたり平均ターン数学級別累積平均">';
     for(var tick=axisMin,guard=0;tick<=axisMax+step*.001&&guard<10;tick+=step,guard+=1){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="svg-label" style="font-size:10px">'+h(fmt(tick))+'</text>'}
-    var every=Math.max(1,Math.ceil(dates.length/7));dates.forEach(function(date,index){if(index%every===0||index===dates.length-1)out+='<text x="'+x(date)+'" y="'+(hgt-19)+'" text-anchor="middle" class="svg-label" style="font-size:10px">'+h(String(date).slice(5))+'</text>'});
+    selectResearchDateTicks(dates,function(index){return x(dates[index])},7,10).forEach(function(index){var date=dates[index];out+='<text x="'+x(date)+'" y="'+(hgt-19)+'" text-anchor="middle" class="svg-label" style="font-size:10px">'+h(String(date).slice(5))+'</text>'});
     list.forEach(function(item,index){
       var color=classColor(item.class_id),shape=classShape(item.class_id),points=[];
       (item.points||[]).forEach(function(point){if(valid(point.value)&&point.observed!==false)points.push(x(point.date)+','+y(Number(point.value)))});
