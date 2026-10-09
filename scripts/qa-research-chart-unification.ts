@@ -209,6 +209,49 @@ const stableSeries = [
 ];
 browser.window.renderDashboard({charts:{cumulativeWordsByClass:stableSeries,cumulativeTurnsByClass:stableSeries}});
 const allColors = {words:wordElement.innerHTML,turns:turnElement.innerHTML};
+// All five class markers, including triangles and crosses, must share the exact
+// geometric footprint of the three reflection markers. This also protects
+// the legend, since every marker passes through the same SVG helper.
+function assertStandardMarkers(svg:string, expectedCount:number, label:string){
+  const groups=[...svg.matchAll(/<g data-marker-size="([^"]+)">([\s\S]*?)<\/g>/g)];
+  assert.equal(groups.length,expectedCount,label+' marker count (observations plus legend)');
+  const bounds=(part:string)=>{
+    let xs:number[]=[],ys:number[]=[];
+    const circle=part.match(/<circle cx="([^"]+)" cy="([^"]+)" r="([^"]+)"/);
+    const rect=part.match(/<rect x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"/);
+    const polygon=part.match(/<polygon points="([^"]+)"/);
+    const cross=part.match(/<path d="M([^,]+),([^ ]+) H([^ ]+) M([^,]+),([^ ]+) V([^"]+)"/);
+    if(circle){
+      const [,cx,cy,rad]=circle.map(Number);
+      xs=[cx-rad,cx+rad];ys=[cy-rad,cy+rad];
+    }else if(rect){
+      const [,x,y,w,h]=rect.map(Number);
+      xs=[x,x+w];ys=[y,y+h];
+    }else if(polygon){
+      const points=polygon[1].split(' ').map(pair=>pair.split(',').map(Number));
+      xs=points.map(p=>p[0]);ys=points.map(p=>p[1]);
+    }else if(cross){
+      xs=[Number(cross[1]),Number(cross[3])];
+      ys=[Number(cross[5]),Number(cross[6])];
+    }else throw new Error(label+' unexpected marker shape '+part);
+    return [Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)];
+  };
+  for(const [,advertised,part] of groups){
+    assert.equal(Number(advertised),6.4,label+' shared nominal marker size');
+    const [width,height]=bounds(part);
+    assert.ok(Math.abs(width-6.4)<1e-8&&Math.abs(height-6.4)<1e-8,
+      label+' marker must fit the exact shared 6.4x6.4 geometry, not only claim to');
+  }
+}
+for(const [chartName,svg] of Object.entries(allColors)){
+  assertStandardMarkers(svg,15,chartName+' five classes');
+}
+browser.window.renderDashboard({charts:{lessonCumulativeReflection:[
+  reflectionTestRow('2026-10-01',true,2.7,2.8,2.5),
+  reflectionTestRow('2026-10-02',true,2.8,2.9,2.6),
+]}});
+assertStandardMarkers(reflectionElement.innerHTML,9,'reflection three categories');
+
 for(const [chartName,svg] of Object.entries(allColors)){
   const trendWidths=[...svg.matchAll(/<polyline [^>]*stroke-width="([^"]+)"/g)]
     .map(m=>Number(m[1]));
