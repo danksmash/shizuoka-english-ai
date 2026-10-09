@@ -112,20 +112,16 @@ assert.ok(element('iCountryDetail').textContent.includes('68'));
 assert.equal(element('iIndividual').textContent, 92);
 assert.ok(element('iIndividualDetail').textContent.includes('54'));
 for (const id of ['chartDaily','chartPersona']) assert.ok(element(id).innerHTML.includes('bar-chart-html'), `${id} must render readable HTML bars`);
-for (const id of ['chartWords','chartReflection']) assert.ok(element(id).innerHTML.includes('<svg'), `${id} must render inline SVG`);
+// The management page no longer provides alternate data-series renderers.
+// The unified chart runtime (tested in qa-research-chart-unification) is the sole owner.
+for (const id of ['chartWords','chartReflection']) {
+  assert.ok(element(id).innerHTML.includes('グラフを準備しています…'),
+    id+' must display a neutral placeholder until the unified renderer paints');
+  assert.equal(element(id).innerHTML.includes('<svg'),false,
+    id+' must not silently revert to obsolete SVG drawing');
+}
 assert.equal(element('chartWordsTitle').textContent,'1分あたり平均発話語数（累積総セッション平均・日別）');
 assert.equal(element('chartReflectionTitle').textContent,'AI対話ふりかえり平均（累積総セッション平均・4件法）');
-assert.ok(element('chartReflection').innerHTML.includes('相手の話を聞いて分かる'));
-assert.ok(element('chartReflection').innerHTML.includes('自分の考えを伝える'));
-assert.ok(element('chartReflection').innerHTML.includes('新しい言葉や文化に気づいた'));
-assert.ok(element('chartReflection').innerHTML.includes('当日までの有効回答の累積平均'));
-assert.ok(element('chartWords').innerHTML.includes('当日までの有効セッション累積平均'));
-assert.ok(element('chartWords').innerHTML.includes('n=97'));
-assert.equal(element('chartWords').innerHTML.includes('class=\"svg-value\"'),false,'cumulative words chart must not print dense point labels');
-assert.ok(element('chartReflection').innerHTML.includes('class="reflection-axis-label">1</text>') && element('chartReflection').innerHTML.includes('class="reflection-axis-label">4</text>'));
-assert.ok(element('chartReflection').innerHTML.includes('#2774ee') && element('chartReflection').innerHTML.includes('#20a567') && element('chartReflection').innerHTML.includes('#f59e0b'));
-assert.ok(element('chartReflection').innerHTML.includes('<circle') && element('chartReflection').innerHTML.includes('<rect') && element('chartReflection').innerHTML.includes('<polygon'));
-assert.equal(element('chartReflection').innerHTML.includes('class="svg-value"'),false,'reflection chart must not print a value label at every point');
 assert.ok(element('qualityRows').innerHTML.includes('研究データ品質'));
 assert.ok(element('qualityRows').innerHTML.includes('システム品質'));
 assert.ok(element('qualityRows').innerHTML.includes('TTSフォールバック'));

@@ -1,5 +1,4 @@
 import type { RequestHandler } from 'express';
-import { RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT } from './researchClassChartPalette';
 import {
   buildResearchExportDataSets,
   filterResearchSessionRows,
@@ -161,94 +160,8 @@ function enhanceDashboardJson(req: any, res: any, body: any): any {
   };
 }
 
-function injectWordsByClassChart(html: string): string {
-  if (!html.includes('id="chartWords"') || html.includes('researchWordsByClassRuntime')) return html;
-
-  const script = `<script id="researchWordsByClassRuntime">
-(function(){
-  function escapeHtml(value){return String(value==null?'':value).replace(/[&<>\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]})}
-  function valid(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))}
-  // Keep legacy fallback display in lockstep with the canonical dashboard renderer.
-${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
-  function shapeForClassId(classId){
-    var id=String(classId||'').trim().toUpperCase();
-    if(id==='5-1')return 'circle';
-    if(id==='5-2')return 'square';
-    if(id==='5-3')return 'triangle';
-    if(id==='6-C1')return 'diamond';
-    if(id==='6-C2')return 'cross';
-    var m=id.match(/(?:C)?([1-9])$/i),n=m?Number(m[1]):1;
-    return n%3===2?'square':n%3===0?'diamond':'circle';
-  }
-  function marker(shape,cx,cy,color,title){
-    var t=title?'<title>'+escapeHtml(title)+'</title>':'';
-    if(shape==='square')return '<g>'+t+'<rect x="'+(cx-3.4)+'" y="'+(cy-3.4)+'" width="6.8" height="6.8" rx="0.8" fill="#fff" stroke="'+color+'" stroke-width="1.5"/></g>';
-    if(shape==='diamond')return '<g>'+t+'<polygon points="'+cx+','+(cy-4.2)+' '+(cx+4.2)+','+cy+' '+cx+','+(cy+4.2)+' '+(cx-4.2)+','+cy+'" fill="#fff" stroke="'+color+'" stroke-width="1.5"/></g>';
-    if(shape==='triangle')return '<g>'+t+'<polygon points="'+cx+','+(cy-4.2)+' '+(cx+4.2)+','+(cy+3.6)+' '+(cx-4.2)+','+(cy+3.6)+'" fill="#fff" stroke="'+color+'" stroke-width="1.5"/></g>';
-    if(shape==='cross')return '<g>'+t+'<path d="M'+(cx-3.7)+','+cy+' H'+(cx+3.7)+' M'+cx+','+(cy-3.7)+' V'+(cy+3.7)+'" fill="none" stroke="'+color+'" stroke-width="2"/></g>';
-    return '<g>'+t+'<circle cx="'+cx+'" cy="'+cy+'" r="3.3" fill="#fff" stroke="'+color+'" stroke-width="1.5"/></g>';
-  }
-  function niceStep(range){
-    var target=Math.max(.1,range/5),power=Math.pow(10,Math.floor(Math.log10(target))),scaled=target/power;
-    var factor=scaled<=1?1:scaled<=2?2:scaled<=2.5?2.5:scaled<=5?5:10;
-    return factor*power;
-  }
-  function wordsByClassSvg(series){
-    var list=(Array.isArray(series)?series:[]).filter(function(s){return Array.isArray(s.points)&&s.points.some(function(p){return valid(p.value)})});
-    var w=460,h=270,left=62,right=16,bottom=50;
-    if(!list.length)return '<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%"><text x="230" y="135" text-anchor="middle" class="svg-label">データなし</text></svg>';
-    var dates=[];list.forEach(function(s){s.points.forEach(function(p){if(dates.indexOf(p.date)<0)dates.push(p.date)})});dates.sort();
-    var values=[];list.forEach(function(s){s.points.forEach(function(p){if(valid(p.value))values.push(Number(p.value))})});
-    var rawMin=Math.min.apply(null,values),rawMax=Math.max.apply(null,values),rawRange=Math.max(0,rawMax-rawMin);
-    var desiredSpan=Math.max(.8,rawRange*1.28),center=(rawMin+rawMax)/2,axisMin=Math.max(0,center-desiredSpan/2),axisMax=axisMin+desiredSpan;
-    if(axisMax<rawMax){axisMax=rawMax;axisMin=Math.max(0,axisMax-desiredSpan)}
-    var step=niceStep(axisMax-axisMin),pad=Math.max(step*.6,(axisMax-axisMin)*.06);
-    axisMin=Math.max(0,Math.floor((axisMin-pad)/step)*step);axisMax=Math.ceil((axisMax+pad)/step)*step;
-    if(axisMax-axisMin<.8)axisMax=axisMin+Math.ceil(.8/step)*step;
-    var legendRows=Math.ceil(list.length/3),top=24+legendRows*21,plotH=h-top-bottom,plotW=w-left-right;
-    var x=function(date){var i=dates.indexOf(date);return left+(dates.length<=1?plotW/2:i*plotW/(dates.length-1))};
-    var y=function(v){return top+plotH-(Number(v)-axisMin)*plotH/(axisMax-axisMin||1)};
-    var fmt=function(v){return Math.abs(v-Math.round(v))<1e-9?String(Math.round(v)):String(Math.round(v*10)/10)};
-    var out='<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="1分あたり平均発話語数学級別累積平均">';
-    for(var tick=axisMin,guard=0;tick<=axisMax+step*.001&&guard<12;tick+=step,guard+=1){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-18)+'" y="'+(yy+5)+'" text-anchor="middle" class="svg-label">'+escapeHtml(fmt(tick))+'</text>'}
-    var every=Math.max(1,Math.ceil(dates.length/8));dates.forEach(function(date,i){if(i%every===0||i===dates.length-1)out+='<text x="'+x(date)+'" y="'+(h-24)+'" text-anchor="middle" class="svg-label">'+escapeHtml(String(date).slice(5))+'</text>'});
-    list.forEach(function(s,si){
-      var color=classColor(s.class_id,s.school_condition),shape=shapeForClassId(s.class_id),points=[];
-      // Connect actual lesson observations only; carried-forward values are not vertices.
-      (s.points||[]).forEach(function(p){if(valid(p.value)&&p.observed!==false)points.push(x(p.date)+','+y(Number(p.value)))});
-      if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>';
-      (s.points||[]).forEach(function(p){if(!valid(p.value)||p.observed===false)return;var title=String(p.date||'')+' '+String(s.label||s.class_id||'')+': '+fmt(Number(p.value))+' 語/分 (n='+Number(p.n||0)+')';out+=marker(shape,x(p.date),y(Number(p.value)),color,title)});
-      var col=si%3,row=Math.floor(si/3),lx=left+col*132,ly=15+row*21;
-      out+='<line x1="'+lx+'" y1="'+ly+'" x2="'+(lx+18)+'" y2="'+ly+'" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round"/>'+marker(shape,lx+9,ly,color,'')+'<text x="'+(lx+24)+'" y="'+(ly+4)+'" class="svg-label" style="font-size:11px;fill:#10224a">'+escapeHtml(s.label||s.class_id||'')+'</text>';
-    });
-    out+='<text x="'+left+'" y="'+(h-3)+'" class="svg-label" style="font-size:9.5px;fill:#64748b">授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜色＝学級別に固定</text>';
-    return out+'</svg>';
-  }
-  var previousRenderDashboard=renderDashboard;
-  renderDashboard=function(d,appliedQuery){
-    previousRenderDashboard(d,appliedQuery);
-    var charts=(d&&d.charts)||{},series=charts.cumulativeWordsByClass;
-    if(!Array.isArray(series))return;
-    var title=document.getElementById('chartWordsTitle'),chart=document.getElementById('chartWords');
-    if(title)title.textContent='1分あたり平均発話語数（学級別・累積平均・日別）';
-    // Unified renderer owns the words chart; suppress redundant legacy redraw.
-    if(chart&&!window.__researchDashboardUnifiedChartsV2)chart.innerHTML=wordsByClassSvg(series);
-  };
-  window.renderDashboard=renderDashboard;
-})();
-</script>`;
-
-  return html.replace('</body>', `${script}</body>`);
-}
-
 export function withResearchWordsByClassRuntime(path: string, handler: RequestHandler): RequestHandler {
-  if (path === '/management') {
-    return (req, res, next) => {
-      const originalSend = res.send.bind(res);
-      (res as any).send = (body: any) => originalSend(typeof body === 'string' ? injectWordsByClassChart(body) : body);
-      return handler(req, res, next);
-    };
-  }
+  // The unified chart renderer is the sole owner of /management visualizations.
   if (path === '/api/management/research.dashboard') {
     return (req, res, next) => {
       const originalJson = res.json.bind(res);

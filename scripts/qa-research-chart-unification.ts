@@ -1,4 +1,5 @@
 import { RESEARCH_CLASS_COLORS } from '../src/server/researchClassChartPalette';
+import { RESEARCH_DATE_TICK_BROWSER_SCRIPT } from '../src/server/researchChartDateTicks';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { runInNewContext } from 'node:vm';
@@ -228,8 +229,7 @@ for (const html of [wordElement.innerHTML,turnElement.innerHTML]) {
 }
 
 
-// Regression: reproduce production's nested /management response wrappers, not
-// just a standalone isolated chart script. Confirm all injected renderers exist.
+// Regression: the unified renderer is the ONE owner of all three line charts.
 let productionHtml='';
 const response:any={send(body:unknown){productionHtml=String(body);return body}};
 let pageHandler:any=(_req:any,res:any)=>res.send(managementPageHtml());
@@ -238,32 +238,17 @@ pageHandler=withResearchWordsByClassRuntime('/management',pageHandler);
 pageHandler=withResearchDashboardChartUnification('/management',pageHandler);
 pageHandler=withResearchReflectionChartPolish('/management',pageHandler);
 pageHandler({} as any,response,()=>{});
-for(const id of ['researchDailyClassStack','researchWordsByClassRuntime','researchDashboardChartUnification','researchReflectionChartPolish']){
+for(const id of ['researchDailyClassStack','researchDashboardChartUnification','researchReflectionChartPolish']){
   assert.ok(productionHtml.includes('id="'+id+'"'), 'production response must inject '+id);
 }
-assert.ok(
-  productionHtml.indexOf('id="researchDailyClassStack"') < productionHtml.indexOf('id="researchWordsByClassRuntime"') &&
-  productionHtml.indexOf('id="researchWordsByClassRuntime"') < productionHtml.indexOf('id="researchDashboardChartUnification"'),
-  'shared chart renderer must load after legacy handlers',
-);
-const legacySource=productionHtml.match(/<script id="researchWordsByClassRuntime">([\s\S]*?)<\/script>/)?.[1];
-assert.ok(legacySource, 'legacy words script must remain a safe fallback');
-const fallbackWords={innerHTML:''};
-const legacyBrowser:any={
-  window:{__researchDashboardUnifiedChartsV2:false},
-  document:{getElementById(id:string){
-    if(id==='chartWords')return fallbackWords;
-    if(id==='chartWordsTitle')return {textContent:''};
-    return null;
-  }},
-  renderDashboard(){},
-};
-runInNewContext(legacySource,legacyBrowser);
-legacyBrowser.window.renderDashboard({charts:{cumulativeWordsByClass:stableSeries}});
-for(const hex of ['#3B82F6','#10B981','#A855F7','#F59E0B','#EC4899']){
-  assert.ok(fallbackWords.innerHTML.includes('stroke="'+hex+'"'), 'fallback words renderer must match class palette: '+hex);
-}
-assert.match(fallbackWords.innerHTML,/色＝学級別に固定/);
+assert.doesNotMatch(productionHtml,/id="researchWordsByClassRuntime"/,'removed legacy words script must never be injected');
+assert.doesNotMatch(productionHtml,/function wordsByClassSvg\(/,'no obsolete words renderer');
+assert.doesNotMatch(productionHtml,/function turnsByClassSvg\(/,'no obsolete turns renderer');
+assert.doesNotMatch(productionHtml,/function aiReflectionLineSvg\(/,'no obsolete reflection renderer');
+assert.doesNotMatch(productionHtml,/function cumulativeWordsLineSvg\(/,'no obsolete base words renderer');
+assert.doesNotMatch(productionHtml,/cumulativeWordsLineSvg\(cumulativeRows\)/,'base management must not overwrite words');
+assert.doesNotMatch(productionHtml,/aiReflectionLineSvg\(cumulativeRows\)/,'base management must not overwrite reflections');
+assert.match(productionHtml,/chartWords'\)\.innerHTML='<div class="muted"/,'base chart remains a visible placeholder if unified renderer is unavailable');
 // With missing lesson dates, vertices must be only the measured dates, not carried-forward plateaus.
 const sparseSeries=[{class_id:'5-1',label:'5年1組',school_condition:'intervention',points:[
   {date:'2026-10-01',value:10,n:1,observed:true},
@@ -272,13 +257,11 @@ const sparseSeries=[{class_id:'5-1',label:'5年1組',school_condition:'intervent
   {date:'2026-10-04',value:12,n:2,observed:false},
   {date:'2026-10-05',value:14,n:3,observed:true},
 ]}];
-legacyBrowser.window.renderDashboard({charts:{cumulativeWordsByClass:sparseSeries}});
 browser.window.renderDashboard({charts:{cumulativeTurnsByClass:sparseSeries,cumulativeWordsByClass:sparseSeries}});
-for(const html of [fallbackWords.innerHTML,wordElement.innerHTML,turnElement.innerHTML]){
+for(const html of [wordElement.innerHTML,turnElement.innerHTML]){
   const points=html.match(/<polyline points="([^"]+)"/)?.[1].split(' ')||[];
   assert.equal(points.length,3,'connect only 3 measured days, without horizontal filler segments');
 }
-assert.doesNotMatch(productionHtml,/function conditionColors\(/,'no obsolete index-based palette remains');
 // Alternating collisions must not create spurious bends in a constant reflection series.
 const constantWithCollisions=[
   reflectionTestRow('2026-10-01',true,2.8,2.8,2.4),
@@ -292,5 +275,86 @@ assert.equal(new Set(ys).size,1,'equal reflection values must form a true horizo
 const polishScript=fs.readFileSync(new URL('../src/server/researchReflectionChartPolishRuntime.ts',import.meta.url),'utf8');
 assert.doesNotMatch(polishScript,/offsets\[index\]|translate\('\+\(offsets/,'markers must never move away from actual vertices');
 assert.doesNotMatch(polishScript,/patchResearchLineMarkers\('chartWords'\)/,'reflection polish must not mutate the newly shared class palette');
+
+
+// Date-axis collision regression: keep first/last date legible as the set grows.
+// This tests the actual 460-unit SVG coordinate system and all three production charts.
+const dateTickSelector: (dates:string[], x:(i:number)=>number, max:number, size:number)=>number[] =
+  runInNewContext(RESEARCH_DATE_TICK_BROWSER_SCRIPT+'\nselectResearchDateTicks', {});
+const makeDates=(count:number)=>Array.from({length:count},(_,i)=>
+  new Date(Date.UTC(2026,8,17)+i*86400000).toISOString().slice(0,10));
+for(const n of [0,1,2,7,14,22,23,30,60,120]){
+  const dates=makeDates(n), x=(i:number)=>56+(n<2?389/2:i*389/(n-1));
+  const indices=dateTickSelector(dates,x,7,10);
+  if(!n){assert.deepEqual(Array.from(indices),[]);continue}
+  assert.equal(indices[0],0,'date axis first tick must survive ('+n+')');
+  assert.equal(indices.at(-1),n-1,'date axis final tick must survive ('+n+')');
+  for(let i=1;i<indices.length;i++){
+    const a=indices[i-1],b=indices[i];
+    const width=(idx:number)=>Math.max(20,dates[idx].slice(5).length*10*.75);
+    assert.ok(x(b)-x(a)>=(width(a)+width(b))/2+8-1e-6,
+      'date labels collide for '+n+' days at ticks '+a+' and '+b);
+  }
+}
+const readDateLabels=(html:string)=>{
+  const re=/<text x="([^"]+)" y="[^"]+" text-anchor="middle" class="(?:unified-line-axis|svg-label)"[^>]*>(\d\d-\d\d)<\/text>/g;
+  return [...html.matchAll(re)].map(match=>({x:Number(match[1]),label:match[2]}));
+};
+function assertDateLabels(html:string,dates:string[],fontSize:number,description:string){
+  const labels=readDateLabels(html);
+  assert.ok(labels.length>=2,description+' must display at least first and last dates');
+  assert.equal(labels[0].label,dates[0].slice(5),description+' first date');
+  assert.equal(labels.at(-1)?.label,dates.at(-1)?.slice(5),description+' final date');
+  for(let i=1;i<labels.length;i++){
+    const a=labels[i-1],b=labels[i];
+    const required=(a.label.length+b.label.length)*fontSize*.75/2+8;
+    assert.ok(b.x-a.x>=required-1e-6,description+' overlaps '+a.label+' and '+b.label);
+  }
+}
+for(const n of [23,60]){
+  const dates=makeDates(n);
+  const points=dates.map((date,i)=>({date,value:8+i*.03,n:1,observed:i%3===0||i===n-1}));
+  const series=[{class_id:'5-1',label:'5年1組',school_condition:'intervention',points}];
+  const reflections=dates.map(date=>reflectionTestRow(date,true,2.5,2.7,2.6));
+  browser.window.renderDashboard({charts:{
+    cumulativeTurnsByClass:series,
+    cumulativeWordsByClass:series,
+    lessonCumulativeReflection:reflections,
+  }});
+  assertDateLabels(turnElement.innerHTML,dates,10,'turn/min '+n);
+  assertDateLabels(wordElement.innerHTML,dates,10,'word/min '+n);
+  assertDateLabels(reflectionElement.innerHTML,dates,10,'reflection '+n);
+  const realPointCount=points.filter(p=>p.observed).length;
+  for(const html of [turnElement.innerHTML,wordElement.innerHTML]){
+    const path=html.match(/<polyline points="([^"]+)"/)?.[1]||'';
+    assert.equal(path.split(' ').length,realPointCount,'date label thinning must never remove actual observations');
+  }
+}
+// The daily class-stack renderer is still responsible for BAR CHARTS ONLY.
+const dailyScript=productionHtml.match(/<script id="researchDailyClassStack">([\s\S]*?)<\/script>/)?.[1];
+assert.ok(dailyScript,'daily bar renderer must remain present');
+const turnsSentinel={innerHTML:'TURN_CHART_UNTOUCHED'};
+const dailyChart={innerHTML:'',closest:()=>null};
+const dailyBrowser:any={
+  window:{__researchDashboardUnifiedChartsV2:false},
+  document:{getElementById(id:string){
+    if(id==='chartTurns')return turnsSentinel;
+    if(id==='chartDaily')return dailyChart;
+    return null;
+  }},
+  renderDashboard(){},
+};
+runInNewContext(dailyScript,dailyBrowser);
+const longDates=makeDates(23);
+dailyBrowser.window.renderDashboard({charts:{
+  dailyClassStack:[{date:longDates.at(-1),sessions:1,by_class:[{class_id:'5-1',label:'5年1組',sessions:1,share_percent:100}]}],
+  dailyClassLegend:[{class_id:'5-1',label:'5年1組'}],
+  cumulativeTurnsByClass:sparseSeries,
+}});
+assert.equal(turnsSentinel.innerHTML,'TURN_CHART_UNTOUCHED','daily session renderer must not overwrite turn trend, even when unified flag is absent');
+assert.match(dailyChart.innerHTML,/daily-class-stack-chart/,'daily stacked bars must remain operational');
+const managementHtml=managementPageHtml();
+assert.doesNotMatch(managementHtml,/function aiReflectionLineSvg\(/);
+assert.doesNotMatch(managementHtml,/function cumulativeWordsLineSvg\(/);
 
 console.log('Research dashboard chart unification QA: PASS');
