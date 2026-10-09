@@ -274,8 +274,8 @@ assert.deepEqual(axisNumbers(reflectionSvgHtml),[2,2.25,2.5,2.75,3,3.25,3.5],
   'reflection graph must use requested 2–3.5 axis at quarter-point intervals');
 const bluePath=reflectionSvgHtml.match(/<polyline points="([^"]+)"[^>]*stroke="#2774ee"[^>]*>/)?.[0]||'';
 const greenPath=reflectionSvgHtml.match(/<polyline points="([^"]+)"[^>]*stroke="#20a567"[^>]*>/)?.[0]||'';
-assert.match(bluePath,/stroke-width="1.45"/,'blue must be thin and solid');
-assert.match(greenPath,/stroke-width="1.45"/,'green must be thin and solid');
+assert.match(bluePath,/stroke-width="1.15"/,'blue must be thin and solid');
+assert.match(greenPath,/stroke-width="1.15"/,'green must be thin and solid');
 assert.doesNotMatch(bluePath,/stroke-dasharray/,'blue must never revert to dashed');
 assert.doesNotMatch(greenPath,/stroke-dasharray/,'green must never be dashed');
 assert.ok(reflectionSvgHtml.indexOf(greenPath)<reflectionSvgHtml.indexOf(bluePath),
