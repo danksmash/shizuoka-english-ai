@@ -6,7 +6,6 @@ import { runInNewContext } from 'node:vm';
 import { withResearchDashboardChartUnification } from '../src/server/researchDashboardChartUnificationRuntime';
 import { withResearchWordsByClassRuntime } from '../src/server/researchWordsByClassRuntime';
 import { withResearchDailyClassStack } from '../src/server/researchDailyClassStackRuntime';
-import { withResearchReflectionChartPolish } from '../src/server/researchReflectionChartPolishRuntime';
 import { managementPageHtml } from '../src/server/managementPage';
 
 let sentBody = '';
@@ -49,7 +48,7 @@ assert.match(sentBody, /reflectionSvg/);
 assert.match(sentBody, /observed===false/);
 // Cumulative values can be carried forward for API consumers, but unobserved dates must not create line vertices.
 assert.match(sentBody, /if\(valid\(p\.value\)&&p\.observed!==false\)points\.push/);
-assert.match(sentBody, /if\(valid\(r\[item\.key\]\)&&r\[item\.observed\]!==false\)/);
+assert.match(sentBody, /function observed\(row,item\)/);
 assert.match(sentBody, /授業内のみ｜累積平均（セッション単位）｜授業外利用は除外/);
 assert.match(sentBody, /turns\.innerHTML=classSeriesSvg\(charts\.cumulativeTurnsByClass/);
 assert.match(sentBody, /words\.innerHTML=classSeriesSvg\(charts\.cumulativeWordsByClass/);
@@ -75,13 +74,8 @@ assert.ok(
   'chart unification runtime must wrap after words-by-class runtime',
 );
 
-const polish = fs.readFileSync(
-  new URL('../src/server/researchReflectionChartPolishRuntime.ts', import.meta.url),
-  'utf8',
-);
-assert.match(polish, /setAttribute\('stroke-width','1\.6'\)/);
-assert.match(polish, /setAttribute\('stroke-width','1\.8'\)/);
-assert.doesNotMatch(polish, /setAttribute\('stroke-width','2\.25'\)/);
+assert.doesNotMatch(serverEntry,/withResearchReflectionChartPolish/,
+  'postprocessing must never reset marker separation or change canonical reflection strokes');
 
 
 // Render the actual injected browser script, not only its text, so missing-day
@@ -236,9 +230,8 @@ let pageHandler:any=(_req:any,res:any)=>res.send(managementPageHtml());
 pageHandler=withResearchDailyClassStack('/management',pageHandler);
 pageHandler=withResearchWordsByClassRuntime('/management',pageHandler);
 pageHandler=withResearchDashboardChartUnification('/management',pageHandler);
-pageHandler=withResearchReflectionChartPolish('/management',pageHandler);
 pageHandler({} as any,response,()=>{});
-for(const id of ['researchDailyClassStack','researchDashboardChartUnification','researchReflectionChartPolish']){
+for(const id of ['researchDailyClassStack','researchDashboardChartUnification']){
   assert.ok(productionHtml.includes('id="'+id+'"'), 'production response must inject '+id);
 }
 assert.doesNotMatch(productionHtml,/id="researchWordsByClassRuntime"/,'removed legacy words script must never be injected');
@@ -272,9 +265,43 @@ browser.window.renderDashboard({charts:{lessonCumulativeReflection:constantWithC
 const firstPolyline=reflectionElement.innerHTML.match(/<polyline points="([^"]+)"/)?.[1]||'';
 const ys=firstPolyline.split(' ').map(point=>Number(point.split(',')[1]));
 assert.equal(new Set(ys).size,1,'equal reflection values must form a true horizontal straight line');
-const polishScript=fs.readFileSync(new URL('../src/server/researchReflectionChartPolishRuntime.ts',import.meta.url),'utf8');
-assert.doesNotMatch(polishScript,/offsets\[index\]|translate\('\+\(offsets/,'markers must never move away from actual vertices');
-assert.doesNotMatch(polishScript,/patchResearchLineMarkers\('chartWords'\)/,'reflection polish must not mutate the newly shared class palette');
+
+// Regression for the issue where the solid green series hid the blue one.
+// Blue must be dashed and drawn LAST; the green line remains visible in dash gaps.
+const reflectionSvgHtml=reflectionElement.innerHTML;
+assert.deepEqual(axisNumbers(reflectionSvgHtml),[2,2.5,3,3.5,4],
+  'reflection zoom must use the requested 2–4 axis with half-step grid');
+const bluePath=reflectionSvgHtml.match(/<polyline points="([^"]+)"[^>]*stroke="#2774ee"[^>]*>/)?.[0]||'';
+const greenPath=reflectionSvgHtml.match(/<polyline points="([^"]+)"[^>]*stroke="#20a567"[^>]*>/)?.[0]||'';
+assert.match(bluePath,/stroke-dasharray="4 3"/,'blue must use a distinct dashed stroke');
+assert.match(greenPath,/stroke-width="1.45"/,'green must use a thin solid stroke');
+assert.ok(reflectionSvgHtml.indexOf(greenPath)<reflectionSvgHtml.indexOf(bluePath),
+  'blue line must be drawn above green');
+assert.match(reflectionSvgHtml,/線は実測値、近接時はマーカーのみ左右に分離/);
+const closeRows=[
+  reflectionTestRow('2026-10-01',true,2.81,2.82,2.45),
+  reflectionTestRow('2026-10-02',true,2.83,2.83,2.46),
+  reflectionTestRow('2026-10-03',true,2.84,2.85,2.49),
+];
+browser.window.renderDashboard({charts:{lessonCumulativeReflection:closeRows}});
+const closeSvg=reflectionElement.innerHTML;
+assert.match(closeSvg,/data-series="reflection_understood" data-mean="2.81" data-visual-offset-x="-3" transform="translate\(-3 0\)"/);
+assert.match(closeSvg,/data-series="reflection_conveyed" data-mean="2.82" data-visual-offset-x="3" transform="translate\(3 0\)"/);
+assert.match(closeSvg,/平均 2.81/,'tooltip must report unmodified mean');
+assert.match(closeSvg,/平均 2.82/,'tooltip must report unmodified mean');
+// The collision algorithm must not move any line vertex or introduce zigzags.
+for(const path of [...closeSvg.matchAll(/<polyline points="([^"]+)"[^>]*stroke="#(?:2774ee|20a567)"/g)]){
+  const xs=path[1].split(' ').map(point=>Number(point.split(',')[0]));
+  assert.deepEqual(xs,[56,250.5,445],'near-equal lines must remain anchored to exact dates');
+}
+const lowRows=[reflectionTestRow('2026-10-04',true,1.88,2.15,2.23)];
+browser.window.renderDashboard({charts:{lessonCumulativeReflection:lowRows}});
+assert.deepEqual(axisNumbers(reflectionElement.innerHTML),[1,1.5,2,2.5,3,3.5,4],
+  'below-2 observed research values must never be clipped');
+assert.match(reflectionElement.innerHTML,/2未満の実測値を含むため縦軸1～4/);
+
+assert.doesNotMatch(productionHtml,/id="researchReflectionChartPolish"/,
+  'production response must not load the old reflection postprocessing script');
 
 
 // Date-axis collision regression: keep first/last date legible as the set grows.
