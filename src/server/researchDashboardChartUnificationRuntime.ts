@@ -1,5 +1,6 @@
 import type { RequestHandler } from 'express';
 import { RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT } from './researchClassChartPalette';
+import { RESEARCH_DATE_TICK_BROWSER_SCRIPT } from './researchChartDateTicks';
 
 function injectResearchDashboardChartUnification(html: string): string {
   // The turns element is added by a separate middleware; do not gate this script on its injection timing.
@@ -12,6 +13,7 @@ function injectResearchDashboardChartUnification(html: string): string {
   const script = `<script id="researchDashboardChartUnification">
 (function(){
   var W=460,H=245,LEFT=56,RIGHT=15,BOTTOM=43,LINE_WIDTH=1.6;
+${RESEARCH_DATE_TICK_BROWSER_SCRIPT}
   function esc(v){return String(v==null?'':v).replace(/[&<>\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]})}
   function valid(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))}
   function niceStep(range){
@@ -66,7 +68,7 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
     var fmt=function(v){return Math.abs(v-Math.round(v))<1e-9?String(Math.round(v)):String(Math.round(v*10)/10)};
     var out='<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="'+esc(aria)+'">';
     for(var tick=axisMin,guard=0;tick<=axisMax+step*.001&&guard<10;tick+=step,guard+=1){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="unified-line-axis">'+esc(unit==='語/分'?String(Math.round(tick*100)/100):fmt(tick))+'</text>'}
-    var every=Math.max(1,Math.ceil(dates.length/7));dates.forEach(function(date,i){if(i%every===0||i===dates.length-1)out+='<text x="'+x(date)+'" y="'+(h-19)+'" text-anchor="middle" class="unified-line-axis">'+esc(String(date).slice(5))+'</text>'});
+    selectResearchDateTicks(dates,function(i){return x(dates[i])},7,10).forEach(function(i){var date=dates[i];out+='<text x="'+x(date)+'" y="'+(h-19)+'" text-anchor="middle" class="unified-line-axis">'+esc(String(date).slice(5))+'</text>'});
     list.forEach(function(s,si){
       var isComparison=s.school_condition==='comparison'||/^[1-9]-C[1-9]$/i.test(String(s.class_id||'')),condition=isComparison?'comparison':'intervention',color=classColor(s.class_id,condition),shape=classShape(s.class_id),points=[];
       (s.points||[]).forEach(function(p){if(valid(p.value)&&p.observed!==false)points.push(x(p.date)+','+y(Number(p.value)))});
@@ -91,7 +93,7 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
     var x=function(i){return left+(rows.length<=1?plotW/2:i*plotW/(rows.length-1))},y=function(v){return top+plotH-(Number(v)-1)*plotH/3};
     // Plot real data coordinates; shifting individual dates introduces spurious zigzags.
     [1,2,3,4].forEach(function(tick){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="unified-line-axis">'+tick+'</text>'});
-    var every=Math.max(1,Math.ceil(rows.length/7));rows.forEach(function(r,i){if(i%every===0||i===rows.length-1)out+='<text x="'+x(i)+'" y="'+(h-19)+'" text-anchor="middle" class="unified-line-axis">'+esc(String(r.date||'').slice(5))+'</text>'});
+    selectResearchDateTicks(rows.map(function(r){return r.date}),x,7,10).forEach(function(i){var r=rows[i];out+='<text x="'+x(i)+'" y="'+(h-19)+'" text-anchor="middle" class="unified-line-axis">'+esc(String(r.date||'').slice(5))+'</text>'});
     series.forEach(function(item,si){
       var points=[];rows.forEach(function(r,i){if(valid(r[item.key])&&r[item.observed]!==false)points.push(x(i)+','+y(Number(r[item.key])))});
       if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+item.color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round" stroke-linejoin="round"/>';
