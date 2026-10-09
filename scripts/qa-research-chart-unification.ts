@@ -32,7 +32,7 @@ assert.match(earlyHtml,/id="researchDashboardChartUnification"/,'chart script mu
 assert.match(sentBody, /researchDashboardChartUnification/);
 assert.match(sentBody, /research-chart-left-stack/);
 assert.match(sentBody, /grid-template-rows:minmax\(0,1fr\) minmax\(0,1fr\)/);
-assert.match(sentBody, /W=460,H=245,LEFT=56,RIGHT=15,BOTTOM=43,LINE_WIDTH=1\.6/);
+assert.match(sentBody, /W=460,H=245,LEFT=56,RIGHT=15,BOTTOM=43,LINE_WIDTH=1\.15/);
 assert.match(sentBody, /unified-line-axis/);
 assert.match(sentBody, /font-size:10px/);
 assert.match(sentBody, /unified-line-legend/);
@@ -209,6 +209,18 @@ const stableSeries = [
 ];
 browser.window.renderDashboard({charts:{cumulativeWordsByClass:stableSeries,cumulativeTurnsByClass:stableSeries}});
 const allColors = {words:wordElement.innerHTML,turns:turnElement.innerHTML};
+for(const [chartName,svg] of Object.entries(allColors)){
+  const trendWidths=[...svg.matchAll(/<polyline [^>]*stroke-width="([^"]+)"/g)]
+    .map(m=>Number(m[1]));
+  assert.equal(trendWidths.length,5,chartName+' should contain all 5 class trend lines');
+  assert.ok(trendWidths.every(width=>width===1.15),
+    chartName+' all class trend strokes must match thin 1.15-unit reflection lines');
+  const legendWidths=[...svg.matchAll(/<line [^>]*stroke="#(?:3B82F6|10B981|A855F7|F59E0B|EC4899)"[^>]*stroke-width="([^"]+)"/g)]
+    .map(m=>Number(m[1]));
+  assert.equal(legendWidths.length,5,chartName+' should contain class-matched legend strokes');
+  assert.ok(legendWidths.every(width=>width===1.15),
+    chartName+' legend strokes must match thin trend strokes');
+}
 for (const html of [allColors.words,allColors.turns]) {
   assert.ok(colorValue(html,'#3B82F6') && colorValue(html,'#10B981') && colorValue(html,'#A855F7'), 'all three intervention classes use distinct color families');
   assert.ok(colorValue(html,'#F59E0B') && colorValue(html,'#EC4899'), 'both comparison classes have their own distinct stable colors');
