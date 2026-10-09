@@ -229,8 +229,7 @@ for (const html of [wordElement.innerHTML,turnElement.innerHTML]) {
 }
 
 
-// Regression: reproduce production's nested /management response wrappers, not
-// just a standalone isolated chart script. Confirm all injected renderers exist.
+// Regression: the unified renderer is the ONE owner of all three line charts.
 let productionHtml='';
 const response:any={send(body:unknown){productionHtml=String(body);return body}};
 let pageHandler:any=(_req:any,res:any)=>res.send(managementPageHtml());
@@ -239,32 +238,17 @@ pageHandler=withResearchWordsByClassRuntime('/management',pageHandler);
 pageHandler=withResearchDashboardChartUnification('/management',pageHandler);
 pageHandler=withResearchReflectionChartPolish('/management',pageHandler);
 pageHandler({} as any,response,()=>{});
-for(const id of ['researchDailyClassStack','researchWordsByClassRuntime','researchDashboardChartUnification','researchReflectionChartPolish']){
+for(const id of ['researchDailyClassStack','researchDashboardChartUnification','researchReflectionChartPolish']){
   assert.ok(productionHtml.includes('id="'+id+'"'), 'production response must inject '+id);
 }
-assert.ok(
-  productionHtml.indexOf('id="researchDailyClassStack"') < productionHtml.indexOf('id="researchWordsByClassRuntime"') &&
-  productionHtml.indexOf('id="researchWordsByClassRuntime"') < productionHtml.indexOf('id="researchDashboardChartUnification"'),
-  'shared chart renderer must load after legacy handlers',
-);
-const legacySource=productionHtml.match(/<script id="researchWordsByClassRuntime">([\s\S]*?)<\/script>/)?.[1];
-assert.ok(legacySource, 'legacy words script must remain a safe fallback');
-const fallbackWords={innerHTML:''};
-const legacyBrowser:any={
-  window:{__researchDashboardUnifiedChartsV2:false},
-  document:{getElementById(id:string){
-    if(id==='chartWords')return fallbackWords;
-    if(id==='chartWordsTitle')return {textContent:''};
-    return null;
-  }},
-  renderDashboard(){},
-};
-runInNewContext(legacySource,legacyBrowser);
-legacyBrowser.window.renderDashboard({charts:{cumulativeWordsByClass:stableSeries}});
-for(const hex of ['#3B82F6','#10B981','#A855F7','#F59E0B','#EC4899']){
-  assert.ok(fallbackWords.innerHTML.includes('stroke="'+hex+'"'), 'fallback words renderer must match class palette: '+hex);
-}
-assert.match(fallbackWords.innerHTML,/色＝学級別に固定/);
+assert.doesNotMatch(productionHtml,/id="researchWordsByClassRuntime"/,'removed legacy words script must never be injected');
+assert.doesNotMatch(productionHtml,/function wordsByClassSvg\(/,'no obsolete words renderer');
+assert.doesNotMatch(productionHtml,/function turnsByClassSvg\(/,'no obsolete turns renderer');
+assert.doesNotMatch(productionHtml,/function aiReflectionLineSvg\(/,'no obsolete reflection renderer');
+assert.doesNotMatch(productionHtml,/function cumulativeWordsLineSvg\(/,'no obsolete base words renderer');
+assert.doesNotMatch(productionHtml,/cumulativeWordsLineSvg\(cumulativeRows\)/,'base management must not overwrite words');
+assert.doesNotMatch(productionHtml,/aiReflectionLineSvg\(cumulativeRows\)/,'base management must not overwrite reflections');
+assert.match(productionHtml,/chartWords'\)\.innerHTML='<div class="muted"/,'base chart remains a visible placeholder if unified renderer is unavailable');
 // With missing lesson dates, vertices must be only the measured dates, not carried-forward plateaus.
 const sparseSeries=[{class_id:'5-1',label:'5年1組',school_condition:'intervention',points:[
   {date:'2026-10-01',value:10,n:1,observed:true},
@@ -273,13 +257,11 @@ const sparseSeries=[{class_id:'5-1',label:'5年1組',school_condition:'intervent
   {date:'2026-10-04',value:12,n:2,observed:false},
   {date:'2026-10-05',value:14,n:3,observed:true},
 ]}];
-legacyBrowser.window.renderDashboard({charts:{cumulativeWordsByClass:sparseSeries}});
 browser.window.renderDashboard({charts:{cumulativeTurnsByClass:sparseSeries,cumulativeWordsByClass:sparseSeries}});
-for(const html of [fallbackWords.innerHTML,wordElement.innerHTML,turnElement.innerHTML]){
+for(const html of [wordElement.innerHTML,turnElement.innerHTML]){
   const points=html.match(/<polyline points="([^"]+)"/)?.[1].split(' ')||[];
   assert.equal(points.length,3,'connect only 3 measured days, without horizontal filler segments');
 }
-assert.doesNotMatch(productionHtml,/function conditionColors\(/,'no obsolete index-based palette remains');
 // Alternating collisions must not create spurious bends in a constant reflection series.
 const constantWithCollisions=[
   reflectionTestRow('2026-10-01',true,2.8,2.8,2.4),
@@ -347,42 +329,32 @@ for(const n of [23,60]){
     const path=html.match(/<polyline points="([^"]+)"/)?.[1]||'';
     assert.equal(path.split(' ').length,realPointCount,'date label thinning must never remove actual observations');
   }
-  legacyBrowser.window.renderDashboard({charts:{cumulativeWordsByClass:series}});
-  assertDateLabels(fallbackWords.innerHTML,dates,10,'legacy word/min '+n);
 }
-// Run the actual legacy turn renderer as well, instead of checking source strings alone.
-const fallbackDailySource=productionHtml.match(/<script id="researchDailyClassStack">([\s\S]*?)<\/script>/)?.[1];
-assert.ok(fallbackDailySource,'daily legacy renderer should be injectable');
-const fallbackTurns={innerHTML:''},dailyChart={innerHTML:'',closest:()=>null};
+// The daily class-stack renderer is still responsible for BAR CHARTS ONLY.
+const dailyScript=productionHtml.match(/<script id="researchDailyClassStack">([\s\S]*?)<\/script>/)?.[1];
+assert.ok(dailyScript,'daily bar renderer must remain present');
+const turnsSentinel={innerHTML:'TURN_CHART_UNTOUCHED'};
+const dailyChart={innerHTML:'',closest:()=>null};
 const dailyBrowser:any={
   window:{__researchDashboardUnifiedChartsV2:false},
   document:{getElementById(id:string){
-    if(id==='chartTurns')return fallbackTurns;
+    if(id==='chartTurns')return turnsSentinel;
     if(id==='chartDaily')return dailyChart;
     return null;
   }},
   renderDashboard(){},
 };
-runInNewContext(fallbackDailySource,dailyBrowser);
+runInNewContext(dailyScript,dailyBrowser);
 const longDates=makeDates(23);
 dailyBrowser.window.renderDashboard({charts:{
   dailyClassStack:[{date:longDates.at(-1),sessions:1,by_class:[{class_id:'5-1',label:'5年1組',sessions:1,share_percent:100}]}],
   dailyClassLegend:[{class_id:'5-1',label:'5年1組'}],
-  cumulativeTurnsByClass:[{class_id:'5-1',label:'5年1組',school_condition:'intervention',points:longDates.map(
-    (date,i)=>({date,value:8+i*.01,n:1,observed:i%2===0}))}],
+  cumulativeTurnsByClass:sparseSeries,
 }});
-assertDateLabels(fallbackTurns.innerHTML,longDates,10,'legacy turn/min');
+assert.equal(turnsSentinel.innerHTML,'TURN_CHART_UNTOUCHED','daily session renderer must not overwrite turn trend, even when unified flag is absent');
+assert.match(dailyChart.innerHTML,/daily-class-stack-chart/,'daily stacked bars must remain operational');
 const managementHtml=managementPageHtml();
-assert.ok(managementHtml.includes('function selectResearchDateTicks('),'management HTML must load the same date-label helper');
-assert.equal((managementHtml.match(/selectResearchDateTicks\(rows\.map\(function\(r\)/g)||[]).length,4,
-  'all four management page legacy line charts must use collision-safe date labels');
-const legacyReflectionLine=managementHtml.split('function aiReflectionLineSvg(items)')[1]?.split('\n')[0];
-assert.ok(legacyReflectionLine,'legacy reflection renderer must exist');
-// This old renderer uses larger 15px date labels; verify the same no-overlap rule.
-const renderLegacyReflection=runInNewContext(
-  RESEARCH_DATE_TICK_BROWSER_SCRIPT+'\nfunction aiReflectionLineSvg(items)'+legacyReflectionLine+'\naiReflectionLineSvg',
-  {esc:(s:unknown)=>String(s),formatChartValue:(n:unknown)=>String(n)});
-assertDateLabels(renderLegacyReflection(longDates.map(date=>reflectionTestRow(date,true,2.8,2.6,2.4))),
-  longDates,15,'management legacy reflection');
+assert.doesNotMatch(managementHtml,/function aiReflectionLineSvg\(/);
+assert.doesNotMatch(managementHtml,/function cumulativeWordsLineSvg\(/);
 
 console.log('Research dashboard chart unification QA: PASS');
