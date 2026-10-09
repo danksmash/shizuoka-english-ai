@@ -266,18 +266,20 @@ const firstPolyline=reflectionElement.innerHTML.match(/<polyline points="([^"]+)
 const ys=firstPolyline.split(' ').map(point=>Number(point.split(',')[1]));
 assert.equal(new Set(ys).size,1,'equal reflection values must form a true horizontal straight line');
 
-// Regression for the issue where the solid green series hid the blue one.
-// Blue must be dashed and drawn LAST; the green line remains visible in dash gaps.
+// Blue and green must BOTH be solid, and the y-axis normally 2–3.5.
+// Overlapping trends are separated by constant whole-series displacement,
+// never date-dependent jitter. Tooltip values stay at true research means.
 const reflectionSvgHtml=reflectionElement.innerHTML;
-assert.deepEqual(axisNumbers(reflectionSvgHtml),[2,2.5,3,3.5,4],
-  'reflection zoom must use the requested 2–4 axis with half-step grid');
+assert.deepEqual(axisNumbers(reflectionSvgHtml),[2,2.25,2.5,2.75,3,3.25,3.5],
+  'reflection graph must use requested 2–3.5 axis at quarter-point intervals');
 const bluePath=reflectionSvgHtml.match(/<polyline points="([^"]+)"[^>]*stroke="#2774ee"[^>]*>/)?.[0]||'';
 const greenPath=reflectionSvgHtml.match(/<polyline points="([^"]+)"[^>]*stroke="#20a567"[^>]*>/)?.[0]||'';
-assert.match(bluePath,/stroke-dasharray="4 3"/,'blue must use a distinct dashed stroke');
-assert.match(greenPath,/stroke-width="1.45"/,'green must use a thin solid stroke');
+assert.match(bluePath,/stroke-width="1.15"/,'blue must be thin and solid');
+assert.match(greenPath,/stroke-width="1.15"/,'green must be thin and solid');
+assert.doesNotMatch(bluePath,/stroke-dasharray/,'blue must never revert to dashed');
+assert.doesNotMatch(greenPath,/stroke-dasharray/,'green must never be dashed');
 assert.ok(reflectionSvgHtml.indexOf(greenPath)<reflectionSvgHtml.indexOf(bluePath),
-  'blue line must be drawn above green');
-assert.match(reflectionSvgHtml,/線は実測値、近接時はマーカーのみ左右に分離/);
+  'blue line is rendered in the foreground to remain distinguishable');
 const closeRows=[
   reflectionTestRow('2026-10-01',true,2.81,2.82,2.45),
   reflectionTestRow('2026-10-02',true,2.83,2.83,2.46),
@@ -285,20 +287,61 @@ const closeRows=[
 ];
 browser.window.renderDashboard({charts:{lessonCumulativeReflection:closeRows}});
 const closeSvg=reflectionElement.innerHTML;
-assert.match(closeSvg,/data-series="reflection_understood" data-mean="2.81" data-visual-offset-x="-3" transform="translate\(-3 0\)"/);
-assert.match(closeSvg,/data-series="reflection_conveyed" data-mean="2.82" data-visual-offset-x="3" transform="translate\(3 0\)"/);
-assert.match(closeSvg,/平均 2.81/,'tooltip must report unmodified mean');
-assert.match(closeSvg,/平均 2.82/,'tooltip must report unmodified mean');
-// The collision algorithm must not move any line vertex or introduce zigzags.
-for(const path of [...closeSvg.matchAll(/<polyline points="([^"]+)"[^>]*stroke="#(?:2774ee|20a567)"/g)]){
-  const xs=path[1].split(' ').map(point=>Number(point.split(',')[0]));
-  assert.deepEqual(xs,[56,250.5,445],'near-equal lines must remain anchored to exact dates');
+assert.match(closeSvg,/data-series="reflection_understood" data-mean="2.81" data-visual-offset-x="-3" data-visual-offset-y="2.4" transform="translate\(-3 2.4\)"/);
+assert.match(closeSvg,/data-series="reflection_conveyed" data-mean="2.82" data-visual-offset-x="3" data-visual-offset-y="-2.4" transform="translate\(3 -2.4\)"/);
+assert.match(closeSvg,/平均 2.81/,'tooltip must report unmodified observed mean');
+assert.match(closeSvg,/平均 2.82/,'tooltip must report unmodified observed mean');
+assert.match(closeSvg,/縦軸2～3.5（0.25刻み）/);
+const blueLine=closeSvg.match(/<polyline points="([^"]+)"[^>]*stroke="#2774ee"[^>]*data-display-offset-y="2.4"/)?.[1];
+const greenLine=closeSvg.match(/<polyline points="([^"]+)"[^>]*stroke="#20a567"[^>]*data-display-offset-y="-2.4"/)?.[1];
+assert.ok(blueLine&&greenLine,'both lines must have uniform opposing visual offsets');
+const parseLine=(line:string)=>line.split(' ').map(point=>point.split(',').map(Number));
+const blueVertices=parseLine(blueLine!),greenVertices=parseLine(greenLine!);
+assert.deepEqual(blueVertices.map(p=>p[0]),[56,250.5,445],
+  'date coordinates cannot be altered for line separation');
+assert.deepEqual(greenVertices.map(p=>p[0]),[56,250.5,445]);
+const expectedScale=(245-48-43)/(3.5-2);
+for(const [vertices,values] of [[blueVertices,[2.81,2.83,2.84]],[greenVertices,[2.82,2.83,2.85]]] as const){
+  for(let i=1;i<vertices.length;i++)
+    assert.ok(Math.abs((vertices[i][1]-vertices[i-1][1])+(values[i]-values[i-1])*expectedScale)<1e-7,
+      'constant visual offsets must preserve true changes and cannot produce artificial bends');
 }
+const exactlyEqual=[
+  reflectionTestRow('2026-10-01',true,2.8,2.8,2.4),
+  reflectionTestRow('2026-10-02',true,2.8,2.8,2.5),
+  reflectionTestRow('2026-10-03',true,2.8,2.8,2.6),
+];
+browser.window.renderDashboard({charts:{lessonCumulativeReflection:exactlyEqual}});
+const equalSvg=reflectionElement.innerHTML;
+const equalBlue=equalSvg.match(/<polyline points="([^"]+)"[^>]*stroke="#2774ee"/)?.[1]||'';
+const equalGreen=equalSvg.match(/<polyline points="([^"]+)"[^>]*stroke="#20a567"/)?.[1]||'';
+const equalBlueY=parseLine(equalBlue).map(p=>p[1]),equalGreenY=parseLine(equalGreen).map(p=>p[1]);
+assert.equal(new Set(equalBlueY).size,1,'equal blue values must remain a straight horizontal line');
+assert.equal(new Set(equalGreenY).size,1,'equal green values must remain a straight horizontal line');
+assert.ok(Math.abs(equalBlueY[0]-equalGreenY[0])>=4.79,
+  'exactly equal values must still show two separate solid lines');
+assert.doesNotMatch(equalSvg,/stroke-dasharray/);
+const distinct=[
+  reflectionTestRow('2026-10-01',true,2.4,2.9,2.7),
+  reflectionTestRow('2026-10-02',true,2.5,3,2.8),
+];
+browser.window.renderDashboard({charts:{lessonCumulativeReflection:distinct}});
+assert.match(reflectionElement.innerHTML,/stroke="#2774ee"[^>]*data-display-offset-y="0"/,
+  'when values are distinct, blue must be at its exact research coordinate');
+assert.match(reflectionElement.innerHTML,/stroke="#20a567"[^>]*data-display-offset-y="0"/);
 const lowRows=[reflectionTestRow('2026-10-04',true,1.88,2.15,2.23)];
 browser.window.renderDashboard({charts:{lessonCumulativeReflection:lowRows}});
+assert.deepEqual(axisNumbers(reflectionElement.innerHTML),[1,1.5,2,2.5,3,3.5],
+  'observed values <2 must not be clipped');
+assert.match(reflectionElement.innerHTML,/範囲外の実測値を含むため縦軸1～3.5/);
+const highRows=[reflectionTestRow('2026-10-04',true,3.7,3.65,3.62)];
+browser.window.renderDashboard({charts:{lessonCumulativeReflection:highRows}});
+assert.deepEqual(axisNumbers(reflectionElement.innerHTML),[2,2.5,3,3.5,4],
+  'observed values >3.5 must not be clipped');
+const bothOut=[reflectionTestRow('2026-10-04',true,1.6,3.85,2.23)];
+browser.window.renderDashboard({charts:{lessonCumulativeReflection:bothOut}});
 assert.deepEqual(axisNumbers(reflectionElement.innerHTML),[1,1.5,2,2.5,3,3.5,4],
-  'below-2 observed research values must never be clipped');
-assert.match(reflectionElement.innerHTML,/2未満の実測値を含むため縦軸1～4/);
+  'simultaneous low and high values must remain visible on the four-point scale');
 
 assert.doesNotMatch(productionHtml,/id="researchReflectionChartPolish"/,
   'production response must not load the old reflection postprocessing script');

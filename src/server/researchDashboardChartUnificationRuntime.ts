@@ -82,7 +82,7 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
   function reflectionSvg(rows){
     rows=Array.isArray(rows)?rows:[];
     var series=[
-      {key:'reflection_understood',n:'reflection_understood_n',observed:'reflection_understood_observed',label:'相手の話を聞いて分かる',color:'#2774ee',shape:'circle',legendX:56,legendY:12,dashed:true},
+      {key:'reflection_understood',n:'reflection_understood_n',observed:'reflection_understood_observed',label:'相手の話を聞いて分かる',color:'#2774ee',shape:'circle',legendX:56,legendY:12},
       {key:'reflection_conveyed',n:'reflection_conveyed_n',observed:'reflection_conveyed_observed',label:'自分の考えを伝える',color:'#20a567',shape:'square',legendX:245,legendY:12},
       {key:'reflection_culture',n:'reflection_culture_n',observed:'reflection_culture_observed',label:'新しい言葉や文化に気づいた',color:'#f59e0b',shape:'diamond',legendX:56,legendY:30}
     ];
@@ -91,24 +91,47 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
     var w=W,h=H,left=LEFT,right=RIGHT,bottom=BOTTOM,top=48,plotW=w-left-right,plotH=h-top-bottom;
     var out='<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="AI対話ふりかえり平均 4件法">';
     if(!rows.length||!has)return out+'<text x="230" y="122" text-anchor="middle" class="unified-line-axis">データなし</text></svg><div class="unified-line-footnote" role="note">4件法｜授業内のみ｜累積平均（セッション単位）｜授業外利用は除外</div>';
-    // Zoom from 1–4 to 2–4. If observed ratings below 2 occur, expand to 1–4
-    // instead of clipping research observations or changing the underlying data.
+    // Focus the four-point-scale graph on 2–3.5. Expand ONLY if observed
+    // means lie outside that window: do not clip or silently discard results.
     var values=[];
     rows.forEach(function(r){series.forEach(function(item){if(observed(r,item))values.push(Number(r[item.key]))})});
     var axisMin=values.some(function(v){return v<2})?1:2;
+    var axisMax=values.some(function(v){return v>3.5})?4:3.5;
     var x=function(i){return left+(rows.length<=1?plotW/2:i*plotW/(rows.length-1))};
-    var y=function(v){return top+plotH-(Number(v)-axisMin)*plotH/(4-axisMin)};
-    var ticks=axisMin===2?[2,2.5,3,3.5,4]:[1,1.5,2,2.5,3,3.5,4];
-    ticks.forEach(function(tick){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="unified-line-axis">'+tick+'</text>'});
+    var y=function(v){return top+plotH-(Number(v)-axisMin)*plotH/(axisMax-axisMin)};
+    var step=axisMin===2&&axisMax===3.5?.25:.5;
+    for(var tick=axisMin;tick<=axisMax+.00001;tick+=step){
+      var yy=y(tick),label=String(Math.round(tick*100)/100);
+      out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="unified-line-axis">'+label+'</text>';
+    }
+    // When the blue and green trends are identical/nearly identical, shift
+    // the WHOLE blue/green curves by constant, opposite 2.4-SVG-unit offsets.
+    // Never move individual vertices by date: that would invent zigzags.
+    // Direction follows the actual series ordering to increase their gap.
+    var closeRows=rows.filter(function(r){
+      return observed(r,series[0])&&observed(r,series[1])&&
+        Math.abs(y(Number(r[series[0].key]))-y(Number(r[series[1].key])))<6;
+    });
+    var blueDy=0,greenDy=0;
+    if(closeRows.length){
+      var signedGap=closeRows.reduce(function(sum,r){
+        return sum+y(Number(r[series[0].key]))-y(Number(r[series[1].key]));
+      },0);
+      blueDy=signedGap>0?2.4:-2.4;
+      greenDy=-blueDy;
+    }
+    function displayDy(item){
+      return item.key==='reflection_understood'?blueDy:
+        item.key==='reflection_conveyed'?greenDy:0;
+    }
     selectResearchDateTicks(rows.map(function(r){return r.date}),x,7,10).forEach(function(i){var r=rows[i];out+='<text x="'+x(i)+'" y="'+(h-19)+'" text-anchor="middle" class="unified-line-axis">'+esc(String(r.date||'').slice(5))+'</text>'});
-    // Draw all polylines at exact data coordinates. The green solid line remains
-    // visible in the gaps of the blue dashed line, even for identical values.
-    // Blue is deliberately drawn last, so it cannot be hidden by green.
+    // Both blue and green are SOLID. Constant whole-series parallel offsets
+    // make exact or near ties visible without introducing spurious bends.
     var drawOrder=[series[1],series[2],series[0]];
     drawOrder.forEach(function(item){
       var points=[];
-      rows.forEach(function(r,i){if(observed(r,item))points.push(x(i)+','+y(Number(r[item.key])))});
-      if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+item.color+'" stroke-width="'+(item.dashed?'1.35':'1.45')+'"'+(item.dashed?' stroke-dasharray="4 3"':'')+' stroke-linecap="round" stroke-linejoin="round"/>';
+      rows.forEach(function(r,i){if(observed(r,item))points.push(x(i)+','+(y(Number(r[item.key]))+displayDy(item)))});
+      if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+item.color+'" stroke-width="1.15" data-display-offset-y="'+displayDy(item)+'" stroke-linecap="round" stroke-linejoin="round"/>';
     });
     // Visual-only horizontal separation of POINT MARKERS when two or more
     // displayed series come within 7 SVG units. All line vertices and tooltip
@@ -117,17 +140,19 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
       rows.forEach(function(r,i){
         if(!observed(r,item))return;
         var near=series.filter(function(other){return observed(r,other)&&Math.abs(y(Number(r[item.key]))-y(Number(r[other.key])))<7});
-        var rank=near.indexOf(item),dx=near.length<2?0:(rank-(near.length-1)/2)*6;
+        var rank=near.indexOf(item),dx=near.length<2?0:(rank-(near.length-1)/2)*6,dy=displayDy(item);
         var value=Math.round(Number(r[item.key])*100)/100,count=Number(r[item.n]||0);
         var title=String(r.date||'')+' '+item.label+': 平均 '+value+' (n='+count+')';
-        out+='<g class="reflection-point" data-series="'+esc(item.key)+'" data-mean="'+Number(r[item.key])+'" data-visual-offset-x="'+dx+'"'+(dx?' transform="translate('+dx+' 0)"':'')+'>'+marker(item.shape,x(i),y(Number(r[item.key])),item.color,title)+'</g>';
+        out+='<g class="reflection-point" data-series="'+esc(item.key)+'" data-mean="'+Number(r[item.key])+'" data-visual-offset-x="'+dx+'" data-visual-offset-y="'+dy+'"'+(dx||dy?' transform="translate('+dx+' '+dy+')"':'')+'>'+marker(item.shape,x(i),y(Number(r[item.key])),item.color,title)+'</g>';
       });
     });
     series.forEach(function(item){
-      out+='<line x1="'+item.legendX+'" y1="'+item.legendY+'" x2="'+(item.legendX+16)+'" y2="'+item.legendY+'" stroke="'+item.color+'" stroke-width="'+(item.dashed?'1.35':'1.45')+'"'+(item.dashed?' stroke-dasharray="4 3"':'')+' stroke-linecap="round"/>'+marker(item.shape,item.legendX+8,item.legendY,item.color,'')+'<text x="'+(item.legendX+21)+'" y="'+(item.legendY+4)+'" class="unified-line-legend">'+esc(item.label)+'</text>';
+      out+='<line x1="'+item.legendX+'" y1="'+item.legendY+'" x2="'+(item.legendX+16)+'" y2="'+item.legendY+'" stroke="'+item.color+'" stroke-width="1.15" stroke-linecap="round"/>'+marker(item.shape,item.legendX+8,item.legendY,item.color,'')+'<text x="'+(item.legendX+21)+'" y="'+(item.legendY+4)+'" class="unified-line-legend">'+esc(item.label)+'</text>';
     });
-    var scaleNote=axisMin===2?'縦軸2～4（0.5刻み）':'2未満の実測値を含むため縦軸1～4';
-    return out+'</svg><div class="unified-line-footnote" role="note">4件法｜'+scaleNote+'｜授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜線は実測値、近接時はマーカーのみ左右に分離</div>';
+    var scaleNote=axisMin===2&&axisMax===3.5?'縦軸2～3.5（0.25刻み）':
+      '範囲外の実測値を含むため縦軸'+axisMin+'～'+axisMax;
+    var separationNote=closeRows.length?'｜青・緑の重複を避けるため線全体を上下2.4px平行移動（実測値・傾きは変更なし）':'';
+    return out+'</svg><div class="unified-line-footnote" role="note">4件法｜'+scaleNote+'｜授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜近接時はマーカーを左右に分離'+separationNote+'</div>';
   }
   function ensureSeparateCards(){
     var daily=document.getElementById('chartDaily'),turns=document.getElementById('chartTurns');
