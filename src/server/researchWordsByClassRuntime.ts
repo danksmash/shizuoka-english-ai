@@ -1,5 +1,6 @@
 import type { RequestHandler } from 'express';
 import { RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT } from './researchClassChartPalette';
+import { RESEARCH_DATE_TICK_BROWSER_SCRIPT } from './researchChartDateTicks';
 import {
   buildResearchExportDataSets,
   filterResearchSessionRows,
@@ -166,6 +167,7 @@ function injectWordsByClassChart(html: string): string {
 
   const script = `<script id="researchWordsByClassRuntime">
 (function(){
+${RESEARCH_DATE_TICK_BROWSER_SCRIPT}
   function escapeHtml(value){return String(value==null?'':value).replace(/[&<>\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]})}
   function valid(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))}
   // Keep legacy fallback display in lockstep with the canonical dashboard renderer.
@@ -211,7 +213,7 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
     var fmt=function(v){return Math.abs(v-Math.round(v))<1e-9?String(Math.round(v)):String(Math.round(v*10)/10)};
     var out='<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="1分あたり平均発話語数学級別累積平均">';
     for(var tick=axisMin,guard=0;tick<=axisMax+step*.001&&guard<12;tick+=step,guard+=1){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-18)+'" y="'+(yy+5)+'" text-anchor="middle" class="svg-label">'+escapeHtml(fmt(tick))+'</text>'}
-    var every=Math.max(1,Math.ceil(dates.length/8));dates.forEach(function(date,i){if(i%every===0||i===dates.length-1)out+='<text x="'+x(date)+'" y="'+(h-24)+'" text-anchor="middle" class="svg-label">'+escapeHtml(String(date).slice(5))+'</text>'});
+    selectResearchDateTicks(dates,function(i){return x(dates[i])},7,10).forEach(function(i){var date=dates[i];out+='<text x="'+x(date)+'" y="'+(h-24)+'" text-anchor="middle" class="svg-label" style="font-size:10px">'+escapeHtml(String(date).slice(5))+'</text>'});
     list.forEach(function(s,si){
       var color=classColor(s.class_id,s.school_condition),shape=shapeForClassId(s.class_id),points=[];
       // Connect actual lesson observations only; carried-forward values are not vertices.
