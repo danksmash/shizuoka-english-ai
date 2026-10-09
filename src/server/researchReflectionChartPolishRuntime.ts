@@ -4,6 +4,7 @@ function injectReflectionChartPolish(html: string): string {
   if (!html.includes('id="chartReflection"') || html.includes('researchReflectionChartPolish')) return html;
   const script = `<script id="researchReflectionChartPolish">
 (function(){
+  // Reflection-only: the new orange comparison-class color also appears in words/min.
   function patchResearchLineMarkers(chartId){
     var svg=document.querySelector('#'+chartId+' svg');
     if(!svg)return;
@@ -38,11 +39,11 @@ function injectReflectionChartPolish(html: string): string {
   var queued=false;
   function schedule(){
     if(queued)return;queued=true;
-    var run=function(){queued=false;patchResearchLineMarkers('chartReflection');patchResearchLineMarkers('chartWords')};
+    var run=function(){queued=false;patchResearchLineMarkers('chartReflection')};
     if(window.requestAnimationFrame)window.requestAnimationFrame(run);else setTimeout(run,0);
   }
   function watch(){
-    var charts=['chartReflection','chartWords'].map(function(id){return document.getElementById(id)}).filter(Boolean);
+    var charts=['chartReflection'].map(function(id){return document.getElementById(id)}).filter(Boolean);
     if(!charts.length)return;
     schedule();
     if(window.MutationObserver)charts.forEach(function(chart){new MutationObserver(schedule).observe(chart,{childList:true,subtree:true})});

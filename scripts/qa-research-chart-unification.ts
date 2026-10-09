@@ -17,11 +17,18 @@ const res: any = {
 };
 const handler = withResearchDashboardChartUnification(
   '/management',
-  ((_req: any, response: any) => response.send('<html><body><div id="chartTurns"></div></body></html>')) as any,
+  ((_req: any, response: any) => response.send('<html><body><div id="chartDaily"></div><div id="chartTurns"></div></body></html>')) as any,
 );
 handler({} as any, res, (() => undefined) as any);
 
 assert.match(sentBody, /researchDashboardChartUnificationStyle/);
+assert.match(sentBody, /typeof lastDashboard!=='undefined'/);
+// The unified chart may be injected before the separate turns container is added.
+let earlyHtml='';
+withResearchDashboardChartUnification('/management',((_req:any,res:any)=>res.send('<html><body><div id="chartDaily"></div></body></html>')) as any)(
+  {} as any,{send(body:unknown){earlyHtml=String(body);return body}} as any,(()=>undefined) as any,
+);
+assert.match(earlyHtml,/id="researchDashboardChartUnification"/,'chart script must not be lost when chartTurns arrives later');
 assert.match(sentBody, /researchDashboardChartUnification/);
 assert.match(sentBody, /research-chart-left-stack/);
 assert.match(sentBody, /grid-template-rows:minmax\(0,1fr\) minmax\(0,1fr\)/);
@@ -96,6 +103,24 @@ const browser: any = {
   renderDashboard() {},
 };
 runInNewContext(injectedScript, browser);
+const cachedWords={innerHTML:''},cachedTurns={innerHTML:''};
+const cachedBrowser:any={
+  window:{},
+  lastDashboard:{charts:{
+    cumulativeWordsByClass:[{class_id:'5-2',label:'5年2組',school_condition:'intervention',points:[
+      {date:'2026-10-01',value:10,n:1,observed:true},{date:'2026-10-03',value:12,n:2,observed:true},
+    ]}],
+    cumulativeTurnsByClass:[{class_id:'5-2',label:'5年2組',school_condition:'intervention',points:[
+      {date:'2026-10-01',value:3,n:1,observed:true},{date:'2026-10-03',value:4,n:2,observed:true},
+    ]}],
+  }},
+  document:{getElementById(id:string){if(id==='chartWords')return cachedWords;if(id==='chartTurns')return cachedTurns;return null}},
+  renderDashboard(){},
+};
+runInNewContext(injectedScript,cachedBrowser);
+assert.match(cachedWords.innerHTML,/stroke="#10B981"/,'existing cached word chart must redraw as soon as unified script loads');
+assert.match(cachedTurns.innerHTML,/stroke="#10B981"/,'existing cached turn chart must redraw without another API request');
+
 
 function reflectionTestRow(date: string, observed: boolean, a: number, b: number, c: number) {
   return {
@@ -266,5 +291,6 @@ const ys=firstPolyline.split(' ').map(point=>Number(point.split(',')[1]));
 assert.equal(new Set(ys).size,1,'equal reflection values must form a true horizontal straight line');
 const polishScript=fs.readFileSync(new URL('../src/server/researchReflectionChartPolishRuntime.ts',import.meta.url),'utf8');
 assert.doesNotMatch(polishScript,/offsets\[index\]|translate\('\+\(offsets/,'markers must never move away from actual vertices');
+assert.doesNotMatch(polishScript,/patchResearchLineMarkers\('chartWords'\)/,'reflection polish must not mutate the newly shared class palette');
 
 console.log('Research dashboard chart unification QA: PASS');

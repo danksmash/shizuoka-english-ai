@@ -2,7 +2,8 @@ import type { RequestHandler } from 'express';
 import { RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT } from './researchClassChartPalette';
 
 function injectResearchDashboardChartUnification(html: string): string {
-  if (!html.includes('id="chartTurns"') || html.includes('researchDashboardChartUnification')) return html;
+  // The turns element is added by a separate middleware; do not gate this script on its injection timing.
+  if (!html.includes('id="chartDaily"') || html.includes('id="researchDashboardChartUnification"')) return html;
 
   const style = `<style id="researchDashboardChartUnificationStyle">
 .research-chart-left-stack{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:14px;min-width:0;align-self:stretch}.research-chart-left-stack>.chart-card{min-height:0;height:100%}.research-chart-left-stack .unified-daily-card{display:flex;flex-direction:column}.research-chart-left-stack .unified-daily-card #chartDaily{flex:1 1 auto;min-height:0}.research-turns-card{display:flex;flex-direction:column}.research-turns-card #chartTurns{flex:1 1 auto;min-height:0}.unified-line-chart{display:flex;flex-direction:column;align-items:stretch;gap:5px;overflow-x:auto;overflow-y:visible}.unified-line-chart svg{display:block;min-width:460px;width:100%;height:auto;flex:1 1 auto;min-height:0}.unified-line-footnote{flex:0 0 auto;min-width:460px;margin:0;padding:1px 2px 3px;font-size:11px;line-height:1.5;color:#64748b;font-weight:700;white-space:normal;overflow-wrap:anywhere}.research-chart-left-stack .chart-card h3,.charts>.chart-card h3{font-size:18px;line-height:1.35;margin:0 0 10px}.research-turns-card h3{margin:0 0 12px;font-size:18px}.unified-line-chart text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}.unified-line-axis{font-size:10px;fill:#425878;font-weight:700}.unified-line-legend{font-size:11px;fill:#10224a;font-weight:800}@media(max-width:760px){.research-chart-left-stack{grid-template-rows:auto auto}.research-chart-left-stack>.chart-card{min-height:390px;height:auto}.unified-line-chart svg{min-width:460px}}
@@ -146,6 +147,11 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
   var previousRenderDashboard=renderDashboard;
   renderDashboard=function(d,appliedQuery){previousRenderDashboard(d,appliedQuery);renderUnified(d)};
   window.renderDashboard=renderDashboard;
+  // Session-cache restoration can finish before the injected chart scripts load.
+  // Repaint only existing chart DOM from the same cached response: no network or data changes.
+  if(typeof lastDashboard!=='undefined'&&lastDashboard&&lastDashboard.charts){
+    renderUnified(lastDashboard);
+  }
 })();
 </script>`;
 
