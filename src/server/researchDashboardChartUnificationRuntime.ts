@@ -7,7 +7,7 @@ function injectResearchDashboardChartUnification(html: string): string {
   if (!html.includes('id="chartDaily"') || html.includes('id="researchDashboardChartUnification"')) return html;
 
   const style = `<style id="researchDashboardChartUnificationStyle">
-.research-chart-left-stack{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:14px;min-width:0;align-self:stretch}.research-chart-left-stack>.chart-card{min-height:0;height:100%}.research-chart-left-stack .unified-daily-card{display:flex;flex-direction:column}.research-chart-left-stack .unified-daily-card #chartDaily{flex:1 1 auto;min-height:0}.research-turns-card{display:flex;flex-direction:column}.research-turns-card #chartTurns{flex:1 1 auto;min-height:0}.unified-line-chart{display:flex;flex-direction:column;align-items:stretch;gap:5px;overflow-x:auto;overflow-y:visible}.unified-line-chart svg{display:block;min-width:460px;width:100%;height:auto;flex:1 1 auto;min-height:0}.unified-line-footnote{flex:0 0 auto;min-width:460px;margin:0;padding:1px 2px 3px;font-size:11px;line-height:1.5;color:#64748b;font-weight:700;white-space:normal;overflow-wrap:anywhere}.research-chart-left-stack .chart-card h3,.charts>.chart-card h3{font-size:18px;line-height:1.35;margin:0 0 10px}.research-turns-card h3{margin:0 0 12px;font-size:18px}.unified-line-chart text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}.unified-line-axis{font-size:10px;fill:#425878;font-weight:700}.unified-line-legend{font-size:11px;fill:#10224a;font-weight:800}@media(max-width:760px){.research-chart-left-stack{grid-template-rows:auto auto}.research-chart-left-stack>.chart-card{min-height:390px;height:auto}.unified-line-chart svg{min-width:460px}}
+.research-chart-left-stack{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:14px;min-width:0;align-self:stretch}.research-chart-left-stack>.chart-card{min-height:0;height:100%}.research-chart-left-stack .unified-daily-card{display:flex;flex-direction:column}.research-chart-left-stack .unified-daily-card #chartDaily{flex:1 1 auto;min-height:0}.research-turns-card{display:flex;flex-direction:column}.research-turns-card #chartTurns{flex:0 0 auto;min-height:330px}.unified-line-chart{display:flex;flex-direction:column;align-items:stretch;gap:5px;height:auto;min-height:330px;overflow-x:auto;overflow-y:visible}.unified-line-chart svg{display:block;min-width:460px;width:100%;height:auto;aspect-ratio:460/245;flex:0 0 auto;min-height:0}.unified-line-footnote{flex:0 0 auto;min-width:460px;margin:0;padding:1px 2px 3px;font-size:11px;line-height:1.5;color:#64748b;font-weight:700;white-space:normal;overflow-wrap:anywhere}.research-chart-left-stack .chart-card h3,.charts>.chart-card h3{font-size:18px;line-height:1.35;margin:0 0 10px}.research-turns-card h3{margin:0 0 12px;font-size:18px}.unified-line-chart text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}.unified-line-axis{font-size:10px;fill:#425878;font-weight:700}.unified-line-legend{font-size:11px;fill:#10224a;font-weight:800}@media(max-width:760px){.research-chart-left-stack{grid-template-rows:auto auto}.research-chart-left-stack>.chart-card{min-height:390px;height:auto}.unified-line-chart svg{min-width:460px}}
 </style>`;
 
   const script = `<script id="researchDashboardChartUnification">
@@ -33,13 +33,18 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
     var m=id.match(/(?:C)?([1-9])$/i),n=m?Number(m[1]):1;
     return n%3===2?'square':n%3===0?'diamond':'circle';
   }
+  // The class and reflection charts share one geometric marker footprint.
+  // Preserve each school/series shape, but never make triangles/diamonds/crosses
+  // larger than the reflection circles or squares.
   function marker(shape,cx,cy,color,title){
+    var half=3.2,size=half*2;
     var t=title?'<title>'+esc(title)+'</title>':'';
-    if(shape==='square')return '<g>'+t+'<rect x="'+(cx-3.2)+'" y="'+(cy-3.2)+'" width="6.4" height="6.4" rx="0.8" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
-    if(shape==='diamond')return '<g>'+t+'<polygon points="'+cx+','+(cy-4)+' '+(cx+4)+','+cy+' '+cx+','+(cy+4)+' '+(cx-4)+','+cy+'" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
-    if(shape==='triangle')return '<g>'+t+'<polygon points="'+cx+','+(cy-4.1)+' '+(cx+4.1)+','+(cy+3.5)+' '+(cx-4.1)+','+(cy+3.5)+'" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
-    if(shape==='cross')return '<g>'+t+'<path d="M'+(cx-3.7)+','+cy+' H'+(cx+3.7)+' M'+cx+','+(cy-3.7)+' V'+(cy+3.7)+'" fill="none" stroke="'+color+'" stroke-width="2.2" stroke-linecap="round"/></g>';
-    return '<g>'+t+'<circle cx="'+cx+'" cy="'+cy+'" r="3.2" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
+    var open='<g data-marker-size="'+size+'">'+t;
+    if(shape==='square')return open+'<rect x="'+(cx-half)+'" y="'+(cy-half)+'" width="'+size+'" height="'+size+'" rx="0.8" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
+    if(shape==='diamond')return open+'<polygon points="'+cx+','+(cy-half)+' '+(cx+half)+','+cy+' '+cx+','+(cy+half)+' '+(cx-half)+','+cy+'" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
+    if(shape==='triangle')return open+'<polygon points="'+cx+','+(cy-half)+' '+(cx+half)+','+(cy+half)+' '+(cx-half)+','+(cy+half)+'" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
+    if(shape==='cross')return open+'<path d="M'+(cx-half)+','+cy+' H'+(cx+half)+' M'+cx+','+(cy-half)+' V'+(cy+half)+'" fill="none" stroke="'+color+'" stroke-width="1.8" stroke-linecap="round"/></g>';
+    return open+'<circle cx="'+cx+'" cy="'+cy+'" r="'+half+'" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
   }
   function classSeriesSvg(series,unit,aria,note){
     var list=(Array.isArray(series)?series:[]).filter(function(s){return Array.isArray(s.points)&&s.points.some(function(p){return valid(p.value)})});

@@ -37,6 +37,14 @@ assert.match(sentBody, /unified-line-axis/);
 assert.match(sentBody, /font-size:10px/);
 assert.match(sentBody, /unified-line-legend/);
 assert.match(sentBody, /unified-line-footnote\{[^}]*font-size:11px/);
+assert.match(sentBody, /\.unified-line-chart\{[^}]*height:auto;min-height:330px/,
+  'all three line charts must size naturally to the available card width');
+assert.match(sentBody, /\.unified-line-chart svg\{[^}]*width:100%;height:auto;aspect-ratio:460\/245;flex:0 0 auto/,
+  'SVG width must not be constrained by the previous fixed chart height / flex shrink');
+assert.match(sentBody, /\.research-turns-card #chartTurns\{flex:0 0 auto;min-height:330px/,
+  'turns graph must follow the same natural sizing rules as words and reflection charts');
+assert.doesNotMatch(sentBody, /\.unified-line-chart svg\{[^}]*flex:1 1 auto/,
+  'chart-specific flex shrink previously made the words/reflection plots narrower');
 assert.doesNotMatch(sentBody, /class=\\"unified-line-note\\"/);
 assert.match(sentBody, /unified-line-chart\{display:flex;flex-direction:column/);
 assert.match(sentBody, /ensureSeparateCards/);
@@ -209,6 +217,54 @@ const stableSeries = [
 ];
 browser.window.renderDashboard({charts:{cumulativeWordsByClass:stableSeries,cumulativeTurnsByClass:stableSeries}});
 const allColors = {words:wordElement.innerHTML,turns:turnElement.innerHTML};
+// All five class markers, including triangles and crosses, must share the exact
+// geometric footprint of the three reflection markers. This also protects
+// the legend, since every marker passes through the same SVG helper.
+function assertStandardMarkers(svg:string, expectedCount:number, label:string){
+  const groups=[...svg.matchAll(/<g data-marker-size="([^"]+)">([\s\S]*?)<\/g>/g)];
+  assert.equal(groups.length,expectedCount,label+' marker count (observations plus legend)');
+  const bounds=(part:string)=>{
+    let xs:number[]=[],ys:number[]=[];
+    const circle=part.match(/<circle cx="([^"]+)" cy="([^"]+)" r="([^"]+)"/);
+    const rect=part.match(/<rect x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"/);
+    const polygon=part.match(/<polygon points="([^"]+)"/);
+    const cross=part.match(/<path d="M([^,]+),([^ ]+) H([^ ]+) M([^,]+),([^ ]+) V([^"]+)"/);
+    if(circle){
+      const [,cx,cy,rad]=circle.map(Number);
+      xs=[cx-rad,cx+rad];ys=[cy-rad,cy+rad];
+    }else if(rect){
+      const [,x,y,w,h]=rect.map(Number);
+      xs=[x,x+w];ys=[y,y+h];
+    }else if(polygon){
+      const points=polygon[1].split(' ').map(pair=>pair.split(',').map(Number));
+      xs=points.map(p=>p[0]);ys=points.map(p=>p[1]);
+    }else if(cross){
+      xs=[Number(cross[1]),Number(cross[3])];
+      ys=[Number(cross[5]),Number(cross[6])];
+    }else throw new Error(label+' unexpected marker shape '+part);
+    return [Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)];
+  };
+  for(const [,advertised,part] of groups){
+    assert.equal(Number(advertised),6.4,label+' shared nominal marker size');
+    const [width,height]=bounds(part);
+    assert.ok(Math.abs(width-6.4)<1e-8&&Math.abs(height-6.4)<1e-8,
+      label+' marker must fit the exact shared 6.4x6.4 geometry, not only claim to');
+  }
+}
+for(const [chartName,svg] of Object.entries(allColors)){
+  assertStandardMarkers(svg,15,chartName+' five classes');
+}
+for(const [chartName,svg] of Object.entries(allColors)){
+  assert.match(svg,/^<svg viewBox="0 0 460 245" width="100%" height="100%"/,
+    chartName+' SVG must keep identical intrinsic coordinates for card-wide rendering');
+}
+
+browser.window.renderDashboard({charts:{lessonCumulativeReflection:[
+  reflectionTestRow('2026-10-01',true,2.7,2.8,2.5),
+  reflectionTestRow('2026-10-02',true,2.8,2.9,2.6),
+]}});
+assertStandardMarkers(reflectionElement.innerHTML,9,'reflection three categories');
+
 for(const [chartName,svg] of Object.entries(allColors)){
   const trendWidths=[...svg.matchAll(/<polyline [^>]*stroke-width="([^"]+)"/g)]
     .map(m=>Number(m[1]));
