@@ -1,4 +1,5 @@
 import { RESEARCH_CLASS_COLORS } from '../src/server/researchClassChartPalette';
+import { RESEARCH_DATE_TICK_BROWSER_SCRIPT } from '../src/server/researchChartDateTicks';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { runInNewContext } from 'node:vm';
@@ -292,5 +293,96 @@ assert.equal(new Set(ys).size,1,'equal reflection values must form a true horizo
 const polishScript=fs.readFileSync(new URL('../src/server/researchReflectionChartPolishRuntime.ts',import.meta.url),'utf8');
 assert.doesNotMatch(polishScript,/offsets\[index\]|translate\('\+\(offsets/,'markers must never move away from actual vertices');
 assert.doesNotMatch(polishScript,/patchResearchLineMarkers\('chartWords'\)/,'reflection polish must not mutate the newly shared class palette');
+
+
+// Date-axis collision regression: keep first/last date legible as the set grows.
+// This tests the actual 460-unit SVG coordinate system and all three production charts.
+const dateTickSelector: (dates:string[], x:(i:number)=>number, max:number, size:number)=>number[] =
+  runInNewContext(RESEARCH_DATE_TICK_BROWSER_SCRIPT+'\nselectResearchDateTicks', {});
+const makeDates=(count:number)=>Array.from({length:count},(_,i)=>
+  new Date(Date.UTC(2026,8,17)+i*86400000).toISOString().slice(0,10));
+for(const n of [0,1,2,7,14,22,23,30,60,120]){
+  const dates=makeDates(n), x=(i:number)=>56+(n<2?389/2:i*389/(n-1));
+  const indices=dateTickSelector(dates,x,7,10);
+  if(!n){assert.deepEqual(Array.from(indices),[]);continue}
+  assert.equal(indices[0],0,'date axis first tick must survive ('+n+')');
+  assert.equal(indices.at(-1),n-1,'date axis final tick must survive ('+n+')');
+  for(let i=1;i<indices.length;i++){
+    const a=indices[i-1],b=indices[i];
+    const width=(idx:number)=>Math.max(20,dates[idx].slice(5).length*10*.75);
+    assert.ok(x(b)-x(a)>=(width(a)+width(b))/2+8-1e-6,
+      'date labels collide for '+n+' days at ticks '+a+' and '+b);
+  }
+}
+const readDateLabels=(html:string)=>{
+  const re=/<text x="([^"]+)" y="[^"]+" text-anchor="middle" class="(?:unified-line-axis|svg-label)"[^>]*>(\d\d-\d\d)<\/text>/g;
+  return [...html.matchAll(re)].map(match=>({x:Number(match[1]),label:match[2]}));
+};
+function assertDateLabels(html:string,dates:string,fontSize:number,description:string){
+  const labels=readDateLabels(html);
+  assert.ok(labels.length>=2,description+' must display at least first and last dates');
+  assert.equal(labels[0].label,dates[0].slice(5),description+' first date');
+  assert.equal(labels.at(-1)?.label,dates.at(-1)?.slice(5),description+' final date');
+  for(let i=1;i<labels.length;i++){
+    const a=labels[i-1],b=labels[i];
+    const required=(a.label.length+b.label.length)*fontSize*.75/2+8;
+    assert.ok(b.x-a.x>=required-1e-6,description+' overlaps '+a.label+' and '+b.label);
+  }
+}
+for(const n of [23,60]){
+  const dates=makeDates(n);
+  const points=dates.map((date,i)=>({date,value:8+i*.03,n:1,observed:i%3===0||i===n-1}));
+  const series=[{class_id:'5-1',label:'5年1組',school_condition:'intervention',points}];
+  const reflections=dates.map(date=>reflectionTestRow(date,true,2.5,2.7,2.6));
+  browser.window.renderDashboard({charts:{
+    cumulativeTurnsByClass:series,
+    cumulativeWordsByClass:series,
+    lessonCumulativeReflection:reflections,
+  }});
+  assertDateLabels(turnElement.innerHTML,dates,10,'turn/min '+n);
+  assertDateLabels(wordElement.innerHTML,dates,10,'word/min '+n);
+  assertDateLabels(reflectionElement.innerHTML,dates,10,'reflection '+n);
+  const realPointCount=points.filter(p=>p.observed).length;
+  for(const html of [turnElement.innerHTML,wordElement.innerHTML]){
+    const path=html.match(/<polyline points="([^"]+)"/)?.[1]||'';
+    assert.equal(path.split(' ').length,realPointCount,'date label thinning must never remove actual observations');
+  }
+  legacyBrowser.window.renderDashboard({charts:{cumulativeWordsByClass:series}});
+  assertDateLabels(fallbackWords.innerHTML,dates,10,'legacy word/min '+n);
+}
+// Run the actual legacy turn renderer as well, instead of checking source strings alone.
+const fallbackDailySource=productionHtml.match(/<script id="researchDailyClassStack">([\s\S]*?)<\/script>/)?.[1];
+assert.ok(fallbackDailySource,'daily legacy renderer should be injectable');
+const fallbackTurns={innerHTML:''},dailyChart={innerHTML:'',closest:()=>null};
+const dailyBrowser:any={
+  window:{__researchDashboardUnifiedChartsV2:false},
+  document:{getElementById(id:string){
+    if(id==='chartTurns')return fallbackTurns;
+    if(id==='chartDaily')return dailyChart;
+    return null;
+  }},
+  renderDashboard(){},
+};
+runInNewContext(fallbackDailySource,dailyBrowser);
+const longDates=makeDates(23);
+dailyBrowser.window.renderDashboard({charts:{
+  dailyClassStack:[{date:longDates.at(-1),sessions:1,by_class:[{class_id:'5-1',label:'5年1組',sessions:1,share_percent:100}]}],
+  dailyClassLegend:[{class_id:'5-1',label:'5年1組'}],
+  cumulativeTurnsByClass:[{class_id:'5-1',label:'5年1組',school_condition:'intervention',points:longDates.map(
+    (date,i)=>({date,value:8+i*.01,n:1,observed:i%2===0}))}],
+}});
+assertDateLabels(fallbackTurns.innerHTML,longDates,10,'legacy turn/min');
+const managementHtml=managementPageHtml();
+assert.ok(managementHtml.includes('function selectResearchDateTicks('),'management HTML must load the same date-label helper');
+assert.equal((managementHtml.match(/selectResearchDateTicks\(rows\.map\(function\(r\)/g)||[]).length,4,
+  'all four management page legacy line charts must use collision-safe date labels');
+const legacyReflectionLine=managementHtml.split('function aiReflectionLineSvg(items)')[1]?.split('\n')[0];
+assert.ok(legacyReflectionLine,'legacy reflection renderer must exist');
+// This old renderer uses larger 15px date labels; verify the same no-overlap rule.
+const renderLegacyReflection=runInNewContext(
+  RESEARCH_DATE_TICK_BROWSER_SCRIPT+'\nfunction aiReflectionLineSvg(items)'+legacyReflectionLine+'\naiReflectionLineSvg',
+  {esc:(s:unknown)=>String(s),formatChartValue:(n:unknown)=>String(n)});
+assertDateLabels(renderLegacyReflection(longDates.map(date=>reflectionTestRow(date,true,2.8,2.6,2.4))),
+  longDates,15,'management legacy reflection');
 
 console.log('Research dashboard chart unification QA: PASS');
