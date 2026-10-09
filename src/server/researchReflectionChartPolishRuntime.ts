@@ -8,7 +8,7 @@ function injectReflectionChartPolish(html: string): string {
     var svg=document.querySelector('#'+chartId+' svg');
     if(!svg)return;
     var order={'#2774ee':0,'#20a567':1,'#f59e0b':2};
-    var markers=[];
+    // Never displace individual data-point markers away from line vertices.
     Array.prototype.forEach.call(svg.querySelectorAll('g'),function(g){
       var shape=g.querySelector('circle,rect,polygon');
       if(!shape||!shape.getBBox)return;
@@ -27,23 +27,12 @@ function injectReflectionChartPolish(html: string): string {
       }else{
         shape.setAttribute('points',cx+','+(cy-4)+' '+(cx+4)+','+cy+' '+cx+','+(cy+4)+' '+(cx-4)+','+cy);
       }
-      markers.push({g:g,cx:cx,cy:cy,order:order[stroke]});
     });
     Array.prototype.forEach.call(svg.querySelectorAll('polyline'),function(line){
       var stroke=String(line.getAttribute('stroke')||'').toLowerCase();
       if(order[stroke]!==undefined)line.setAttribute('stroke-width','1.6');
     });
-    var groups={};
-    markers.forEach(function(item){var key=String(Math.round(item.cx));(groups[key]||(groups[key]=[])).push(item)});
-    Object.keys(groups).forEach(function(key){
-      var group=groups[key];if(group.length<2)return;
-      var crowded=false;
-      for(var i=0;i<group.length;i+=1){for(var j=i+1;j<group.length;j+=1){if(Math.abs(group[i].cy-group[j].cy)<10)crowded=true}}
-      if(!crowded)return;
-      group.sort(function(a,b){return a.order-b.order});
-      var offsets=group.length>=3?[-4,0,4]:[-3,3];
-      group.forEach(function(item,index){item.g.setAttribute('transform','translate('+(offsets[index]||0)+' 0)')});
-    });
+
   }
 
   var queued=false;
