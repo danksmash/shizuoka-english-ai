@@ -17,7 +17,6 @@ import {
   withResilientResearchPhaseDashboard,
 } from './src/server/researchDashboardResilientRuntime';
 import { withResearchSessionAuditManagementPage } from './src/server/researchSessionAuditManagementRuntime';
-import { withResearchReflectionChartPolish } from './src/server/researchReflectionChartPolishRuntime';
 import { withResearchDailyClassStack } from './src/server/researchDailyClassStackRuntime';
 import { withResearchWordsByClassRuntime } from './src/server/researchWordsByClassRuntime';
 import { withResearchDashboardChartUnification } from './src/server/researchDashboardChartUnificationRuntime';
@@ -129,7 +128,6 @@ application.get = function researchPhaseAwareGet(this: any, path: any, ...handle
     handlers[handlers.length - 1] = withQuestionnaireResearchRuntime(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withResearchSessionAuditManagementPage(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withResearchSessionHistoryManagementPage(path, handlers[handlers.length - 1]);
-    handlers[handlers.length - 1] = withResearchReflectionChartPolish(path, handlers[handlers.length - 1]);
     handlers[handlers.length - 1] = withResearchRq1DashboardLink(path, handlers[handlers.length - 1]);
     if (path === '/api/management/research.dashboard') {
       handlers[handlers.length - 1] = withResilientResearchPhaseDashboard(path, handlers[handlers.length - 1]);
