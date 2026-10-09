@@ -394,7 +394,7 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
     var every=Math.max(1,Math.ceil(dates.length/7));dates.forEach(function(date,index){if(index%every===0||index===dates.length-1)out+='<text x="'+x(date)+'" y="'+(hgt-19)+'" text-anchor="middle" class="svg-label" style="font-size:10px">'+h(String(date).slice(5))+'</text>'});
     list.forEach(function(item,index){
       var color=classColor(item.class_id),points=[];
-      (item.points||[]).forEach(function(point){if(valid(point.value))points.push(x(point.date)+','+y(Number(point.value)))});
+      (item.points||[]).forEach(function(point){if(valid(point.value)&&point.observed!==false)points.push(x(point.date)+','+y(Number(point.value)))});
       if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
       (item.points||[]).forEach(function(point){if(!valid(point.value)||point.observed===false)return;var title=String(point.date||'')+' '+String(item.label||item.class_id||'')+': '+fmt(Number(point.value))+' ターン/分 (n='+Number(point.n||0)+')';out+='<circle cx="'+x(point.date)+'" cy="'+y(Number(point.value))+'" r="3.2" fill="#fff" stroke="'+color+'" stroke-width="1.8"><title>'+h(title)+'</title></circle>'});
       var col=index%3,row=Math.floor(index/3),lx=left+col*132,ly=12+row*18;
