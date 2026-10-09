@@ -88,13 +88,13 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
     var out='<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="AI対話ふりかえり平均 4件法">';
     if(!rows.length||!has)return out+'<text x="230" y="122" text-anchor="middle" class="unified-line-axis">データなし</text></svg><div class="unified-line-footnote" role="note">4件法｜授業内のみ｜累積平均（セッション単位）｜授業外利用は除外</div>';
     var x=function(i){return left+(rows.length<=1?plotW/2:i*plotW/(rows.length-1))},y=function(v){return top+plotH-(Number(v)-1)*plotH/3};
-    var offsets=function(r){var result=[0,0,0],groups={};series.forEach(function(s,si){if(!valid(r[s.key]))return;var key=Number(r[s.key]).toFixed(6);(groups[key]||(groups[key]=[])).push(si)});Object.keys(groups).forEach(function(key){var group=groups[key];if(group.length===2){result[group[0]]=-2.5;result[group[1]]=2.5}else if(group.length>=3){result[group[0]]=-3.5;result[group[1]]=0;result[group[2]]=3.5}});return result};
+    // Plot real data coordinates; shifting individual dates introduces spurious zigzags.
     [1,2,3,4].forEach(function(tick){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="unified-line-axis">'+tick+'</text>'});
     var every=Math.max(1,Math.ceil(rows.length/7));rows.forEach(function(r,i){if(i%every===0||i===rows.length-1)out+='<text x="'+x(i)+'" y="'+(h-19)+'" text-anchor="middle" class="unified-line-axis">'+esc(String(r.date||'').slice(5))+'</text>'});
     series.forEach(function(item,si){
-      var points=[];rows.forEach(function(r,i){if(valid(r[item.key])&&r[item.observed]!==false){var off=offsets(r)[si];points.push(x(i)+','+(y(Number(r[item.key]))+off))}});
+      var points=[];rows.forEach(function(r,i){if(valid(r[item.key])&&r[item.observed]!==false)points.push(x(i)+','+y(Number(r[item.key])))});
       if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+item.color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round" stroke-linejoin="round"/>';
-      rows.forEach(function(r,i){if(!valid(r[item.key])||r[item.observed]===false)return;var off=offsets(r)[si],value=Math.round(Number(r[item.key])*100)/100,count=Number(r[item.n]||0),title=String(r.date||'')+' '+item.label+': 平均 '+value+' (n='+count+')';out+=marker(item.shape,x(i),y(Number(r[item.key]))+off,item.color,title)});
+      rows.forEach(function(r,i){if(!valid(r[item.key])||r[item.observed]===false)return;var value=Math.round(Number(r[item.key])*100)/100,count=Number(r[item.n]||0),title=String(r.date||'')+' '+item.label+': 平均 '+value+' (n='+count+')';out+=marker(item.shape,x(i),y(Number(r[item.key])),item.color,title)});
       out+='<line x1="'+item.legendX+'" y1="'+item.legendY+'" x2="'+(item.legendX+16)+'" y2="'+item.legendY+'" stroke="'+item.color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round"/>'+marker(item.shape,item.legendX+8,item.legendY,item.color,'')+'<text x="'+(item.legendX+21)+'" y="'+(item.legendY+4)+'" class="unified-line-legend">'+esc(item.label)+'</text>';
     });
     return out+'</svg><div class="unified-line-footnote" role="note">4件法｜授業内のみ｜累積平均（セッション単位）｜授業外利用は除外</div>';
