@@ -321,6 +321,24 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
   var latestCharts=null;
 
   function h(value){return String(value==null?'':value).replace(/[&<>\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]})}
+  function classShape(classId){
+    var id=String(classId||'').trim().toUpperCase();
+    if(id==='5-1')return 'circle';
+    if(id==='5-2')return 'square';
+    if(id==='5-3')return 'triangle';
+    if(id==='6-C1')return 'diamond';
+    if(id==='6-C2')return 'cross';
+    var m=id.match(/(?:C)?([1-9])$/i),n=m?Number(m[1]):1;
+    return n%3===2?'square':n%3===0?'diamond':'circle';
+  }
+  function lineMarker(shape,cx,cy,color,title){
+    var t=title?'<title>'+h(title)+'</title>':'';
+    if(shape==='square')return '<g>'+t+'<rect x="'+(cx-3.2)+'" y="'+(cy-3.2)+'" width="6.4" height="6.4" rx="0.8" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
+    if(shape==='diamond')return '<g>'+t+'<polygon points="'+cx+','+(cy-4)+' '+(cx+4)+','+cy+' '+cx+','+(cy+4)+' '+(cx-4)+','+cy+'" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
+    if(shape==='triangle')return '<g>'+t+'<polygon points="'+cx+','+(cy-4.1)+' '+(cx+4.1)+','+(cy+3.5)+' '+(cx-4.1)+','+(cy+3.5)+'" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
+    if(shape==='cross')return '<g>'+t+'<path d="M'+(cx-3.7)+','+cy+' H'+(cx+3.7)+' M'+cx+','+(cy-3.7)+' V'+(cy+3.7)+'" fill="none" stroke="'+color+'" stroke-width="2.2"/></g>';
+    return '<g>'+t+'<circle cx="'+cx+'" cy="'+cy+'" r="3.2" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
+  }
   function valid(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))}
   function parseDate(date){var parsed=new Date(String(date||'')+'T00:00:00Z');return Number.isNaN(parsed.getTime())?null:parsed}
   function cutoffForRange(latestDate,range){
@@ -393,12 +411,12 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
     for(var tick=axisMin,guard=0;tick<=axisMax+step*.001&&guard<10;tick+=step,guard+=1){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="svg-label" style="font-size:10px">'+h(fmt(tick))+'</text>'}
     var every=Math.max(1,Math.ceil(dates.length/7));dates.forEach(function(date,index){if(index%every===0||index===dates.length-1)out+='<text x="'+x(date)+'" y="'+(hgt-19)+'" text-anchor="middle" class="svg-label" style="font-size:10px">'+h(String(date).slice(5))+'</text>'});
     list.forEach(function(item,index){
-      var color=classColor(item.class_id),points=[];
+      var color=classColor(item.class_id),shape=classShape(item.class_id),points=[];
       (item.points||[]).forEach(function(point){if(valid(point.value)&&point.observed!==false)points.push(x(point.date)+','+y(Number(point.value)))});
       if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
-      (item.points||[]).forEach(function(point){if(!valid(point.value)||point.observed===false)return;var title=String(point.date||'')+' '+String(item.label||item.class_id||'')+': '+fmt(Number(point.value))+' ターン/分 (n='+Number(point.n||0)+')';out+='<circle cx="'+x(point.date)+'" cy="'+y(Number(point.value))+'" r="3.2" fill="#fff" stroke="'+color+'" stroke-width="1.8"><title>'+h(title)+'</title></circle>'});
+      (item.points||[]).forEach(function(point){if(!valid(point.value)||point.observed===false)return;var title=String(point.date||'')+' '+String(item.label||item.class_id||'')+': '+fmt(Number(point.value))+' ターン/分 (n='+Number(point.n||0)+')';out+=lineMarker(shape,x(point.date),y(Number(point.value)),color,title)});
       var col=index%3,row=Math.floor(index/3),lx=left+col*132,ly=12+row*18;
-      out+='<line x1="'+lx+'" y1="'+ly+'" x2="'+(lx+16)+'" y2="'+ly+'" stroke="'+color+'" stroke-width="2"/><circle cx="'+(lx+8)+'" cy="'+ly+'" r="2.8" fill="#fff" stroke="'+color+'" stroke-width="1.5"/><text x="'+(lx+21)+'" y="'+(ly+4)+'" class="svg-label" style="font-size:10px;fill:#10224a">'+h(item.label||item.class_id||'')+'</text>';
+      out+='<line x1="'+lx+'" y1="'+ly+'" x2="'+(lx+16)+'" y2="'+ly+'" stroke="'+color+'" stroke-width="2"/>'+lineMarker(shape,lx+8,ly,color,'')+'<text x="'+(lx+21)+'" y="'+(ly+4)+'" class="svg-label" style="font-size:10px;fill:#10224a">'+h(item.label||item.class_id||'')+'</text>';
     });
     out+='<text x="'+left+'" y="'+(hgt-3)+'" class="svg-label" style="font-size:9px;fill:#64748b">授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜ターン＝児童＋AI発話</text>';
     return out+'</svg>';
