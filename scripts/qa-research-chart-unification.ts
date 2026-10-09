@@ -262,7 +262,7 @@ const constantWithCollisions=[
   reflectionTestRow('2026-10-03',true,2.8,2.8,2.8),
 ];
 browser.window.renderDashboard({charts:{lessonCumulativeReflection:constantWithCollisions}});
-const firstPolyline=reflectionElement.innerHTML.match(/<polyline points="([^"]+)"/)?.[1]||'';
+const firstPolyline=reflectionElement.innerHTML.match(/<polyline points="([^"]+)"[^>]*stroke="#2774ee"/)?.[1]||'';
 const ys=firstPolyline.split(' ').map(point=>Number(point.split(',')[1]));
 assert.equal(new Set(ys).size,1,'equal reflection values must form a true horizontal straight line');
 
