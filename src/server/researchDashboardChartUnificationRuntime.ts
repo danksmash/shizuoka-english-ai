@@ -12,7 +12,7 @@ function injectResearchDashboardChartUnification(html: string): string {
 
   const script = `<script id="researchDashboardChartUnification">
 (function(){
-  var W=460,H=245,LEFT=56,RIGHT=15,BOTTOM=43,LINE_WIDTH=1.6;
+  var W=460,H=245,LEFT=56,RIGHT=15,BOTTOM=43,LINE_WIDTH=1.15;
 ${RESEARCH_DATE_TICK_BROWSER_SCRIPT}
   function esc(v){return String(v==null?'':v).replace(/[&<>\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]})}
   function valid(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))}
