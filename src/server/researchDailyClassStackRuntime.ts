@@ -1,5 +1,4 @@
 import { RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT } from './researchClassChartPalette';
-import { RESEARCH_DATE_TICK_BROWSER_SCRIPT } from './researchChartDateTicks';
 import type { RequestHandler } from 'express';
 import {
   buildResearchExportDataSets,
@@ -316,32 +315,12 @@ function injectResearchDailyClassStack(html: string): string {
 
   const script = `<script id="researchDailyClassStack">
 (function(){
-${RESEARCH_DATE_TICK_BROWSER_SCRIPT}
   // Use the exact same class palette as the two cumulative line charts.
 ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
   var selectedRange='14';
   var latestCharts=null;
 
   function h(value){return String(value==null?'':value).replace(/[&<>\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]})}
-  function classShape(classId){
-    var id=String(classId||'').trim().toUpperCase();
-    if(id==='5-1')return 'circle';
-    if(id==='5-2')return 'square';
-    if(id==='5-3')return 'triangle';
-    if(id==='6-C1')return 'diamond';
-    if(id==='6-C2')return 'cross';
-    var m=id.match(/(?:C)?([1-9])$/i),n=m?Number(m[1]):1;
-    return n%3===2?'square':n%3===0?'diamond':'circle';
-  }
-  function lineMarker(shape,cx,cy,color,title){
-    var t=title?'<title>'+h(title)+'</title>':'';
-    if(shape==='square')return '<g>'+t+'<rect x="'+(cx-3.2)+'" y="'+(cy-3.2)+'" width="6.4" height="6.4" rx="0.8" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
-    if(shape==='diamond')return '<g>'+t+'<polygon points="'+cx+','+(cy-4)+' '+(cx+4)+','+cy+' '+cx+','+(cy+4)+' '+(cx-4)+','+cy+'" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
-    if(shape==='triangle')return '<g>'+t+'<polygon points="'+cx+','+(cy-4.1)+' '+(cx+4.1)+','+(cy+3.5)+' '+(cx-4.1)+','+(cy+3.5)+'" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
-    if(shape==='cross')return '<g>'+t+'<path d="M'+(cx-3.7)+','+cy+' H'+(cx+3.7)+' M'+cx+','+(cy-3.7)+' V'+(cy+3.7)+'" fill="none" stroke="'+color+'" stroke-width="2.2"/></g>';
-    return '<g>'+t+'<circle cx="'+cx+'" cy="'+cy+'" r="3.2" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
-  }
-  function valid(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))}
   function parseDate(date){var parsed=new Date(String(date||'')+'T00:00:00Z');return Number.isNaN(parsed.getTime())?null:parsed}
   function cutoffForRange(latestDate,range){
     if(range==='all')return null;
@@ -388,41 +367,6 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
     }).join('');
     return '<div class="daily-class-stack-chart daily-density-'+density+'">'+legendHtml+'<div class="daily-class-stack-rows">'+rowsHtml+'</div><div class="daily-class-note">棒全体＝その日の総セッション数｜色＝学級別内訳（スクロールで全表示日を確認）</div></div>';
   }
-  function niceStep(range){
-    var target=Math.max(.1,range/4),power=Math.pow(10,Math.floor(Math.log10(target))),scaled=target/power;
-    var factor=scaled<=1?1:scaled<=2?2:scaled<=2.5?2.5:scaled<=5?5:10;
-    return factor*power;
-  }
-  function turnsByClassSvg(series){
-    var list=(Array.isArray(series)?series:[]).filter(function(item){return Array.isArray(item.points)&&item.points.some(function(point){return valid(point.value)})});
-    var w=460,hgt=245,left=56,right=15,bottom=43;
-    if(!list.length)return '<svg viewBox="0 0 '+w+' '+hgt+'" role="img" aria-label="1分あたり平均ターン数学級別累積平均"><text x="230" y="122" text-anchor="middle" class="svg-label">データなし</text></svg>';
-    var dates=[];list.forEach(function(item){item.points.forEach(function(point){if(dates.indexOf(point.date)<0)dates.push(point.date)})});dates.sort();
-    var values=[];list.forEach(function(item){item.points.forEach(function(point){if(valid(point.value))values.push(Number(point.value))})});
-    var rawMin=Math.min.apply(null,values),rawMax=Math.max.apply(null,values),rawRange=Math.max(0,rawMax-rawMin);
-    var desiredSpan=Math.max(1,rawRange*1.3),center=(rawMin+rawMax)/2,axisMin=Math.max(0,center-desiredSpan/2),axisMax=axisMin+desiredSpan;
-    if(axisMax<rawMax){axisMax=rawMax;axisMin=Math.max(0,axisMax-desiredSpan)}
-    var step=niceStep(axisMax-axisMin),pad=Math.max(step*.5,(axisMax-axisMin)*.05);
-    axisMin=Math.max(0,Math.floor((axisMin-pad)/step)*step);axisMax=Math.ceil((axisMax+pad)/step)*step;
-    if(axisMax<=axisMin)axisMax=axisMin+step;
-    var legendRows=Math.ceil(list.length/3),top=18+legendRows*18,plotH=hgt-top-bottom,plotW=w-left-right;
-    var x=function(date){var i=dates.indexOf(date);return left+(dates.length<=1?plotW/2:i*plotW/(dates.length-1))};
-    var y=function(value){return top+plotH-(Number(value)-axisMin)*plotH/(axisMax-axisMin||1)};
-    var fmt=function(value){return Math.abs(value-Math.round(value))<1e-9?String(Math.round(value)):String(Math.round(value*10)/10)};
-    var out='<svg viewBox="0 0 '+w+' '+hgt+'" role="img" aria-label="1分あたり平均ターン数学級別累積平均">';
-    for(var tick=axisMin,guard=0;tick<=axisMax+step*.001&&guard<10;tick+=step,guard+=1){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="svg-label" style="font-size:10px">'+h(fmt(tick))+'</text>'}
-    selectResearchDateTicks(dates,function(index){return x(dates[index])},7,10).forEach(function(index){var date=dates[index];out+='<text x="'+x(date)+'" y="'+(hgt-19)+'" text-anchor="middle" class="svg-label" style="font-size:10px">'+h(String(date).slice(5))+'</text>'});
-    list.forEach(function(item,index){
-      var color=classColor(item.class_id),shape=classShape(item.class_id),points=[];
-      (item.points||[]).forEach(function(point){if(valid(point.value)&&point.observed!==false)points.push(x(point.date)+','+y(Number(point.value)))});
-      if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
-      (item.points||[]).forEach(function(point){if(!valid(point.value)||point.observed===false)return;var title=String(point.date||'')+' '+String(item.label||item.class_id||'')+': '+fmt(Number(point.value))+' ターン/分 (n='+Number(point.n||0)+')';out+=lineMarker(shape,x(point.date),y(Number(point.value)),color,title)});
-      var col=index%3,row=Math.floor(index/3),lx=left+col*132,ly=12+row*18;
-      out+='<line x1="'+lx+'" y1="'+ly+'" x2="'+(lx+16)+'" y2="'+ly+'" stroke="'+color+'" stroke-width="2"/>'+lineMarker(shape,lx+8,ly,color,'')+'<text x="'+(lx+21)+'" y="'+(ly+4)+'" class="svg-label" style="font-size:10px;fill:#10224a">'+h(item.label||item.class_id||'')+'</text>';
-    });
-    out+='<text x="'+left+'" y="'+(hgt-3)+'" class="svg-label" style="font-size:9px;fill:#64748b">授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜ターン＝児童＋AI発話</text>';
-    return out+'</svg>';
-  }
   function updateRangeButtons(){
     var controls=document.getElementById('dailySessionRangeControls');
     if(!controls)return;
@@ -437,14 +381,11 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
     if(!latestCharts)return;
     var rows=Array.isArray(latestCharts.dailyClassStack)?latestCharts.dailyClassStack:[];
     var visibleRows=filterRowsByRange(rows,selectedRange);
-    var visibleTurns=Array.isArray(latestCharts.cumulativeTurnsByClass)?latestCharts.cumulativeTurnsByClass:[];
     var title=document.getElementById('chartDailyTitle');
     var chart=document.getElementById('chartDaily');
-    var turns=document.getElementById('chartTurns');
     if(title)title.textContent='日別セッション数（学級別内訳）';
     if(chart)chart.innerHTML=stackedClassBars(visibleRows,latestCharts.dailyClassLegend||[]);
-    // The unified renderer owns turns when installed; avoid a transient legacy palette.
-    if(turns&&!window.__researchDashboardUnifiedChartsV2)turns.innerHTML=turnsByClassSvg(visibleTurns);
+    // ChartTurns is rendered exclusively by researchDashboardChartUnificationRuntime.
     updateRangeButtons();
   }
   function bindRangeControls(){
