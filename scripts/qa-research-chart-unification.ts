@@ -37,6 +37,14 @@ assert.match(sentBody, /unified-line-axis/);
 assert.match(sentBody, /font-size:10px/);
 assert.match(sentBody, /unified-line-legend/);
 assert.match(sentBody, /unified-line-footnote\{[^}]*font-size:11px/);
+assert.match(sentBody, /\.unified-line-chart\{[^}]*height:auto;min-height:330px/,
+  'all three line charts must size naturally to the available card width');
+assert.match(sentBody, /\.unified-line-chart svg\{[^}]*width:100%;height:auto;aspect-ratio:460\/245;flex:0 0 auto/,
+  'SVG width must not be constrained by the previous fixed chart height / flex shrink');
+assert.match(sentBody, /\.research-turns-card #chartTurns\{flex:0 0 auto;min-height:330px/,
+  'turns graph must follow the same natural sizing rules as words and reflection charts');
+assert.doesNotMatch(sentBody, /\.unified-line-chart svg\{[^}]*flex:1 1 auto/,
+  'chart-specific flex shrink previously made the words/reflection plots narrower');
 assert.doesNotMatch(sentBody, /class=\\"unified-line-note\\"/);
 assert.match(sentBody, /unified-line-chart\{display:flex;flex-direction:column/);
 assert.match(sentBody, /ensureSeparateCards/);
@@ -246,6 +254,11 @@ function assertStandardMarkers(svg:string, expectedCount:number, label:string){
 for(const [chartName,svg] of Object.entries(allColors)){
   assertStandardMarkers(svg,15,chartName+' five classes');
 }
+for(const [chartName,svg] of Object.entries(allColors)){
+  assert.match(svg,/^<svg viewBox="0 0 460 245" width="100%" height="100%"/,
+    chartName+' SVG must keep identical intrinsic coordinates for card-wide rendering');
+}
+
 browser.window.renderDashboard({charts:{lessonCumulativeReflection:[
   reflectionTestRow('2026-10-01',true,2.7,2.8,2.5),
   reflectionTestRow('2026-10-02',true,2.8,2.9,2.6),
