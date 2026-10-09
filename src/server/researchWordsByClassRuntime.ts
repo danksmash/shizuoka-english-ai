@@ -1,4 +1,5 @@
 import type { RequestHandler } from 'express';
+import { RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT } from './researchClassChartPalette';
 import {
   buildResearchExportDataSets,
   filterResearchSessionRows,
@@ -167,19 +168,24 @@ function injectWordsByClassChart(html: string): string {
 (function(){
   function escapeHtml(value){return String(value==null?'':value).replace(/[&<>\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]})}
   function valid(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))}
-  function conditionColors(condition){
-    return condition==='comparison'
-      ? ['#f59e0b']
-      : ['#1d4ed8','#2563eb','#3b82f6','#60a5fa','#1e40af','#93c5fd'];
-  }
+  // Keep legacy fallback display in lockstep with the canonical dashboard renderer.
+${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
   function shapeForClassId(classId){
-    var m=String(classId||'').match(/(?:C)?([1-9])$/i),n=m?Number(m[1]):1;
+    var id=String(classId||'').trim().toUpperCase();
+    if(id==='5-1')return 'circle';
+    if(id==='5-2')return 'square';
+    if(id==='5-3')return 'triangle';
+    if(id==='6-C1')return 'diamond';
+    if(id==='6-C2')return 'cross';
+    var m=id.match(/(?:C)?([1-9])$/i),n=m?Number(m[1]):1;
     return n%3===2?'square':n%3===0?'diamond':'circle';
   }
   function marker(shape,cx,cy,color,title){
     var t=title?'<title>'+escapeHtml(title)+'</title>':'';
     if(shape==='square')return '<g>'+t+'<rect x="'+(cx-3.4)+'" y="'+(cy-3.4)+'" width="6.8" height="6.8" rx="0.8" fill="#fff" stroke="'+color+'" stroke-width="1.5"/></g>';
     if(shape==='diamond')return '<g>'+t+'<polygon points="'+cx+','+(cy-4.2)+' '+(cx+4.2)+','+cy+' '+cx+','+(cy+4.2)+' '+(cx-4.2)+','+cy+'" fill="#fff" stroke="'+color+'" stroke-width="1.5"/></g>';
+    if(shape==='triangle')return '<g>'+t+'<polygon points="'+cx+','+(cy-4.2)+' '+(cx+4.2)+','+(cy+3.6)+' '+(cx-4.2)+','+(cy+3.6)+'" fill="#fff" stroke="'+color+'" stroke-width="1.5"/></g>';
+    if(shape==='cross')return '<g>'+t+'<path d="M'+(cx-3.7)+','+cy+' H'+(cx+3.7)+' M'+cx+','+(cy-3.7)+' V'+(cy+3.7)+'" fill="none" stroke="'+color+'" stroke-width="2"/></g>';
     return '<g>'+t+'<circle cx="'+cx+'" cy="'+cy+'" r="3.3" fill="#fff" stroke="'+color+'" stroke-width="1.5"/></g>';
   }
   function niceStep(range){
@@ -206,16 +212,16 @@ function injectWordsByClassChart(html: string): string {
     var out='<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="1分あたり平均発話語数学級別累積平均">';
     for(var tick=axisMin,guard=0;tick<=axisMax+step*.001&&guard<12;tick+=step,guard+=1){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-18)+'" y="'+(yy+5)+'" text-anchor="middle" class="svg-label">'+escapeHtml(fmt(tick))+'</text>'}
     var every=Math.max(1,Math.ceil(dates.length/8));dates.forEach(function(date,i){if(i%every===0||i===dates.length-1)out+='<text x="'+x(date)+'" y="'+(h-24)+'" text-anchor="middle" class="svg-label">'+escapeHtml(String(date).slice(5))+'</text>'});
-    var counts={intervention:0,comparison:0,unknown:0};
     list.forEach(function(s,si){
-      var condition=s.school_condition==='comparison'?'comparison':'intervention',palette=conditionColors(condition),color=palette[counts[condition]++%palette.length],shape=shapeForClassId(s.class_id),points=[];
-      (s.points||[]).forEach(function(p){if(valid(p.value))points.push(x(p.date)+','+y(Number(p.value)))});
+      var color=classColor(s.class_id,s.school_condition),shape=shapeForClassId(s.class_id),points=[];
+      // Connect actual lesson observations only; carried-forward values are not vertices.
+      (s.points||[]).forEach(function(p){if(valid(p.value)&&p.observed!==false)points.push(x(p.date)+','+y(Number(p.value)))});
       if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>';
       (s.points||[]).forEach(function(p){if(!valid(p.value)||p.observed===false)return;var title=String(p.date||'')+' '+String(s.label||s.class_id||'')+': '+fmt(Number(p.value))+' 語/分 (n='+Number(p.n||0)+')';out+=marker(shape,x(p.date),y(Number(p.value)),color,title)});
       var col=si%3,row=Math.floor(si/3),lx=left+col*132,ly=15+row*21;
       out+='<line x1="'+lx+'" y1="'+ly+'" x2="'+(lx+18)+'" y2="'+ly+'" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round"/>'+marker(shape,lx+9,ly,color,'')+'<text x="'+(lx+24)+'" y="'+(ly+4)+'" class="svg-label" style="font-size:11px;fill:#10224a">'+escapeHtml(s.label||s.class_id||'')+'</text>';
     });
-    out+='<text x="'+left+'" y="'+(h-3)+'" class="svg-label" style="font-size:9.5px;fill:#64748b">授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜実践校＝青系・比較校＝緑系</text>';
+    out+='<text x="'+left+'" y="'+(h-3)+'" class="svg-label" style="font-size:9.5px;fill:#64748b">授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜色＝学級別に固定</text>';
     return out+'</svg>';
   }
   var previousRenderDashboard=renderDashboard;
