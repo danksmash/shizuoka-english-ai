@@ -131,7 +131,7 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
     drawOrder.forEach(function(item){
       var points=[];
       rows.forEach(function(r,i){if(observed(r,item))points.push(x(i)+','+(y(Number(r[item.key]))+displayDy(item)))});
-      if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+item.color+'" stroke-width="1.45" data-display-offset-y="'+displayDy(item)+'" stroke-linecap="round" stroke-linejoin="round"/>';
+      if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+item.color+'" stroke-width="1.15" data-display-offset-y="'+displayDy(item)+'" stroke-linecap="round" stroke-linejoin="round"/>';
     });
     // Visual-only horizontal separation of POINT MARKERS when two or more
     // displayed series come within 7 SVG units. All line vertices and tooltip
@@ -147,7 +147,7 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
       });
     });
     series.forEach(function(item){
-      out+='<line x1="'+item.legendX+'" y1="'+item.legendY+'" x2="'+(item.legendX+16)+'" y2="'+item.legendY+'" stroke="'+item.color+'" stroke-width="1.45" stroke-linecap="round"/>'+marker(item.shape,item.legendX+8,item.legendY,item.color,'')+'<text x="'+(item.legendX+21)+'" y="'+(item.legendY+4)+'" class="unified-line-legend">'+esc(item.label)+'</text>';
+      out+='<line x1="'+item.legendX+'" y1="'+item.legendY+'" x2="'+(item.legendX+16)+'" y2="'+item.legendY+'" stroke="'+item.color+'" stroke-width="1.15" stroke-linecap="round"/>'+marker(item.shape,item.legendX+8,item.legendY,item.color,'')+'<text x="'+(item.legendX+21)+'" y="'+(item.legendY+4)+'" class="unified-line-legend">'+esc(item.label)+'</text>';
     });
     var scaleNote=axisMin===2&&axisMax===3.5?'縦軸2～3.5（0.25刻み）':
       '範囲外の実測値を含むため縦軸'+axisMin+'～'+axisMax;
