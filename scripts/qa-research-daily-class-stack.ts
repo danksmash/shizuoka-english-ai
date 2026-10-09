@@ -274,12 +274,8 @@ assert.ok(dailyRuntimeSource.includes("import { RESEARCH_CLASS_PALETTE_BROWSER_S
 assert.ok(dailyRuntimeSource.includes('${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}'), 'daily bar script must embed shared color definitions');
 assert.ok(dailyRuntimeSource.includes("style=\"background:'+classColor(id)"), 'daily legend must use the shared palette');
 assert.ok(dailyRuntimeSource.includes("style=\"background:'+classColor(id)+';flex:"), 'stacked bar segments must use the shared palette');
-assert.ok(dailyRuntimeSource.includes('if(valid(point.value)&&point.observed!==false)points.push'), 'turn trend must not create fake vertices on days without lessons');
-assert.ok(dailyRuntimeSource.includes('lineMarker(shape,x(point.date)'), 'fallback turn trend markers must match class shapes');
-assert.ok(
-  dailyRuntimeSource.includes('var visibleTurns=Array.isArray(latestCharts.cumulativeTurnsByClass)?latestCharts.cumulativeTurnsByClass:[];'),
-  'turn trend must remain full-range even when daily-session bars use a 7/14/30-day display filter',
-);
+assert.doesNotMatch(dailyRuntimeSource,/function turnsByClassSvg\(/,'legacy turn chart is removed');
+assert.doesNotMatch(dailyRuntimeSource,/turns\.innerHTML=turnsByClassSvg/,'daily bars must never paint the turn chart');
 assert.equal(
   dailyRuntimeSource.includes('filterSeriesByRange(latestCharts.cumulativeTurnsByClass'),
   false,
