@@ -1,4 +1,5 @@
 import type { RequestHandler } from 'express';
+import { RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT } from './researchClassChartPalette';
 
 function injectResearchDashboardChartUnification(html: string): string {
   if (!html.includes('id="chartTurns"') || html.includes('researchDashboardChartUnification')) return html;
@@ -17,26 +18,24 @@ function injectResearchDashboardChartUnification(html: string): string {
     var factor=scaled<=1?1:scaled<=2?2:scaled<=2.5?2.5:scaled<=5?5:10;
     return factor*power;
   }
-  // Stable identity-to-color mapping: never assign colors by filtered list order.
-  // The comparison orange exactly matches the culture-reflection series.
-  var classColors={'5-1':'#1d4ed8','5-2':'#2563eb','5-3':'#3b82f6',
-    '6-1':'#60a5fa','6-2':'#1e40af','6-3':'#93c5fd'};
-  var otherInterventionColors=['#1d4ed8','#2563eb','#3b82f6','#60a5fa','#1e40af','#93c5fd'];
-  function classColor(classId,condition){
-    var id=String(classId||'').trim();
-    if(condition==='comparison'||/^[1-9]-C[1-9]$/i.test(id))return '#f59e0b';
-    if(classColors[id])return classColors[id];
-    var hash=0;for(var i=0;i<id.length;i++)hash=((hash*31)+id.charCodeAt(i))>>>0;
-    return otherInterventionColors[hash%otherInterventionColors.length];
-  }
+  // Both line charts and the daily bars use one shared, ID-stable palette.
+${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
   function classShape(classId){
-    var m=String(classId||'').match(/(?:C)?([1-9])$/i),n=m?Number(m[1]):1;
+    var id=String(classId||'').trim().toUpperCase();
+    if(id==='5-1')return 'circle';
+    if(id==='5-2')return 'square';
+    if(id==='5-3')return 'triangle';
+    if(id==='6-C1')return 'diamond';
+    if(id==='6-C2')return 'cross';
+    var m=id.match(/(?:C)?([1-9])$/i),n=m?Number(m[1]):1;
     return n%3===2?'square':n%3===0?'diamond':'circle';
   }
   function marker(shape,cx,cy,color,title){
     var t=title?'<title>'+esc(title)+'</title>':'';
     if(shape==='square')return '<g>'+t+'<rect x="'+(cx-3.2)+'" y="'+(cy-3.2)+'" width="6.4" height="6.4" rx="0.8" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
     if(shape==='diamond')return '<g>'+t+'<polygon points="'+cx+','+(cy-4)+' '+(cx+4)+','+cy+' '+cx+','+(cy+4)+' '+(cx-4)+','+cy+'" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
+    if(shape==='triangle')return '<g>'+t+'<polygon points="'+cx+','+(cy-4.1)+' '+(cx+4.1)+','+(cy+3.5)+' '+(cx-4.1)+','+(cy+3.5)+'" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
+    if(shape==='cross')return '<g>'+t+'<path d="M'+(cx-3.7)+','+cy+' H'+(cx+3.7)+' M'+cx+','+(cy-3.7)+' V'+(cy+3.7)+'" fill="none" stroke="'+color+'" stroke-width="2.2" stroke-linecap="round"/></g>';
     return '<g>'+t+'<circle cx="'+cx+'" cy="'+cy+'" r="3.2" fill="#fff" stroke="'+color+'" stroke-width="1.8"/></g>';
   }
   function classSeriesSvg(series,unit,aria,note){
@@ -135,9 +134,9 @@ function injectResearchDashboardChartUnification(html: string): string {
     ensureSeparateCards();
     var charts=(d&&d.charts)||{};
     var turns=document.getElementById('chartTurns');
-    if(turns&&Array.isArray(charts.cumulativeTurnsByClass))turns.innerHTML=classSeriesSvg(charts.cumulativeTurnsByClass,'ターン/分','1分あたり平均ターン数学級別累積平均','授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜ターン＝児童＋AI発話｜実践校＝青系・比較校＝オレンジ');
+    if(turns&&Array.isArray(charts.cumulativeTurnsByClass))turns.innerHTML=classSeriesSvg(charts.cumulativeTurnsByClass,'ターン/分','1分あたり平均ターン数学級別累積平均','授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜ターン＝児童＋AI発話｜色＝学級別に固定');
     var words=document.getElementById('chartWords');
-    if(words&&Array.isArray(charts.cumulativeWordsByClass))words.innerHTML=classSeriesSvg(charts.cumulativeWordsByClass,'語/分','1分あたり平均発話語数学級別累積平均','授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜実践校＝青系・比較校＝オレンジ');
+    if(words&&Array.isArray(charts.cumulativeWordsByClass))words.innerHTML=classSeriesSvg(charts.cumulativeWordsByClass,'語/分','1分あたり平均発話語数学級別累積平均','授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜色＝学級別に固定');
     var wordsTitle=document.getElementById('chartWordsTitle');if(wordsTitle)wordsTitle.textContent='1分あたり平均発話語数（学級別・累積平均・日別）';
     var reflection=document.getElementById('chartReflection');var cumulative=charts.lessonCumulativeReflection||charts.cumulativeDaily||charts.daily||[];
     if(reflection)reflection.innerHTML=reflectionSvg(cumulative);

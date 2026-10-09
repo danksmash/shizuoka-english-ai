@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import vm from 'node:vm';
+import { RESEARCH_CLASS_COLORS, RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT } from '../src/server/researchClassChartPalette';
 import {
   buildCumulativeTurnsByClass,
   buildDailyClassStackRows,
@@ -154,7 +156,7 @@ const comparisonTurns = buildCumulativeTurnsByClass([
     actual_duration_seconds:120,
   },
 ]);
-assert.equal(comparisonTurns[0]?.school_condition, 'comparison', 'comparison-school turn series must carry school_condition for orange chart styling');
+assert.equal(comparisonTurns[0]?.school_condition, 'comparison', 'comparison-school turn series must retain its class identity for stable color styling');
 assert.equal(comparisonTurns[0]?.label, '6年比較1組');
 
 const lessonTrendSessions = [
@@ -261,7 +263,17 @@ assert.deepEqual(
   'WPM trend must use the same child-speech eligibility rule as turn trend',
 );
 
+// Daily stacked bars, turn/min and word/min share one fixed, identity-based palette.
+const resolveColor = vm.runInNewContext(RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT + '\nclassColor', {});
+for (const [classId, expected] of Object.entries(RESEARCH_CLASS_COLORS)) {
+  assert.equal(resolveColor(classId), expected, classId + ' must keep its color after redraw');
+}
+assert.notEqual(resolveColor('6-C1'),resolveColor('6-C2'), 'comparison classes must have distinct colors');
 const dailyRuntimeSource = fs.readFileSync(new URL('../src/server/researchDailyClassStackRuntime.ts', import.meta.url), 'utf8');
+assert.ok(dailyRuntimeSource.includes("import { RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT }"), 'daily bar renderer must use shared color definitions');
+assert.ok(dailyRuntimeSource.includes('${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}'), 'daily bar script must embed shared color definitions');
+assert.ok(dailyRuntimeSource.includes("style=\"background:'+classColor(id)"), 'daily legend must use the shared palette');
+assert.ok(dailyRuntimeSource.includes("style=\"background:'+classColor(id)+';flex:"), 'stacked bar segments must use the shared palette');
 assert.ok(
   dailyRuntimeSource.includes('var visibleTurns=Array.isArray(latestCharts.cumulativeTurnsByClass)?latestCharts.cumulativeTurnsByClass:[];'),
   'turn trend must remain full-range even when daily-session bars use a 7/14/30-day display filter',

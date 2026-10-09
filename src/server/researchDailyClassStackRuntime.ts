@@ -1,3 +1,4 @@
+import { RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT } from './researchClassChartPalette';
 import type { RequestHandler } from 'express';
 import {
   buildResearchExportDataSets,
@@ -314,22 +315,11 @@ function injectResearchDailyClassStack(html: string): string {
 
   const script = `<script id="researchDailyClassStack">
 (function(){
-  var fixedColors={
-    '5-1':'#1d4ed8','5-2':'#2563eb','5-3':'#3b82f6',
-    '6-1':'#60a5fa','6-2':'#1e40af','6-3':'#93c5fd',
-    'unknown':'#94a3b8'
-  };
-  var fallbackColors=['#0f766e','#9333ea','#be123c','#4f46e5','#15803d','#c2410c','#0369a1','#a16207','#6d28d9','#047857'];
+  // Use the exact same class palette as the two cumulative line charts.
+${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
   var selectedRange='14';
   var latestCharts=null;
 
-  function classColor(classId){
-    var id=String(classId||'unknown');
-    if(/^[1-9]-C[1-9]$/i.test(id))return '#f59e0b';
-    if(fixedColors[id])return fixedColors[id];
-    var hash=0;for(var i=0;i<id.length;i+=1)hash=((hash*31)+id.charCodeAt(i))>>>0;
-    return fallbackColors[hash%fallbackColors.length];
-  }
   function h(value){return String(value==null?'':value).replace(/[&<>\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]})}
   function valid(v){return v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))}
   function parseDate(date){var parsed=new Date(String(date||'')+'T00:00:00Z');return Number.isNaN(parsed.getTime())?null:parsed}
