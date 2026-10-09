@@ -82,25 +82,52 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
   function reflectionSvg(rows){
     rows=Array.isArray(rows)?rows:[];
     var series=[
-      {key:'reflection_understood',n:'reflection_understood_n',observed:'reflection_understood_observed',label:'相手の話を聞いて分かる',color:'#2774ee',shape:'circle',legendX:56,legendY:12},
+      {key:'reflection_understood',n:'reflection_understood_n',observed:'reflection_understood_observed',label:'相手の話を聞いて分かる',color:'#2774ee',shape:'circle',legendX:56,legendY:12,dashed:true},
       {key:'reflection_conveyed',n:'reflection_conveyed_n',observed:'reflection_conveyed_observed',label:'自分の考えを伝える',color:'#20a567',shape:'square',legendX:245,legendY:12},
       {key:'reflection_culture',n:'reflection_culture_n',observed:'reflection_culture_observed',label:'新しい言葉や文化に気づいた',color:'#f59e0b',shape:'diamond',legendX:56,legendY:30}
     ];
-    var has=rows.some(function(r){return series.some(function(s){return valid(r[s.key])})});
+    function observed(row,item){return valid(row[item.key])&&row[item.observed]!==false}
+    var has=rows.some(function(r){return series.some(function(item){return observed(r,item)})});
     var w=W,h=H,left=LEFT,right=RIGHT,bottom=BOTTOM,top=48,plotW=w-left-right,plotH=h-top-bottom;
     var out='<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="100%" role="img" aria-label="AI対話ふりかえり平均 4件法">';
     if(!rows.length||!has)return out+'<text x="230" y="122" text-anchor="middle" class="unified-line-axis">データなし</text></svg><div class="unified-line-footnote" role="note">4件法｜授業内のみ｜累積平均（セッション単位）｜授業外利用は除外</div>';
-    var x=function(i){return left+(rows.length<=1?plotW/2:i*plotW/(rows.length-1))},y=function(v){return top+plotH-(Number(v)-1)*plotH/3};
-    // Plot real data coordinates; shifting individual dates introduces spurious zigzags.
-    [1,2,3,4].forEach(function(tick){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="unified-line-axis">'+tick+'</text>'});
+    // Zoom from 1–4 to 2–4. If observed ratings below 2 occur, expand to 1–4
+    // instead of clipping research observations or changing the underlying data.
+    var values=[];
+    rows.forEach(function(r){series.forEach(function(item){if(observed(r,item))values.push(Number(r[item.key]))})});
+    var axisMin=values.some(function(v){return v<2})?1:2;
+    var x=function(i){return left+(rows.length<=1?plotW/2:i*plotW/(rows.length-1))};
+    var y=function(v){return top+plotH-(Number(v)-axisMin)*plotH/(4-axisMin)};
+    var ticks=axisMin===2?[2,2.5,3,3.5,4]:[1,1.5,2,2.5,3,3.5,4];
+    ticks.forEach(function(tick){var yy=y(tick);out+='<line x1="'+left+'" y1="'+yy+'" x2="'+(left+plotW)+'" y2="'+yy+'" stroke="#dfe7f2" stroke-width="1"/><text x="'+(left-17)+'" y="'+(yy+4)+'" text-anchor="middle" class="unified-line-axis">'+tick+'</text>'});
     selectResearchDateTicks(rows.map(function(r){return r.date}),x,7,10).forEach(function(i){var r=rows[i];out+='<text x="'+x(i)+'" y="'+(h-19)+'" text-anchor="middle" class="unified-line-axis">'+esc(String(r.date||'').slice(5))+'</text>'});
-    series.forEach(function(item,si){
-      var points=[];rows.forEach(function(r,i){if(valid(r[item.key])&&r[item.observed]!==false)points.push(x(i)+','+y(Number(r[item.key])))});
-      if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+item.color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round" stroke-linejoin="round"/>';
-      rows.forEach(function(r,i){if(!valid(r[item.key])||r[item.observed]===false)return;var value=Math.round(Number(r[item.key])*100)/100,count=Number(r[item.n]||0),title=String(r.date||'')+' '+item.label+': 平均 '+value+' (n='+count+')';out+=marker(item.shape,x(i),y(Number(r[item.key])),item.color,title)});
-      out+='<line x1="'+item.legendX+'" y1="'+item.legendY+'" x2="'+(item.legendX+16)+'" y2="'+item.legendY+'" stroke="'+item.color+'" stroke-width="'+LINE_WIDTH+'" stroke-linecap="round"/>'+marker(item.shape,item.legendX+8,item.legendY,item.color,'')+'<text x="'+(item.legendX+21)+'" y="'+(item.legendY+4)+'" class="unified-line-legend">'+esc(item.label)+'</text>';
+    // Draw all polylines at exact data coordinates. The green solid line remains
+    // visible in the gaps of the blue dashed line, even for identical values.
+    // Blue is deliberately drawn last, so it cannot be hidden by green.
+    var drawOrder=[series[1],series[2],series[0]];
+    drawOrder.forEach(function(item){
+      var points=[];
+      rows.forEach(function(r,i){if(observed(r,item))points.push(x(i)+','+y(Number(r[item.key])))});
+      if(points.length>1)out+='<polyline points="'+points.join(' ')+'" fill="none" stroke="'+item.color+'" stroke-width="'+(item.dashed?'1.35':'1.45')+'"'+(item.dashed?' stroke-dasharray="4 3"':'')+' stroke-linecap="round" stroke-linejoin="round"/>';
     });
-    return out+'</svg><div class="unified-line-footnote" role="note">4件法｜授業内のみ｜累積平均（セッション単位）｜授業外利用は除外</div>';
+    // Visual-only horizontal separation of POINT MARKERS when two or more
+    // displayed series come within 7 SVG units. All line vertices and tooltip
+    // means remain at their real coordinates, avoiding artificial zigzags.
+    drawOrder.forEach(function(item){
+      rows.forEach(function(r,i){
+        if(!observed(r,item))return;
+        var near=series.filter(function(other){return observed(r,other)&&Math.abs(y(Number(r[item.key]))-y(Number(r[other.key])))<7});
+        var rank=near.indexOf(item),dx=near.length<2?0:(rank-(near.length-1)/2)*6;
+        var value=Math.round(Number(r[item.key])*100)/100,count=Number(r[item.n]||0);
+        var title=String(r.date||'')+' '+item.label+': 平均 '+value+' (n='+count+')';
+        out+='<g class="reflection-point" data-series="'+esc(item.key)+'" data-mean="'+Number(r[item.key])+'" data-visual-offset-x="'+dx+'"'+(dx?' transform="translate('+dx+' 0)"':'')+'>'+marker(item.shape,x(i),y(Number(r[item.key])),item.color,title)+'</g>';
+      });
+    });
+    series.forEach(function(item){
+      out+='<line x1="'+item.legendX+'" y1="'+item.legendY+'" x2="'+(item.legendX+16)+'" y2="'+item.legendY+'" stroke="'+item.color+'" stroke-width="'+(item.dashed?'1.35':'1.45')+'"'+(item.dashed?' stroke-dasharray="4 3"':'')+' stroke-linecap="round"/>'+marker(item.shape,item.legendX+8,item.legendY,item.color,'')+'<text x="'+(item.legendX+21)+'" y="'+(item.legendY+4)+'" class="unified-line-legend">'+esc(item.label)+'</text>';
+    });
+    var scaleNote=axisMin===2?'縦軸2～4（0.5刻み）':'2未満の実測値を含むため縦軸1～4';
+    return out+'</svg><div class="unified-line-footnote" role="note">4件法｜'+scaleNote+'｜授業内のみ｜累積平均（セッション単位）｜授業外利用は除外｜線は実測値、近接時はマーカーのみ左右に分離</div>';
   }
   function ensureSeparateCards(){
     var daily=document.getElementById('chartDaily'),turns=document.getElementById('chartTurns');
