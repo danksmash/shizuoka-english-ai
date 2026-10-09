@@ -300,7 +300,7 @@ const readDateLabels=(html:string)=>{
   const re=/<text x="([^"]+)" y="[^"]+" text-anchor="middle" class="(?:unified-line-axis|svg-label)"[^>]*>(\d\d-\d\d)<\/text>/g;
   return [...html.matchAll(re)].map(match=>({x:Number(match[1]),label:match[2]}));
 };
-function assertDateLabels(html:string,dates:string,fontSize:number,description:string){
+function assertDateLabels(html:string,dates:string[],fontSize:number,description:string){
   const labels=readDateLabels(html);
   assert.ok(labels.length>=2,description+' must display at least first and last dates');
   assert.equal(labels[0].label,dates[0].slice(5),description+' first date');
