@@ -18,7 +18,7 @@ export const DEFAULT_RQ2_CODEBOOK = {
   interactionFunctionRule: '児童発話が対話の中で主に「何をしているか」を1つの主コードで表す。複数機能が明確な場合は、その局所系列で中心となる機能を主コードとし、その他を補助ラベルに残す。形式（疑問文、説明文）ではなく対話上の働きで判定する。',
   functionBoundaryRule: 'ACKは傾聴・反応の表示、RESは質問への直接応答や自己開示、Qは相手の直前内容に依存しない情報要求、TOPは相手が提示した内容を受けた関連質問・関連コメント・話題の深掘り、COMPは理解を確認・要求・交渉する行動、REPは理解上の問題を解消するために自分の発話を訂正・反復・言い換える行動とする。',
   repairTaxonomy: {
-    rule: '対話機能の主コードがREPの場合のみ付与する補助属性。旧childRepairCountとは別物で、正式REPは局所系列をAI候補＋人間確認で判定する。',
+    rule: '対話機能の主コードがREPの場合のみ付与する補助属性。旧childRepairCountとは別物で、正式REPは局所系列をAI候補＋研究者確認で判定する。',
     subtypes: [
       { code: 'self_initiated', label: '自己開始修復', definition: '相手から明示的な修復要求が出る前に、児童が自分の発話を自発的に訂正・言い換える。' },
       { code: 'response_to_trouble', label: '相手の理解困難への応答', definition: 'AIの聞き返し・理解困難表明・確認要求を受け、児童が自分の発話を修正する。' },
@@ -48,7 +48,7 @@ export const DEFAULT_RQ2_CODEBOOK = {
     { code: 'T', replacement: 'TOP', rule: '旧版の話題展開。新規コードではTOPを用いる。' },
     { code: 'U', replacement: 'COMP', rule: '旧版の理解確認・調整。新規コードではCOMPを用いる。' },
     { code: 'R', replacement: 'REP', rule: '旧版の修復。新規コードではREPを用いる。' },
-    { code: 'E', replacement: 'manual_review', rule: '「説明」という形式だけでは機能を決めない。RES/TOP/COMP/REPのいずれかを文脈に基づき人間が再判定する。' },
+    { code: 'E', replacement: 'manual_review', rule: '「説明」という形式だけでは機能を決めない。RES/TOP/COMP/REPのいずれかを文脈に基づき研究者が再判定する。' },
   ],
   referenceBasis: [
     {
@@ -229,7 +229,7 @@ export const DEFAULT_RQ2_CODEBOOK = {
   ],
   notes: [
     '本v2は「文献による演繹的出発点＋実データで確認されたrepair境界事例」を反映した開発版である。300系列のうちコードブック開発用120系列で境界事例・未分類行動を確認して精緻化する。',
-    '旧childRepairCountはPardon等の表層的キーワード集計であり、RQ2の正式REPとは同一視しない。正式REPはB4等の参照基盤と局所系列を確認し、人間確定コードとして扱う。',
+    '旧childRepairCountはPardon等の表層的キーワード集計であり、RQ2の正式REPとは同一視しない。正式REPはB4等の参照基盤と局所系列を確認し、研究者確定コードとして扱う。',
     '開発用120系列は6区分×20系列、一致度確認用60系列は6区分×10系列で、両者を混用しない。',
     'コードブックを確定（freeze）する前に、developmentStatusをvalidated_with_development_sampleへ変更し、開発用標本での検討を完了したことを明示する。',
     '確定後の一致度確認用60系列は独立二重コードとし、参照基盤主コード・対話機能主コードそれぞれでCohenのκ係数を算出する。出現率の偏りが大きい場合はGwet AC1/AC2を補助確認する。',
