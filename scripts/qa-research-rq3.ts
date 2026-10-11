@@ -140,7 +140,10 @@ const rq2Codebook = fs.readFileSync('src/server/researchRq2Codebook.ts', 'utf8')
 
 assert.ok(entry.includes('createResearchRq3Router'));
 assert.ok(auth.includes("path.startsWith('/research-rq3')"));
-assert.ok(page.includes('RQ3 類型分布分析'));\nassert.ok(page.includes('3. 研究者確認'));\nassert.ok(page.includes('研究者未確認を表示'));\nassert.ok(page.includes('研究者確定系列'));
+assert.ok(page.includes('RQ3 類型分布分析'));
+assert.ok(page.includes('3. 研究者確認'));
+assert.ok(page.includes('研究者未確認を表示'));
+assert.ok(page.includes('研究者確定系列'));
 assert.ok(page.includes('analysis_sessions.csv'));
 assert.ok(page.includes('interaction_codes.csv'));
 assert.ok(page.includes('RQ2・RQ3分析用ZIP'));
