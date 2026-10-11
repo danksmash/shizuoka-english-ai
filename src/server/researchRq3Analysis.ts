@@ -128,7 +128,7 @@ export function buildRq3Distribution(items: Record<string, any>[]) {
     }
   }
   return {
-    codingRule: '人間確認済みの主コードのみ正式分布に含める。参照基盤B2a/B2bは記述では保持し、多項モデル用分布ではB2へ統合する。',
+    codingRule: '研究者確認済みの主コードのみ正式分布に含める。参照基盤B2a/B2bは記述では保持し、多項モデル用分布ではB2へ統合する。',
     confirmedN: confirmed.length,
     pendingN: Math.max(0, items.length - confirmed.length),
     strata,
