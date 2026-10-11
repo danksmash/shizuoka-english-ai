@@ -61,7 +61,7 @@ function humanFinalRows(rows: Record<string, any>[]) {
 
 export function buildRq2Analysis(items: Record<string, any>[]) {
   return {
-    codingRule: 'AIは候補コード。正式集計は人間確認済みの参照基盤主コード・対話機能主コードを用い、補助ラベルは記述用に保持する。',
+    codingRule: 'AIは候補コード。正式集計は研究者確認済みの参照基盤主コード・対話機能主コードを用い、補助ラベルは記述用に保持する。',
     strata: RQ2_STRATA.map((stratum) => {
       const rows = items.filter((row) => row.stratum === stratum);
       const finalRows = humanFinalRows(rows);
