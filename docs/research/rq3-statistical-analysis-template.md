@@ -18,7 +18,7 @@ Rは、データ点検、記述統計の再現、収束不良時の感度分析�
 正式分析に含める条件:
 
 - `analysis_ready == 1`
-- 人間確認済みの主コードのみ
+- 研究者確認済みの主コードのみ
 - `participant_key` を児童クラスタIDとして使用
 - `reference_primary_raw` は記述用
 - `reference_primary_model` はB2a/B2bをB2に統合した主モデル用
