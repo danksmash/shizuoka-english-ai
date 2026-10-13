@@ -53,6 +53,11 @@ type PhaseStats = {
   visitorSessionSharePercent: number | null;
   visitorParticipantN: number;
   visitorParticipantMeanSharePercent: number | null;
+  visitorMissingCountry: number;
+  visitorMissingSet: number;
+  assignedMissingCountry: number;
+  assignedMissingTarget: number;
+  assignedNotAnnounced: number;
 };
 
 const PHASE_LABELS: Record<PhaseId, string> = {
@@ -123,6 +128,11 @@ export function buildPhaseComparisonFromExportSessions(
     visitorSessionSharePercent: null,
     visitorParticipantN: 0,
     visitorParticipantMeanSharePercent: null,
+    visitorMissingCountry: 0,
+    visitorMissingSet: 0,
+    assignedMissingCountry: 0,
+    assignedMissingTarget: 0,
+    assignedNotAnnounced: 0,
   });
   if (requestedCondition === 'comparison') {
     return {
@@ -142,12 +152,14 @@ export function buildPhaseComparisonFromExportSessions(
   }
 
   type MatchBucket = { eligible: number; matched: number; participants: Map<string, { eligible: number; matched: number }> };
-  const buckets = new Map<PhaseId, { sessions: number; assigned: MatchBucket; visitor: MatchBucket }>();
+  type AuditCounts = { visitorMissingCountry: number; visitorMissingSet: number; assignedMissingCountry: number; assignedMissingTarget: number; assignedNotAnnounced: number };
+  const buckets = new Map<PhaseId, { sessions: number; assigned: MatchBucket; visitor: MatchBucket; audit: AuditCounts }>();
   for (const phase of PHASE_IDS) {
     buckets.set(phase, {
       sessions: 0,
       assigned: { eligible: 0, matched: 0, participants: new Map() },
       visitor: { eligible: 0, matched: 0, participants: new Map() },
+      audit: { visitorMissingCountry: 0, visitorMissingSet: 0, assignedMissingCountry: 0, assignedMissingTarget: 0, assignedNotAnnounced: 0 },
     });
   }
   const addMatch = (bucket: MatchBucket, researchId: string, matched: number) => {
@@ -187,11 +199,16 @@ export function buildPhaseComparisonFromExportSessions(
     const researchId = String(row.research_id || '');
 
     const visitorSet = new Set((schedule.announcedVisitorCountries || []).map(normalizedResearchCountry).filter(Boolean));
-    if (selected && visitorSet.size) addMatch(bucket.visitor, researchId, visitorSet.has(selected) ? 1 : 0);
+    if (!selected) bucket.audit.visitorMissingCountry += 1;
+    else if (!visitorSet.size) bucket.audit.visitorMissingSet += 1;
+    else addMatch(bucket.visitor, researchId, visitorSet.has(selected) ? 1 : 0);
 
     const assigned = normalizedResearchCountry(row.assigned_partner_country);
     const assignmentKnown = Boolean(schedule.assignmentRevealDate && localDate && localDate >= schedule.assignmentRevealDate);
-    if (assignmentKnown && assigned && selected) addMatch(bucket.assigned, researchId, assigned === selected ? 1 : 0);
+    if (!assignmentKnown) bucket.audit.assignedNotAnnounced += 1;
+    else if (!selected) bucket.audit.assignedMissingCountry += 1;
+    else if (!assigned) bucket.audit.assignedMissingTarget += 1;
+    else addMatch(bucket.assigned, researchId, assigned === selected ? 1 : 0);
   }
 
   const phases: PhaseStats[] = PHASE_IDS.map((phase) => {
@@ -212,13 +229,35 @@ export function buildPhaseComparisonFromExportSessions(
       visitorSessionSharePercent: visitor.sessionShare,
       visitorParticipantN: visitor.participantN,
       visitorParticipantMeanSharePercent: visitor.participantMean,
+      ...bucket.audit,
     };
   });
+
+  const p1Visitors = buckets.get('phase1')!.visitor.participants;
+  const p2Visitors = buckets.get('phase2')!.visitor.participants;
+  const visitorPairedParticipantN = [...p1Visitors.keys()].filter((id) => p2Visitors.has(id)).length;
+  const unphasedFilteredSessions = sessions.length - phases.reduce((sum, phase) => sum + phase.sessions, 0);
+  // A changed historical country list is a warning, not an automatic historical rewrite.
+  // The revision history alone cannot establish which version was actually shown to pupils.
+  const visitorSetRevisionClassIds = schedules.filter((schedule) => {
+    const current = [...new Set(schedule.announcedVisitorCountries.map(normalizedResearchCountry).filter(Boolean))].sort().join('|');
+    if (!current) return false;
+    return (schedule.history || []).some((snapshot) =>
+      snapshot.nationalityRevealDate === schedule.nationalityRevealDate
+      && [...new Set((snapshot.announcedVisitorCountries || []).map(normalizedResearchCountry).filter(Boolean))].sort().join('|') !== current
+      && (snapshot.announcedVisitorCountries || []).length > 0);
+  }).map((schedule) => schedule.classId);
 
   return {
     applicable: true,
     reason: '',
-    filterNote: 'Phase比較は実践校のみを対象にし、Persona・研究Phaseフィルタを除外して、開始日・終了日・データ区分・学年・学級・テーマ・complete条件を反映します。',
+    referenceAudit: {
+      filteredSessionN: sessions.length,
+      unphasedFilteredSessions,
+      visitorPairedParticipantN,
+      visitorSetRevisionClassIds,
+    },
+    filterNote: '参考値：実践校の該当セッションから算出。Persona・研究Phaseフィルタを除外し、開始日・終了日・データ区分・学年・学級・テーマ・complete条件を反映します。正式RQ1分析の授業内・児童発話1回以上・手動除外の採否とは異なります。',
     phase1Note: 'Phase 1の来校国籍群一致は、後に告知される国籍集合を分析上だけ遡及適用した基準選好です。児童はこの時点では来校国籍を知りません。',
     phase2Note: 'Phase 2は来校予定国籍群への焦点化、Phase 3は担当相手告知後の担当国への焦点化を別指標として扱います。',
     phases,
@@ -424,12 +463,12 @@ function buildStoredZip(files: Array<{ name: string; content: string }>): Buffer
 
 function injectPhaseAnalyticsUi(html: string): string {
   const oldIndicators = '<div class="research-indicators section"><div class="card indicator"><h3>告知前／告知後セッション</h3><b><span id="iBefore">-</span> / <span id="iAfter">-</span></b><p>担当留学生の告知日時が登録されている児童のみを集計</p></div><div class="card indicator"><h3>告知後・担当国Persona選択率</h3><b id="iCountryShare">-</b><p id="iCountryDetail">対象データなし</p></div><div class="card indicator"><h3>個別利用らしいセッション</h3><b id="iIndividual">-</b><p id="iIndividualDetail">対象データなし</p></div></div>';
-  const newIndicators = '<div class="research-indicators section"><div class="card indicator"><h3>実践進行確認：Phase別セッション数</h3><div id="iPhaseCounts" class="phase-mini">読み込み中…</div><p id="iPhaseCountNote">Phase 1〜4をStudy 1日程から判定</p></div><div class="card indicator"><h3>過程指標：相手選択の焦点化</h3><b id="iPhaseCountryHeadline">-</b><p id="iPhaseCountryDetail">Phase 1→2は来校国籍群、Phase 2→3は担当国を別指標で表示</p></div><div class="card indicator"><h3>個別利用らしいセッション（推定）</h3><b id="iIndividual">-</b><p id="iIndividualDetail">対象データなし</p><p>同学級の開始時刻集中度から推定。家庭利用を直接示すものではありません。</p></div><span id="iBefore" hidden></span><span id="iAfter" hidden></span><span id="iCountryShare" hidden></span><span id="iCountryDetail" hidden></span></div>';
+  const newIndicators = '<div class="research-indicators section"><div class="card indicator"><h3>実践進行確認：Phase別セッション数</h3><div id="iPhaseCounts" class="phase-mini">読み込み中…</div><p id="iPhaseCountNote">Phase 1〜4をStudy 1日程から判定</p></div><div class="card indicator"><h3>参考指標：相手選択の焦点化</h3><b id="iPhaseCountryHeadline">-</b><p id="iPhaseCountryDetail">児童別選択率の単純平均（正式RQ1主要分析の推定確率とは異なります）</p></div><div class="card indicator"><h3>個別利用らしいセッション（推定）</h3><b id="iIndividual">-</b><p id="iIndividualDetail">対象データなし</p><p>同学級の開始時刻集中度から推定。家庭利用を直接示すものではありません。</p></div><span id="iBefore" hidden></span><span id="iAfter" hidden></span><span id="iCountryShare" hidden></span><span id="iCountryDetail" hidden></span></div>';
   if (!html.includes(oldIndicators)) throw new Error('PHASE_ANALYTICS_INDICATOR_ANCHOR_MISSING');
   let out = html.replace(oldIndicators, newIndicators);
 
   const phaseSlot = '<div id="phaseCountryPanelSlot" class="phase-country-slot"></div>';
-  const phaseCard = '<div class="card chart-card phase-country-card"><h3>過程指標：20→来校国籍群→担当国への焦点化</h3><div id="chartPhaseCountry" class="chart"></div><p id="chartPhaseNote" class="muted" style="font-size:11px"></p></div>';
+  const phaseCard = '<div class="card chart-card phase-country-card"><h3>参考指標：20→来校国籍群→担当国への焦点化</h3><p class="muted">児童平均は児童ごとに等重み、session値は全選択機会の割合です。正式RQ1の採否・推定値とは別の参考集計です。 <a href="/research-rq1.html">正式RQ1分析・CSV</a></p><div id="chartPhaseCountry" class="chart"></div><p id="chartPhaseNote" class="muted" style="font-size:11px"></p></div>';
   if (!out.includes(phaseSlot)) throw new Error('PHASE_ANALYTICS_LAYOUT_SLOT_MISSING');
   out = out.replace(phaseSlot, '<div id="phaseCountryPanelSlot" class="phase-country-slot">' + phaseCard + '</div>');
 
@@ -444,6 +483,12 @@ function injectPhaseAnalyticsUi(html: string): string {
     var v=value===null||value===undefined?0:Math.max(0,Math.min(100,Number(value)));
     return '<div class="phase-rate-row"><div class="phase-rate-label">'+label+'</div><div class="phase-rate-track"><div class="phase-rate-fill" style="width:'+v+'%"></div></div><div class="phase-rate-value">'+pct(value)+'</div><div class="phase-rate-sub">児童 n='+n+' ／ session '+matched+'/'+eligible+' = '+pct(sessionShare)+'</div></div>';
   }
+  function excluded(label, total, eligible, reasons){
+    var diff=Math.max(0,Number(total||0)-Number(eligible||0));
+    if(!diff)return '';
+    var details=reasons.filter(function(x){return x[1]>0}).map(function(x){return x[0]+' '+x[1]+'件'}).join('・');
+    return '<div class="muted" style="font-size:11px;margin:0 4px 9px">参考集計の分母外 '+label+' '+diff+'件'+(details?'（'+details+'）':'')+'</div>';
+  }
   function renderPhaseComparison(data){
     var box=p$('iPhaseCounts'), headline=p$('iPhaseCountryHeadline'), detail=p$('iPhaseCountryDetail'), chart=p$('chartPhaseCountry'), note=p$('chartPhaseNote');
     if(!box||!headline||!detail||!chart)return;
@@ -456,14 +501,18 @@ function injectPhaseAnalyticsUi(html: string): string {
     var visitor=p2&&p2.visitorParticipantMeanSharePercent!==null?pct(p2.visitorParticipantMeanSharePercent):'—';
     var assigned=p3&&p3.participantMeanSharePercent!==null?pct(p3.participantMeanSharePercent):'—';
     headline.textContent='来校国籍群 P2 '+visitor+' / 担当国 P3 '+assigned;
-    detail.textContent='児童平均。Phase 1→2とPhase 2→3は偶然一致確率が異なるため別指標として扱います。';
+    detail.textContent='参考値（児童別率の平均）。正式RQ1主要分析と採否条件が異なります。Phase 1→2とPhase 2→3は異なる指標です。';
     var html='<div class="muted" style="font-weight:800;margin:8px 4px">来校国籍群Persona選択率（20→集合）</div>';
-    if(p1)html+=row('Phase 1',p1.visitorParticipantMeanSharePercent,p1.visitorParticipantN,p1.visitorMatchedSessions,p1.visitorEligibleSessions,p1.visitorSessionSharePercent);
-    if(p2)html+=row('Phase 2',p2.visitorParticipantMeanSharePercent,p2.visitorParticipantN,p2.visitorMatchedSessions,p2.visitorEligibleSessions,p2.visitorSessionSharePercent);
+    if(p1){html+=row('Phase 1',p1.visitorParticipantMeanSharePercent,p1.visitorParticipantN,p1.visitorMatchedSessions,p1.visitorEligibleSessions,p1.visitorSessionSharePercent);html+=excluded('Phase 1',p1.sessions,p1.visitorEligibleSessions,[['Persona国籍不明',p1.visitorMissingCountry],['来校国籍群未設定',p1.visitorMissingSet]]);}
+    if(p2){html+=row('Phase 2',p2.visitorParticipantMeanSharePercent,p2.visitorParticipantN,p2.visitorMatchedSessions,p2.visitorEligibleSessions,p2.visitorSessionSharePercent);html+=excluded('Phase 2',p2.sessions,p2.visitorEligibleSessions,[['Persona国籍不明',p2.visitorMissingCountry],['来校国籍群未設定',p2.visitorMissingSet]]);}
+    if(pc.referenceAudit)html+='<div class="muted" style="font-size:11px;margin:0 4px">参考集計のPhase 1・2両方で来校国籍群の判定が可能な同一児童 n='+pc.referenceAudit.visitorPairedParticipantN+'。上の平均は同一児童限定ではありません。</div>';
     html+='<div class="muted" style="font-weight:800;margin:20px 4px 8px">担当国Persona選択率（集合→担当国）</div>';
-    if(p3)html+=row('Phase 3',p3.participantMeanSharePercent,p3.participantN,p3.matchedSessions,p3.eligibleSessions,p3.sessionSharePercent);
+    if(p3){html+=row('Phase 3',p3.participantMeanSharePercent,p3.participantN,p3.matchedSessions,p3.eligibleSessions,p3.sessionSharePercent);html+=excluded('Phase 3',p3.sessions,p3.eligibleSessions,[['告知前',p3.assignedNotAnnounced],['Persona国籍不明',p3.assignedMissingCountry],['担当国の保存時点値なし',p3.assignedMissingTarget]]);}
+    if(pc.referenceAudit&&pc.referenceAudit.unphasedFilteredSessions>0)html+='<div class="muted" style="font-size:11px;margin:12px 4px">日程未判定などでPhaseに割り当てられないセッション：'+pc.referenceAudit.unphasedFilteredSessions+'件（上記Phase別件数の外）</div>';
     chart.innerHTML=html;
-    if(note)note.textContent=pc.phase1Note+' '+(pc.phase2Note||'')+' '+pc.filterNote;
+    if(note){note.textContent=pc.phase1Note+' '+(pc.phase2Note||'')+' '+pc.filterNote;
+      if(pc.referenceAudit&&pc.referenceAudit.visitorSetRevisionClassIds.length)note.textContent+=' 【確認要】Study 1の来校国籍群について履歴と現設定が異なる学級：'+pc.referenceAudit.visitorSetRevisionClassIds.join('、')+'。過去の集計基準に現設定を用いています。実際の告知内容を確認し、正式分析の参照国籍群を固定してください。';
+    }
   }
   window.__renderPhaseComparison=renderPhaseComparison;
 })();
