@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Study 1｜来校留学生・自己紹介動画管理</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#172840;background:#f3f7fc}
+*{box-sizing:border-box}body{margin:0}main{max-width:1120px;margin:auto;padding:18px 16px 45px}
+h1{font-size:25px;margin:4px 0 8px}h2{font-size:20px;margin:0 0 12px}h3{font-size:17px;margin:12px 0}
+p,.muted{color:#516176;line-height:1.65}p{margin:5px 0 13px}
+.card{background:#fff;border:1px solid #dce4ee;border-radius:14px;padding:20px;margin:15px 0}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.wide{grid-column:1/-1}
+label{display:block;font-size:15px;font-weight:750;margin-bottom:6px}input,select,textarea{font:inherit;width:100%;border-radius:8px;border:1px solid #bac8dc;background:#fff;color:#16273d;padding:10px}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:3px solid #81adf5;outline-offset:2px}
+textarea{resize:vertical;min-height:90px}.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
+button,.button-link{font:inherit;font-size:15px;font-weight:750;padding:10px 15px;border:1px solid #9db1cc;border-radius:9px;background:#edf3fc;color:#183c71;cursor:pointer;text-decoration:none}
+button.primary{background:#145abb;color:white;border-color:#145abb}button:disabled{opacity:.55;cursor:wait}
+header{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:15px}
+.notice{background:#f7f9fd;border-left:4px solid #5383c6;padding:10px 13px;line-height:1.65;font-size:14px}
+.small{font-size:13px}.message{margin-top:10px;font-weight:700;min-height:20px}.message.error{color:#b62323}
+.checklist{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.checkitem{border:1px solid #dce4ee;padding:8px 10px;border-radius:9px;display:flex;gap:9px;align-items:center;line-height:1.35}
+.checkitem input{width:19px;height:19px;flex:0 0 auto}.checkitem span{font-size:14px;min-width:0;overflow-wrap:anywhere}
+.scroll-list{max-height:320px;overflow:auto;border:1px solid #dbe5f0;border-radius:10px;padding:10px}
+.historyitem{border-bottom:1px solid #e5eaf2;padding:9px 2px;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
+.historyitem:last-child{border:0}.nowrap{white-space:nowrap}.statuschip{font-size:12px;color:#3b526d;border:1px solid #d0dce9;padding:3px 7px;border-radius:999px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}.checklist{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:21px}.card{padding:15px}}
+@media(max-width:420px){.checklist{grid-template-columns:1fr}}
+</style></head>
+<body><main>
+<div id="login" class="card" style="max-width:460px;margin:45px auto">
+<h1>来校留学生・自己紹介動画管理</h1><p>研究者専用。ログイン情報は既存のStudy 1と共通です。</p>
+<div><label for="username">研究者ID</label><input id="username" autocomplete="username"></div>
+<div style="margin-top:12px"><label for="password">パスワード</label><input id="password" type="password" autocomplete="current-password"></div>
+<div class="actions"><button class="primary" id="loginBtn">ログイン</button></div><p id="loginMsg" class="message" role="status"></p>
+</div>
+<div id="panel" hidden>
+<header><div><h1>Study 1｜来校留学生・自己紹介動画管理</h1><p>動画内容は留学生ごとに保存し、学級別の来校者変更は独立した履歴に残します。</p></div>
+<div class="actions"><a class="button-link" href="/study-schedule.html">日程管理へ戻る</a><button id="reloadBtn">再読込</button><button id="logoutBtn">ログアウト</button></div></header>
+<div class="notice">この画面の保存操作では、既存のStudy Schedule、国籍告知日、Phase、児童の担当国、過去の対話ログは変更しません。動画・来校者情報の更新は新しい版・記録として追記されます。動画そのものはアップロードせず、研究者用のURLと内容を記録します。</div>
+<section class="card"><h2>1．留学生ごとの自己紹介動画</h2>
+<div class="grid">
+<div><label for="studentSelect">留学生ID</label><select id="studentSelect"></select></div>
+<div><label>保存状態</label><p id="revision" class="muted">未登録</p></div>
+<div><label for="country">国籍（英語または日本語）</label><input id="country" maxlength="120" placeholder="Germany"></div>
+<div><label for="displayName">研究者用表示名（任意）</label><input id="displayName" maxlength="120"></div>
+<div><label for="videoVersion">動画の版・撮影日等（任意）</label><input id="videoVersion" maxlength="60" placeholder="2026-10-13 / ver.1"></div>
+<div><label for="videoUrl">保存先のHTTPS URL（任意）</label><input id="videoUrl" maxlength="1200" placeholder="https://..."><div class="small muted">一般公開リンクではなく、大学等でアクセス制限された場所を推奨します。</div></div>
+<div class="wide"><label for="englishTranscript">実際に話した英文（書き起こし）</label><textarea id="englishTranscript" maxlength="16000" rows="6" placeholder="My name is ..."></textarea></div>
+<div class="wide"><label for="japaneseSummary">動画内容の日本語整理</label><textarea id="japaneseSummary" maxlength="8000" rows="4" placeholder="名前・出身地・趣味・経験など"></textarea></div>
+<div class="wide"><label for="contentTags">情報タグ（カンマ区切り・30個まで）</label><input id="contentTags" placeholder="soccer, Japanese food, hometown"><div class="muted small">Phase 3の本人情報照合の補助。タグ一致のみではB2bを確定しません。</div></div>
+<div class="wide"><label for="researcherNotes">研究者用メモ（任意）</label><textarea id="researcherNotes" maxlength="2000" rows="3"></textarea></div>
+</div>
+<div class="actions"><button class="primary" id="saveVideoBtn">この留学生の動画内容を保存</button><span class="muted small">同じIDの情報を更新しても旧版は残ります。</span></div>
+<p id="videoMsg" role="status" class="message"></p>
+<details><summary>この留学生の登録履歴を表示</summary><div id="versionHistory" class="scroll-list"></div></details>
+</section>
+<section class="card"><h2>2．学級別の来校予定者変更・児童への告知の記録</h2>
+<p>変更日（研究者が知った日）と児童へ伝えた日を分けて記録します。留学生ID・国籍は保存時点のスナップショットとして固定されます。</p>
+<div class="grid">
+<div><label for="classId">対象学級</label><select id="classId"></select></div>
+<div><label for="eventType">記録区分</label><select id="eventType"><option value="roster_change">来校予定者の変更</option><option value="student_notice">児童への情報提示</option><option value="video_view">本人自己紹介動画の視聴</option></select></div>
+<div><label for="effectiveDate">予定者変更の確認日／記録基準日</label><input id="effectiveDate" type="date"></div>
+<div><label for="announcementDate">児童へ知らせた日（知らせていない場合は空欄）</label><input id="announcementDate" type="date"></div>
+<div class="wide"><label>この記録時点の来校予定留学生（複数選択）</label><div id="visitorList" class="checklist"></div></div>
+<div class="wide"><label for="eventNote">変更理由・児童への提示内容・授業記録等</label><textarea id="eventNote" maxlength="1500" rows="3" placeholder="10/9からの変更。児童への告知は10/13。"></textarea></div>
+</div>
+<div class="actions"><button class="primary" id="saveEventBtn">履歴に追記する</button></div><p id="eventMsg" class="message" role="status"></p>
+<h3>来校者・告知の履歴</h3><div id="eventHistory" class="scroll-list"></div>
+<h3>参考：既存Study Scheduleの国籍集合変更履歴（読み取り専用）</h3><div id="scheduleHistory" class="scroll-list"></div>
+</section>
+<section class="card">
+<h2>3．自己紹介動画と児童発話の照合候補</h2>
+<p>「2．」で動画を提示した留学生と視聴日を登録した後に使えます。動画内容の情報タグと、授業内の児童発話を照合します。<b>一致しても動画を参照した証拠ではなく、必ず研究者が前後の文脈を確認してください。</b></p>
+<div class="grid">
+<div><label for="candidateClass">対象学級</label><select id="candidateClass"></select></div>
+<div><label for="candidateDate">対話実施日</label><input id="candidateDate" type="date"></div>
+</div>
+<div class="actions"><button id="candidateBtn" class="primary">発話候補を確認</button></div>
+<p id="candidateMsg" class="message" role="status"></p>
+<div id="candidateResults" class="scroll-list"></div>
+</section>
+</div></main>
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+var state={studentIds:[],profiles:[],versions:[],events:[],schedules:[]};
+function message(id,text,error){var e=$(id);e.textContent=text;e.className='message'+(error?' error':'')};
+function text(id,value){$(id).textContent=value==null?'':String(value)};
+function el(tag,txt,cls){var e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e}
+function item(container,txt){container.appendChild(el('div',txt,'historyitem'))}
+function busy(id,isBusy){$(id).disabled=isBusy}
+async function api(path,options){
+var response=await fetch(path,Object.assign({credentials:'same-origin',headers:{'Content-Type':'application/json'}},options||{}));
+var data=await response.json().catch(function(){return {}});
+if(!response.ok)throw new Error(data.error||'HTTP_'+response.status);return data;
+}
+function profile(id){return state.profiles.find(function(x){return x.studentId===id})||{studentId:id,revision:0}}
+function selectVideo(){
+var id=$('studentSelect').value,p=profile(id);
+['country','displayName','videoVersion','videoUrl','englishTranscript','japaneseSummary','researcherNotes'].forEach(function(k){$(k).value=p[k]||''});
+$('contentTags').value=(p.contentTags||[]).join(', ');
+text('revision',p.revision?'保存済み・版 '+p.revision+'／最終更新 '+p.updatedAt:'未登録');
+message('videoMsg','');
+var root=$('versionHistory');root.replaceChildren();
+var rows=state.versions.filter(function(x){return x.studentId===id});
+if(!rows.length)item(root,'登録履歴はありません');
+rows.forEach(function(x){item(root,'版 '+x.revision+'　'+x.updatedAt+'　更新者 '+x.updatedBy+'　'+(x.videoVersion||'')+'　'+(x.country||''))});
+}
+function renderVisitors(){
+var root=$('visitorList');root.replaceChildren();
+state.studentIds.forEach(function(id){
+var p=profile(id),lab=el('label',undefined,'checkitem'),box=document.createElement('input');
+box.type='checkbox';box.value=id;box.name='visitor';
+lab.appendChild(box);lab.appendChild(el('span',id+'　'+(p.displayName||'')+'　'+(p.country||'【国籍未登録】')));root.appendChild(lab);
+});
+}
+async function loadCandidates(){
+busy('candidateBtn',true);message('candidateMsg','照合中…');
+$('candidateResults').replaceChildren();
+try{
+var cls=$('candidateClass').value,day=$('candidateDate').value;
+if(!day)throw new Error('対話実施日を選んでください');
+var p=new URLSearchParams({classId:cls,localDate:day});
+var data=await api('/api/management/study-partner-videos/candidates?'+p.toString());
+var notes={BEFORE_RECORDED_VIDEO_VIEW_DATE:'日程上、動画視聴より前の日付です。',REGISTER_VIDEO_VIEW_EVENTS_FIRST:'「2．」で対象留学生の動画視聴日を記録してください。',NO_SNAPSHOT_TAGS_TO_COMPARE:'動画を提示した版に情報タグが登録されていません。'};
+if(data.note&&notes[data.note]){message('candidateMsg',notes[data.note],true);return;}
+message('candidateMsg','児童発話 '+data.examinedChildTurns+'件（'+data.examinedSessions+'セッション）中、照合候補 '+data.candidateCount+'件。'+(data.truncated?'表示は最大150件まで。':'')+' 全件研究者確認が必要です。');
+if(!data.candidates.length)item($('candidateResults'),'候補なし。タグ未一致は情報を利用していない証明ではありません。');
+data.candidates.forEach(function(row){
+var root=$('candidateResults'),detail=document.createElement('details'),title=document.createElement('summary');
+title.textContent='ID '+row.researchId+'／動画 '+row.studentId+' 版'+row.videoRevision+'／一致タグ '+row.matchedTags.join('・')+(row.priorAiAlsoMentionedTag?'（AIが直前に同じタグを言及）':'');
+detail.appendChild(title);
+detail.appendChild(el('p','児童：'+row.childText));
+detail.appendChild(el('p','直前AI：'+(row.previousAiText||'記録なし'),'muted'));
+detail.appendChild(el('p','session_id：'+row.sessionId+'　※一次抽出候補。B2b自動判定ではありません。','small'));
+detail.className='historyitem';root.appendChild(detail);
+});
+}catch(e){message('candidateMsg','候補を読み込めません：'+e.message,true)}
+finally{busy('candidateBtn',false)}
+}
+function renderEvents(){
+var cls=$('classId').value;
+var root=$('eventHistory');root.replaceChildren();
+var entries=state.events.filter(function(x){return x.classId===cls});
+if(!entries.length)item(root,'この学級の登録済みイベントはありません');
+entries.forEach(function(e){
+var label=e.eventType==='student_notice'?'児童への告知':e.eventType==='video_view'?'本人動画の視聴':'来校者の変更';
+item(root,'['+label+'] 記録基準日 '+e.effectiveDate+'／児童告知日 '+(e.announcedToChildrenDate||'未告知')+' ／ '+(e.visitors||[]).map(function(v){return v.studentId+':'+v.country}).join('・')+' ／ '+(e.note||'')+' （保存 '+e.createdAt+'）');
+});
+var s=state.schedules.find(function(x){return x.classId===cls});
+root=$('scheduleHistory');root.replaceChildren();
+if(!s){item(root,'日程情報がありません');return}
+item(root,'現在 revision '+s.revision+'：'+(s.announcedVisitorCountries||[]).join('・')+'／国籍告知 '+(s.nationalityRevealDate||'未設定')+'／動画 '+(s.videoViewDate||'未設定')+'／担当告知 '+(s.assignmentRevealDate||'未設定'));
+(s.history||[]).slice().reverse().forEach(function(h){item(root,'revision '+h.revision+'（'+(h.updatedAt||'')+'）国籍集合：'+(h.announcedVisitorCountries||[]).join('・')+' ／ 告知日 '+(h.nationalityRevealDate||'未設定'))});
+}
+async function reload(){
+var selectedId=$('studentSelect').value,selectedClass=$('classId').value;
+var data=await api('/api/management/study-partner-videos');
+state=data;
+$('studentSelect').replaceChildren();
+data.studentIds.forEach(function(id){$('studentSelect').appendChild(new Option(id+'　'+(profile(id).displayName||'')+'　'+(profile(id).country||''),id))});
+if(data.studentIds.includes(selectedId))$('studentSelect').value=selectedId;
+$('classId').replaceChildren();
+data.schedules.forEach(function(s){$('classId').appendChild(new Option(s.classId,s.classId))});
+if(data.schedules.some(function(s){return s.classId===selectedClass}))$('classId').value=selectedClass;
+else if(data.schedules.some(function(s){return s.classId==='5-3'}))$('classId').value='5-3';
+$('candidateClass').replaceChildren();
+data.schedules.forEach(function(s){$('candidateClass').appendChild(new Option(s.classId,s.classId))});
+$('candidateClass').value=$('classId').value;
+renderVisitors();selectVideo();renderEvents();
+}
+async function saveVideo(){
+busy('saveVideoBtn',true);message('videoMsg','保存中…');
+try{
+var id=$('studentSelect').value,p=profile(id);
+var payload={studentId:id,expectedRevision:p.revision||0};
+['country','displayName','videoVersion','videoUrl','englishTranscript','japaneseSummary','researcherNotes'].forEach(function(k){payload[k]=$(k).value});
+payload.contentTags=$('contentTags').value.split(/[,、\n]/).map(function(s){return s.trim()}).filter(Boolean);
+await api('/api/management/study-partner-videos/record',{method:'POST',body:JSON.stringify(payload)});
+await reload();message('videoMsg','新しい版を保存しました。過去の版も維持されています。');
+}catch(e){message('videoMsg','保存できません：'+e.message,true)}finally{busy('saveVideoBtn',false)}
+}
+async function saveEvent(){
+busy('saveEventBtn',true);message('eventMsg','保存中…');
+try{
+var ids=Array.from(document.querySelectorAll('input[name="visitor"]:checked')).map(function(x){return x.value});
+var p={classId:$('classId').value,eventType:$('eventType').value,effectiveDate:$('effectiveDate').value,announcedToChildrenDate:$('announcementDate').value,visitorIds:ids,note:$('eventNote').value};
+await api('/api/management/study-partner-videos/visitor-event',{method:'POST',body:JSON.stringify(p)});
+await reload();$('eventNote').value='';message('eventMsg','変更・告知の履歴を追記しました。既存の日程設定は変更していません。');
+}catch(e){message('eventMsg','記録できません：'+e.message,true)}finally{busy('saveEventBtn',false)}
+}
+async function show(){
+try{await api('/api/management/me');$('login').hidden=true;$('panel').hidden=false;await reload()}
+catch(e){$('login').hidden=false;$('panel').hidden=true;message('loginMsg','ログインしてご利用ください。',true)}
+}
+$('studentSelect').addEventListener('change',selectVideo);
+$('classId').addEventListener('change',renderEvents);
+$('saveVideoBtn').addEventListener('click',saveVideo);
+$('saveEventBtn').addEventListener('click',saveEvent);
+$('candidateBtn').addEventListener('click',loadCandidates);
+$('reloadBtn').addEventListener('click',function(){reload().catch(function(e){message('eventMsg',e.message,true)})});
+$('loginBtn').addEventListener('click',async function(){
+try{await api('/api/management/login',{method:'POST',body:JSON.stringify({username:$('username').value,password:$('password').value})});$('password').value='';await show()}
+catch(e){message('loginMsg','ログインできません。研究者ID・パスワードを確認してください。',true)}
+});
+$('password').addEventListener('keydown',function(e){if(e.key==='Enter')$('loginBtn').click()});
+$('logoutBtn').addEventListener('click',async function(){await api('/api/management/logout',{method:'POST',body:'{}'});location.reload()});
+if(location.hostname.endsWith('github.io')){
+$('login').innerHTML='<h1>Cloud Runの研究者専用管理画面を使用してください</h1><p><a href="https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app/study-partner-videos.html">来校留学生・自己紹介動画管理を開く</a></p>';
+}else{show()}
+})();
+</script></body></html>

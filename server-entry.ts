@@ -1,6 +1,7 @@
 import express from 'express';
 import { createReflectionRouter } from './src/server/reflectionRoutes';
 import { createStudyScheduleRouter } from './src/server/studyScheduleRoutes';
+import { createStudyPartnerVideoRouter } from './src/server/studyPartnerVideoRoutes';
 import { createStudyParticipantRouter } from './src/server/studyParticipantRoutes';
 import { createComparisonParticipantSetupRouter } from './src/server/comparisonParticipantSetupRoutes';
 import { createQuestionnaireRouter } from './src/server/questionnaireRoutes';
@@ -61,6 +62,10 @@ function ensureExtensionRoutesMounted(app: any) {
   if (!app.__reflectionRoutesMounted) {
     app.use('/api/reflection', createReflectionRouter());
     app.__reflectionRoutesMounted = true;
+  }
+  if (!app.__studyPartnerVideoRoutesMounted) {
+    app.use('/api/management', createStudyPartnerVideoRouter());
+    app.__studyPartnerVideoRoutesMounted = true;
   }
   if (!app.__studyScheduleRoutesMounted) {
     app.use('/api/management', createStudyScheduleRouter());
