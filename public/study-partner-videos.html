@@ -56,7 +56,7 @@ header{display:flex;align-items:flex-start;justify-content:space-between;flex-wr
 <p>変更日（研究者が知った日）と児童へ伝えた日を分けて記録します。留学生ID・国籍は保存時点のスナップショットとして固定されます。</p>
 <div class="grid">
 <div><label for="classId">対象学級</label><select id="classId"></select></div>
-<div><label for="eventType">記録区分</label><select id="eventType"><option value="roster_change">来校予定者の変更</option><option value="student_notice">児童への情報提示</option></select></div>
+<div><label for="eventType">記録区分</label><select id="eventType"><option value="roster_change">来校予定者の変更</option><option value="student_notice">児童への情報提示</option><option value="video_view">本人自己紹介動画の視聴</option></select></div>
 <div><label for="effectiveDate">予定者変更の確認日／記録基準日</label><input id="effectiveDate" type="date"></div>
 <div><label for="announcementDate">児童へ知らせた日（知らせていない場合は空欄）</label><input id="announcementDate" type="date"></div>
 <div class="wide"><label>この記録時点の来校予定留学生（複数選択）</label><div id="visitorList" class="checklist"></div></div>
@@ -108,7 +108,7 @@ var root=$('eventHistory');root.replaceChildren();
 var entries=state.events.filter(function(x){return x.classId===cls});
 if(!entries.length)item(root,'この学級の登録済みイベントはありません');
 entries.forEach(function(e){
-var label=e.eventType==='student_notice'?'児童への告知':'来校者の変更';
+var label=e.eventType==='student_notice'?'児童への告知':e.eventType==='video_view'?'本人動画の視聴':'来校者の変更';
 item(root,'['+label+'] 記録基準日 '+e.effectiveDate+'／児童告知日 '+(e.announcedToChildrenDate||'未告知')+' ／ '+(e.visitors||[]).map(function(v){return v.studentId+':'+v.country}).join('・')+' ／ '+(e.note||'')+' （保存 '+e.createdAt+'）');
 });
 var s=state.schedules.find(function(x){return x.classId===cls});
