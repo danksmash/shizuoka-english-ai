@@ -160,7 +160,7 @@ function csvValue(raw: unknown): string {
   return '"' + safe.replace(/"/g, '""') + '"';
 }
 
-function registeredVideoCsv(rows: VideoRecord[]): string {
+export function registeredVideoCsv(rows: VideoRecord[]): string {
   const records = rows.map(row => ({
     student_id: row.studentId,
     country: row.country,
