@@ -162,11 +162,10 @@ if(data.studentIds.includes(selectedId))$('studentSelect').value=selectedId;
 $('classId').replaceChildren();
 data.schedules.forEach(function(s){$('classId').appendChild(new Option(s.classId,s.classId))});
 if(data.schedules.some(function(s){return s.classId===selectedClass}))$('classId').value=selectedClass;
+else if(data.schedules.some(function(s){return s.classId==='5-3'}))$('classId').value='5-3';
 $('candidateClass').replaceChildren();
 data.schedules.forEach(function(s){$('candidateClass').appendChild(new Option(s.classId,s.classId))});
-$('candidateClass').value=data.schedules.some(function(s){return s.classId===selectedClass})?selectedClass:'5-3';
-
-else if(data.schedules.some(function(s){return s.classId==='5-3'}))$('classId').value='5-3';
+$('candidateClass').value=$('classId').value;
 renderVisitors();selectVideo();renderEvents();
 }
 async function saveVideo(){
