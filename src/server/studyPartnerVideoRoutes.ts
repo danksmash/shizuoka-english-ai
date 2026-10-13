@@ -264,8 +264,15 @@ router.get('/study-partner-videos/candidates', requireManagementRole(['researche
           const matched = profile.contentTags.filter(tag => {
             const t = tag.normalize('NFKC').toLowerCase().trim();
             if (t.length < 3) return false;
-            const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\export function createStudyPartnerVideoRouter() { return router; }');
-            return new RegExp('(?:^|[^a-z])' + escaped + '(?=$|[^a-z])').test(normalized);
+            let at = normalized.indexOf(t);
+            while (at >= 0) {
+              const left = at === 0 || !/[a-z]/.test(normalized[at - 1]);
+              const end = at + t.length;
+              const right = end === normalized.length || !/[a-z]/.test(normalized[end]);
+              if (left && right) return true;
+              at = normalized.indexOf(t, at + 1);
+            }
+            return false;
           });
           if (!matched.length) continue;
           candidates.push({
