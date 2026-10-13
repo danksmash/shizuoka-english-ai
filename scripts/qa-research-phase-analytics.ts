@@ -186,9 +186,9 @@ assert.ok(source.includes('raw session documents are never rewritten'));
 assert.equal(source.includes('may fall back to the current student assignment record'), false);
 assert.equal(source.includes("fetch('/api/management/research.dashboard?"),false,'Phase analytics must not issue a second dashboard request');
 assert.ok(source.includes("window.__renderPhaseComparison=renderPhaseComparison"));
-assert.ok(source.includes("if(p2)html+=row('Phase 2',p2.visitorParticipantMeanSharePercent"), 'Keep Phase 2 under visitor-country-set selection');
+assert.ok(source.includes("if(p2){html+=row('Phase 2',p2.visitorParticipantMeanSharePercent"), 'Keep Phase 2 under visitor-country-set selection');
 assert.equal(source.includes("if(p2)html+=row('Phase 2',p2.participantMeanSharePercent"), false, 'Hide Phase 2 under assigned-country selection');
-assert.ok(source.includes("if(p3)html+=row('Phase 3',p3.participantMeanSharePercent"), 'Keep Phase 3 under assigned-country selection');
+assert.ok(source.includes("if(p3){html+=row('Phase 3',p3.participantMeanSharePercent"), 'Keep Phase 3 under assigned-country selection');
 assert.ok(source.includes("PHASE_ANALYTICS_LAYOUT_SLOT_MISSING"));
 assert.equal(source.includes("PHASE_ANALYTICS_CHART_ANCHOR_MISSING"),false,'Phase chart must no longer be appended as a fifth item in the two-column chart grid');
 
