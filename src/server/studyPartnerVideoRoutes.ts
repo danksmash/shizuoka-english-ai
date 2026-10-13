@@ -3,6 +3,7 @@ import express from 'express';
 import { requireManagementRole, type AuthenticatedRequest } from './auth';
 import { createDocumentIfAbsent, listCollection } from './firestore';
 import { getAllStudySchedules, isStudyClassId, normalizeStudyDate } from './studySchedulePersistence';
+import { getSessionsForManagementByLocalDateRange } from './persistence';
 
 // Researcher-only, append-only evidence. Never update study_schedules or raw sessions.
 const VIDEO_VERSIONS = 'study_partner_video_versions';
@@ -30,7 +31,7 @@ type VisitorEvent = {
   eventType: 'roster_change' | 'student_notice' | 'video_view';
   effectiveDate: string;
   announcedToChildrenDate: string;
-  visitors: Array<{ studentId: string; country: string; displayName: string }>;
+  visitors: Array<{ studentId: string; country: string; displayName: string; videoRevision: number; videoVersion: string }>;
   note: string;
   createdAt: string;
   createdBy: string;
@@ -178,6 +179,7 @@ router.post('/study-partner-videos/visitor-event', requireManagementRole(['resea
     const latest = latestRecords(await videoVersions());
     const missingCountry = ids.find(id => !latest.get(id)?.country);
     if (missingCountry) throw new Error('INVALID_EVENT_COUNTRY_REQUIRED_FOR_' + missingCountry);
+    if (input.eventType === 'video_view' && ids.some(id => !(latest.get(id)?.revision) || !latest.get(id)?.englishTranscript)) throw new Error('INVALID_VIDEO_TRANSCRIPT_REQUIRED');
     const effectiveDate = requiredDate(input.effectiveDate, false, 'EFFECTIVE_DATE');
     const announcedToChildrenDate = requiredDate(input.announcedToChildrenDate, true, 'ANNOUNCEMENT_DATE');
     if (input.eventType === 'video_view' && !announcedToChildrenDate) throw new Error('INVALID_VIDEO_VIEW_DATE_REQUIRED');
@@ -188,6 +190,8 @@ router.post('/study-partner-videos/visitor-event', requireManagementRole(['resea
       visitors: ids.map(id => ({
         studentId: id, country: latest.get(id)!.country,
         displayName: latest.get(id)!.displayName,
+        videoRevision: latest.get(id)!.revision,
+        videoVersion: latest.get(id)!.videoVersion,
       })),
       note: requiredString(input.note ?? '', 1500, 'EVENT_NOTE'),
       createdAt: new Date().toISOString(),
@@ -202,6 +206,95 @@ router.post('/study-partner-videos/visitor-event', requireManagementRole(['resea
     if (message.startsWith('INVALID_')) return res.status(400).json({ success: false, error: message });
     console.error('Partner visitor event failed', { message });
     return res.status(503).json({ success: false, error: 'PARTNER_EVENT_SAVE_UNAVAILABLE' });
+  }
+});
+
+
+/** Candidates are prompts for manual B2b review, never formal interaction codes. */
+router.get('/study-partner-videos/candidates', requireManagementRole(['researcher']), async (req, res) => {
+  try {
+    const classId = limited(req.query.classId, 30);
+    if (!isStudyClassId(classId) || /^[56]-C[1-9]$/.test(classId)) throw new Error('INVALID_CLASS_ID');
+    const localDate = requiredDate(req.query.localDate, false, 'LOCAL_DATE');
+    const [versions, events, schedules] = await Promise.all([
+      videoVersions(), listCollection(VISITOR_EVENTS, 100), getAllStudySchedules(),
+    ]);
+    const schedule = schedules.find(row => row.classId === classId);
+    if (!schedule?.videoViewDate || localDate < schedule.videoViewDate) {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({ success: true, candidates: [], examinedChildTurns: 0, note: 'BEFORE_RECORDED_VIDEO_VIEW_DATE' });
+    }
+    const viewed = (events as VisitorEvent[]).filter(event =>
+      event.classId === classId && event.eventType === 'video_view' &&
+      event.announcedToChildrenDate && event.announcedToChildrenDate <= localDate);
+    if (!viewed.length) {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({ success: true, candidates: [], examinedChildTurns: 0, note: 'REGISTER_VIDEO_VIEW_EVENTS_FIRST' });
+    }
+    const versionByKey = new Map(versions.map(row => [row.studentId + ':' + row.revision, row]));
+    const viewedVersions = new Map<string, VideoRecord>();
+    for (const event of viewed) {
+      for (const visitor of event.visitors || []) {
+        const version = versionByKey.get(visitor.studentId + ':' + visitor.videoRevision);
+        if (version) viewedVersions.set(visitor.studentId + ':' + visitor.videoRevision, version);
+      }
+    }
+    const available = [...viewedVersions.values()].filter(row => row.contentTags.length);
+    if (!available.length) {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({ success: true, candidates: [], examinedChildTurns: 0, note: 'NO_SNAPSHOT_TAGS_TO_COMPARE' });
+    }
+    const sessions = (await getSessionsForManagementByLocalDateRange(localDate, localDate))
+      .filter(row => row.classId === classId && row.formalStudyParticipant === true &&
+        row.lessonContextInferred === 'in_lesson');
+    const candidates: Array<Record<string, unknown>> = [];
+    let examinedChildTurns = 0;
+    for (const session of sessions) {
+      let previousAi = '';
+      const history = Array.isArray(session.history) ? session.history : [];
+      for (const turn of history) {
+        if (turn?.sender === 'ai') { previousAi = limited(turn.englishText, 4000); continue; }
+        if (turn?.sender !== 'child' || typeof turn.englishText !== 'string') continue;
+        const utterance = turn.englishText.trim();
+        if (!utterance) continue;
+        examinedChildTurns++;
+        const normalized = utterance.normalize('NFKC').toLowerCase();
+        const preceding = previousAi.normalize('NFKC').toLowerCase();
+        for (const profile of available) {
+          const matched = profile.contentTags.filter(tag => {
+            const t = tag.normalize('NFKC').toLowerCase().trim();
+            if (t.length < 3) return false;
+            const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\export function createStudyPartnerVideoRouter() { return router; }');
+            return new RegExp('(?:^|[^a-z])' + escaped + '(?=$|[^a-z])').test(normalized);
+          });
+          if (!matched.length) continue;
+          candidates.push({
+            researchId: limited(session.researchId, 120),
+            sessionId: limited(session.sessionId, 120),
+            studentId: profile.studentId, videoRevision: profile.revision,
+            matchedTags: matched,
+            childText: utterance.slice(0, 1200),
+            previousAiText: previousAi.slice(0, 1200),
+            priorAiAlsoMentionedTag: matched.some(tag => preceding.includes(tag.toLowerCase())),
+            classification: 'CANDIDATE_RESEARCHER_REVIEW_REQUIRED',
+          });
+        }
+      }
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      success: true,
+      classId, localDate, examinedSessions: sessions.length, examinedChildTurns,
+      candidateCount: candidates.length,
+      candidates: candidates.slice(0, 150),
+      truncated: candidates.length > 150,
+      note: 'TAG_MATCH_NOT_EVIDENCE_OF_VIDEO_REFERENCE',
+    });
+  } catch (error: any) {
+    const code = String(error?.message || '');
+    if (code.startsWith('INVALID_')) return res.status(400).json({ success: false, error: code });
+    console.error('Video reference candidate search failed', { message: code });
+    return res.status(503).json({ success: false, error: 'VIDEO_CANDIDATE_SEARCH_UNAVAILABLE' });
   }
 });
 
