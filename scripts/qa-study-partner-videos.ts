@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { registeredVideoCsv } from '../src/server/studyPartnerVideoRoutes';
 
 const server = fs.readFileSync('server-entry.ts', 'utf8');
 const auth = fs.readFileSync('src/server/auth.ts', 'utf8');
@@ -29,6 +30,18 @@ assert.ok(videosPage.includes('japaneseSummary'));
 assert.ok(videosPage.includes('video_view'));
 assert.ok(videosPage.includes('scheduleHistory'));
 assert.ok(videosPage.includes('state.versions'));
+assert.ok(videosPage.includes('videoCsvBtn'));
+assert.ok(videosPage.includes('videoHistoryCsvBtn'));
+assert.ok(videosPage.includes('/api/management/study-partner-videos/export.csv'));
+assert.ok(routes.includes("router.get('/study-partner-videos/export.csv', requireManagementRole(['researcher'])"));
+assert.ok(routes.includes("'private, no-store, max-age=0'"));
+assert.ok(routes.includes("res.setHeader('Content-Disposition'"));
+const sample = registeredVideoCsv([{studentId:'S001',country:'Germany',displayName:'',videoVersion:'v1',revision:1,englishTranscript:'I like "soccer".\nI like sushi.',japaneseSummary:'日本語要約',contentTags:['soccer','sushi'],researcherNotes:'',updatedAt:'2026-10-13T00:00:00Z',updatedBy:'researcher'}, {studentId:'S002',country:'',displayName:'',videoVersion:'',revision:2,englishTranscript:'=2+2',japaneseSummary:'',contentTags:[],researcherNotes:'',updatedAt:'',updatedBy:''}]);
+assert.ok(sample.startsWith('\uFEFF"student_id"'));
+assert.ok(sample.includes('"I like ""soccer"".\nI like sushi."'));
+assert.ok(sample.includes('"日本語要約"'));
+assert.ok(sample.includes('"soccer | sushi"'));
+assert.ok(sample.includes('"\'=2+2"'), 'CSV must neutralize spreadsheet formulas');
 assert.ok(!videosPage.includes('innerHTML=state.'), 'untrusted Firestore content must not be rendered as HTML');
 
 const script = videosPage.match(/<script>([\s\S]*?)<\/script>/)?.[1];
