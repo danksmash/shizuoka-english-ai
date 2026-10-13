@@ -35,6 +35,14 @@ header{display:flex;align-items:flex-start;justify-content:space-between;flex-wr
 <header><div><h1>Study 1｜来校留学生・自己紹介動画管理</h1><p>動画内容は留学生ごとに保存し、学級別の来校者変更は独立した履歴に残します。</p></div>
 <div class="actions"><a class="button-link" href="/study-schedule.html">日程管理へ戻る</a><button id="reloadBtn">再読込</button><button id="logoutBtn">ログアウト</button></div></header>
 <div class="notice">この画面の保存操作では、既存のStudy Schedule、国籍告知日、Phase、児童の担当国、過去の対話ログは変更しません。動画・来校者情報の更新は新しい版・記録として追記されます。動画そのものはアップロードせず、研究者用のURLと内容を記録します。</div>
+<section class="card"><h2>動画内容CSVエクスポート</h2>
+<p>登録済みの留学生について、ID、国籍、動画の英文、日本語要約、情報タグ、保存版をまとめて出力します。未登録IDの行は含みません。研究者ログイン中のみダウンロードできます。</p>
+<div class="actions">
+<button id="videoCsvBtn" class="primary" type="button">登録済み動画のCSVを出力</button>
+<button id="videoHistoryCsvBtn" type="button">全版履歴CSVを出力</button>
+</div>
+<p id="videoCsvMsg" class="message" role="status"></p>
+</section>
 <section class="card"><h2>1．留学生ごとの自己紹介動画</h2>
 <div class="grid">
 <div><label for="studentSelect">留学生ID</label><select id="studentSelect"></select></div>
@@ -92,6 +100,24 @@ async function api(path,options){
 var response=await fetch(path,Object.assign({credentials:'same-origin',headers:{'Content-Type':'application/json'}},options||{}));
 var data=await response.json().catch(function(){return {}});
 if(!response.ok)throw new Error(data.error||'HTTP_'+response.status);return data;
+}
+
+async function exportVideoCsv(scope){
+var buttonId=scope==='versions'?'videoHistoryCsvBtn':'videoCsvBtn';
+busy('videoCsvBtn',true);busy('videoHistoryCsvBtn',true);
+message('videoCsvMsg','CSVを出力しています…');
+try{
+var response=await fetch('/api/management/study-partner-videos/export.csv?scope='+encodeURIComponent(scope),{
+method:'GET',credentials:'same-origin',cache:'no-store'
+});
+if(!response.ok){var data=await response.json().catch(function(){return {}});throw new Error(data.error||'HTTP '+response.status)}
+var file=await response.blob(),href=URL.createObjectURL(file),link=document.createElement('a');
+link.href=href;link.download=scope==='versions'?'study-partner-videos-all-versions.csv':'study-partner-videos-latest.csv';
+document.body.appendChild(link);link.click();link.remove();
+setTimeout(function(){URL.revokeObjectURL(href)},2000);
+message('videoCsvMsg','CSVを取得しました。ファイルを分析用チャットに添付すると、動画情報と対話ログを照合できます。');
+}catch(error){message('videoCsvMsg','CSVを取得できません：'+error.message,true)}
+finally{busy('videoCsvBtn',false);busy('videoHistoryCsvBtn',false)}
 }
 function profile(id){return state.profiles.find(function(x){return x.studentId===id})||{studentId:id,revision:0}}
 function selectVideo(){
@@ -197,6 +223,8 @@ $('classId').addEventListener('change',renderEvents);
 $('saveVideoBtn').addEventListener('click',saveVideo);
 $('saveEventBtn').addEventListener('click',saveEvent);
 $('candidateBtn').addEventListener('click',loadCandidates);
+$('videoCsvBtn').addEventListener('click',function(){exportVideoCsv('latest')});
+$('videoHistoryCsvBtn').addEventListener('click',function(){exportVideoCsv('versions')});
 $('reloadBtn').addEventListener('click',function(){reload().catch(function(e){message('eventMsg',e.message,true)})});
 $('loginBtn').addEventListener('click',async function(){
 try{await api('/api/management/login',{method:'POST',body:JSON.stringify({username:$('username').value,password:$('password').value})});$('password').value='';await show()}

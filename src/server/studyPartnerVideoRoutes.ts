@@ -141,6 +141,66 @@ router.get('/study-partner-videos', requireManagementRole(['researcher']), async
   }
 });
 
+
+/**
+ * Researcher-only export: latest registered video information (default) or
+ * all historical revisions (scope=versions). Do not read/write dialogue data.
+ * CSV is generated in-memory and never committed or served as a public asset.
+ */
+const VIDEO_CSV_FIELDS = [
+  'student_id', 'country', 'display_name', 'video_version', 'revision',
+  'english_transcript', 'japanese_summary', 'content_tags',
+  'updated_at', 'updated_by',
+] as const;
+
+function csvValue(raw: unknown): string {
+  const input = raw == null ? '' : String(raw);
+  // Neutralize spreadsheet formula execution without rewriting normal transcripts.
+  const safe = /^\s*[=+\-@]/.test(input) ? "'" + input : input;
+  return '"' + safe.replace(/"/g, '""') + '"';
+}
+
+export function registeredVideoCsv(rows: VideoRecord[]): string {
+  const records = rows.map(row => ({
+    student_id: row.studentId,
+    country: row.country,
+    display_name: row.displayName,
+    video_version: row.videoVersion,
+    revision: row.revision,
+    english_transcript: row.englishTranscript,
+    japanese_summary: row.japaneseSummary,
+    content_tags: row.contentTags.join(' | '),
+    updated_at: row.updatedAt,
+    updated_by: row.updatedBy,
+  }));
+  return '\uFEFF' + [
+    VIDEO_CSV_FIELDS.map(csvValue).join(','),
+    ...records.map(row => VIDEO_CSV_FIELDS.map(field => csvValue(row[field])).join(',')),
+  ].join('\r\n') + '\r\n';
+}
+
+router.get('/study-partner-videos/export.csv', requireManagementRole(['researcher']), async (req, res) => {
+  try {
+    const scope = req.query.scope === undefined ? 'latest' : req.query.scope;
+    if (scope !== 'latest' && scope !== 'versions') {
+      return res.status(400).json({ success: false, error: 'INVALID_VIDEO_EXPORT_SCOPE' });
+    }
+    const versions = await videoVersions();
+    const records = scope === 'versions'
+      ? versions
+      : [...latestRecords(versions).values()].sort((a, b) => a.studentId.localeCompare(b.studentId));
+    const fileName = scope === 'versions' ? 'study-partner-videos-all-versions.csv' : 'study-partner-videos-latest.csv';
+    res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + fileName + '"');
+    return res.status(200).send(registeredVideoCsv(records));
+  } catch (error: any) {
+    console.error('Partner video CSV export failed', { message: error?.message });
+    return res.status(503).json({ success: false, error: 'PARTNER_VIDEO_EXPORT_UNAVAILABLE' });
+  }
+});
+
 router.post('/study-partner-videos/record', requireManagementRole(['researcher']), async (req: AuthenticatedRequest, res) => {
   try {
     const input = req.body || {};
