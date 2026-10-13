@@ -66,6 +66,17 @@ header{display:flex;align-items:flex-start;justify-content:space-between;flex-wr
 <h3>来校者・告知の履歴</h3><div id="eventHistory" class="scroll-list"></div>
 <h3>参考：既存Study Scheduleの国籍集合変更履歴（読み取り専用）</h3><div id="scheduleHistory" class="scroll-list"></div>
 </section>
+<section class="card">
+<h2>3．自己紹介動画と児童発話の照合候補</h2>
+<p>「2．」で動画を提示した留学生と視聴日を登録した後に使えます。動画内容の情報タグと、授業内の児童発話を照合します。<b>一致しても動画を参照した証拠ではなく、必ず研究者が前後の文脈を確認してください。</b></p>
+<div class="grid">
+<div><label for="candidateClass">対象学級</label><select id="candidateClass"></select></div>
+<div><label for="candidateDate">対話実施日</label><input id="candidateDate" type="date"></div>
+</div>
+<div class="actions"><button id="candidateBtn" class="primary">発話候補を確認</button></div>
+<p id="candidateMsg" class="message" role="status"></p>
+<div id="candidateResults" class="scroll-list"></div>
+</section>
 </div></main>
 <script>
 (function(){
@@ -102,6 +113,30 @@ box.type='checkbox';box.value=id;box.name='visitor';
 lab.appendChild(box);lab.appendChild(el('span',id+'　'+(p.displayName||'')+'　'+(p.country||'【国籍未登録】')));root.appendChild(lab);
 });
 }
+async function loadCandidates(){
+busy('candidateBtn',true);message('candidateMsg','照合中…');
+$('candidateResults').replaceChildren();
+try{
+var cls=$('candidateClass').value,day=$('candidateDate').value;
+if(!day)throw new Error('対話実施日を選んでください');
+var p=new URLSearchParams({classId:cls,localDate:day});
+var data=await api('/api/management/study-partner-videos/candidates?'+p.toString());
+var notes={BEFORE_RECORDED_VIDEO_VIEW_DATE:'日程上、動画視聴より前の日付です。',REGISTER_VIDEO_VIEW_EVENTS_FIRST:'「2．」で対象留学生の動画視聴日を記録してください。',NO_SNAPSHOT_TAGS_TO_COMPARE:'動画を提示した版に情報タグが登録されていません。'};
+if(data.note&&notes[data.note]){message('candidateMsg',notes[data.note],true);return;}
+message('candidateMsg','児童発話 '+data.examinedChildTurns+'件（'+data.examinedSessions+'セッション）中、照合候補 '+data.candidateCount+'件。'+(data.truncated?'表示は最大150件まで。':'')+' 全件研究者確認が必要です。');
+if(!data.candidates.length)item($('candidateResults'),'候補なし。タグ未一致は情報を利用していない証明ではありません。');
+data.candidates.forEach(function(row){
+var root=$('candidateResults'),detail=document.createElement('details'),title=document.createElement('summary');
+title.textContent='ID '+row.researchId+'／動画 '+row.studentId+' 版'+row.videoRevision+'／一致タグ '+row.matchedTags.join('・')+(row.priorAiAlsoMentionedTag?'（AIが直前に同じタグを言及）':'');
+detail.appendChild(title);
+detail.appendChild(el('p','児童：'+row.childText));
+detail.appendChild(el('p','直前AI：'+(row.previousAiText||'記録なし'),'muted'));
+detail.appendChild(el('p','session_id：'+row.sessionId+'　※一次抽出候補。B2b自動判定ではありません。','small'));
+detail.className='historyitem';root.appendChild(detail);
+});
+}catch(e){message('candidateMsg','候補を読み込めません：'+e.message,true)}
+finally{busy('candidateBtn',false)}
+}
 function renderEvents(){
 var cls=$('classId').value;
 var root=$('eventHistory');root.replaceChildren();
@@ -127,6 +162,10 @@ if(data.studentIds.includes(selectedId))$('studentSelect').value=selectedId;
 $('classId').replaceChildren();
 data.schedules.forEach(function(s){$('classId').appendChild(new Option(s.classId,s.classId))});
 if(data.schedules.some(function(s){return s.classId===selectedClass}))$('classId').value=selectedClass;
+$('candidateClass').replaceChildren();
+data.schedules.forEach(function(s){$('candidateClass').appendChild(new Option(s.classId,s.classId))});
+$('candidateClass').value=data.schedules.some(function(s){return s.classId===selectedClass})?selectedClass:'5-3';
+
 else if(data.schedules.some(function(s){return s.classId==='5-3'}))$('classId').value='5-3';
 renderVisitors();selectVideo();renderEvents();
 }
@@ -158,6 +197,7 @@ $('studentSelect').addEventListener('change',selectVideo);
 $('classId').addEventListener('change',renderEvents);
 $('saveVideoBtn').addEventListener('click',saveVideo);
 $('saveEventBtn').addEventListener('click',saveEvent);
+$('candidateBtn').addEventListener('click',loadCandidates);
 $('reloadBtn').addEventListener('click',function(){reload().catch(function(e){message('eventMsg',e.message,true)})});
 $('loginBtn').addEventListener('click',async function(){
 try{await api('/api/management/login',{method:'POST',body:JSON.stringify({username:$('username').value,password:$('password').value})});$('password').value='';await show()}
