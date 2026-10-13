@@ -433,7 +433,7 @@ function injectPhaseAnalyticsUi(html: string): string {
   if (!out.includes(phaseSlot)) throw new Error('PHASE_ANALYTICS_LAYOUT_SLOT_MISSING');
   out = out.replace(phaseSlot, '<div id="phaseCountryPanelSlot" class="phase-country-slot">' + phaseCard + '</div>');
 
-  const extraStyle = '<style>.phase-country-card{min-height:390px}.phase-country-card .chart{height:330px}.phase-mini{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 10px;font-size:13px}.phase-mini b{font-size:18px}.phase-rate-row{display:grid;grid-template-columns:80px 1fr 58px;gap:8px;align-items:center;margin:16px 4px}.phase-rate-track{height:18px;background:#edf3ff;border-radius:999px;overflow:hidden}.phase-rate-fill{height:100%;background:#4d8df7;border-radius:999px}.phase-rate-label{font-weight:800;color:#425878}.phase-rate-value{font-weight:900;text-align:right}.phase-rate-sub{grid-column:2/4;font-size:11px;color:#64748b;margin-top:-4px}@media(max-width:760px){.phase-mini{grid-template-columns:1fr 1fr}.phase-rate-row{grid-template-columns:70px 1fr 52px}}</style>';
+  const extraStyle = '<style>.phase-country-card{min-height:390px}.phase-country-card .chart{height:auto;overflow-y:visible}.phase-mini{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 10px;font-size:13px}.phase-mini b{font-size:18px}.phase-rate-row{display:grid;grid-template-columns:80px 1fr 58px;gap:8px;align-items:center;margin:16px 4px}.phase-rate-track{height:18px;background:#edf3ff;border-radius:999px;overflow:hidden}.phase-rate-fill{height:100%;background:#4d8df7;border-radius:999px}.phase-rate-label{font-weight:800;color:#425878}.phase-rate-value{font-weight:900;text-align:right}.phase-rate-sub{grid-column:2/4;font-size:11px;color:#64748b;margin-top:-4px}@media(max-width:760px){.phase-mini{grid-template-columns:1fr 1fr}.phase-rate-row{grid-template-columns:70px 1fr 52px}}</style>';
   out = out.replace('</head>', `${extraStyle}</head>`);
 
   const script = `<script>
@@ -461,7 +461,6 @@ function injectPhaseAnalyticsUi(html: string): string {
     if(p1)html+=row('Phase 1',p1.visitorParticipantMeanSharePercent,p1.visitorParticipantN,p1.visitorMatchedSessions,p1.visitorEligibleSessions,p1.visitorSessionSharePercent);
     if(p2)html+=row('Phase 2',p2.visitorParticipantMeanSharePercent,p2.visitorParticipantN,p2.visitorMatchedSessions,p2.visitorEligibleSessions,p2.visitorSessionSharePercent);
     html+='<div class="muted" style="font-weight:800;margin:20px 4px 8px">担当国Persona選択率（集合→担当国）</div>';
-    if(p2)html+=row('Phase 2',p2.participantMeanSharePercent,p2.participantN,p2.matchedSessions,p2.eligibleSessions,p2.sessionSharePercent);
     if(p3)html+=row('Phase 3',p3.participantMeanSharePercent,p3.participantN,p3.matchedSessions,p3.eligibleSessions,p3.sessionSharePercent);
     chart.innerHTML=html;
     if(note)note.textContent=pc.phase1Note+' '+(pc.phase2Note||'')+' '+pc.filterNote;
