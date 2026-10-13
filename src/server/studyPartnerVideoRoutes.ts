@@ -27,7 +27,7 @@ type VideoRecord = {
 type VisitorEvent = {
   eventId: string;
   classId: string;
-  eventType: 'roster_change' | 'student_notice';
+  eventType: 'roster_change' | 'student_notice' | 'video_view';
   effectiveDate: string;
   announcedToChildrenDate: string;
   visitors: Array<{ studentId: string; country: string; displayName: string }>;
@@ -171,7 +171,7 @@ router.post('/study-partner-videos/visitor-event', requireManagementRole(['resea
   try {
     const input = req.body || {};
     if (!isStudyClassId(input.classId) || /^[56]-C[1-9]$/.test(input.classId)) throw new Error('INVALID_EVENT_CLASS');
-    if (input.eventType !== 'roster_change' && input.eventType !== 'student_notice') throw new Error('INVALID_EVENT_TYPE');
+    if (input.eventType !== 'roster_change' && input.eventType !== 'student_notice' && input.eventType !== 'video_view') throw new Error('INVALID_EVENT_TYPE');
     if (!Array.isArray(input.visitorIds) || input.visitorIds.length < 1 || input.visitorIds.length > 20) throw new Error('INVALID_EVENT_VISITORS');
     const ids = input.visitorIds.map(requiredId);
     if (new Set(ids).size !== ids.length) throw new Error('INVALID_EVENT_DUPLICATE_VISITOR');
@@ -180,6 +180,7 @@ router.post('/study-partner-videos/visitor-event', requireManagementRole(['resea
     if (missingCountry) throw new Error('INVALID_EVENT_COUNTRY_REQUIRED_FOR_' + missingCountry);
     const effectiveDate = requiredDate(input.effectiveDate, false, 'EFFECTIVE_DATE');
     const announcedToChildrenDate = requiredDate(input.announcedToChildrenDate, true, 'ANNOUNCEMENT_DATE');
+    if (input.eventType === 'video_view' && !announcedToChildrenDate) throw new Error('INVALID_VIDEO_VIEW_DATE_REQUIRED');
     const eventId = crypto.randomUUID();
     const event: VisitorEvent = {
       eventId, classId: input.classId, eventType: input.eventType,
