@@ -7,6 +7,7 @@ import {
   PHASE_SESSION_EXPORT_HEADERS,
   augmentSessionRowsWithPhase,
   buildPhaseComparison,
+  buildPhaseComparisonFromExportSessions,
   withResearchPhaseAnalyticsRuntime,
 } from '../src/server/researchPhaseAnalyticsRuntime';
 import { managementPageHtmlWithStudyPhase } from '../src/server/researchPhaseRuntime';
@@ -74,6 +75,34 @@ assert.equal(comparison.phases[3].participantMeanSharePercent, 100);
 assert.ok(comparison.phase1Note?.includes('来校国籍'));
 assert.ok(comparison.phase2Note?.includes('Phase 2'));
 
+// Descriptive dashboard MUST identify its own denominators and avoid presenting them as official RQ1 selection samples.
+const missingSetSchedule: StudyScheduleRecord = {
+  ...schedule, classId: '5-2', announcedVisitorCountries: [], announcedVisitorCountryCounts: {},
+};
+const changedHistorySchedule: StudyScheduleRecord = {
+  ...schedule,
+  history: [{ ...schedule, revision: 2, announcedVisitorCountries: ['United Kingdom'], announcedVisitorCountryCounts: { 'United Kingdom': 1 } }],
+};
+const exported = [
+  { research_id: 'R1', class_id: '5-1', local_date: '2026-09-17', persona_country: 'United States' },
+  { research_id: 'R2', class_id: '5-1', local_date: '2026-09-18', persona_country: 'Bangladesh' },
+  { research_id: 'R3', class_id: '5-1', local_date: '2026-09-19', persona_country: '' },
+  { research_id: 'R4', class_id: '5-2', local_date: '2026-09-19', persona_country: 'United Kingdom' },
+  { research_id: 'R1', class_id: '5-1', local_date: '2026-10-02', persona_country: 'United States' },
+  { research_id: 'R1', class_id: '5-1', local_date: '2026-10-08', persona_country: 'United States', assigned_partner_country: '' },
+].map((row) => ({ ...row, school_condition: 'intervention', formal_study_participant: 1, study_start_date: '2026-09-17' }));
+const audited = buildPhaseComparisonFromExportSessions(exported as any, [changedHistorySchedule, missingSetSchedule], { dataScope: 'main' });
+assert.equal(audited.phases[0].sessions, 4);
+assert.equal(audited.phases[0].visitorEligibleSessions, 2);
+assert.equal(audited.phases[0].visitorMissingCountry, 1);
+assert.equal(audited.phases[0].visitorMissingSet, 1);
+assert.equal(audited.phases[1].visitorEligibleSessions, 1);
+assert.equal(audited.phases[2].eligibleSessions, 0);
+assert.equal(audited.phases[2].assignedMissingTarget, 1);
+assert.equal(audited.referenceAudit.visitorPairedParticipantN, 1);
+assert.equal(audited.referenceAudit.unphasedFilteredSessions, 0);
+assert.deepEqual(audited.referenceAudit.visitorSetRevisionClassIds, ['5-1']);
+
 const notApplicable = buildPhaseComparison(raw as any, [schedule], { dataScope: 'test' });
 assert.equal(notApplicable.applicable, false);
 assert.ok(notApplicable.reason.includes('本研究'));
@@ -136,6 +165,11 @@ assert.ok(capturedHtml.includes('20→来校国籍群→担当国への焦点化
 assert.ok(capturedHtml.includes('id="chartPhaseCountry"'));
 assert.ok(capturedHtml.includes('id="phaseCountryPanelSlot"'),'Phase chart must render inside the E-layout analysis column');
 assert.ok(capturedHtml.includes('phase-country-card'),'Phase chart must use the dedicated analysis card class');
+assert.ok(capturedHtml.includes('正式RQ1分析・CSV'));
+assert.ok(capturedHtml.includes('参考指標：相手選択の焦点化'));
+assert.ok(capturedHtml.includes('参考集計の分母外'));
+assert.ok(capturedHtml.includes('同一児童 n='));
+assert.ok(capturedHtml.includes('来校国籍群について履歴と現設定が異なる学級'));
 assert.ok(capturedHtml.indexOf('id="phaseCountryPanelSlot"') > capturedHtml.indexOf('class="analysis-session-layout'),'Phase slot must remain inside the analysis/session workspace');
 assert.ok(capturedHtml.includes('id="iBefore" hidden'), 'legacy ids must remain hidden so the base renderer cannot break');
 assert.equal(capturedHtml.includes('<h3>告知前／告知後セッション</h3>'), false);
