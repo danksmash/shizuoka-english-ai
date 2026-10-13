@@ -4,6 +4,7 @@ import type { AIStudentId, ChatMessage, DialogueDurationMinutes, DialogueTopic, 
 import { getPersonaResearchMetadata } from '../data/personaResearch';
 import { createDocumentIfAbsent, getDocument, listCollection, patchDocumentField, queryCollection, queryCollectionByStringRange, queryCollectionFieldsByStringRange, queryCollectionLatest, setDocument } from './firestore';
 import { resolveTtsRuntimeMetadata } from './ttsRuntimeMetadata';
+import { isSupportedResearchIdFormat } from './researchIdFormat';
 import {
   RESEARCH_DAILY_AGGREGATE_COLLECTION,
   RESEARCH_DASHBOARD_SESSION_FIELDS,
@@ -305,7 +306,7 @@ export async function updateStudentStudyMetadata(
   const results = [];
   for (const input of inputs) {
     const researchId = typeof input?.researchId === 'string' ? input.researchId.trim().toUpperCase() : '';
-    if (!/^R-[A-Z2-9]{8,20}$/.test(researchId)) throw new Error('INVALID_RESEARCH_ID');
+    if (!isSupportedResearchIdFormat(researchId)) throw new Error('INVALID_RESEARCH_ID');
     if (input.formalStudyParticipant !== true) throw new Error('FORMAL_STUDY_PARTICIPANT_REQUIRED');
     const studySiteId = normalizeStudySiteId(input.studySiteId);
     const schoolCondition = normalizeSchoolCondition(input.schoolCondition);
@@ -371,7 +372,7 @@ export async function updateStudentResearchAssignments(
 
   const normalizedInputs = inputs.map((input) => {
     const researchId = typeof input?.researchId === 'string' ? input.researchId.trim().toUpperCase() : '';
-    if (!/^R-[A-Z2-9]{8,20}$/.test(researchId)) throw new Error('INVALID_RESEARCH_ID');
+    if (!isSupportedResearchIdFormat(researchId)) throw new Error('INVALID_RESEARCH_ID');
     const assignedPartnerId = normalizeAssignmentText(input.assignedPartnerId);
     const assignedPartnerCountry = normalizeAssignmentText(input.assignedPartnerCountry);
     const rawAnnouncedAt = typeof input.assignmentAnnouncedAt === 'string' ? input.assignmentAnnouncedAt.trim() : '';
