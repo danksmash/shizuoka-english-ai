@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { isSupportedResearchIdFormat } from '../src/server/researchIdFormat';
 import {
   analysisPeriodForLocalDate,
   identifiedOtherStartDate,
@@ -9,6 +10,14 @@ import {
   STUDY_CLASS_IDS,
   isStudyClassId,
 } from '../src/server/studySchedulePersistence';
+
+// Both issued ID generations must save, but malformed and fabricated formats must fail.
+for (const id of ['R244386', 'R373562', 'R919587', 'R-ABCDEFGH', 'R-ABCDEFGHJKLM']) {
+  assert.equal(isSupportedResearchIdFormat(id), true, `expected to accept ${id}`);
+}
+for (const id of ['', 'R24438', 'R2443867', 'R-ABC', 'R-ABCDEFG1', 'R-ABCDEFGH123456789012345', 'student-244386', 'R244386;DROP']) {
+  assert.equal(isSupportedResearchIdFormat(id), false, `expected to reject ${id}`);
+}
 
 assert.deepEqual(STUDY_CLASS_IDS, ['5-1','5-2','5-3','6-1','6-2']);
 assert.equal(isStudyClassId('5-C1'), true);
@@ -148,6 +157,9 @@ assert.ok(persistence.includes('history: [...current.history, snapshot].slice(-1
 assert.ok(studentPersistence.includes('export async function updateStudentResearchAssignments'));
 assert.ok(studentPersistence.includes('researchAssignmentHistory'));
 assert.ok(studentPersistence.includes('RESEARCH_ASSIGNMENT_CONFLICT'));
+assert.ok(studentPersistence.includes('if (!isSupportedResearchIdFormat(researchId))'), 'both persistence updates must apply supported ID validation');
+assert.ok(studentPersistence.includes("if (!records.length) throw new Error('RESEARCH_PARTICIPANT_NOT_FOUND')"), 'format match alone must not permit a non-existent ID');
+assert.ok(routes.includes('const participant = participantByResearchId.get(researchId);'), 'assignment API must keep the enrolled intervention participant allowlist');
 assert.ok(studentPersistence.includes('expectedAssignedPartnerCountry'));
 assert.ok(studentPersistence.includes('export async function updateStudentStudyMetadata'));
 assert.ok(studentPersistence.includes('schoolCondition'));
