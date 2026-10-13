@@ -114,6 +114,7 @@ export function buildPhaseComparisonFromExportSessions(
 ) {
   const scope = requestedDataScope(query);
   const requestedCondition = typeof query.schoolCondition === 'string' ? query.schoolCondition.trim() : '';
+  const emptyReferenceAudit = { filteredSessionN: 0, unphasedFilteredSessions: 0, visitorPairedParticipantN: 0, visitorSetRevisionClassIds: [] as string[] };
   const emptyPhase = (phase: PhaseId): PhaseStats => ({
     phase,
     label: PHASE_LABELS[phase],
@@ -137,6 +138,7 @@ export function buildPhaseComparisonFromExportSessions(
   if (requestedCondition === 'comparison') {
     return {
       applicable: false,
+      referenceAudit: emptyReferenceAudit,
       reason: 'ResearchPhaseは国籍告知・本人動画・実在留学生交流を行う実践校のみを対象にします。比較校はPhase 1～4へ割り当てません。',
       filterNote: '比較校は同じ相対経過時点でPre／Mid／Postを実施しますが、Phase分析には含めません。',
       phases: PHASE_IDS.map(emptyPhase),
@@ -145,6 +147,7 @@ export function buildPhaseComparisonFromExportSessions(
   if (!['main', 'all'].includes(scope)) {
     return {
       applicable: false,
+      referenceAudit: emptyReferenceAudit,
       reason: 'ResearchPhaseは本研究データのみを対象にします。',
       filterNote: 'Phase比較はPersona・研究Phaseフィルタを除外して集計します。',
       phases: PHASE_IDS.map(emptyPhase),
