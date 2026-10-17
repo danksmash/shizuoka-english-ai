@@ -34,6 +34,7 @@ import {
   isManualResearchExcludedSessionId,
 } from './researchManualExclusions';
 import { getAllAnalysisSessionOverrides } from './researchAnalysisSessions';
+import { summarizeInLessonResearchCollection } from './researchLessonCollectionProgress';
 
 type PhaseAwareResearchQuery = ResearchFilterQuery & { studyPhase?: unknown; dataset?: unknown };
 
@@ -264,6 +265,8 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
     );
     const filteredPreparedPhaseSessions = filterResearchSessionRows(preparedPhaseSessions, query);
     const lessonCumulativeReflection = buildCumulativeLessonReflectionRows(filteredPreparedPhaseSessions, lessonSessionIds);
+    // Reuse the prepared rows and final lesson inclusion set; no additional Firestore read.
+    const collectionProgress = summarizeInLessonResearchCollection(filteredPreparedPhaseSessions, schedules, lessonSessionIds);
     const phaseComparison = preparedPhaseSessions.length || analysisSessions.length === 0
       ? buildConsistentPhaseComparisonFromExportSessions(preparedPhaseSessions, schedules, query)
       : buildConsistentPhaseComparison(analysisSessions, schedules, query);
@@ -310,6 +313,7 @@ const resilientDashboardHandler: RequestHandler = async (req, res) => {
       sessionAuditLazy: true,
       manualResearchExclusions: MANUAL_RESEARCH_EXCLUSIONS,
       dashboardWarnings,
+      collectionProgress: { ...collectionProgress, calculatedAt: new Date().toISOString() },
       phaseComparison,
     });
   } catch (error: any) {

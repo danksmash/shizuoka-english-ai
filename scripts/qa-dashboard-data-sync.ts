@@ -125,9 +125,10 @@ assert.equal(element('chartReflectionTitle').textContent,'AI対話ふりかえ�
 assert.ok(element('qualityRows').innerHTML.includes('研究データ品質'));
 assert.ok(element('qualityRows').innerHTML.includes('システム品質'));
 assert.ok(element('qualityRows').innerHTML.includes('TTSフォールバック'));
-assert.ok(element('topExpressions').innerHTML.includes('surfing'));
+assert.equal(element('topExpressions').innerHTML, '', 'hidden expression analysis must not be rendered on initial dashboard load');
+assert.ok(element('collectionProgress').innerHTML.includes('更新'), 'legacy cached payload must degrade gracefully until refreshed');
 assert.ok(element('recentRows').innerHTML.includes('R0123'));
-assert.ok(element('exportCards').innerHTML.includes('sessions.csv') && element('exportCards').innerHTML.includes('codebook.csv'));
+assert.ok(element('exportCards').innerHTML.includes('sessions.csv') && element('exportCards').innerHTML.includes('codebook.csv'), 'export cards missing: '+String(element('exportCards').innerHTML).slice(0,350));
 assert.ok(element('exportCards').innerHTML.includes('lesson_reflections.csv'));
 
 const parsedLesson = context.parseCsvRows(lessonCsv);
