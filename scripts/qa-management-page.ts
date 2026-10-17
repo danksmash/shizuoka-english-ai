@@ -6,7 +6,9 @@ assert.ok(page.includes('id="scheduleBtn"'));assert.ok(page.includes('href="/stu
 assert.ok(page.includes('/research-rq2.html'));assert.ok(page.includes('/research-rq3.html'));assert.ok(page.includes('7 CSVを一括ZIP'));assert.equal(page.includes('6 CSVを一括ZIP'),false,'CSV bundle label must match the seven exported CSV files');
 assert.ok(page.includes('analysis-session-layout'),'dashboard must use the E-layout analysis/session workspace');
 assert.ok(page.includes('analysis-column'),'left column must collect research analysis cards');
-assert.ok(page.includes('analysis-secondary'),'quality and expressions must share the lower-left analysis row');
+assert.ok(page.includes('analysis-secondary'),'quality and collection progress must share the lower-left analysis row');
+assert.ok(page.includes('id="collectionPanel"'),'lightweight research collection panel must replace expression panel');
+assert.ok(page.includes('id="expressionPanel" hidden'),'expression panel must remain reversible and hidden');
 assert.ok(page.includes('id="phaseCountryPanelSlot"'),'Phase comparison must have a dedicated analysis-column slot');
 assert.ok(page.includes('recent-card'),'recent anonymized sessions must remain a dedicated card');
 assert.ok(page.includes('.analysis-session-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(590px,.8fr);gap:12px;margin-top:12px;align-items:start}'),'desktop E-layout must preserve intrinsic column heights');
