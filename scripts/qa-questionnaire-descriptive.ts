@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import vm from 'node:vm';
 import { buildQuestionnaireDescriptiveStatistics } from '../src/server/questionnaireDescriptive';
 import {
   QUESTIONNAIRE_INSTRUMENT_VERSION,
@@ -107,6 +108,31 @@ assert.ok(page.includes("mid=row.mid[key]"));
 assert.ok(page.includes("renderChart('chartAttitude',rows,'attitude')"));
 assert.equal(page.includes("renderChart('chartAttitude',rows,'total')"), false);
 assert.ok(page.includes("bar(mid,cx"));
+assert.ok(page.includes("const rows=questionnaireVisibleRows(data?.rows)"), 'the table and every metric chart must share the display-only row filter');
+const visibleGroupSet = page.match(/const QUESTIONNAIRE_VISIBLE_GROUP_IDS=new Set\(\[([^\]]+)\]\)/)?.[1];
+assert.ok(visibleGroupSet, 'questionnaire display allowlist must exist');
+const visibleGroupIds = [...visibleGroupSet.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+assert.deepEqual(visibleGroupIds, ['intervention:5-1','intervention:5-2','intervention:5-3','intervention:6-1','intervention:6-2','intervention:grade5','intervention:all','comparison:6-C1']);
+assert.ok(page.includes("startsWith('comparison:')"), 'single-school displays without comparison data must retain their existing rows');
+assert.equal(visibleGroupIds.includes('comparison:grade6'), false, 'comparison grade rollup must not be displayed');
+assert.equal(visibleGroupIds.includes('comparison:all'), false, 'comparison overall rollup must not be displayed');
+assert.equal(visibleGroupIds.includes('all'), false, 'both-schools overall rollup must not be displayed');
+assert.ok(stats.rows.some((row) => row.groupId === 'all'), 'both-schools aggregate must remain available in the descriptive calculation');
+assert.ok(stats.rows.some((row) => row.groupId === 'grade6'), 'grade aggregates must remain available in the descriptive calculation');
+const comparisonRecords = [record('R-COMP', '6-C1', 'pre_app', 4)].map((row) => ({ ...row, schoolCondition: 'comparison' as const }));
+const comparisonStats = buildQuestionnaireDescriptiveStatistics([...records, ...comparisonRecords]);
+assert.ok(comparisonStats.rows.some((row) => row.groupId === 'comparison:6-C1'));
+assert.ok(comparisonStats.rows.some((row) => row.groupId === 'comparison:grade6'), 'comparison grade aggregate must remain calculated');
+assert.ok(comparisonStats.rows.some((row) => row.groupId === 'comparison:all'), 'comparison overall aggregate must remain calculated');
+assert.ok(comparisonStats.rows.some((row) => row.groupId === 'all'), 'both-schools aggregate must remain calculated');
+const filterStart = page.indexOf('const QUESTIONNAIRE_VISIBLE_GROUP_IDS=');
+const filterEnd = page.indexOf('function renderDescriptive', filterStart);
+assert.ok(filterStart >= 0 && filterEnd > filterStart, 'display filter source must be extractable');
+const filterContext: { questionnaireVisibleRows?: (rows: Array<{ groupId: string }>) => Array<{ groupId: string }> } = {};
+vm.runInNewContext(`${page.slice(filterStart, filterEnd)};globalThis.questionnaireVisibleRows=questionnaireVisibleRows;`, filterContext);
+const filteredGroupIds = filterContext.questionnaireVisibleRows!(comparisonStats.rows).map((row) => row.groupId);
+assert.deepEqual(filteredGroupIds, visibleGroupIds.filter((groupId) => comparisonStats.rows.some((row) => row.groupId === groupId)));
+assert.deepEqual(filterContext.questionnaireVisibleRows!(stats.rows).map((row) => row.groupId), stats.rows.map((row) => row.groupId), 'legacy intervention-only display must remain unchanged');
 assert.ok(page.includes('試験的LMM分析（研究者用）'));
 assert.ok(page.includes("api('/api/management/questionnaire/lmm-trial'"));
 assert.equal(page.includes('事前・事後対応分析'), false);
