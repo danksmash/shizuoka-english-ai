@@ -95,8 +95,14 @@ function fmt(value,digits=2){return value===null||value===undefined||!Number.isF
 function pfmt(value){if(value===null||value===undefined||!Number.isFinite(Number(value)))return '—';const n=Number(value);return n<.001?'&lt;.001':n.toFixed(3);}
 function ms(metric){if(!metric||metric.mean===null||metric.mean===undefined)return '—';return fmt(metric.mean,2)+' ('+(metric.sd===null||metric.sd===undefined?'—':fmt(metric.sd,2))+')';}
 function renderCounts(stats){const c=stats?.counts||{};$('mRecords').textContent=c.records??0;$('mPre').textContent=c.preUnique??0;$('mMid').textContent=c.midUnique??0;$('mPost').textContent=c.postUnique??0;$('mComplete3').textContent=c.complete3??0;$('mPreMid').textContent=c.preMidPaired??0;$('mMidPost').textContent=c.midPostPaired??0;$('mPrePost').textContent=c.prePostPaired??0;$('mDup').textContent=c.duplicateWaveKeys??0;}
+const QUESTIONNAIRE_VISIBLE_GROUP_IDS=new Set(['intervention:5-1','intervention:5-2','intervention:5-3','intervention:6-1','intervention:6-2','intervention:grade5','intervention:all','comparison:6-C1']);
+function questionnaireVisibleRows(rows){
+  const allRows=Array.isArray(rows)?rows:[];
+  const hasComparison=allRows.some(row=>String(row?.groupId||'').startsWith('comparison:'));
+  return hasComparison?allRows.filter(row=>QUESTIONNAIRE_VISIBLE_GROUP_IDS.has(String(row?.groupId||''))):allRows;
+}
 function renderDescriptive(data){
-  const rows=Array.isArray(data?.rows)?data.rows:[];
+  const rows=questionnaireVisibleRows(data?.rows);
   $('descriptiveBody').innerHTML=rows.map(row=>`<tr><td>${esc(row.groupLabel)}</td><td>${row.pre.n}</td><td>${row.mid.n}</td><td>${row.post.n}</td><td>${ms(row.pre.attitude)}</td><td>${ms(row.mid.attitude)}</td><td>${ms(row.post.attitude)}</td><td>${ms(row.pre.persistence)}</td><td>${ms(row.mid.persistence)}</td><td>${ms(row.post.persistence)}</td><td>${ms(row.pre.self_regulation)}</td><td>${ms(row.mid.self_regulation)}</td><td>${ms(row.post.self_regulation)}</td><td>${ms(row.pre.l2wtc)}</td><td>${ms(row.mid.l2wtc)}</td><td>${ms(row.post.l2wtc)}</td></tr>`).join('');
   renderChart('chartAttitude',rows,'attitude');renderChart('chartPersistence',rows,'persistence');renderChart('chartSelfRegulation',rows,'self_regulation');renderChart('chartL2wtc',rows,'l2wtc');
 }
