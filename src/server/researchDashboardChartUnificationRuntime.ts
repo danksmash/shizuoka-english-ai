@@ -7,7 +7,7 @@ function injectResearchDashboardChartUnification(html: string): string {
   if (!html.includes('id="chartDaily"') || html.includes('id="researchDashboardChartUnification"')) return html;
 
   const style = `<style id="researchDashboardChartUnificationStyle">
-.research-chart-left-stack{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:14px;min-width:0;align-self:stretch}.research-chart-left-stack>.chart-card{min-height:0;height:100%}.research-chart-left-stack .unified-daily-card{display:flex;flex-direction:column}.research-chart-left-stack .unified-daily-card #chartDaily{flex:1 1 auto;min-height:0}.research-turns-card{display:flex;flex-direction:column}.research-turns-card #chartTurns{flex:0 0 auto;min-height:330px}.unified-line-chart{display:flex;flex-direction:column;align-items:stretch;gap:5px;height:auto;min-height:330px;overflow-x:auto;overflow-y:visible}.unified-line-chart svg{display:block;min-width:460px;width:100%;height:auto;aspect-ratio:460/245;flex:0 0 auto;min-height:0}.unified-line-footnote{flex:0 0 auto;min-width:460px;margin:0;padding:1px 2px 3px;font-size:11px;line-height:1.5;color:#64748b;font-weight:700;white-space:normal;overflow-wrap:anywhere}.research-chart-left-stack .chart-card h3,.charts>.chart-card h3{font-size:18px;line-height:1.35;margin:0 0 10px}.research-turns-card h3{margin:0 0 12px;font-size:18px}.unified-line-chart text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}.unified-line-axis{font-size:10px;fill:#425878;font-weight:700}.unified-line-legend{font-size:11px;fill:#10224a;font-weight:800}@media(max-width:760px){.research-chart-left-stack{grid-template-rows:auto auto}.research-chart-left-stack>.chart-card{min-height:390px;height:auto}.unified-line-chart svg{min-width:460px}}
+.research-chart-left-stack{display:grid;grid-template-rows:minmax(min-content,1fr) minmax(min-content,1fr);gap:14px;min-width:0;align-self:stretch}.research-chart-left-stack>.chart-card{min-height:0;height:100%}.research-chart-left-stack .unified-daily-card{display:flex;flex-direction:column}.research-chart-left-stack .unified-daily-card #chartDaily{flex:1 1 auto;min-height:0}.research-turns-card{display:flex;flex-direction:column}.research-turns-card #chartTurns{flex:0 0 auto;min-height:330px}.unified-line-card{display:flex;flex-direction:column;min-height:0}.unified-line-chart{display:flex;flex-direction:column;align-items:stretch;gap:5px;height:auto;min-height:330px;overflow-x:auto;overflow-y:visible}.unified-line-chart svg{display:block;min-width:460px;width:100%;height:auto;aspect-ratio:460/245;flex:0 0 auto;min-height:0}.unified-line-footnote{flex:0 0 auto;min-width:460px;margin:0;padding:1px 2px 3px;font-size:11px;line-height:1.5;color:#64748b;font-weight:700;white-space:normal;overflow-wrap:anywhere}.research-chart-left-stack .chart-card h3,.charts>.chart-card h3{font-size:18px;line-height:1.35;margin:0 0 10px}.research-turns-card h3{margin:0 0 12px;font-size:18px}.unified-line-chart text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}.unified-line-axis{font-size:10px;fill:#425878;font-weight:700}.unified-line-legend{font-size:11px;fill:#10224a;font-weight:800}@media(max-width:760px){.research-chart-left-stack{grid-template-rows:auto auto}.research-chart-left-stack>.chart-card{min-height:390px;height:auto}.unified-line-chart svg{min-width:460px}}
 </style>`;
 
   const script = `<script id="researchDashboardChartUnification">
@@ -187,8 +187,37 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
     dailyCard.classList.add('unified-daily-card');
     turns.classList.add('unified-line-chart');
     var words=document.getElementById('chartWords'),reflection=document.getElementById('chartReflection');
-    if(words)words.classList.add('unified-line-chart');
-    if(reflection)reflection.classList.add('unified-line-chart');
+    if(words){words.classList.add('unified-line-chart');var wc=words.closest&&words.closest('.chart-card');if(wc)wc.classList.add('unified-line-card')}
+    if(reflection){reflection.classList.add('unified-line-chart');var rc=reflection.closest&&reflection.closest('.chart-card');if(rc)rc.classList.add('unified-line-card')}
+  }
+  // SVG height depends on the available width. Grid intrinsic row sizing can
+  // underestimate it, leaving the note visually outside its chart card.
+  // Measure the actual note bottom after paint and reserve enough card height.
+  var lineChartFitQueued=false;
+  function fitLineChartCards(){
+    var items=[];
+    ['chartWords','chartReflection','chartTurns'].forEach(function(id){
+      var chart=document.getElementById(id);
+      if(!chart||!chart.closest||!chart.querySelector)return;
+      var card=chart.closest('.chart-card'),footnote=chart.querySelector('.unified-line-footnote');
+      if(card&&footnote&&card.getBoundingClientRect&&footnote.getBoundingClientRect)items.push({card:card,footnote:footnote});
+    });
+    // Clear stale minimums first so reducing the viewport does not leave an
+    // unnecessarily tall card; measuring all cards before writing avoids drift.
+    items.forEach(function(item){item.card.style.minHeight=''});
+    items.forEach(function(item){
+      var cardRect=item.card.getBoundingClientRect();
+      var noteRect=item.footnote.getBoundingClientRect();
+      var paddingBottom=typeof getComputedStyle==='function'?(parseFloat(getComputedStyle(item.card).paddingBottom)||14):14;
+      var minHeight=Math.ceil(noteRect.bottom-cardRect.top+paddingBottom+8);
+      if(Number.isFinite(minHeight))item.card.style.minHeight=Math.max(390,minHeight)+'px';
+    });
+  }
+  function scheduleLineChartFit(){
+    if(lineChartFitQueued||!document.querySelector)return;
+    lineChartFitQueued=true;
+    var run=function(){lineChartFitQueued=false;fitLineChartCards()};
+    if(window.requestAnimationFrame)window.requestAnimationFrame(run);else setTimeout(run,0);
   }
   function renderUnified(d){
     ensureSeparateCards();
@@ -200,7 +229,9 @@ ${RESEARCH_CLASS_PALETTE_BROWSER_SCRIPT}
     var wordsTitle=document.getElementById('chartWordsTitle');if(wordsTitle)wordsTitle.textContent='1分あたり平均発話語数（学級別・累積平均・日別）';
     var reflection=document.getElementById('chartReflection');var cumulative=charts.lessonCumulativeReflection||charts.cumulativeDaily||charts.daily||[];
     if(reflection)reflection.innerHTML=reflectionSvg(cumulative);
+    scheduleLineChartFit();
   }
+  if(window.addEventListener)window.addEventListener('resize',scheduleLineChartFit);
   window.__researchDashboardUnifiedChartsV2=true;
   ensureSeparateCards();
   var previousRenderDashboard=renderDashboard;
