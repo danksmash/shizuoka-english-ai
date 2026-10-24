@@ -31,7 +31,8 @@ withResearchDashboardChartUnification('/management',((_req:any,res:any)=>res.sen
 assert.match(earlyHtml,/id="researchDashboardChartUnification"/,'chart script must not be lost when chartTurns arrives later');
 assert.match(sentBody, /researchDashboardChartUnification/);
 assert.match(sentBody, /research-chart-left-stack/);
-assert.match(sentBody, /grid-template-rows:minmax\(0,1fr\) minmax\(0,1fr\)/);
+assert.match(sentBody, /grid-template-rows:minmax\(min-content,1fr\) minmax\(min-content,1fr\)/,
+  'left chart stack rows must respect the line-chart footnote intrinsic height');
 assert.match(sentBody, /W=460,H=245,LEFT=56,RIGHT=15,BOTTOM=43,LINE_WIDTH=1\.15/);
 assert.match(sentBody, /unified-line-axis/);
 assert.match(sentBody, /font-size:10px/);
@@ -47,6 +48,14 @@ assert.doesNotMatch(sentBody, /\.unified-line-chart svg\{[^}]*flex:1 1 auto/,
   'chart-specific flex shrink previously made the words/reflection plots narrower');
 assert.doesNotMatch(sentBody, /class=\\"unified-line-note\\"/);
 assert.match(sentBody, /unified-line-chart\{display:flex;flex-direction:column/);
+assert.match(sentBody, /function fitLineChartCards\(\)/,
+  'chart cards must reserve height for notes after SVG aspect-ratio layout');
+assert.match(sentBody, /item\.footnote\.getBoundingClientRect\(\)/,
+  'layout fit must use the actual bottom of the wrapped footnote');
+assert.match(sentBody, /item\.card\.style\.minHeight=Math\.max\(390,minHeight\)\+'px'/,
+  'layout fit must set the minimum card height without clipping');
+assert.match(sentBody, /window\.addEventListener\('resize',scheduleLineChartFit\)/,
+  'chart cards must refit when the viewport width changes');
 assert.match(sentBody, /ensureSeparateCards/);
 assert.match(sentBody, /research-turns-card/);
 assert.match(sentBody, /daily-class-stack-card/);
