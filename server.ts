@@ -7,13 +7,14 @@ import { getAIStudentById } from './src/data/curriculum';
 import { getDialogueTopicContext } from './src/data/dialogueTopicContext';
 import { GOOGLE_TTS_VOICES } from './src/data/personaResearch';
 import { azureTtsConfigured, synthesizeAzureTts } from './src/server/azureTts';
+import { dedupePaidJsonRoute } from './src/server/providerRequestDedupe';
 import { detectVocabularyInText } from './src/data/vocabulary56';
 import { getTopicLearningGoals } from './src/data/topicLearningGoals';
 import { MAX_CHILD_UTTERANCE_CHARS, calculateCanonicalStats, canonicalizeHistory, isAIStudentId, isDialogueDuration, isDialogueTopic, isValidLearningCode, normalizeLearningCode, validateSessionSaveInput } from './src/dataContract';
 import { generateFallbackFeedback } from './src/utils/feedbackFallback';
 import { maskHighRiskPII, detectPromptInjection, detectInappropriateContent } from './src/utils/security';
 import { validateAiResponse, inspectAiResponse, buildAlignedReply } from './src/utils/responseValidation';
-import { getAllSessionsForManagement, getStudentHistory, persistenceConfigured, resolveStudentByCode, saveCanonicalSession } from './src/server/persistence';
+import { getAllSessionsForManagement, getCostAuditSessionsForManagementByLocalDateRange, getStudentHistory, persistenceConfigured, resolveStudentByCode, saveCanonicalSession } from './src/server/persistence';
 import { buildResearchDashboardData, buildResearchExportDataSets, filterResearchExportDataSets, normalizeFormalResearchExportQuery, serializeResearchCsv, type ResearchExportDatasetName } from './src/server/researchDashboard';
 import { getAllReflectionRecordsForTeacher } from './src/server/reflectionPersistence';
 import { buildResearchLessonReflectionCodebookRows, buildResearchLessonReflectionRows, serializeResearchLessonReflectionCsv } from './src/server/researchLessonReflectionExport';
@@ -39,8 +40,8 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Access-Control-Expose-Headers', 'X-TTS-Provider, X-TTS-Fallback-From, X-TTS-Fallback-Reason, X-TTS-Effective-Rate, X-TTS-Latency-Ms, X-TTS-Cache');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Idempotency-Key');
+    res.setHeader('Access-Control-Expose-Headers', 'X-TTS-Provider, X-TTS-Fallback-From, X-TTS-Fallback-Reason, X-TTS-Effective-Rate, X-TTS-Latency-Ms, X-TTS-Cache, X-Idempotency-Cache');
   }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
@@ -383,7 +384,7 @@ app.post('/api/tts', async (req, res) => {
       res.setHeader('Content-Type', 'audio/mpeg');
       res.setHeader('Cache-Control', 'private, max-age=900');
       res.setHeader('X-TTS-Provider', 'azure-speech');
-      res.setHeader('X-TTS-Cache', 'MISS');
+      res.setHeader('X-TTS-Cache', azure.cache);
       res.setHeader('X-TTS-Effective-Rate', azure.effectiveRate.toFixed(2));
       res.setHeader('X-TTS-Latency-Ms', String(Date.now() - requestStart));
       return res.send(azure.audio);
@@ -407,7 +408,7 @@ app.post('/api/tts', async (req, res) => {
   }
 });
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', dedupePaidJsonRoute('chat'), async (req, res) => {
   const requestStart = Date.now();
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (!checkRateLimit(ip)) {
@@ -612,7 +613,7 @@ function groundKeyPhrases(
   return result;
 }
 
-app.post('/api/feedback', async (req, res) => {
+app.post('/api/feedback', dedupePaidJsonRoute('feedback'), async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (!checkRateLimit(ip)) return res.status(429).json({ success: false, error: 'Rate limited' });
 
@@ -687,7 +688,7 @@ JSONのみ:
 }`;
 
   try {
-    const { parsed } = await callClaudeJson(
+    const { parsed, model, usage } = await callClaudeJson(
       `あなたは小学校外国語教育の専門家です。児童を具体的かつ温かく励ましてください。
 講評部分は指導者の視点で書き、studentMessageだけは${persona.name}本人が児童に直接話しかける自然な一人称メッセージにしてください。studentMessageは必ず日本語で書いてください。英語の文章は禁止です。児童が使った英語に触れる場合も、日本語で内容を要約してください。
 ${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${persona.country}、好きなものは${persona.likes.join(', ')}です。`,
@@ -733,6 +734,11 @@ ${persona.name}の年齢は${persona.age}歳、出身は${persona.city}, ${perso
           targetDurationMinutes: targetDuration,
         },
       },
+      _diagnostics: {
+        model,
+        usage,
+        route: 'anthropic-feedback',
+      },
     });
   } catch {
     const fallbackData = generateFallbackFeedback(
@@ -759,6 +765,21 @@ app.post('/api/sessions',async(req,res)=>{const validated=validateSessionSaveInp
 app.post('/api/management/login',(req,res)=>{const ip=req.ip||req.socket.remoteAddress||'unknown';if(!checkSensitiveLimit(`mgmt:${ip}`,10,15*60_000))return res.status(429).json({success:false,error:'TOO_MANY_LOGIN_ATTEMPTS'});const username=typeof req.body?.username==='string'?req.body.username.slice(0,100):'';const password=typeof req.body?.password==='string'?req.body.password.slice(0,300):'';const result=authenticateManagement(username,password);if(!result)return res.status(managementAuthConfigured()?401:503).json({success:false,error:managementAuthConfigured()?'INVALID_CREDENTIALS':'MANAGEMENT_AUTH_NOT_CONFIGURED'});if(result.role!=='researcher')return res.status(403).json({success:false,error:'RESEARCHER_ONLY'});setManagementCookie(res,result.token);return res.json({success:true,role:result.role});});
 app.post('/api/management/logout',(_req,res)=>{clearManagementCookie(res);return res.json({success:true});});
 app.get('/api/management/me',requireManagementRole(['researcher']),(req:AuthenticatedRequest,res)=>{res.setHeader('Cache-Control','no-store');return res.json({success:true,user:req.managementUser});});
+app.get('/api/management/cost.audit',requireManagementRole(['researcher']),async(req,res)=>{
+  try{
+    const rows=await getCostAuditSessionsForManagementByLocalDateRange(req.query?.start,req.query?.end);
+    const numeric=(value:unknown)=>{const parsed=Number(value);return Number.isFinite(parsed)&&parsed>=0?parsed:0;};
+    const empty=()=>({sessions:0,aiInputTokens:0,aiOutputTokens:0,aiCacheReadTokens:0,aiCacheCreationTokens:0,aiRequestFailures:0,ttsRequestsObserved:0,ttsFallbacks:0});
+    const totals=empty();const byDate=new Map<string,ReturnType<typeof empty>>();const models=new Map<string,number>();
+    for(const row of rows){
+      const date=String(row.localDate||'');const target=byDate.get(date)||empty();target.sessions+=1;totals.sessions+=1;
+      for(const [source,destination] of [['aiInputTokens','aiInputTokens'],['aiOutputTokens','aiOutputTokens'],['aiCacheReadTokens','aiCacheReadTokens'],['aiCacheCreationTokens','aiCacheCreationTokens'],['aiRequestFailureCount','aiRequestFailures'],['ttsProviderEventCount','ttsRequestsObserved'],['ttsFallbackCount','ttsFallbacks']] as const){const value=numeric(row[source]);totals[destination]+=value;target[destination]+=value;}
+      byDate.set(date,target);const model=String(row.aiModel||'unknown');models.set(model,(models.get(model)||0)+1);
+    }
+    const cacheDenominator=totals.aiInputTokens+totals.aiCacheReadTokens+totals.aiCacheCreationTokens;
+    res.setHeader('Cache-Control','no-store');return res.json({success:true,scope:{start:typeof req.query?.start==='string'?req.query.start:'',end:typeof req.query?.end==='string'?req.query.end:''},totals,cacheReadSharePercent:cacheDenominator?Number((totals.aiCacheReadTokens/cacheDenominator*100).toFixed(1)):0,models:Object.fromEntries([...models.entries()].sort()),byDate:[...byDate.entries()].filter(([date])=>date).sort(([left],[right])=>left.localeCompare(right)).map(([localDate,value])=>({localDate,...value})),limitations:['Historical feedback usage was not persisted before this build.','TTS cache HIT/STATIC was reported as MISS before this build; historical hit rate cannot be reconstructed.']});
+  }catch(error:any){console.error('Cost audit failed',{message:error?.message});return res.status(503).json({success:false,error:'COST_AUDIT_UNAVAILABLE'});}
+});
 app.get('/api/management/research.summary',requireManagementRole(['researcher']),async(_req,res)=>{
   try{
     const data=buildResearchExportDataSets(await getAllSessionsForManagement());

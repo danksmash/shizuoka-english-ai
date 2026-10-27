@@ -117,6 +117,7 @@ export default function App() {
   const effectiveTtsRateRef = useRef(speechRate);
   const dialogueActiveRef = useRef(false);
   const chatAbortControllerRef = useRef<AbortController | null>(null);
+  const chatRequestInFlightRef = useRef(false);
   const systemEventsRef = useRef<ResearchSystemEvent[]>([]);
   const initialSessionSaveRef = useRef<Promise<void> | null>(null);
   const sessionSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -316,10 +317,11 @@ export default function App() {
   }, [recordResearchEvent]);
 
   const handleSendMessage = async (text: string) => {
-    if (!dialogueActiveRef.current || phase !== 'dialogue' || remainingSeconds <= 0 || !text.trim() || isAiResponding) return;
+    if (!dialogueActiveRef.current || phase !== 'dialogue' || remainingSeconds <= 0 || !text.trim() || isAiResponding || chatRequestInFlightRef.current) return;
+    chatRequestInFlightRef.current = true;
     if (isRecording) stopRecordingInternal();
     const trimmed = text.trim();
-    if (trimmed.length > MAX_CHILD_UTTERANCE_CHARS) { setMicHintMessage('一度に話せる長さを少し超えました。少し短く分けて話してみてね。'); setTimeout(() => setMicHintMessage(''), 4000); return; }
+    if (trimmed.length > MAX_CHILD_UTTERANCE_CHARS) { chatRequestInFlightRef.current = false; setMicHintMessage('一度に話せる長さを少し超えました。少し短く分けて話してみてね。'); setTimeout(() => setMicHintMessage(''), 4000); return; }
     setMicHintMessage('');
     const spokenNameMatch = trimmed.match(/\b(?:my name is|i'm|i am|call me)\s+([A-Za-z]{2,15})\b/i);
     if (spokenNameMatch) {
@@ -339,7 +341,8 @@ export default function App() {
     const aiRequestStartedAt = Date.now();
     try {
       const currentProf = profileRef.current;
-      const response = await fetch(apiUrl('/api/chat'), { method:'POST', headers:{'Content-Type':'application/json'}, signal:controller.signal, body:JSON.stringify({ message:trimmed, history:newHistory, topic:currentProf.selectedTopic, studentName:currentProf.name, aiStudentId:currentProf.selectedAiStudentId }) });
+      const requestId = globalThis.crypto?.randomUUID?.() || `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const response = await fetch(apiUrl('/api/chat'), { method:'POST', headers:{'Content-Type':'application/json','X-Idempotency-Key':requestId}, signal:controller.signal, body:JSON.stringify({ message:trimmed, history:newHistory, topic:currentProf.selectedTopic, studentName:currentProf.name, aiStudentId:currentProf.selectedAiStudentId }) });
       const resData = await response.json();
       recordResearchEvent('ai_response_latency_ms', String(Math.max(0, Date.now() - aiRequestStartedAt)));
       if (resData?._diagnostics?.model) recordResearchEvent('ai_model', String(resData._diagnostics.model));
@@ -369,6 +372,7 @@ export default function App() {
       const wasAborted = (e as {name?:string})?.name === 'AbortError' || controller.signal.aborted;
       if (!wasAborted && dialogueActiveRef.current) { recordResearchEvent('ai_request_failure'); console.error('AI backend unavailable:', e); setMood('listening'); setMicHintMessage('AI留学生に接続できませんでした。もう一度送ってみてね。'); setTimeout(() => setMicHintMessage(''), 5000); }
     } finally {
+      chatRequestInFlightRef.current = false;
       if (chatAbortControllerRef.current === controller) chatAbortControllerRef.current = null;
       if (dialogueActiveRef.current) setIsAiResponding(false);
     }
@@ -511,7 +515,7 @@ export default function App() {
     } else {
       initialSessionSaveRef.current = null;
     }
-    (async()=>{ try { const controller=new AbortController(); const timeoutId=setTimeout(()=>controller.abort(),20000); const response=await fetch(apiUrl('/api/feedback'),{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,body:JSON.stringify({history:finalMessages,studentName:currentProf.name,durationMinutes:currentProf.selectedDurationMinutes,turns:turnCountRef.current,totalWords:totalChildWordsRef.current,aiStudentId:currentProf.selectedAiStudentId,topic:currentProf.selectedTopic,encounteredVocab:encounteredVocabRef.current})}); clearTimeout(timeoutId); const resData=await response.json(); if(resData.success&&resData.data)setFeedback(resData.data); else throw new Error('Invalid feedback response'); } catch(e){ console.warn('Feedback API fetch issue:',e); setFeedback(generateFallbackFeedback(studentObj,currentProf.name,turnCountRef.current,totalChildWordsRef.current,elapsedSecondsRef.current,currentProf.selectedDurationMinutes,encounteredVocabRef.current,finalMessages)); } finally { setIsLoadingFeedback(false); } })();
+    (async()=>{ try { const controller=new AbortController(); const timeoutId=setTimeout(()=>controller.abort(),20000); const requestId=globalThis.crypto?.randomUUID?.()||`feedback-${Date.now()}-${Math.random().toString(36).slice(2)}`; const response=await fetch(apiUrl('/api/feedback'),{method:'POST',headers:{'Content-Type':'application/json','X-Idempotency-Key':requestId},signal:controller.signal,body:JSON.stringify({history:finalMessages,studentName:currentProf.name,durationMinutes:currentProf.selectedDurationMinutes,turns:turnCountRef.current,totalWords:totalChildWordsRef.current,aiStudentId:currentProf.selectedAiStudentId,topic:currentProf.selectedTopic,encounteredVocab:encounteredVocabRef.current})}); clearTimeout(timeoutId); const resData=await response.json(); if(resData?._diagnostics?.model)recordResearchEvent('ai_model',String(resData._diagnostics.model));const usage=resData?._diagnostics?.usage||{};if(Number(usage.inputTokens)>0)recordResearchEvent('ai_input_tokens',String(usage.inputTokens));if(Number(usage.outputTokens)>0)recordResearchEvent('ai_output_tokens',String(usage.outputTokens));if(Number(usage.cacheReadTokens)>0)recordResearchEvent('ai_cache_read_tokens',String(usage.cacheReadTokens));if(Number(usage.cacheCreationTokens)>0)recordResearchEvent('ai_cache_creation_tokens',String(usage.cacheCreationTokens)); if(resData.success&&resData.data)setFeedback(resData.data); else throw new Error('Invalid feedback response'); } catch(e){ console.warn('Feedback API fetch issue:',e); setFeedback(generateFallbackFeedback(studentObj,currentProf.name,turnCountRef.current,totalChildWordsRef.current,elapsedSecondsRef.current,currentProf.selectedDurationMinutes,encounteredVocabRef.current,finalMessages)); } finally { setIsLoadingFeedback(false); } })();
     let hasTransitioned=false; const executeTransition=()=>{if(hasTransitioned)return;hasTransitioned=true;stopSpeaking();if(farewellSafetyTimerRef.current){clearTimeout(farewellSafetyTimerRef.current);farewellSafetyTimerRef.current=null;}farewellTransitionRef.current=null;setFarewellBanner(null);setPhase('reflection');};
     farewellTransitionRef.current=executeTransition;
     // Do not advance on a fixed timer: long farewell audio must finish before the reflection screen opens.

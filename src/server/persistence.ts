@@ -677,6 +677,17 @@ export async function getAllSessionsForManagement(): Promise<Record<string, any>
   return getSessionsForManagementByLocalDateRange();
 }
 
+const COST_AUDIT_SESSION_FIELDS = [
+  'localDate','aiModel','aiInputTokens','aiOutputTokens','aiCacheReadTokens','aiCacheCreationTokens',
+  'aiRequestFailureCount','ttsProviderEventCount','ttsFallbackCount',
+];
+
+export async function getCostAuditSessionsForManagementByLocalDateRange(start?: unknown, end?: unknown): Promise<Record<string, any>[]> {
+  const from = managementDateBoundary(start);
+  const to = managementDateBoundary(end);
+  return queryCollectionFieldsByStringRange(SESSION_COLLECTION, 'localDate', from, to, COST_AUDIT_SESSION_FIELDS);
+}
+
 const DASHBOARD_SESSION_FIELDS = RESEARCH_DASHBOARD_SESSION_FIELDS;
 
 export async function getDashboardSessionsForManagementByLocalDateRange(start?: unknown, end?: unknown): Promise<Record<string, any>[]> {
