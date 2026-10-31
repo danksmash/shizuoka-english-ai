@@ -1,4 +1,8 @@
 import { once } from 'node:events';
+import { createReadStream } from 'node:fs';
+import { mkdtemp, open, rm, type FileHandle } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { createDeflateRaw } from 'node:zlib';
 import type { RequestHandler, Response } from 'express';
@@ -185,6 +189,57 @@ async function* productionDatasetCsvChunks(
         .join('\n');
       if (batch) yield Buffer.from(`${batch}\n`, 'utf8');
     }
+  }
+}
+
+type MaterializedBundleCsvs = {
+  directory: string;
+  paths: Record<LargeDataset, string>;
+  counts: Record<LargeDataset, number>;
+};
+
+async function materializeBundleCsvs(
+  students: StudentMap,
+  preparation: StreamingPreparation,
+  schedules: StudyScheduleRecord[],
+  studyPhase: unknown,
+  exportQuery: ResearchFilterQuery,
+): Promise<MaterializedBundleCsvs> {
+  const directory = await mkdtemp(join(tmpdir(), 'research-bundle-'));
+  const datasets: LargeDataset[] = ['sessions', 'utterances', 'expressions'];
+  const paths = Object.fromEntries(datasets.map((dataset) => [dataset, join(directory, `${dataset}.csv`)])) as Record<LargeDataset, string>;
+  const handles = new Map<LargeDataset, FileHandle>();
+  const counts = { sessions: 0, utterances: 0, expressions: 0 };
+  try {
+    for (const dataset of datasets) {
+      const handle = await open(paths[dataset], 'w');
+      handles.set(dataset, handle);
+      const protectLeadingWhitespace = dataset !== 'sessions';
+      const header = headersForDataset(dataset).map((key) => csvCell(key, protectLeadingWhitespace)).join(',');
+      await handle.write(Buffer.from(`\uFEFF${header}\n`, 'utf8'));
+    }
+    for await (const page of fullSessionPages(students)) {
+      for (const dataset of datasets) {
+        const rows = buildStreamingRowsForPage(page, preparation, schedules, studyPhase, exportQuery, dataset);
+        counts[dataset] += rows.length;
+        const protectLeadingWhitespace = dataset !== 'sessions';
+        const headers = headersForDataset(dataset);
+        const handle = handles.get(dataset)!;
+        for (let index = 0; index < rows.length; index += CSV_BATCH_ROWS) {
+          const batch = rows.slice(index, index + CSV_BATCH_ROWS)
+            .map((row) => serializeStreamingCsvRow(row, headers, protectLeadingWhitespace))
+            .join('\n');
+          if (batch) await handle.write(Buffer.from(`${batch}\n`, 'utf8'));
+        }
+      }
+    }
+    for (const handle of handles.values()) await handle.close();
+    handles.clear();
+    return { directory, paths, counts };
+  } catch (error) {
+    await Promise.allSettled([...handles.values()].map((handle) => handle.close()));
+    await rm(directory, { recursive: true, force: true });
+    throw error;
   }
 }
 
@@ -412,6 +467,7 @@ const streamingCsvHandler: RequestHandler = async (req, res) => {
 
 const streamingBundleHandler: RequestHandler = async (req, res) => {
   const query = req.query as Record<string, unknown>;
+  let temporaryDirectory = '';
   try {
     const exportQuery = normalizeFormalResearchExportQuery(query);
     const studyPhase = normalizeStudyPhaseFilter(query.studyPhase);
@@ -436,16 +492,15 @@ const streamingBundleHandler: RequestHandler = async (req, res) => {
       ...buildQuestionnaireCodebookRows(),
     ]);
     const exportedAt = new Date().toISOString();
+    const materialized = await materializeBundleCsvs(students, preparation, schedules, studyPhase, exportQuery);
+    temporaryDirectory = materialized.directory;
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="research-bundle-${exportedAt.slice(0, 10).replace(/-/g, '')}.zip"`);
     res.setHeader('Cache-Control', 'no-store');
     const zip = new StreamingZipWriter(res);
-    const counts = { sessions: 0, utterances: 0, expressions: 0 };
     for (const dataset of ['sessions', 'utterances', 'expressions'] as const) {
-      const counter = { rows: 0 };
-      await zip.addFile(`${dataset}.csv`, productionDatasetCsvChunks(dataset, students, preparation, schedules, studyPhase, exportQuery, counter));
-      counts[dataset] = counter.rows;
+      await zip.addFile(`${dataset}.csv`, createReadStream(materialized.paths[dataset]));
     }
     await zip.addFile('personas.csv', oneChunk(serializeResearchCsv(personaRows, 'personas')));
     await zip.addFile('lesson_reflections.csv', oneChunk(serializeResearchLessonReflectionCsv(lessonRows)));
@@ -466,9 +521,9 @@ const streamingBundleHandler: RequestHandler = async (req, res) => {
       assigned_country_persona_definition: 'assigned_partner_country compared with persona_country after country normalization',
       assignment_country_provenance: 'immutable session-time snapshot when present; blank remains blank and is never silently backfilled from the current student assignment record',
       row_counts: {
-        sessions: counts.sessions,
-        utterances: counts.utterances,
-        expressions: counts.expressions,
+        sessions: materialized.counts.sessions,
+        utterances: materialized.counts.utterances,
+        expressions: materialized.counts.expressions,
         personas: personaRows.length,
         lesson_reflections: lessonRows.length,
         student_questionnaires: questionnaireRows.length,
@@ -477,7 +532,7 @@ const streamingBundleHandler: RequestHandler = async (req, res) => {
       lesson_reflection_join_key: ['research_id', 'local_date'],
       questionnaire_join_key: ['research_id', 'survey_wave'],
       questionnaire_phase_filter: 'not_applicable',
-      export_transport: 'streaming-deflate-v1',
+      export_transport: 'single-scan-staged-deflate-v2',
     };
     await zip.addFile('manifest.json', oneChunk(JSON.stringify(manifest, null, 2)));
     await zip.finalize();
@@ -490,6 +545,8 @@ const streamingBundleHandler: RequestHandler = async (req, res) => {
       return;
     }
     return res.status(503).json({ success: false, error: 'RESEARCH_BUNDLE_UNAVAILABLE' });
+  } finally {
+    if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true });
   }
 };
 

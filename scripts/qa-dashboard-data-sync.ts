@@ -81,6 +81,14 @@ const sample = {
   ],
 };
 const lessonCsv = '\uFEFF"research_id","class_id","data_scope","grade_level","class_number","local_date","status","today_goal","goal_rating","communication_rating"\n"R0001","5-1","test","5","1","2026-09-01","submitted","goal","3","4"\n"R0002","5-1","test","5","1","2026-09-01","submitted","goal","4","3"\n"R0003","5-1","test","5","1","2026-09-02","submitted","goal","4","4"\n';
+const zipEocd = new Uint8Array(46*8+22);
+const zipView = new DataView(zipEocd.buffer);
+for (let index=0;index<8;index+=1) zipView.setUint32(index*46,0x02014b50,true);
+const eocdOffset=46*8;
+zipView.setUint32(eocdOffset,0x06054b50,true);
+zipView.setUint16(eocdOffset+8,8,true);
+zipView.setUint16(eocdOffset+10,8,true);
+zipView.setUint32(eocdOffset+12,46*8,true);
 const urlApi: any = { createObjectURL:() => 'blob:test', revokeObjectURL:() => {} };
 const context: any = {
   console, document:documentStub, window:{}, location, sessionStorage:sessionStorageStub, alert:() => {}, URL:urlApi, URLSearchParams, AbortController, Set, Map, Math, Number, String, Array, Object, Date, Blob,
@@ -91,7 +99,7 @@ const context: any = {
       ok:true,status:200,
       json:async() => url.includes('/api/health') ? {appVersion:'1.0.7',build:'test'} : sample,
       text:async() => isLessonCsv ? lessonCsv : '',
-      blob:async() => new Blob(['test']),
+      blob:async() => url.includes('research.bundle.zip') ? new Blob([zipEocd]) : new Blob(['test']),
       headers:{get:() => null},
     };
   },
@@ -184,7 +192,14 @@ await element('bundleBtn').onclick();
 assert.ok(fetchCalls.some((url) => url.startsWith('/api/management/research.bundle.zip') && url.includes('personaId=emma_usa')));
 assert.ok(downloaded.some((item) => item.download === 'research-bundle.zip'));
 
+const completeDownloadCount = downloaded.length;
 const savedFetch = context.fetch;
+context.fetch = async() => ({ok:true,status:200,blob:async() => new Blob(['PK partial']),json:async() => ({})});
+await element('bundleBtn').onclick();
+assert.equal(downloaded.length,completeDownloadCount,'incomplete ZIP must not be saved');
+assert.ok(element('exportStatus').textContent.includes('ZIP_INCOMPLETE'));
+assert.ok(element('exportStatus').className.includes('error'));
+
 context.fetch = async() => ({ok:false,status:503,json:async() => ({error:'RESEARCH_EXPORT_UNAVAILABLE'})});
 await context.downloadDataset('sessions');
 assert.ok(element('exportStatus').textContent.includes('RESEARCH_EXPORT_UNAVAILABLE'));
