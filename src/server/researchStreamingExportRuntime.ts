@@ -289,6 +289,28 @@ function crc32Update(crc: number, buffer: Buffer): number {
   return value >>> 0;
 }
 
+// ZIP DOS timestamps are timezone-naive; represent export time in Japan Standard Time.
+// The seconds field has 2-second precision (ZIP format requirement).
+function zipDosTimestamp(exportedAt: Date): { time: number; date: number } {
+  if (!Number.isFinite(exportedAt.getTime())) throw new Error('INVALID_RESEARCH_ZIP_TIMESTAMP');
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(exportedAt)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  const { year, month, day, hour, minute, second } = parts;
+  if (year < 1980 || year > 2107) throw new Error('RESEARCH_ZIP_DOS_DATE_OUT_OF_RANGE');
+  return {
+    time: (hour << 11) | (minute << 5) | Math.floor(second / 2),
+    date: ((year - 1980) << 9) | (month << 5) | day,
+  };
+}
+
 type ZipEntry = {
   name: Buffer;
   crc: number;
@@ -300,8 +322,11 @@ type ZipEntry = {
 export class StreamingZipWriter {
   private offset = 0;
   private readonly entries: ZipEntry[] = [];
+  private readonly modified: { time: number; date: number };
 
-  constructor(private readonly sink: Response) {}
+  constructor(private readonly sink: Response, exportedAt: Date = new Date()) {
+    this.modified = zipDosTimestamp(exportedAt);
+  }
 
   private async write(chunk: Buffer): Promise<void> {
     await writeResponseChunk(this.sink, chunk);
@@ -316,6 +341,8 @@ export class StreamingZipWriter {
     local.writeUInt16LE(20, 4);
     local.writeUInt16LE(0x0808, 6);
     local.writeUInt16LE(8, 8);
+    local.writeUInt16LE(this.modified.time, 10);
+    local.writeUInt16LE(this.modified.date, 12);
     local.writeUInt16LE(name.length, 26);
     await this.write(local);
     await this.write(name);
@@ -360,6 +387,8 @@ export class StreamingZipWriter {
       central.writeUInt16LE(20, 6);
       central.writeUInt16LE(0x0808, 8);
       central.writeUInt16LE(8, 10);
+      central.writeUInt16LE(this.modified.time, 12);
+      central.writeUInt16LE(this.modified.date, 14);
       central.writeUInt32LE(entry.crc, 16);
       central.writeUInt32LE(entry.compressedSize, 20);
       central.writeUInt32LE(entry.uncompressedSize, 24);
@@ -498,7 +527,7 @@ const streamingBundleHandler: RequestHandler = async (req, res) => {
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="research-bundle-${exportedAt.slice(0, 10).replace(/-/g, '')}.zip"`);
     res.setHeader('Cache-Control', 'no-store');
-    const zip = new StreamingZipWriter(res);
+    const zip = new StreamingZipWriter(res, new Date(exportedAt));
     for (const dataset of ['sessions', 'utterances', 'expressions'] as const) {
       await zip.addFile(`${dataset}.csv`, createReadStream(materialized.paths[dataset]));
     }
