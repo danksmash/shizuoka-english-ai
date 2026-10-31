@@ -915,7 +915,10 @@ export function buildResearchDashboardData(
       ['personas','personas.csv','研究対象20名の固定Personaプロフィール','刺激条件・Persona属性の確認'],
       ['codebook','codebook.csv','全CSV列の定義・型・値域・分析用途','変数理解・共同研究・再現可能性'],
     ] as const).map(([dataset,fileName,contains,analysisUse]) => ({
-      dataset,fileName,contains,analysisUse,rowCount:data[dataset as ResearchExportDatasetName].length,
+      dataset,fileName,contains,analysisUse,
+      rowCount:dataset === 'utterances' || dataset === 'expressions'
+        ? '初期表示では未集計（CSV出力時に全件取得）'
+        : data[dataset as ResearchExportDatasetName].length,
     })),
   };
   return options.includeInternal
