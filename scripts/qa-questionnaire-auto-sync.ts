@@ -4,6 +4,7 @@ import {
   QUESTIONNAIRE_MID_FORM_ID,
   QUESTIONNAIRE_POST_FORM_ID,
   QUESTIONNAIRE_PRE_FORM_ID,
+  PERSONA_CHOICE_REASONS_FORM_ID,
   canonicalQuestionnaireAutoPayload,
   comparisonPreBeforeFormalAllowed,
   computeQuestionnaireAutoSignature,
@@ -25,6 +26,7 @@ assert.equal(questionnaireWaveForFormId(QUESTIONNAIRE_MID_FORM_ID), 'mid_pre_rev
 assert.equal(questionnaireWaveForFormId(QUESTIONNAIRE_POST_FORM_ID), 'post_pre_exchange');
 assert.match(QUESTIONNAIRE_MID_FORM_ID, /^[A-Za-z0-9_-]{20,}$/);
 assert.equal(questionnaireWaveForFormId('unknown-form'), null);
+assert.match(PERSONA_CHOICE_REASONS_FORM_ID, /^[A-Za-z0-9_-]{20,}$/);
 
 assert.equal(comparisonPreBeforeFormalAllowed('pre_app', '6-C1', true), true, 'official comparison PRE must be ingestible before first AI session/formal activation');
 assert.equal(comparisonPreBeforeFormalAllowed('mid_pre_reveal', '6-C1', true), false, 'comparison MID must require formal activation');
@@ -84,6 +86,20 @@ assert.equal(verifyQuestionnaireAutoSignature(secret, requestTimestamp, '0'.repe
 assert.equal(verifyQuestionnaireAutoSignature(secret, String(Math.floor((now - 301_000) / 1000)), signature, payload, now), false);
 assert.equal(verifyQuestionnaireAutoSignature('', requestTimestamp, signature, payload, now), false);
 
+const personaPayload: QuestionnaireAutoIngestPayload = {
+  formId: PERSONA_CHOICE_REASONS_FORM_ID,
+  formResponseId: 'persona-response-1',
+  submittedAt: '2026-11-03T00:00:00.000Z',
+  learningCode: '7k8m',
+  answers: { initialReasons: ['国に興味', '見た目'], finalReasons: ['話しやすい'], comment: '選び方が変わった' },
+};
+const personaCanonical = canonicalQuestionnaireAutoPayload(personaPayload);
+assert.ok(personaCanonical.includes('"initialReasons":["国に興味","見た目"]'));
+assert.ok(personaCanonical.includes('"finalReasons":["話しやすい"]'));
+assert.ok(personaCanonical.includes('"learningCode":"7K8M"'));
+const personaSignature = computeQuestionnaireAutoSignature(secret, requestTimestamp, personaPayload);
+assert.equal(verifyQuestionnaireAutoSignature(secret, requestTimestamp, personaSignature, personaPayload, now), true);
+
 const entry = fs.readFileSync('server-entry.ts', 'utf8');
 const route = fs.readFileSync('src/server/questionnaireAutoSyncRoutes.ts', 'utf8');
 const manualRoute = fs.readFileSync('src/server/questionnaireRoutes.ts', 'utf8');
@@ -93,6 +109,7 @@ const participantHashes = fs.readFileSync('src/server/study1FormalParticipantHas
 const participantMetadata = fs.readFileSync('src/server/studyParticipantMetadata.ts', 'utf8');
 const deployWorkflow = fs.readFileSync('.github/workflows/cloud-run-deploy.yml', 'utf8');
 const productionSmoke = fs.readFileSync('.github/workflows/questionnaire-production-smoke.yml', 'utf8');
+const personaChoiceScript = fs.readFileSync('scripts/persona-choice-reasons-auto-sync.gs', 'utf8');
 assert.ok(entry.includes("this.use('/api/questionnaire-auto', createQuestionnaireAutoSyncRouter())"));
 assert.equal(entry.includes('withQuestionnaireAutoSyncDashboardRuntime'), false, 'Research Dashboard must not mount the legacy questionnaire auto-sync UI wrapper');
 assert.ok(route.includes("router.post('/ingest'"));
@@ -110,6 +127,12 @@ assert.ok(participantMetadata.includes("studySiteId: 'site_a'"));
 assert.ok(participantMetadata.includes("schoolCondition: 'intervention'"));
 assert.ok(core.includes('createDocumentIfAbsent'));
 assert.ok(core.includes('QUESTIONNAIRE_SYNC_STATE_COLLECTION'));
+assert.ok(core.includes('PERSONA_CHOICE_REASONS_COLLECTION'));
+assert.ok(core.includes('sourceFormResponseId'), 'persona-choice responses must be idempotent by the Google Forms response ID');
+assert.ok(personaChoiceScript.includes("everyMinutes(5)"), 'persona-choice sync must retry every five minutes');
+assert.ok(personaChoiceScript.includes("'0000'"));
+assert.ok(personaChoiceScript.includes("expected: 'INVALID_LEARNING_CODE'"), 'connection check must be a signed no-write validation');
+assert.ok(personaChoiceScript.includes('hideSheet()'), 'operational sync log must stay hidden from the ordinary response sheet view');
 assert.equal((participantHashes.match(/[0-9a-f]{64}/g) || []).length, 145, 'allowlist file must contain exactly 145 irreversible hashes');
 assert.ok(!participantHashes.includes('learningCode') && !participantHashes.includes('researchId') && !participantHashes.includes('studentId:'), 'allowlist source must not expose operational identifiers');
 assert.ok(manualRoute.includes('importStrictGoogleFormsQuestionnaireCsv'), 'manual CSV fallback must use the same guarded importer');
