@@ -22,6 +22,8 @@ import {
 export const QUESTIONNAIRE_PRE_FORM_ID = '1wI_kC4zO9fgnq0B7kfV9BVuojuGTyWJ8GDaeoMtRAuI';
 export const QUESTIONNAIRE_MID_FORM_ID = '1YcEZaiMCcxODYDJ8pDD-laPMS8_5USZ0S2b45yv1ucY';
 export const QUESTIONNAIRE_POST_FORM_ID = '1OculFD2Ykkgj1ad3opG4I12wfal4fdhOO1dODmEwg-A';
+export const PERSONA_CHOICE_REASONS_FORM_ID = '1yJZ0nfvYETEnKaV227VBD9_T0WiOMobI6gT-K6BYS7I';
+export const PERSONA_CHOICE_REASONS_COLLECTION = 'persona_choice_reason_responses';
 export const QUESTIONNAIRE_SYNC_STATE_COLLECTION = 'questionnaire_sync_state';
 export const QUESTIONNAIRE_SYNC_STATE_DOCUMENT = 'study1';
 export const QUESTIONNAIRE_SIGNATURE_MAX_AGE_SECONDS = 300;
@@ -38,7 +40,7 @@ export interface QuestionnaireAutoIngestResult {
   responseId: string;
   researchId: string;
   classId: string;
-  surveyWave: QuestionnaireWave;
+  surveyWave: QuestionnaireWave | 'persona_choice_reasons';
   created: boolean;
   submittedAt: string;
 }
@@ -124,13 +126,29 @@ function orderedAnswers(answers: Record<string, unknown>): Record<string, string
   return Object.fromEntries(QUESTIONNAIRE_ITEMS.map((item) => [item.sourceId, String(answers[item.sourceId] ?? '')]));
 }
 
+function normalizedChoiceList(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : String(value ?? '').split(',');
+  return values.map((item) => String(item).trim()).filter(Boolean);
+}
+
+function canonicalAnswersForForm(formId: unknown, answers: Record<string, unknown>): Record<string, unknown> {
+  if (String(formId ?? '').trim() === PERSONA_CHOICE_REASONS_FORM_ID) {
+    return {
+      initialReasons: normalizedChoiceList(answers.initialReasons),
+      finalReasons: normalizedChoiceList(answers.finalReasons),
+      comment: String(answers.comment ?? '').trim(),
+    };
+  }
+  return orderedAnswers(answers);
+}
+
 export function canonicalQuestionnaireAutoPayload(payload: QuestionnaireAutoIngestPayload): string {
   return JSON.stringify({
     formId: String(payload.formId ?? '').trim(),
     formResponseId: String(payload.formResponseId ?? '').trim(),
     submittedAt: String(payload.submittedAt ?? '').trim(),
     learningCode: normalizedLearningCode(payload.learningCode),
-    answers: orderedAnswers(payload.answers || {}),
+    answers: canonicalAnswersForForm(payload.formId, payload.answers || {}),
   });
 }
 
@@ -223,6 +241,43 @@ async function persistCanonicalQuestionnaire(
 }
 
 export async function ingestQuestionnaireAutoSubmission(payload: QuestionnaireAutoIngestPayload): Promise<QuestionnaireAutoIngestResult> {
+  if (String(payload.formId ?? '').trim() === PERSONA_CHOICE_REASONS_FORM_ID) {
+    const code = normalizedLearningCode(payload.learningCode);
+    if (!/^[A-HJ-NP-Z2-9]{4}$/.test(code)) throw new Error('INVALID_LEARNING_CODE');
+    if (!String(payload.formResponseId ?? '').trim()) throw new Error('FORM_RESPONSE_ID_MISSING');
+    const student = await resolveStudentByCode(code);
+    if (!student) throw new Error('LEARNING_CODE_NOT_FOUND');
+    if (!student.formalStudyParticipant) throw new Error('NOT_FORMAL_STUDY1_PARTICIPANT');
+    const submittedAt = normalizeQuestionnaireSubmittedAt(payload.submittedAt);
+    if (!submittedAt) throw new Error('INVALID_TIMESTAMP');
+    const initialReasons = normalizedChoiceList(payload.answers?.initialReasons);
+    const finalReasons = normalizedChoiceList(payload.answers?.finalReasons);
+    if (!initialReasons.length) throw new Error('INVALID_INITIAL_REASONS');
+    if (!finalReasons.length) throw new Error('INVALID_FINAL_REASONS');
+    const sourceFormResponseId = String(payload.formResponseId).trim();
+    const responseId = `pcr_${crypto.createHash('sha256').update(JSON.stringify([PERSONA_CHOICE_REASONS_FORM_ID, sourceFormResponseId])).digest('hex').slice(0, 24)}`;
+    const created = await createDocumentIfAbsent(PERSONA_CHOICE_REASONS_COLLECTION, responseId, {
+      responseId,
+      sourceFormId: PERSONA_CHOICE_REASONS_FORM_ID,
+      sourceFormResponseId,
+      researchId: student.researchId,
+      classId: student.classId,
+      gradeLevel: student.gradeLevel || gradeForClassId(student.classId),
+      dataScope: 'main',
+      siteId: student.studySiteId || 'site_a',
+      schoolCondition: student.schoolCondition || 'intervention',
+      submittedAt,
+      surveyDate: tokyoDate(submittedAt),
+      instrumentVersion: 'persona-choice-reasons-20261103-v1',
+      initialReasons,
+      finalReasons,
+      comment: String(payload.answers?.comment ?? '').trim(),
+      dataQualityFlag: 'complete',
+      importedAt: new Date().toISOString(),
+    });
+    if (created) await setDocument(QUESTIONNAIRE_SYNC_STATE_COLLECTION, 'persona_choice_reasons', { lastIngestedAt: new Date().toISOString(), lastResponseId: responseId });
+    return { responseId, researchId: student.researchId, classId: student.classId, surveyWave: 'persona_choice_reasons', created, submittedAt };
+  }
   const wave = questionnaireWaveForFormId(payload.formId);
   if (!wave) throw new Error('UNKNOWN_QUESTIONNAIRE_FORM');
   if (!String(payload.formResponseId ?? '').trim()) throw new Error('FORM_RESPONSE_ID_MISSING');
