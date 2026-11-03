@@ -2,6 +2,9 @@ import { listCollectionFields } from './firestore';
 import { PERSONA_CHOICE_REASONS_COLLECTION } from './questionnaireAutoSync';
 
 export interface PersonaChoiceReasonRecord {
+  responseId?: string;
+  siteId?: string;
+  instrumentVersion?: string;
   researchId: string;
   classId: string;
   gradeLevel: number;
@@ -53,6 +56,9 @@ function strings(value: unknown): string[] {
 
 function normalize(raw: Record<string, unknown>): PersonaChoiceReasonRecord {
   return {
+    responseId: String(raw.responseId || ''),
+    siteId: String(raw.siteId || ''),
+    instrumentVersion: String(raw.instrumentVersion || ''),
     researchId: String(raw.researchId ?? '').trim(),
     classId: String(raw.classId ?? '').trim(),
     gradeLevel: Number(raw.gradeLevel || 0),
@@ -69,7 +75,7 @@ function normalize(raw: Record<string, unknown>): PersonaChoiceReasonRecord {
 
 export async function getPersonaChoiceReasonRecords(): Promise<PersonaChoiceReasonRecord[]> {
   const fields = [
-    'researchId', 'classId', 'gradeLevel', 'schoolCondition', 'dataScope',
+    'responseId', 'siteId', 'instrumentVersion', 'researchId', 'classId', 'gradeLevel', 'schoolCondition', 'dataScope',
     'surveyDate', 'submittedAt', 'initialReasons', 'finalReasons', 'comment', 'dataQualityFlag',
   ];
   const records = await listCollectionFields(PERSONA_CHOICE_REASONS_COLLECTION, fields);
