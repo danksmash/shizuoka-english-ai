@@ -162,7 +162,7 @@ async function runRq1Link(){
   try{
     const data=await api('/api/management/research-rq1/persona-choice-link');
     const c=data.counts||{};
-    $('rq1LinkCounts').textContent='質問紙有効回答児童 '+(c.linkedSurveyRespondents??0)+'名／全期間が照合可能 '+(c.complete??0)+'名／一部欠測 '+(c.partial??0)+'名／RQ1なし '+(c.notFound??0)+'名／照合不整合 '+(c.mismatched??0)+'名';
+    $('rq1LinkCounts').textContent=(data.rq1TargetTableFormalReady?'RQ1対応国表は正式固定済み。':'注意：RQ1対応国表が正式固定されていないため、担当国指標は暫定値です。')+' 質問紙有効回答児童 '+(c.linkedSurveyRespondents??0)+'名／全期間が照合可能 '+(c.complete??0)+'名／一部欠測 '+(c.partial??0)+'名／RQ1なし '+(c.notFound??0)+'名／照合不整合 '+(c.mismatched??0)+'名';
     const rows=Array.isArray(data.rows)?data.rows:[];
     $('rq1LinkBody').innerHTML=rows.length?rows.map(r=>'<tr><td>'+esc(r.research_id)+'</td><td>'+esc(r.class_id)+'</td><td>'+pct(r.period1_visitor_rate)+'</td><td>'+pct(r.period2_visitor_rate)+'</td><td>'+pct(r.period2_assigned_rate)+'</td><td>'+pct(r.period3_assigned_rate)+'</td><td>'+esc(r.rq1_join_status)+'</td></tr>').join(''):'<tr><td colspan="7">照合対象となる質問紙回答はありません。</td></tr>';
     status('rq1LinkStatus','照合が完了しました。結果は探索的な記述分析です。');
