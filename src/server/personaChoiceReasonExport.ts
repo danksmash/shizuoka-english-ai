@@ -36,10 +36,10 @@ export function buildPersonaChoiceReasonExportRows(
 ): PersonaChoiceReasonExportRow[] {
   // Determine duplicate status before applying class/grade filters, so filtering
   // never turns a duplicate respondent into an apparently unique response.
-  const validCounts = new Map<string, number>();
+  const recordCounts = new Map<string, number>();
   for (const record of records) {
-    if (!valid(record)) continue;
-    validCounts.set(record.researchId, (validCounts.get(record.researchId) || 0) + 1);
+    if (!record.researchId || record.dataScope !== 'main') continue;
+    recordCounts.set(record.researchId, (recordCounts.get(record.researchId) || 0) + 1);
   }
   return filtered(records, query)
     .map((record) => ({
@@ -57,7 +57,7 @@ export function buildPersonaChoiceReasonExportRows(
       comment: record.comment,
       data_quality_flag: record.dataQualityFlag,
       analysis_status: !valid(record) ? 'invalid_or_incomplete'
-        : (validCounts.get(record.researchId) || 0) > 1 ? 'duplicate_research_id'
+        : (recordCounts.get(record.researchId) || 0) > 1 ? 'duplicate_research_id'
           : 'valid_unique',
       response_id: record.responseId || '',
     }))
