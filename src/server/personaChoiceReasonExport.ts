@@ -61,8 +61,9 @@ export function buildPersonaChoiceReasonExportRows(
           : 'valid_unique',
       response_id: record.responseId || '',
     }))
-    .sort((a, b) => a.research_id.localeCompare(b.research_id)
-      || a.submitted_at.localeCompare(b.submitted_at) || a.response_id.localeCompare(b.response_id));
+    .sort((a, b) => String(a.research_id).localeCompare(String(b.research_id))
+      || String(a.submitted_at).localeCompare(String(b.submitted_at))
+      || String(a.response_id).localeCompare(String(b.response_id)));
 }
 
 function csvCell(value: string | number): string {
