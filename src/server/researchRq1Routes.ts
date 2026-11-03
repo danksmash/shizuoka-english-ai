@@ -1,4 +1,6 @@
 import express from 'express';
+import { getPersonaChoiceReasonRecords } from './personaChoiceReasonAnalysis';
+import { PERSONA_REASON_RQ1_LINK_HEADERS, buildPersonaReasonRq1LinkRows } from './personaReasonRq1Link';
 import { requireManagementRole, type AuthenticatedRequest } from './auth';
 import { getAllSessionsForManagement } from './persistence';
 import { getAllStudySchedules } from './studySchedulePersistence';
@@ -180,6 +182,43 @@ function buildStoredZip(files: Array<{ name: string; content: string }>): Buffer
   end.writeUInt32LE(centralSize, 12); end.writeUInt32LE(offset, 16);
   return Buffer.concat([...localParts, ...centralParts, end]);
 }
+
+router.get('/research-rq1/persona-choice-link', requireManagementRole(['researcher']), async (_req, res) => {
+  try {
+    const [responses, rq1] = await Promise.all([getPersonaChoiceReasonRecords(), formalData()]);
+    const rows = buildPersonaReasonRq1LinkRows(responses, rq1.periodSummary);
+    const statusCounts = {
+      complete: rows.filter((row) => row.rq1_join_status === 'complete').length,
+      partial: rows.filter((row) => row.rq1_join_status === 'partial_periods').length,
+      notFound: rows.filter((row) => row.rq1_join_status === 'rq1_not_found').length,
+      mismatched: rows.filter((row) => row.rq1_join_status === 'mismatch_or_duplicate_period').length,
+    };
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      success: true,
+      counts: { linkedSurveyRespondents: rows.length, ...statusCounts },
+      rows,
+      note: 'RQ1の既存有効セッション・期間判定を再利用。回答理由は調査時点の回顧でありPhase別測定ではない。空欄の比率を0と見なさない。',
+    });
+  } catch (error: any) {
+    console.error('Persona reason RQ1 link failed', { message: error?.message });
+    return res.status(503).json({ success: false, error: 'PERSONA_REASON_RQ1_LINK_UNAVAILABLE' });
+  }
+});
+
+router.get('/research-rq1/persona-choice-link.csv', requireManagementRole(['researcher']), async (_req, res) => {
+  try {
+    const [responses, rq1] = await Promise.all([getPersonaChoiceReasonRecords(), formalData()]);
+    const rows = buildPersonaReasonRq1LinkRows(responses, rq1.periodSummary);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="persona_choice_reason_rq1_link.csv"');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(serializeRq1Csv(rows, PERSONA_REASON_RQ1_LINK_HEADERS));
+  } catch (error: any) {
+    console.error('Persona reason RQ1 CSV failed', { message: error?.message });
+    return res.status(503).json({ success: false, error: 'PERSONA_REASON_RQ1_LINK_EXPORT_UNAVAILABLE' });
+  }
+});
 
 router.get('/research-rq1/status', requireManagementRole(['researcher']), async (_req, res) => {
   try {
