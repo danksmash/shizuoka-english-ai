@@ -20,6 +20,22 @@ function injectPersonaChoiceLink(html: string) {
   // The formal bundle now contains an additional separate questionnaire CSV.
   result = result.replace('7 CSVを一括ZIP', '8 CSVを一括ZIP');
   result = result.replace('7 CSV一括ZIP', '8 CSV一括ZIP');
+  result = result.replace(
+    'student_questionnaires.csv の個別表示・DLは「質問紙分析」ページへ移しましたが、8 CSV一括ZIPには引き続き含まれます。',
+    '質問紙2種の分析表示は各専用ページで行い、個別CSVは下のカードまたは専用ページからダウンロードできます。8 CSV一括ZIPにも両方を含みます。',
+  );
+  result = result.replace(
+    'codebook.csv は7 CSVの全列の定義・型・値域・分析用途を収録します。',
+    'student_questionnaires.csv と persona_choice_reason_responses.csv は research_id で既存データと結合できます。codebook.csv は8 CSVの全列の定義・型・値域・分析用途を収録します。',
+  );
+  const exportListAnchor = "const exportFiles=[...(d.exportFiles||[]),";
+  const questionnaireCards = [
+    "{dataset:'student_questionnaires',fileName:'student_questionnaires.csv',contains:'Pre・Mid・Postの15項目6件法質問紙と尺度得点',analysisUse:'3時点記述統計・児童単位の縦断分析・LMM用long形式',rowCount:'質問紙分析ページで確認'},",
+    "{dataset:'persona_choice_reason_responses',fileName:'persona_choice_reason_responses.csv',contains:'初めの頃／最後の方のPersona選択理由・自由記述',analysisUse:'理由の継続・増加・減少と実際のPersona選択行動の照合',rowCount:'追加質問紙ページで確認'},",
+  ].join('');
+  if (result.includes(exportListAnchor) && !result.includes("fileName:'persona_choice_reason_responses.csv'")) {
+    result = result.replace(exportListAnchor, exportListAnchor + questionnaireCards);
+  }
   return result;
 }
 
