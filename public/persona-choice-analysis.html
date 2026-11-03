@@ -59,6 +59,7 @@ th,td{border-bottom:1px solid #e1e9f4;padding:9px;text-align:left;vertical-align
         <div class="metric"><span>重複回答児童</span><b id="duplicate">—</b></div>
         <div class="metric"><span>要確認・除外レコード</span><b id="excluded">—</b></div>
       </div>
+      <p class="muted" id="syncNote">同期状態を確認中です。回答数0は、未回答と同期未設定を区別できません。</p>
       <p class="muted" id="qualityNote"></p>
       <p id="analysisStatus" class="status"></p>
     </div>
@@ -121,6 +122,10 @@ function renderReasonRows(){
 }
 function render(data){
   report=data;
+  const lastIngest=String(data.lastSuccessfulIngestAt||'');
+  $('syncNote').textContent=lastIngest
+    ? 'Firestoreへの最終取込：'+new Date(lastIngest).toLocaleString('ja-JP')+'。なお、この時刻はApps Scriptトリガーの稼働確認を保証しません。'
+    : 'Firestoreへの取込履歴はありません。回答数0件だけでは児童が未回答なのか、自動同期が未設定なのか判断できません。Googleフォーム原本とApps Scriptの監査結果を確認してください。';
   $('stored').textContent=data.counts.storedRecords;
   $('valid').textContent=data.counts.validUniqueRespondents;
   $('duplicate').textContent=data.counts.duplicateRespondents;
