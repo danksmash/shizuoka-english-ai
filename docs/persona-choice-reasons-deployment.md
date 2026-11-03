@@ -18,7 +18,8 @@
 ## 1．Apps Scriptへの反映（要編集者権限）
 1. 対象GoogleフォームのApps Scriptプロジェクトを開く。既存の同名処理を確認し、必要な部分だけ原稿と同内容に更新する（原稿を貼るだけではGitHubから自動反映されない）。
 2. **スクリプトプロパティ**で `QUESTIONNAIRE_INGEST_SECRET` が設定され、Cloud Runの同名シークレットと一致していることを権限を持つ管理者が確認する。鍵をチャット・ログ・リポジトリに貼り付けない。
-3. `testPersonaChoiceReasonsConnectionNoWrite()` を手動実行する。成功時は `ok: true`、`expected: INVALID_LEARNING_CODE`、`writePerformed: false`。エラー時は秘密鍵・URL・署名の不一致を確認し、実回答を送らない。
+3. `testPersonaChoiceReasonsConnectionNoWrite()` を手動実行する。
+   - インストーラーもフォーム質問の見出し（学習コード、質問1～3）と回答受付状態、および署名付き接続を事前確認します。失敗時は古いトリガーを削除しません。成功時は `ok: true`、`expected: INVALID_LEARNING_CODE`、`writePerformed: false`。エラー時は秘密鍵・URL・署名の不一致を確認し、実回答を送らない。
 4. `installPersonaChoiceReasonsAutoSync()` を**一度だけ**実行し、必要なGoogleの権限を許可する。onFormSubmitと5分間隔トリガーが設定される。
 5. `auditPersonaChoiceReasonsAutoSync()` を実行し、次の条件を確認する：
    - `secretConfigured === true`
