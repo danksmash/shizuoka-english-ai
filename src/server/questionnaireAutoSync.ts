@@ -156,6 +156,10 @@ export function computeQuestionnaireAutoSignature(secret: string, requestTimesta
   return crypto.createHmac('sha256', secret).update(`${requestTimestamp}\n${canonicalQuestionnaireAutoPayload(payload)}`).digest('hex');
 }
 
+function computeQuestionnaireAutoEscapedNewlineSignature(secret: string, requestTimestamp: string, payload: QuestionnaireAutoIngestPayload): string {
+  return crypto.createHmac('sha256', secret).update(`${requestTimestamp}\\n${canonicalQuestionnaireAutoPayload(payload)}`).digest('hex');
+}
+
 export function verifyQuestionnaireAutoSignature(
   secret: string,
   requestTimestamp: unknown,
@@ -173,7 +177,12 @@ export function verifyQuestionnaireAutoSignature(
   const expected = computeQuestionnaireAutoSignature(secret, timestampText, payload);
   const left = Buffer.from(signatureText, 'hex');
   const right = Buffer.from(expected, 'hex');
-  return left.length === right.length && crypto.timingSafeEqual(left, right);
+  if (left.length === right.length && crypto.timingSafeEqual(left, right)) return true;
+  // One Apps Script editor path stored the separator as the two characters
+  // "\\n". It is still a secret-keyed HMAC, so accept that exact transport
+  // variant while keeping the canonical JSON and freshness checks unchanged.
+  const escaped = Buffer.from(computeQuestionnaireAutoEscapedNewlineSignature(secret, timestampText, payload), 'hex');
+  return left.length === escaped.length && crypto.timingSafeEqual(left, escaped);
 }
 
 function responseDocumentId(researchId: string, wave: QuestionnaireWave, submittedAt: string, items: QuestionnaireItemScores): string {
