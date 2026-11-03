@@ -139,6 +139,10 @@ assert.equal(mixedCsvRows.filter((row) => row.analysis_status === 'invalid_or_in
 const managementLink = fs.readFileSync('src/server/researchRq1DashboardRuntime.ts', 'utf8');
 assert.ok(managementLink.includes('personaChoiceReasonsBtn'));
 assert.ok(managementLink.includes('8 CSVを一括ZIP'));
+assert.ok(managementLink.includes("fileName:'student_questionnaires.csv'"));
+assert.ok(managementLink.includes("fileName:'persona_choice_reason_responses.csv'"));
+assert.ok(managementLink.includes('個別CSVは下のカードまたは専用ページからダウンロードできます'));
+assert.ok(managementLink.includes('codebook.csv は8 CSVの全列'));
 
 const route = fs.readFileSync('src/server/questionnaireRoutes.ts', 'utf8');
 const oldPage = fs.readFileSync('public/questionnaire-analysis.html', 'utf8');
