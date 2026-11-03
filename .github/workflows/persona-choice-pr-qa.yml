@@ -44,3 +44,20 @@ jobs:
         run: npm run qa:research-export
       - name: Research management page and RQ1 alignment QA
         run: npm run qa:management && npm run qa:research-rq1-rq2-alignment
+
+      - name: Production signed-ingest endpoint no-write probe
+        run: |
+          set -euo pipefail
+          code=$(curl --silent --show-error --max-time 20 --retry 2 \
+            -o /tmp/persona-choice-unsigned-response.json \
+            -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            --data '{"formId":"1yJZ0nfvYETEnKaV227VBD9_T0WiOMobI6gT-K6BYS7I","formResponseId":"pr-unsigned-no-write","submittedAt":"2026-11-03T00:00:00Z","learningCode":"0000","answers":{"initialReasons":["接続確認"],"finalReasons":["接続確認"]}}' \
+            "https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app/api/questionnaire-auto/ingest")
+          if [ "$code" != "401" ]; then
+            echo "Expected HTTP 401 without signature, got HTTP $code" >&2
+            exit 1
+          fi
+          # Signature is deliberately absent: the request must not reach Firestore.
+          echo "Production ingest endpoint rejects unsigned requests (HTTP 401)."
+
