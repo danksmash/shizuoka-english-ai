@@ -141,6 +141,7 @@ assert.ok(personaChoiceScript.includes('submitTriggerInstalled'), 'audit must ve
 assert.ok(personaChoiceScript.includes('retryTriggerInstalled'), 'audit must verify scheduled retry trigger');
 assert.ok(personaChoiceScript.includes('personaChoiceFormSchemaAudit_'), 'installer must validate the Google Form question schema');
 assert.ok(personaChoiceScript.includes('const connection = testPersonaChoiceReasonsConnectionNoWrite();'), 'installer must verify signed API before installing triggers');
+assert.ok(personaChoiceScript.includes('Utilities.Charset.UTF_8'), 'Apps Script HMAC signing must explicitly use UTF-8 so non-ASCII questionnaire answers match Cloud Run');
 assert.ok(personaChoiceScript.indexOf('newSubmit = ScriptApp.newTrigger') < personaChoiceScript.indexOf('oldTriggers.forEach'), 'installer must create replacement triggers before deleting prior ones');
 assert.ok(personaChoiceScript.includes('sheet.getRange(2, 3, sheet.getLastRow() - 1, 1).clearContent()'), 'legacy log must purge learner codes');
 assert.ok(!personaChoiceScript.includes('JSON.stringify(payload),'), 'sync log must not retain raw learning codes inside payload JSON');
