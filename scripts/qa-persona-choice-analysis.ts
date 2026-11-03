@@ -120,6 +120,26 @@ const rq1Routes = fs.readFileSync('src/server/researchRq1Routes.ts', 'utf8');
 assert.ok(rq1Routes.includes("router.get('/research-rq1/persona-choice-link', requireManagementRole(['researcher'])"));
 assert.ok(rq1Routes.includes("router.get('/research-rq1/persona-choice-link.csv', requireManagementRole(['researcher'])"));
 
+// A valid submission plus an incomplete retry from the SAME research ID is
+// still a duplicate respondent, not a unique valid participant.
+const mixedQualityDuplicate = [
+  answer('R-MIXED', ['国籍'], ['見た目']),
+  answer('R-MIXED', [], ['見た目']),
+];
+const mixedResult = buildPersonaChoiceReasonAnalysis(mixedQualityDuplicate);
+assert.equal(mixedResult.counts.validUniqueRespondents, 0);
+assert.equal(mixedResult.counts.invalidRecords, 1);
+assert.equal(mixedResult.counts.duplicateRespondents, 1);
+assert.equal(mixedResult.counts.duplicateRecordsExcluded, 1);
+const mixedCsvRows = buildPersonaChoiceReasonExportRows(mixedQualityDuplicate);
+assert.equal(mixedCsvRows.filter((row) => row.analysis_status === 'valid_unique').length, 0);
+assert.equal(mixedCsvRows.filter((row) => row.analysis_status === 'duplicate_research_id').length, 1);
+assert.equal(mixedCsvRows.filter((row) => row.analysis_status === 'invalid_or_incomplete').length, 1);
+
+const managementLink = fs.readFileSync('src/server/researchRq1DashboardRuntime.ts', 'utf8');
+assert.ok(managementLink.includes('personaChoiceReasonsBtn'));
+assert.ok(managementLink.includes('8 CSVを一括ZIP'));
+
 const route = fs.readFileSync('src/server/questionnaireRoutes.ts', 'utf8');
 const oldPage = fs.readFileSync('public/questionnaire-analysis.html', 'utf8');
 const newPage = fs.readFileSync('public/persona-choice-analysis.html', 'utf8');
