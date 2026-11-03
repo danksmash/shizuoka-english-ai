@@ -4,25 +4,53 @@ const PERSONA_CHOICE_INGEST_URL = 'https://shizuoka-english-ai-1075707511474.asi
 const PERSONA_CHOICE_SECRET_PROPERTY = 'QUESTIONNAIRE_INGEST_SECRET';
 const PERSONA_CHOICE_SYNC_LOG_SHEET = '_sync_log';
 
+function personaChoiceFormSchemaAudit_() {
+  const form = FormApp.openById(PERSONA_CHOICE_FORM_ID);
+  const titles = form.getItems().map(function(item) { return item.getTitle(); });
+  const checks = {
+    learningCode: titles.filter(function(title) { return title.indexOf('学習コード') >= 0; }).length,
+    initialReasons: titles.filter(function(title) { return title.indexOf('質問1') === 0; }).length,
+    finalReasons: titles.filter(function(title) { return title.indexOf('質問2') === 0; }).length,
+    comment: titles.filter(function(title) { return title.indexOf('質問3') === 0; }).length,
+  };
+  return {
+    valid: Object.keys(checks).every(function(key) { return checks[key] === 1; }),
+    matchingItemCounts: checks,
+  };
+}
+
 function installPersonaChoiceReasonsAutoSync() {
   const secret = personaChoiceSecret_();
   if (!secret) throw new Error('QUESTIONNAIRE_INGEST_SECRET をスクリプトプロパティに設定してください。');
+  const form = FormApp.openById(PERSONA_CHOICE_FORM_ID);
+  const schema = personaChoiceFormSchemaAudit_();
+  if (!schema.valid) throw new Error('PERSONA_CHOICE_FORM_SCHEMA_MISMATCH: フォームの質問見出しを確認してください。');
+  if (!form.isAcceptingResponses()) throw new Error('PERSONA_CHOICE_FORM_NOT_ACCEPTING_RESPONSES');
+
+  // Preflight the authenticated API without creating a Firestore record.
+  // A failed preflight must NOT delete the currently installed triggers.
+  const connection = testPersonaChoiceReasonsConnectionNoWrite();
+  if (!connection.ok || connection.writePerformed) throw new Error('PERSONA_CHOICE_CONNECTION_PREFLIGHT_FAILED');
 
   const handlers = ['onPersonaChoiceReasonSubmit', 'retryPersonaChoiceReasonSync'];
-  ScriptApp.getProjectTriggers().forEach(function(trigger) {
-    if (handlers.indexOf(trigger.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(trigger);
+  const oldTriggers = ScriptApp.getProjectTriggers().filter(function(trigger) {
+    return handlers.indexOf(trigger.getHandlerFunction()) >= 0;
   });
-
-  ScriptApp.newTrigger('onPersonaChoiceReasonSubmit')
-    .forForm(FormApp.openById(PERSONA_CHOICE_FORM_ID))
-    .onFormSubmit()
-    .create();
-  ScriptApp.newTrigger('retryPersonaChoiceReasonSync')
-    .timeBased()
-    .everyMinutes(5)
-    .create();
-
-  personaChoiceSyncLog_();
+  let newSubmit = null;
+  let newRetry = null;
+  try {
+    newSubmit = ScriptApp.newTrigger('onPersonaChoiceReasonSubmit')
+      .forForm(form).onFormSubmit().create();
+    newRetry = ScriptApp.newTrigger('retryPersonaChoiceReasonSync')
+      .timeBased().everyMinutes(5).create();
+    personaChoiceSyncLog_();
+  } catch (error) {
+    if (newSubmit) ScriptApp.deleteTrigger(newSubmit);
+    if (newRetry) ScriptApp.deleteTrigger(newRetry);
+    throw error;
+  }
+  // Both new triggers are installed: replace only the older targeted handlers.
+  oldTriggers.forEach(function(trigger) { ScriptApp.deleteTrigger(trigger); });
   return auditPersonaChoiceReasonsAutoSync();
 }
 
@@ -101,6 +129,7 @@ function auditPersonaChoiceReasonsAutoSync() {
     responseSheetId: PERSONA_CHOICE_RESPONSE_SHEET_ID,
     acceptingResponses: form.isAcceptingResponses(),
     secretConfigured: Boolean(personaChoiceSecret_()),
+    formSchema: personaChoiceFormSchemaAudit_(),
     // These are aggregate diagnostics only: do not expose pupil codes or answers.
     formResponseCount: formResponses.length,
     loggedResponseCount: logged.size,
