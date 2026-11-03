@@ -135,6 +135,9 @@ assert.ok(core.includes('QUESTIONNAIRE_SYNC_STATE_COLLECTION'));
 assert.ok(core.includes('PERSONA_CHOICE_REASONS_COLLECTION'));
 assert.ok(core.includes('sourceFormResponseId'), 'persona-choice responses must be idempotent by the Google Forms response ID');
 assert.ok(personaChoiceScript.includes("everyMinutes(5)"), 'persona-choice sync must retry every five minutes');
+assert.ok(personaChoiceScript.includes('.getResponses()'), 'persona-choice retry must reconcile the complete Google Forms response list');
+assert.ok(!personaChoiceScript.includes('JSON.stringify(payload),'), 'sync log must not retain raw learning codes inside payload JSON');
+
 assert.ok(personaChoiceScript.includes("'0000'"));
 assert.ok(personaChoiceScript.includes("expected: 'INVALID_LEARNING_CODE'"), 'connection check must be a signed no-write validation');
 assert.ok(personaChoiceScript.includes('hideSheet()'), 'operational sync log must stay hidden from the ordinary response sheet view');
