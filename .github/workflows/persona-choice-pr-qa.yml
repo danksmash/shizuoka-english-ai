@@ -42,3 +42,5 @@ jobs:
         run: npm run qa:questionnaire
       - name: Existing research CSV/ZIP QA
         run: npm run qa:research-export
+      - name: Research management page and RQ1 alignment QA
+        run: npm run qa:management && npm run qa:research-rq1-rq2-alignment
