@@ -128,7 +128,7 @@ jobs:
           echo "$health" | grep -q "\"build\":\"${EXPECTED_BUILD}\""
 
           # Research Dashboard deployment contract: verify the exact deployed build,
-          # the current seven-file UI, and that Phase analytics no longer injects
+          # the current eight-file UI, and that Phase analytics no longer injects
           # a second dashboard API request into the management page.
           management_html=""
           for attempt in 1 2 3; do
@@ -137,7 +137,7 @@ jobs:
             fi
             sleep 2
           done
-          grep -q '7 CSVを一括ZIP' <<<"$management_html"
+          grep -q '8 CSVを一括ZIP' <<<"$management_html"
           grep -q 'questionnaire-analysis.html' <<<"$management_html"
           grep -q 'research-rq2.html' <<<"$management_html"
           grep -q 'research-rq3.html' <<<"$management_html"
