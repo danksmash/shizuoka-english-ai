@@ -44,9 +44,16 @@ function legacyStatisticsInput(records: QuestionnaireRecord[]) {
 
 router.post('/questionnaire/persona-choice-analysis', requireManagementRole(['researcher']), async (_req, res) => {
   try {
-    const records = await getPersonaChoiceReasonRecords();
+    const [records, syncRevision] = await Promise.all([
+      getPersonaChoiceReasonRecords(),
+      getDocument(QUESTIONNAIRE_SYNC_STATE_COLLECTION, 'persona_choice_reasons'),
+    ]);
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ success: true, ...buildPersonaChoiceReasonAnalysis(records) });
+    return res.json({
+      success: true,
+      ...buildPersonaChoiceReasonAnalysis(records),
+      lastSuccessfulIngestAt: String(syncRevision?.lastIngestedAt || ''),
+    });
   } catch (error: any) {
     console.error('Persona choice reason analysis failed', { message: error?.message });
     return res.status(503).json({ success: false, error: 'PERSONA_CHOICE_REASON_ANALYSIS_UNAVAILABLE' });
