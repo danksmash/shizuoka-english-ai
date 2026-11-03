@@ -88,5 +88,6 @@ export function buildPersonaReasonRq1LinkRows(
         assigned_rate_change_p3_minus_p2: mismatch ? '' : rateDiff(p3Assigned, p2Assigned),
         rq1_join_status: joinStatus,
       };
-    }).sort((a, b) => a.class_id.localeCompare(b.class_id, 'ja') || a.research_id.localeCompare(b.research_id));
+    }).sort((a, b) => String(a.class_id).localeCompare(String(b.class_id), 'ja')
+      || String(a.research_id).localeCompare(String(b.research_id)));
 }
