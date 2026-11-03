@@ -40,6 +40,11 @@ function onPersonaChoiceReasonSubmit(event) {
 
 function retryPersonaChoiceReasonSync() {
   const sheet = personaChoiceSyncLog_();
+  // Older script versions wrote payload JSON including a learner code.
+  // Wipe that legacy column before scanning, including already-synced rows.
+  if (sheet.getLastRow() > 1) {
+    sheet.getRange(2, 3, sheet.getLastRow() - 1, 1).clearContent();
+  }
   const values = sheet.getDataRange().getValues();
   const state = {};
   for (let row = 1; row < values.length; row += 1) {
@@ -84,12 +89,30 @@ function auditPersonaChoiceReasonsAutoSync() {
   const triggers = ScriptApp.getProjectTriggers().map(function(trigger) {
     return { handler: trigger.getHandlerFunction(), source: String(trigger.getTriggerSource()), event: String(trigger.getEventType()) };
   });
+  const form = FormApp.openById(PERSONA_CHOICE_FORM_ID);
   const log = personaChoiceSyncLog_();
+  const logRows = log.getDataRange().getValues().slice(1);
+  const formResponses = form.getResponses();
+  const logged = new Set(logRows.map(function(row) { return String(row[0] || ''); }).filter(Boolean));
+  const synced = new Set(logRows.filter(function(row) { return String(row[3]) === 'synced'; })
+    .map(function(row) { return String(row[0] || ''); }).filter(Boolean));
   return {
     formId: PERSONA_CHOICE_FORM_ID,
     responseSheetId: PERSONA_CHOICE_RESPONSE_SHEET_ID,
-    acceptingResponses: FormApp.openById(PERSONA_CHOICE_FORM_ID).isAcceptingResponses(),
+    acceptingResponses: form.isAcceptingResponses(),
     secretConfigured: Boolean(personaChoiceSecret_()),
+    // These are aggregate diagnostics only: do not expose pupil codes or answers.
+    formResponseCount: formResponses.length,
+    loggedResponseCount: logged.size,
+    syncedResponseCount: synced.size,
+    pendingResponseCount: logRows.filter(function(row) { return String(row[3]) === 'pending'; }).length,
+    unloggedResponseCount: formResponses.filter(function(response) { return !logged.has(String(response.getId())); }).length,
+    submitTriggerInstalled: triggers.some(function(trigger) {
+      return trigger.handler === 'onPersonaChoiceReasonSubmit' && trigger.event === 'ON_FORM_SUBMIT';
+    }),
+    retryTriggerInstalled: triggers.some(function(trigger) {
+      return trigger.handler === 'retryPersonaChoiceReasonSync' && trigger.event === 'CLOCK';
+    }),
     triggers: triggers,
     syncLogSheet: log.getName(),
     syncLogHidden: log.isSheetHidden(),
