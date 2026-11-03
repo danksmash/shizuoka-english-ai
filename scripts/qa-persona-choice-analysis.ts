@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
+  PERSONA_CHOICE_REASON_EXPORT_HEADERS,
+  buildPersonaChoiceReasonExportRows,
+  buildPersonaChoiceReasonCodebookRows,
+  serializePersonaChoiceReasonCsv,
+} from '../src/server/personaChoiceReasonExport';
+import {
   buildPersonaChoiceReasonAnalysis,
   type PersonaChoiceReasonRecord,
 } from '../src/server/personaChoiceReasonAnalysis';
@@ -61,6 +67,33 @@ assert.equal(byReason.get('国籍')?.initialPercent, 50);
 assert.equal(result.groups.length, 5); // all + intervention + grade5 + 2 classes
 assert.equal(buildPersonaChoiceReasonAnalysis([]).counts.validUniqueRespondents, 0);
 assert.equal(buildPersonaChoiceReasonAnalysis([]).groups[0].n, 0);
+
+
+const exportRows = buildPersonaChoiceReasonExportRows(data);
+assert.equal(exportRows.length, data.length);
+assert.equal(exportRows.filter((row) => row.analysis_status === 'valid_unique').length, 2);
+assert.equal(exportRows.filter((row) => row.analysis_status === 'duplicate_research_id').length, 2);
+assert.equal(exportRows.filter((row) => row.analysis_status === 'invalid_or_incomplete').length, 1);
+assert.ok(exportRows.every((row) => Object.keys(row).length === PERSONA_CHOICE_REASON_EXPORT_HEADERS.length));
+assert.equal(buildPersonaChoiceReasonCodebookRows().length, PERSONA_CHOICE_REASON_EXPORT_HEADERS.length);
+assert.ok(buildPersonaChoiceReasonCodebookRows().every((row) => row.file_name === 'persona_choice_reason_responses.csv'));
+const filtered = buildPersonaChoiceReasonExportRows(data, { classId: '5-1' });
+assert.equal(filtered.find((row) => row.research_id === 'R-CCCC')?.analysis_status, 'duplicate_research_id');
+assert.equal(filtered.some((row) => row.research_id === 'R-BBBB'), false);
+const hazard = answer('R-HHHH', ['声'], ['国籍'], { comment: '=HYPERLINK("http://invalid.test","click")' });
+const hazardCsv = serializePersonaChoiceReasonCsv(buildPersonaChoiceReasonExportRows([hazard]));
+assert.ok(hazardCsv.startsWith('\uFEFF'));
+assert.ok(hazardCsv.includes("'=HYPERLINK"));
+assert.ok(!hazardCsv.includes('"=HYPERLINK'));
+assert.ok(!hazardCsv.includes('learningCode'));
+assert.deepEqual(buildPersonaChoiceReasonExportRows([]), []);
+
+const exportRuntime = fs.readFileSync('src/server/researchStreamingExportRuntime.ts', 'utf8');
+assert.ok(exportRuntime.includes("if (requested === 'persona_choice_reason_responses')"));
+assert.ok(exportRuntime.includes("zip.addFile('persona_choice_reason_responses.csv'"));
+assert.ok(exportRuntime.includes('persona_choice_reason_responses: personaReasonRows.length'));
+assert.ok(exportRuntime.includes('persona_choice_reason_join_key'));
+assert.ok(exportRuntime.includes('buildPersonaChoiceReasonCodebookRows'));
 
 const route = fs.readFileSync('src/server/questionnaireRoutes.ts', 'utf8');
 const oldPage = fs.readFileSync('public/questionnaire-analysis.html', 'utf8');
