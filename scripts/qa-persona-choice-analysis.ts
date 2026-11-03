@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { PERSONA_REASON_RQ1_LINK_HEADERS, buildPersonaReasonRq1LinkRows } from '../src/server/personaReasonRq1Link';
 import {
   PERSONA_CHOICE_REASON_EXPORT_HEADERS,
   buildPersonaChoiceReasonExportRows,
@@ -95,6 +96,30 @@ assert.ok(exportRuntime.includes('persona_choice_reason_responses: personaReason
 assert.ok(exportRuntime.includes('persona_choice_reason_join_key'));
 assert.ok(exportRuntime.includes('buildPersonaChoiceReasonCodebookRows'));
 
+
+const rq1Rows = [
+  { research_id: 'R-AAAA', class_id: '5-1', school_condition: 'intervention', analysis_period: 'period1', visitor_choice_denominator: 4, visitor_selection_rate: 0.25 },
+  { research_id: 'R-AAAA', class_id: '5-1', school_condition: 'intervention', analysis_period: 'period2', visitor_choice_denominator: 4, visitor_selection_rate: 0.5, assigned_choice_denominator: 4, assigned_selection_rate: 0.25 },
+  { research_id: 'R-AAAA', class_id: '5-1', school_condition: 'intervention', analysis_period: 'period3', assigned_choice_denominator: 4, assigned_selection_rate: 0.75 },
+  { research_id: 'R-BBBB', class_id: '5-2', school_condition: 'intervention', analysis_period: 'period1', visitor_choice_denominator: 2, visitor_selection_rate: 0 },
+];
+const joined = buildPersonaReasonRq1LinkRows(data, rq1Rows);
+assert.equal(joined.length, 2, 'duplicate and incomplete questionnaire respondents must not be joined');
+assert.equal(joined[0].research_id, 'R-AAAA');
+assert.equal(joined[0].rq1_join_status, 'complete');
+assert.equal(joined[0].visitor_rate_change_p2_minus_p1, 0.25);
+assert.equal(joined[0].assigned_rate_change_p3_minus_p2, 0.5);
+assert.equal(joined[1].rq1_join_status, 'partial_periods');
+assert.equal(joined[1].period2_assigned_rate, '', 'missing RQ1 period must never become zero');
+assert.equal(Object.keys(joined[0]).length, PERSONA_REASON_RQ1_LINK_HEADERS.length);
+const mismatchRows = buildPersonaReasonRq1LinkRows([data[0]], [{ ...rq1Rows[0], class_id: '5-2' }]);
+assert.equal(mismatchRows[0].rq1_join_status, 'mismatch_or_duplicate_period');
+assert.equal(mismatchRows[0].period1_visitor_rate, '');
+assert.equal(buildPersonaReasonRq1LinkRows([data[0]], [])[0].rq1_join_status, 'rq1_not_found');
+const rq1Routes = fs.readFileSync('src/server/researchRq1Routes.ts', 'utf8');
+assert.ok(rq1Routes.includes("router.get('/research-rq1/persona-choice-link', requireManagementRole(['researcher'])"));
+assert.ok(rq1Routes.includes("router.get('/research-rq1/persona-choice-link.csv', requireManagementRole(['researcher'])"));
+
 const route = fs.readFileSync('src/server/questionnaireRoutes.ts', 'utf8');
 const oldPage = fs.readFileSync('public/questionnaire-analysis.html', 'utf8');
 const newPage = fs.readFileSync('public/persona-choice-analysis.html', 'utf8');
@@ -102,6 +127,9 @@ assert.ok(route.includes("router.post('/questionnaire/persona-choice-analysis', 
 assert.ok(oldPage.includes('href="/persona-choice-analysis.html"'));
 assert.ok(newPage.includes('/api/management/questionnaire/persona-choice-analysis'));
 assert.ok(newPage.includes('esc(r.comment)'));
+assert.ok(newPage.includes('runRq1Link'));
+assert.ok(newPage.includes('downloadRq1LinkCsv'));
+
 assert.ok(newPage.includes('escape') === false || newPage.includes('esc('));
 assert.ok(!JSON.stringify(result).includes('learningCode'));
 
