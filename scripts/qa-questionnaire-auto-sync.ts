@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import {
   QUESTIONNAIRE_MID_FORM_ID,
@@ -99,6 +100,10 @@ assert.ok(personaCanonical.includes('"finalReasons":["話しやすい"]'));
 assert.ok(personaCanonical.includes('"learningCode":"7K8M"'));
 const personaSignature = computeQuestionnaireAutoSignature(secret, requestTimestamp, personaPayload);
 assert.equal(verifyQuestionnaireAutoSignature(secret, requestTimestamp, personaSignature, personaPayload, now), true);
+const personaEscapedNewlineSignature = crypto.createHmac('sha256', secret)
+  .update(`${requestTimestamp}\\n${personaCanonical}`)
+  .digest('hex');
+assert.equal(verifyQuestionnaireAutoSignature(secret, requestTimestamp, personaEscapedNewlineSignature, personaPayload, now), true);
 
 const entry = fs.readFileSync('server-entry.ts', 'utf8');
 const route = fs.readFileSync('src/server/questionnaireAutoSyncRoutes.ts', 'utf8');
