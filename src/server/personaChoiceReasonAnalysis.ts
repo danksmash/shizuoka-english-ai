@@ -89,18 +89,11 @@ export function buildPersonaChoiceReasonAnalysis(records: PersonaChoiceReasonRec
   const byResearchId = new Map<string, PersonaChoiceReasonRecord[]>();
   let invalidRecords = 0;
 
+  // Count all submitted main-study records, including incomplete answers, before
+  // selecting usable records. Otherwise a complete and an incomplete response
+  // for the same learner would be incorrectly treated as one unique response.
   for (const record of records) {
-    if (
-      !record.researchId ||
-      !record.classId ||
-      record.dataScope !== 'main' ||
-      record.dataQualityFlag !== 'complete' ||
-      record.initialReasons.length === 0 ||
-      record.finalReasons.length === 0
-    ) {
-      invalidRecords += 1;
-      continue;
-    }
+    if (!record.researchId || record.dataScope !== 'main') continue;
     const group = byResearchId.get(record.researchId) || [];
     group.push(record);
     byResearchId.set(record.researchId, group);
@@ -109,12 +102,21 @@ export function buildPersonaChoiceReasonAnalysis(records: PersonaChoiceReasonRec
   let duplicateRespondents = 0;
   let duplicateRecordsExcluded = 0;
   for (const group of byResearchId.values()) {
-    if (group.length !== 1) {
-      duplicateRespondents += 1;
-      duplicateRecordsExcluded += group.length;
-    } else {
-      usable.push(group[0]);
+    if (group.length > 1) duplicateRespondents += 1;
+  }
+  for (const record of records) {
+    const valid = Boolean(record.researchId && record.classId && record.dataScope === 'main'
+      && record.dataQualityFlag === 'complete'
+      && record.initialReasons.length > 0 && record.finalReasons.length > 0);
+    if (!valid) {
+      invalidRecords += 1;
+      continue;
     }
+    if ((byResearchId.get(record.researchId) || []).length > 1) {
+      duplicateRecordsExcluded += 1;
+      continue;
+    }
+    usable.push(record);
   }
 
   function grouped(groupId: string, label: string, subset: PersonaChoiceReasonRecord[]): PersonaChoiceReasonGroup {
