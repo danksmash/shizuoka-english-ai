@@ -42,6 +42,7 @@ th,td{border-bottom:1px solid #e1e9f4;padding:9px;text-align:left;vertical-align
         <a class="btn secondary" href="/questionnaire-analysis.html">既存3時点質問紙</a>
         <a class="btn secondary" href="/management">研究ダッシュボード</a>
         <button class="secondary" id="reloadBtn">最新データ</button>
+        <button class="secondary" id="csvBtn">研究用CSV</button>
         <button class="secondary" id="logoutBtn">ログアウト</button>
       </div>
     </div>
@@ -116,6 +117,19 @@ async function load(){
   try{const data=await api('/api/management/questionnaire/persona-choice-analysis',{});render(data);status('analysisStatus','集計結果を更新しました。');}
   catch(e){status('analysisStatus','集計を読み込めません：'+e.message,true);}
 }
+async function downloadResearchCsv(){
+  const btn=$('csvBtn');btn.disabled=true;
+  status('analysisStatus','研究用CSVを準備しています…');
+  try{
+    const response=await fetch('/api/management/research.csv?dataset=persona_choice_reason_responses',{credentials:'same-origin'});
+    if(!response.ok)throw new Error('HTTP_'+response.status);
+    const blob=await response.blob(),url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='persona_choice_reason_responses.csv';
+    document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+    status('analysisStatus','研究用CSVをダウンロードしました。個人識別情報がないか確認してから共有してください。');
+  }catch(e){status('analysisStatus','CSV取得に失敗：'+e.message,true);}
+  finally{btn.disabled=false;}
+}
 async function showPanel(){
   try{await api('/api/management/me');$('login').style.display='none';$('panel').style.display='block';await load();}
   catch(e){$('login').style.display='block';$('panel').style.display='none';}
@@ -128,6 +142,7 @@ $('loginBtn').addEventListener('click',login);
 $('password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
 $('groupSelect').addEventListener('change',renderReasonRows);
 $('reloadBtn').addEventListener('click',load);
+$('csvBtn').addEventListener('click',downloadResearchCsv);
 $('logoutBtn').addEventListener('click',async()=>{await api('/api/management/logout',{});location.reload();});
 if(location.hostname.endsWith('github.io')){
   document.body.innerHTML='<div class="wrap"><div class="card"><h1 class="title">追加質問紙（Persona選択理由）</h1><p>この画面はCloud Run本番環境で使用してください。</p></div></div>';
