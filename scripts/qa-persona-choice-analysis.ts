@@ -147,6 +147,8 @@ assert.ok(route.includes("router.post('/questionnaire/persona-choice-analysis', 
 assert.ok(oldPage.includes('href="/persona-choice-analysis.html"'));
 assert.ok(newPage.includes('/api/management/questionnaire/persona-choice-analysis'));
 assert.ok(newPage.includes('esc(r.comment)'));
+assert.ok(newPage.includes('lastSuccessfulIngestAt'), 'empty Firestore state must be distinguished from unverified form delivery');
+assert.ok(route.includes("getDocument(QUESTIONNAIRE_SYNC_STATE_COLLECTION, 'persona_choice_reasons')"), 'Persona sync status must use its own revision document');
 assert.ok(newPage.includes('runRq1Link'));
 assert.ok(newPage.includes('downloadRq1LinkCsv'));
 
