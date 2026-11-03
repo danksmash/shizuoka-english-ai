@@ -78,6 +78,27 @@ th,td{border-bottom:1px solid #e1e9f4;padding:9px;text-align:left;vertical-align
       </table></div>
     </div>
     <div class="card">
+      <div class="top">
+        <div>
+          <h2>RQ1：実際のPersona選択行動との照合</h2>
+          <p class="muted">「初めの頃／最後の方」の自己申告と、既存RQ1の有効セッションに基づく選択率を別指標として対応付けます。</p>
+        </div>
+        <div class="actions">
+          <button id="rq1LinkBtn" class="secondary">照合を実行</button>
+          <button id="rq1LinkCsvBtn" class="secondary">照合CSV</button>
+        </div>
+      </div>
+      <p class="muted">来校国籍群選択率は期間1→2、担当国Persona選択率は期間2→3で比較します。
+      選択対象が異なるため、両指標の割合を単純に比較しません。欠測は0として扱いません。
+      計算負荷を抑えるため、照合はボタンを押した時だけ実行します。</p>
+      <p id="rq1LinkStatus" class="status">照合はまだ実行していません。</p>
+      <p id="rq1LinkCounts" class="muted"></p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>研究ID</th><th>学級</th><th>期間1 来校国籍群</th><th>期間2 来校国籍群</th><th>期間2 担当国</th><th>期間3 担当国</th><th>照合状態</th></tr></thead>
+        <tbody id="rq1LinkBody"><tr><td colspan="7">照合を実行すると表示されます。</td></tr></tbody>
+      </table></div>
+    </div>
+    <div class="card">
       <h2>自由記述（研究者確認用）</h2>
       <p class="muted">研究IDを表示します。自由記述に個人を特定できる情報が含まれていないか、研究用に転載・共有する前に確認してください。</p>
       <div class="table-wrap"><table><thead><tr><th>研究ID</th><th>学級</th><th>記述</th></tr></thead><tbody id="commentsBody"></tbody></table></div>
@@ -130,6 +151,37 @@ async function downloadResearchCsv(){
   }catch(e){status('analysisStatus','CSV取得に失敗：'+e.message,true);}
   finally{btn.disabled=false;}
 }
+function pct(value){
+  if(value===null||value===undefined||value==='')return '—';
+  const n=Number(value);
+  return Number.isFinite(n)?(n*100).toFixed(1)+'%':'—';
+}
+async function runRq1Link(){
+  const btn=$('rq1LinkBtn');btn.disabled=true;
+  status('rq1LinkStatus','既存RQ1データと照合しています…');
+  try{
+    const data=await api('/api/management/research-rq1/persona-choice-link');
+    const c=data.counts||{};
+    $('rq1LinkCounts').textContent='質問紙有効回答児童 '+(c.linkedSurveyRespondents??0)+'名／全期間が照合可能 '+(c.complete??0)+'名／一部欠測 '+(c.partial??0)+'名／RQ1なし '+(c.notFound??0)+'名／照合不整合 '+(c.mismatched??0)+'名';
+    const rows=Array.isArray(data.rows)?data.rows:[];
+    $('rq1LinkBody').innerHTML=rows.length?rows.map(r=>'<tr><td>'+esc(r.research_id)+'</td><td>'+esc(r.class_id)+'</td><td>'+pct(r.period1_visitor_rate)+'</td><td>'+pct(r.period2_visitor_rate)+'</td><td>'+pct(r.period2_assigned_rate)+'</td><td>'+pct(r.period3_assigned_rate)+'</td><td>'+esc(r.rq1_join_status)+'</td></tr>').join(''):'<tr><td colspan="7">照合対象となる質問紙回答はありません。</td></tr>';
+    status('rq1LinkStatus','照合が完了しました。結果は探索的な記述分析です。');
+  }catch(e){status('rq1LinkStatus','RQ1照合に失敗：'+e.message,true);}
+  finally{btn.disabled=false;}
+}
+async function downloadRq1LinkCsv(){
+  const btn=$('rq1LinkCsvBtn');btn.disabled=true;
+  status('rq1LinkStatus','RQ1照合CSVを準備しています…');
+  try{
+    const response=await fetch('/api/management/research-rq1/persona-choice-link.csv',{credentials:'same-origin'});
+    if(!response.ok)throw new Error('HTTP_'+response.status);
+    const blob=await response.blob(),url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='persona_choice_reason_rq1_link.csv';
+    document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+    status('rq1LinkStatus','RQ1照合CSVをダウンロードしました。');
+  }catch(e){status('rq1LinkStatus','RQ1照合CSV取得に失敗：'+e.message,true);}
+  finally{btn.disabled=false;}
+}
 async function showPanel(){
   try{await api('/api/management/me');$('login').style.display='none';$('panel').style.display='block';await load();}
   catch(e){$('login').style.display='block';$('panel').style.display='none';}
@@ -143,6 +195,8 @@ $('password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
 $('groupSelect').addEventListener('change',renderReasonRows);
 $('reloadBtn').addEventListener('click',load);
 $('csvBtn').addEventListener('click',downloadResearchCsv);
+$('rq1LinkBtn').addEventListener('click',runRq1Link);
+$('rq1LinkCsvBtn').addEventListener('click',downloadRq1LinkCsv);
 $('logoutBtn').addEventListener('click',async()=>{await api('/api/management/logout',{});location.reload();});
 if(location.hostname.endsWith('github.io')){
   document.body.innerHTML='<div class="wrap"><div class="card"><h1 class="title">追加質問紙（Persona選択理由）</h1><p>この画面はCloud Run本番環境で使用してください。</p></div></div>';
