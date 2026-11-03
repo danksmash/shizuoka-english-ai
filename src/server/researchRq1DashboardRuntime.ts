@@ -11,11 +11,23 @@ function injectRq1Link(html: string) {
   return out;
 }
 
+function injectPersonaChoiceLink(html: string) {
+  const anchor = '<a href="/questionnaire-analysis.html"><button id="questionnaireBtn" class="secondary">質問紙分析</button></a>';
+  const addition = '<a href="/persona-choice-analysis.html"><button id="personaChoiceReasonsBtn" class="secondary">追加質問紙（Persona選択理由）</button></a>';
+  let result = html.includes(anchor) && !html.includes('/persona-choice-analysis.html')
+    ? html.replace(anchor, anchor + addition)
+    : html;
+  // The formal bundle now contains an additional separate questionnaire CSV.
+  result = result.replace('7 CSVを一括ZIP', '8 CSVを一括ZIP');
+  result = result.replace('7 CSV一括ZIP', '8 CSV一括ZIP');
+  return result;
+}
+
 export function withResearchRq1DashboardLink(path: string, handler: RequestHandler): RequestHandler {
   if (path !== '/management') return handler;
   return (req, res, next) => {
     const originalSend = res.send.bind(res);
-    (res as any).send = (body: any) => originalSend(typeof body === 'string' ? injectRq1Link(body) : body);
+    (res as any).send = (body: any) => originalSend(typeof body === 'string' ? injectPersonaChoiceLink(injectRq1Link(body)) : body);
     return handler(req, res, next);
   };
 }
