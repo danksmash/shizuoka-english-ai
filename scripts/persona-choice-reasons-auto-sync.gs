@@ -194,7 +194,7 @@ function personaChoiceList_(value) {
 function sendPersonaChoicePayload_(payload) {
   const timestamp = String(Math.floor(Date.now() / 1000));
   const canonical = personaChoiceCanonical_(payload);
-  const signatureBytes = Utilities.computeHmacSha256Signature(timestamp + '\n' + canonical, personaChoiceSecret_());
+  const signatureBytes = Utilities.computeHmacSha256Signature(timestamp + '\n' + canonical, personaChoiceSecret_(), Utilities.Charset.UTF_8);
   const signature = signatureBytes.map(function(value) { return ('0' + (value & 255).toString(16)).slice(-2); }).join('');
   const response = UrlFetchApp.fetch(PERSONA_CHOICE_INGEST_URL, {
     method: 'post',
