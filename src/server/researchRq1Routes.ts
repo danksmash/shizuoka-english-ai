@@ -197,6 +197,7 @@ router.get('/research-rq1/persona-choice-link', requireManagementRole(['research
     return res.json({
       success: true,
       counts: { linkedSurveyRespondents: rows.length, ...statusCounts },
+      rq1TargetTableFormalReady: Boolean(rq1.targetStatus.formalReady),
       rows,
       note: 'RQ1の既存有効セッション・期間判定を再利用。回答理由は調査時点の回顧でありPhase別測定ではない。空欄の比率を0と見なさない。',
     });
