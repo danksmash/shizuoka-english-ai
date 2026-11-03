@@ -41,16 +41,43 @@ function onPersonaChoiceReasonSubmit(event) {
 function retryPersonaChoiceReasonSync() {
   const sheet = personaChoiceSyncLog_();
   const values = sheet.getDataRange().getValues();
+  const state = {};
   for (let row = 1; row < values.length; row += 1) {
-    if (String(values[row][3]) !== 'pending') continue;
-    try {
-      const payload = JSON.parse(String(values[row][2]));
-      const result = sendPersonaChoicePayload_(payload);
-      sheet.getRange(row + 1, 4, 1, 4).setValues([['synced', new Date(), JSON.stringify(result), '']]);
-    } catch (error) {
-      sheet.getRange(row + 1, 7).setValue(String(error && error.message || error));
+    const id = String(values[row][0] || '');
+    if (!id) continue;
+    const status = String(values[row][3] || '');
+    if (!state[id] || (status === 'synced' && state[id].status !== 'synced')) {
+      state[id] = { row: row + 1, status: status };
     }
   }
+
+  // Reconcile against the Google Form itself, not only previously logged
+  // "pending" submissions. This rescues responses missed by both the submit
+  // trigger and the log writer. Firestore already deduplicates by Form response ID.
+  const responses = FormApp.openById(PERSONA_CHOICE_FORM_ID).getResponses();
+  responses.forEach(function(response) {
+    const id = String(response.getId() || '');
+    if (state[id] && state[id].status === 'synced') return;
+    const payload = personaChoicePayload_(response);
+    try {
+      const result = sendPersonaChoicePayload_(payload);
+      if (state[id]) {
+        sheet.getRange(state[id].row, 3).clearContent(); // Never retain the learning code in the sync log.
+        sheet.getRange(state[id].row, 4, 1, 4).setValues([['synced', new Date(), JSON.stringify(result), '']]);
+      } else {
+        recordPersonaChoiceSync_(payload, 'synced', result, '');
+      }
+    } catch (error) {
+      const message = String(error && error.message || error);
+      if (state[id]) {
+        sheet.getRange(state[id].row, 3).clearContent();
+        sheet.getRange(state[id].row, 4).setValue('pending');
+        sheet.getRange(state[id].row, 7).setValue(message);
+      } else {
+        recordPersonaChoiceSync_(payload, 'pending', null, message);
+      }
+    }
+  });
 }
 
 function auditPersonaChoiceReasonsAutoSync() {
@@ -148,7 +175,7 @@ function recordPersonaChoiceSync_(payload, status, result, error) {
   personaChoiceSyncLog_().appendRow([
     payload.formResponseId,
     payload.submittedAt,
-    JSON.stringify(payload),
+    '', // The Form is the source of truth; do not copy the learning code into the sync log.
     status,
     status === 'synced' ? new Date() : '',
     result ? JSON.stringify(result) : '',
