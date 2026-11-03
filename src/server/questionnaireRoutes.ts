@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireManagementRole } from './auth';
 import { getDocument } from './firestore';
+import { buildPersonaChoiceReasonAnalysis, getPersonaChoiceReasonRecords } from './personaChoiceReasonAnalysis';
 import { buildQuestionnaireDescriptiveStatistics } from './questionnaireDescriptive';
 import { buildQuestionnaireLmmTrialBundle } from './questionnaireLmmTrial';
 import { buildQuestionnaireTimingAudit } from './questionnaireTimingAudit';
@@ -40,6 +41,24 @@ function legacyStatisticsInput(records: QuestionnaireRecord[]) {
     comparisonExcluded: comparisonRecords.length,
   };
 }
+
+router.post('/questionnaire/persona-choice-analysis', requireManagementRole(['researcher']), async (_req, res) => {
+  try {
+    const [records, syncRevision] = await Promise.all([
+      getPersonaChoiceReasonRecords(),
+      getDocument(QUESTIONNAIRE_SYNC_STATE_COLLECTION, 'persona_choice_reasons'),
+    ]);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      success: true,
+      ...buildPersonaChoiceReasonAnalysis(records),
+      lastSuccessfulIngestAt: String(syncRevision?.lastIngestedAt || ''),
+    });
+  } catch (error: any) {
+    console.error('Persona choice reason analysis failed', { message: error?.message });
+    return res.status(503).json({ success: false, error: 'PERSONA_CHOICE_REASON_ANALYSIS_UNAVAILABLE' });
+  }
+});
 
 router.post('/questionnaire/import', requireManagementRole(['researcher']), async (req, res) => {
   try {

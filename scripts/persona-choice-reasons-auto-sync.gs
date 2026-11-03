@@ -4,25 +4,53 @@ const PERSONA_CHOICE_INGEST_URL = 'https://shizuoka-english-ai-1075707511474.asi
 const PERSONA_CHOICE_SECRET_PROPERTY = 'QUESTIONNAIRE_INGEST_SECRET';
 const PERSONA_CHOICE_SYNC_LOG_SHEET = '_sync_log';
 
+function personaChoiceFormSchemaAudit_() {
+  const form = FormApp.openById(PERSONA_CHOICE_FORM_ID);
+  const titles = form.getItems().map(function(item) { return item.getTitle(); });
+  const checks = {
+    learningCode: titles.filter(function(title) { return title.indexOf('学習コード') >= 0; }).length,
+    initialReasons: titles.filter(function(title) { return title.indexOf('質問1') === 0; }).length,
+    finalReasons: titles.filter(function(title) { return title.indexOf('質問2') === 0; }).length,
+    comment: titles.filter(function(title) { return title.indexOf('質問3') === 0; }).length,
+  };
+  return {
+    valid: Object.keys(checks).every(function(key) { return checks[key] === 1; }),
+    matchingItemCounts: checks,
+  };
+}
+
 function installPersonaChoiceReasonsAutoSync() {
   const secret = personaChoiceSecret_();
   if (!secret) throw new Error('QUESTIONNAIRE_INGEST_SECRET をスクリプトプロパティに設定してください。');
+  const form = FormApp.openById(PERSONA_CHOICE_FORM_ID);
+  const schema = personaChoiceFormSchemaAudit_();
+  if (!schema.valid) throw new Error('PERSONA_CHOICE_FORM_SCHEMA_MISMATCH: フォームの質問見出しを確認してください。');
+  if (!form.isAcceptingResponses()) throw new Error('PERSONA_CHOICE_FORM_NOT_ACCEPTING_RESPONSES');
+
+  // Preflight the authenticated API without creating a Firestore record.
+  // A failed preflight must NOT delete the currently installed triggers.
+  const connection = testPersonaChoiceReasonsConnectionNoWrite();
+  if (!connection.ok || connection.writePerformed) throw new Error('PERSONA_CHOICE_CONNECTION_PREFLIGHT_FAILED');
 
   const handlers = ['onPersonaChoiceReasonSubmit', 'retryPersonaChoiceReasonSync'];
-  ScriptApp.getProjectTriggers().forEach(function(trigger) {
-    if (handlers.indexOf(trigger.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(trigger);
+  const oldTriggers = ScriptApp.getProjectTriggers().filter(function(trigger) {
+    return handlers.indexOf(trigger.getHandlerFunction()) >= 0;
   });
-
-  ScriptApp.newTrigger('onPersonaChoiceReasonSubmit')
-    .forForm(FormApp.openById(PERSONA_CHOICE_FORM_ID))
-    .onFormSubmit()
-    .create();
-  ScriptApp.newTrigger('retryPersonaChoiceReasonSync')
-    .timeBased()
-    .everyMinutes(5)
-    .create();
-
-  personaChoiceSyncLog_();
+  let newSubmit = null;
+  let newRetry = null;
+  try {
+    newSubmit = ScriptApp.newTrigger('onPersonaChoiceReasonSubmit')
+      .forForm(form).onFormSubmit().create();
+    newRetry = ScriptApp.newTrigger('retryPersonaChoiceReasonSync')
+      .timeBased().everyMinutes(5).create();
+    personaChoiceSyncLog_();
+  } catch (error) {
+    if (newSubmit) ScriptApp.deleteTrigger(newSubmit);
+    if (newRetry) ScriptApp.deleteTrigger(newRetry);
+    throw error;
+  }
+  // Both new triggers are installed: replace only the older targeted handlers.
+  oldTriggers.forEach(function(trigger) { ScriptApp.deleteTrigger(trigger); });
   return auditPersonaChoiceReasonsAutoSync();
 }
 
@@ -40,29 +68,80 @@ function onPersonaChoiceReasonSubmit(event) {
 
 function retryPersonaChoiceReasonSync() {
   const sheet = personaChoiceSyncLog_();
+  // Older script versions wrote payload JSON including a learner code.
+  // Wipe that legacy column before scanning, including already-synced rows.
+  if (sheet.getLastRow() > 1) {
+    sheet.getRange(2, 3, sheet.getLastRow() - 1, 1).clearContent();
+  }
   const values = sheet.getDataRange().getValues();
+  const state = {};
   for (let row = 1; row < values.length; row += 1) {
-    if (String(values[row][3]) !== 'pending') continue;
-    try {
-      const payload = JSON.parse(String(values[row][2]));
-      const result = sendPersonaChoicePayload_(payload);
-      sheet.getRange(row + 1, 4, 1, 4).setValues([['synced', new Date(), JSON.stringify(result), '']]);
-    } catch (error) {
-      sheet.getRange(row + 1, 7).setValue(String(error && error.message || error));
+    const id = String(values[row][0] || '');
+    if (!id) continue;
+    const status = String(values[row][3] || '');
+    if (!state[id] || (status === 'synced' && state[id].status !== 'synced')) {
+      state[id] = { row: row + 1, status: status };
     }
   }
+
+  // Reconcile against the Google Form itself, not only previously logged
+  // "pending" submissions. This rescues responses missed by both the submit
+  // trigger and the log writer. Firestore already deduplicates by Form response ID.
+  const responses = FormApp.openById(PERSONA_CHOICE_FORM_ID).getResponses();
+  responses.forEach(function(response) {
+    const id = String(response.getId() || '');
+    if (state[id] && state[id].status === 'synced') return;
+    const payload = personaChoicePayload_(response);
+    try {
+      const result = sendPersonaChoicePayload_(payload);
+      if (state[id]) {
+        sheet.getRange(state[id].row, 3).clearContent(); // Never retain the learning code in the sync log.
+        sheet.getRange(state[id].row, 4, 1, 4).setValues([['synced', new Date(), JSON.stringify(result), '']]);
+      } else {
+        recordPersonaChoiceSync_(payload, 'synced', result, '');
+      }
+    } catch (error) {
+      const message = String(error && error.message || error);
+      if (state[id]) {
+        sheet.getRange(state[id].row, 3).clearContent();
+        sheet.getRange(state[id].row, 4).setValue('pending');
+        sheet.getRange(state[id].row, 7).setValue(message);
+      } else {
+        recordPersonaChoiceSync_(payload, 'pending', null, message);
+      }
+    }
+  });
 }
 
 function auditPersonaChoiceReasonsAutoSync() {
   const triggers = ScriptApp.getProjectTriggers().map(function(trigger) {
     return { handler: trigger.getHandlerFunction(), source: String(trigger.getTriggerSource()), event: String(trigger.getEventType()) };
   });
+  const form = FormApp.openById(PERSONA_CHOICE_FORM_ID);
   const log = personaChoiceSyncLog_();
+  const logRows = log.getDataRange().getValues().slice(1);
+  const formResponses = form.getResponses();
+  const logged = new Set(logRows.map(function(row) { return String(row[0] || ''); }).filter(Boolean));
+  const synced = new Set(logRows.filter(function(row) { return String(row[3]) === 'synced'; })
+    .map(function(row) { return String(row[0] || ''); }).filter(Boolean));
   return {
     formId: PERSONA_CHOICE_FORM_ID,
     responseSheetId: PERSONA_CHOICE_RESPONSE_SHEET_ID,
-    acceptingResponses: FormApp.openById(PERSONA_CHOICE_FORM_ID).isAcceptingResponses(),
+    acceptingResponses: form.isAcceptingResponses(),
     secretConfigured: Boolean(personaChoiceSecret_()),
+    formSchema: personaChoiceFormSchemaAudit_(),
+    // These are aggregate diagnostics only: do not expose pupil codes or answers.
+    formResponseCount: formResponses.length,
+    loggedResponseCount: logged.size,
+    syncedResponseCount: synced.size,
+    pendingResponseCount: logRows.filter(function(row) { return String(row[3]) === 'pending'; }).length,
+    unloggedResponseCount: formResponses.filter(function(response) { return !logged.has(String(response.getId())); }).length,
+    submitTriggerInstalled: triggers.some(function(trigger) {
+      return trigger.handler === 'onPersonaChoiceReasonSubmit' && trigger.event === 'ON_FORM_SUBMIT';
+    }),
+    retryTriggerInstalled: triggers.some(function(trigger) {
+      return trigger.handler === 'retryPersonaChoiceReasonSync' && trigger.event === 'CLOCK';
+    }),
     triggers: triggers,
     syncLogSheet: log.getName(),
     syncLogHidden: log.isSheetHidden(),
@@ -115,7 +194,7 @@ function personaChoiceList_(value) {
 function sendPersonaChoicePayload_(payload) {
   const timestamp = String(Math.floor(Date.now() / 1000));
   const canonical = personaChoiceCanonical_(payload);
-  const signatureBytes = Utilities.computeHmacSha256Signature(timestamp + '\n' + canonical, personaChoiceSecret_());
+  const signatureBytes = Utilities.computeHmacSha256Signature(timestamp + '\n' + canonical, personaChoiceSecret_(), Utilities.Charset.UTF_8);
   const signature = signatureBytes.map(function(value) { return ('0' + (value & 255).toString(16)).slice(-2); }).join('');
   const response = UrlFetchApp.fetch(PERSONA_CHOICE_INGEST_URL, {
     method: 'post',
@@ -148,7 +227,7 @@ function recordPersonaChoiceSync_(payload, status, result, error) {
   personaChoiceSyncLog_().appendRow([
     payload.formResponseId,
     payload.submittedAt,
-    JSON.stringify(payload),
+    '', // The Form is the source of truth; do not copy the learning code into the sync log.
     status,
     status === 'synced' ? new Date() : '',
     result ? JSON.stringify(result) : '',

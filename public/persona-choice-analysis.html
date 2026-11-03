@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/researcher-readable.css">
+<title>追加質問紙（Persona選択理由）｜Study 1</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f7faff;color:#10224a;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}
+.wrap{max-width:1320px;margin:0 auto;padding:18px}.card{background:#fff;border:1px solid #d7e2f1;border-radius:14px;padding:17px;margin-bottom:14px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.title{font-size:23px;margin:0}.muted{color:#526680;font-size:13px;line-height:1.7}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.btn,button{font:inherit;font-weight:700;padding:9px 12px;border-radius:8px;cursor:pointer}
+.btn{text-decoration:none;display:inline-block}.primary{border:1px solid #1767ed;background:#1767ed;color:white}.secondary{border:1px solid #9ab4df;background:#f7faff;color:#123e85}
+.login{max-width:440px;margin:10vh auto}.field{margin:12px 0}.field label{display:block;margin-bottom:5px;font-weight:700}
+input,select{font:inherit;padding:9px 10px;border:1px solid #aebdd5;border-radius:7px;background:white}input{width:100%}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.metric{background:#f1f6ff;border-radius:9px;padding:13px}
+.metric span{display:block;color:#526680;font-size:12px}.metric b{display:block;font-size:23px;margin-top:5px}
+.table-wrap{max-width:100%;overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{border-bottom:1px solid #e1e9f4;padding:9px;text-align:left;vertical-align:top}th{background:#f1f5ff;white-space:nowrap}td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.bar{height:8px;border-radius:5px;background:#ecf2fb;min-width:95px;overflow:hidden}.bar>span{display:block;height:100%;border-radius:5px}
+.bar.before>span{background:#8aa8df}.bar.after>span{background:#238b7d}
+.note{background:#eef4ff;border:1px solid #c9d9f4;padding:12px;border-radius:9px}
+.status{font-size:13px}.error{color:#a61b2d}.ok{color:#18654d}
+.comment{white-space:pre-wrap;overflow-wrap:anywhere;max-width:780px}
+@media(max-width:780px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.wrap{padding:9px}.title{font-size:20px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="login" class="card login">
+    <h1 class="title">Study 1 追加質問紙分析</h1>
+    <p class="muted">研究者専用。既存の研究者IDとパスワードでログインします。</p>
+    <div class="field"><label for="username">研究者ID</label><input id="username" type="text" autocomplete="username"></div>
+    <div class="field"><label for="password">パスワード</label><input id="password" type="password" autocomplete="current-password"></div>
+    <button id="loginBtn" class="primary">ログイン</button>
+    <p id="loginStatus" class="status"></p>
+  </div>
+  <div id="panel" style="display:none">
+    <div class="card top">
+      <div><h1 class="title">追加質問紙（Persona選択理由）</h1><div class="muted">初めの頃と最後の方の選択理由を同一児童内で比較</div></div>
+      <div class="actions">
+        <a class="btn secondary" href="/questionnaire-analysis.html">既存3時点質問紙</a>
+        <a class="btn secondary" href="/management">研究ダッシュボード</a>
+        <button class="secondary" id="reloadBtn">最新データ</button>
+        <button class="secondary" id="csvBtn">研究用CSV</button>
+        <button class="secondary" id="logoutBtn">ログアウト</button>
+      </div>
+    </div>
+    <div class="note card" id="note">
+      本調査は回顧的回答です。Phase 1とPhase 3で独立に測定した縦断質問紙とはみなしません。
+      複数選択の割合の分母は、その群の有効回答児童数です。選択率の合計は100%になりません。
+      同一児童による複数回答は、研究者確認が完了するまで全件を集計から除外します。
+    </div>
+    <div class="card">
+      <h2>取込・品質管理</h2>
+      <div class="metrics">
+        <div class="metric"><span>保存された回答</span><b id="stored">—</b></div>
+        <div class="metric"><span>有効回答児童</span><b id="valid">—</b></div>
+        <div class="metric"><span>重複回答児童</span><b id="duplicate">—</b></div>
+        <div class="metric"><span>要確認・除外レコード</span><b id="excluded">—</b></div>
+      </div>
+      <p class="muted" id="syncNote">同期状態を確認中です。回答数0は、未回答と同期未設定を区別できません。</p>
+      <p class="muted" id="qualityNote"></p>
+      <p id="analysisStatus" class="status"></p>
+    </div>
+    <div class="card">
+      <h2>学級・学年別の回答人数</h2>
+      <div class="table-wrap"><table><thead><tr><th>対象</th><th>有効回答児童数</th></tr></thead><tbody id="groupsBody"></tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="top">
+        <h2>理由ごとの回答割合</h2>
+        <label>表示対象：<select id="groupSelect" aria-label="集計対象"></select></label>
+      </div>
+      <p class="muted">青：初めの頃　緑：最後の方。「増加」「継続」「減少」は同じ児童の回答内での理由の選択状況を表します。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>理由</th><th>初めの頃</th><th>最後の方</th><th>新たに選択</th><th>継続</th><th>選択しなくなった</th></tr></thead>
+        <tbody id="reasonsBody"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <div class="top">
+        <div>
+          <h2>RQ1：実際のPersona選択行動との照合</h2>
+          <p class="muted">「初めの頃／最後の方」の自己申告と、既存RQ1の有効セッションに基づく選択率を別指標として対応付けます。</p>
+        </div>
+        <div class="actions">
+          <button id="rq1LinkBtn" class="secondary">照合を実行</button>
+          <button id="rq1LinkCsvBtn" class="secondary">照合CSV</button>
+        </div>
+      </div>
+      <p class="muted">来校国籍群選択率は期間1→2、担当国Persona選択率は期間2→3で比較します。
+      選択対象が異なるため、両指標の割合を単純に比較しません。欠測は0として扱いません。
+      計算負荷を抑えるため、照合はボタンを押した時だけ実行します。</p>
+      <p id="rq1LinkStatus" class="status">照合はまだ実行していません。</p>
+      <p id="rq1LinkCounts" class="muted"></p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>研究ID</th><th>学級</th><th>期間1 来校国籍群</th><th>期間2 来校国籍群</th><th>期間2 担当国</th><th>期間3 担当国</th><th>照合状態</th></tr></thead>
+        <tbody id="rq1LinkBody"><tr><td colspan="7">照合を実行すると表示されます。</td></tr></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h2>自由記述（研究者確認用）</h2>
+      <p class="muted">研究IDを表示します。自由記述に個人を特定できる情報が含まれていないか、研究用に転載・共有する前に確認してください。</p>
+      <div class="table-wrap"><table><thead><tr><th>研究ID</th><th>学級</th><th>記述</th></tr></thead><tbody id="commentsBody"></tbody></table></div>
+    </div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let report=null;
+function esc(x){return String(x??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+function status(id,message,error=false){const el=$(id);el.textContent=message;el.className='status '+(error?'error':'ok');}
+async function api(path,body){const r=await fetch(path,{method:body?'POST':'GET',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error||'HTTP_'+r.status);return data;}
+function renderReasonRows(){
+  if(!report)return;
+  const id=$('groupSelect').value;
+  const group=report.groups.find(g=>g.groupId===id)||report.groups[0];
+  if(!group||!group.reasons.length){$('reasonsBody').innerHTML='<tr><td colspan="6">表示できる回答がありません。</td></tr>';return;}
+  const bar=(n,pct,kind)=>'<div class="bar '+kind+'"><span style="width:'+Math.max(0,Math.min(100,pct))+'%"></span></div><span>'+n+'人（'+pct+'%）</span>';
+  $('reasonsBody').innerHTML=group.reasons.map(r=>'<tr><td>'+esc(r.reason)+'</td><td>'+bar(r.initialCount,r.initialPercent,'before')+'</td><td>'+bar(r.finalCount,r.finalPercent,'after')+'</td><td class="num">'+r.addedCount+'</td><td class="num">'+r.continuedCount+'</td><td class="num">'+r.removedCount+'</td></tr>').join('');
+}
+function render(data){
+  report=data;
+  const lastIngest=String(data.lastSuccessfulIngestAt||'');
+  $('syncNote').textContent=lastIngest
+    ? 'Firestoreへの最終取込：'+new Date(lastIngest).toLocaleString('ja-JP')+'。なお、この時刻はApps Scriptトリガーの稼働確認を保証しません。'
+    : 'Firestoreへの取込履歴はありません。回答数0件だけでは児童が未回答なのか、自動同期が未設定なのか判断できません。Googleフォーム原本とApps Scriptの監査結果を確認してください。';
+  $('stored').textContent=data.counts.storedRecords;
+  $('valid').textContent=data.counts.validUniqueRespondents;
+  $('duplicate').textContent=data.counts.duplicateRespondents;
+  $('excluded').textContent=data.counts.invalidRecords+data.counts.duplicateRecordsExcluded;
+  $('qualityNote').textContent='不完全・無効 '+data.counts.invalidRecords+'件／重複に伴う除外 '+data.counts.duplicateRecordsExcluded+'件';
+  $('groupsBody').innerHTML=data.groups.map(g=>'<tr><td>'+esc(g.label)+'</td><td class="num">'+g.n+'</td></tr>').join('');
+  const previous=$('groupSelect').value;
+  $('groupSelect').innerHTML=data.groups.map(g=>'<option value="'+esc(g.groupId)+'">'+esc(g.label)+'（'+g.n+'名）</option>').join('');
+  if(data.groups.some(g=>g.groupId===previous))$('groupSelect').value=previous;
+  renderReasonRows();
+  $('commentsBody').innerHTML=data.comments.length?data.comments.map(r=>'<tr><td>'+esc(r.researchId)+'</td><td>'+esc(r.classId)+'</td><td class="comment">'+esc(r.comment)+'</td></tr>').join(''):'<tr><td colspan="3">自由記述はありません。</td></tr>';
+}
+async function load(){
+  status('analysisStatus','追加質問紙の集計を読み込んでいます…');
+  try{const data=await api('/api/management/questionnaire/persona-choice-analysis',{});render(data);status('analysisStatus','集計結果を更新しました。');}
+  catch(e){status('analysisStatus','集計を読み込めません：'+e.message,true);}
+}
+async function downloadResearchCsv(){
+  const btn=$('csvBtn');btn.disabled=true;
+  status('analysisStatus','研究用CSVを準備しています…');
+  try{
+    const response=await fetch('/api/management/research.csv?dataset=persona_choice_reason_responses',{credentials:'same-origin'});
+    if(!response.ok)throw new Error('HTTP_'+response.status);
+    const blob=await response.blob(),url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='persona_choice_reason_responses.csv';
+    document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+    status('analysisStatus','研究用CSVをダウンロードしました。個人識別情報がないか確認してから共有してください。');
+  }catch(e){status('analysisStatus','CSV取得に失敗：'+e.message,true);}
+  finally{btn.disabled=false;}
+}
+function pct(value){
+  if(value===null||value===undefined||value==='')return '—';
+  const n=Number(value);
+  return Number.isFinite(n)?(n*100).toFixed(1)+'%':'—';
+}
+async function runRq1Link(){
+  const btn=$('rq1LinkBtn');btn.disabled=true;
+  status('rq1LinkStatus','既存RQ1データと照合しています…');
+  try{
+    const data=await api('/api/management/research-rq1/persona-choice-link');
+    const c=data.counts||{};
+    $('rq1LinkCounts').textContent=(data.rq1TargetTableFormalReady?'RQ1対応国表は正式固定済み。':'注意：RQ1対応国表が正式固定されていないため、担当国指標は暫定値です。')+' 質問紙有効回答児童 '+(c.linkedSurveyRespondents??0)+'名／全期間が照合可能 '+(c.complete??0)+'名／一部欠測 '+(c.partial??0)+'名／RQ1なし '+(c.notFound??0)+'名／照合不整合 '+(c.mismatched??0)+'名';
+    const rows=Array.isArray(data.rows)?data.rows:[];
+    $('rq1LinkBody').innerHTML=rows.length?rows.map(r=>'<tr><td>'+esc(r.research_id)+'</td><td>'+esc(r.class_id)+'</td><td>'+pct(r.period1_visitor_rate)+'</td><td>'+pct(r.period2_visitor_rate)+'</td><td>'+pct(r.period2_assigned_rate)+'</td><td>'+pct(r.period3_assigned_rate)+'</td><td>'+esc(r.rq1_join_status)+'</td></tr>').join(''):'<tr><td colspan="7">照合対象となる質問紙回答はありません。</td></tr>';
+    status('rq1LinkStatus','照合が完了しました。結果は探索的な記述分析です。');
+  }catch(e){status('rq1LinkStatus','RQ1照合に失敗：'+e.message,true);}
+  finally{btn.disabled=false;}
+}
+async function downloadRq1LinkCsv(){
+  const btn=$('rq1LinkCsvBtn');btn.disabled=true;
+  status('rq1LinkStatus','RQ1照合CSVを準備しています…');
+  try{
+    const response=await fetch('/api/management/research-rq1/persona-choice-link.csv',{credentials:'same-origin'});
+    if(!response.ok)throw new Error('HTTP_'+response.status);
+    const blob=await response.blob(),url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='persona_choice_reason_rq1_link.csv';
+    document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+    status('rq1LinkStatus','RQ1照合CSVをダウンロードしました。');
+  }catch(e){status('rq1LinkStatus','RQ1照合CSV取得に失敗：'+e.message,true);}
+  finally{btn.disabled=false;}
+}
+async function showPanel(){
+  try{await api('/api/management/me');$('login').style.display='none';$('panel').style.display='block';await load();}
+  catch(e){$('login').style.display='block';$('panel').style.display='none';}
+}
+async function login(){
+  try{await api('/api/management/login',{username:$('username').value,password:$('password').value});$('password').value='';await showPanel();}
+  catch(e){status('loginStatus','ログインできません。研究者ID・パスワードを確認してください。',true);}
+}
+$('loginBtn').addEventListener('click',login);
+$('password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
+$('groupSelect').addEventListener('change',renderReasonRows);
+$('reloadBtn').addEventListener('click',load);
+$('csvBtn').addEventListener('click',downloadResearchCsv);
+$('rq1LinkBtn').addEventListener('click',runRq1Link);
+$('rq1LinkCsvBtn').addEventListener('click',downloadRq1LinkCsv);
+$('logoutBtn').addEventListener('click',async()=>{await api('/api/management/logout',{});location.reload();});
+if(location.hostname.endsWith('github.io')){
+  document.body.innerHTML='<div class="wrap"><div class="card"><h1 class="title">追加質問紙（Persona選択理由）</h1><p>この画面はCloud Run本番環境で使用してください。</p></div></div>';
+}else showPanel();
+</script>
+</body>
+</html>

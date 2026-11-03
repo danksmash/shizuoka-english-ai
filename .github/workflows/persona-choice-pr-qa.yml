@@ -1,0 +1,63 @@
+name: Persona choice questionnaire PR QA
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/server/personaChoiceReasonAnalysis.ts'
+      - 'src/server/personaChoiceReasonExport.ts'
+      - 'src/server/personaReasonRq1Link.ts'
+      - 'src/server/researchRq1Routes.ts'
+      - 'src/server/researchRq1DashboardRuntime.ts'
+      - 'src/server/questionnaireRoutes.ts'
+      - 'src/server/researchStreamingExportRuntime.ts'
+      - 'public/persona-choice-analysis.html'
+      - 'public/questionnaire-analysis.html'
+      - 'scripts/persona-choice-reasons-auto-sync.gs'
+      - 'scripts/qa-persona-choice-analysis.ts'
+      - 'scripts/qa-questionnaire-auto-sync.ts'
+      - 'package.json'
+      - '.github/workflows/persona-choice-pr-qa.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: TypeScript check
+        run: npm run lint
+      - name: Questionnaire auto-sync and Persona reason QA
+        run: npm run qa:questionnaire-auto
+      - name: Existing questionnaire QA
+        run: npm run qa:questionnaire
+      - name: Existing research CSV/ZIP QA
+        run: npm run qa:research-export
+      - name: Research management page and RQ1 alignment QA
+        run: npm run qa:management && npm run qa:research-rq1-rq2-alignment
+
+      - name: Production signed-ingest endpoint no-write probe
+        run: |
+          set -euo pipefail
+          code=$(curl --silent --show-error --max-time 20 --retry 2 \
+            -o /tmp/persona-choice-unsigned-response.json \
+            -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            --data '{"formId":"1yJZ0nfvYETEnKaV227VBD9_T0WiOMobI6gT-K6BYS7I","formResponseId":"pr-unsigned-no-write","submittedAt":"2026-11-03T00:00:00Z","learningCode":"0000","answers":{"initialReasons":["接続確認"],"finalReasons":["接続確認"]}}' \
+            "https://shizuoka-english-ai-1075707511474.asia-northeast1.run.app/api/questionnaire-auto/ingest")
+          if [ "$code" != "401" ]; then
+            echo "Expected HTTP 401 without signature, got HTTP $code" >&2
+            exit 1
+          fi
+          # Signature is deliberately absent: the request must not reach Firestore.
+          echo "Production ingest endpoint rejects unsigned requests (HTTP 401)."
+

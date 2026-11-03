@@ -20,6 +20,12 @@ import {
   buildResearchLessonReflectionRows,
   serializeResearchLessonReflectionCsv,
 } from './researchLessonReflectionExport';
+import { getPersonaChoiceReasonRecords } from './personaChoiceReasonAnalysis';
+import {
+  buildPersonaChoiceReasonCodebookRows,
+  buildPersonaChoiceReasonExportRows,
+  serializePersonaChoiceReasonCsv,
+} from './personaChoiceReasonExport';
 import {
   buildQuestionnaireCodebookRows,
   buildQuestionnaireExportRows,
@@ -444,6 +450,14 @@ async function handleSmallCsv(req: any, res: Response, requested: string): Promi
     res.send(serializeResearchLessonReflectionCsv(rows));
     return true;
   }
+  if (requested === 'persona_choice_reason_responses') {
+    const rows = buildPersonaChoiceReasonExportRows(await getPersonaChoiceReasonRecords(), query);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="persona_choice_reason_responses.csv"');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(serializePersonaChoiceReasonCsv(rows));
+    return true;
+  }
   if (requested === 'student_questionnaires') {
     const rows = buildQuestionnaireExportRows(await getAllQuestionnaireRecords(), query);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -465,6 +479,7 @@ async function handleSmallCsv(req: any, res: Response, requested: string): Promi
       ...base.codebook,
       ...buildResearchLessonReflectionCodebookRows(),
       ...buildQuestionnaireCodebookRows(),
+      ...buildPersonaChoiceReasonCodebookRows(),
     ]);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="codebook.csv"');
@@ -500,11 +515,12 @@ const streamingBundleHandler: RequestHandler = async (req, res) => {
   try {
     const exportQuery = normalizeFormalResearchExportQuery(query);
     const studyPhase = normalizeStudyPhaseFilter(query.studyPhase);
-    const [studentRecords, schedules, lessonReflections, questionnaireRecords] = await Promise.all([
+    const [studentRecords, schedules, lessonReflections, questionnaireRecords, personaReasonRecords] = await Promise.all([
       getStudentRecordsForManagement(),
       getAllStudySchedules(),
       getAllReflectionRecordsForTeacher(),
       getAllQuestionnaireRecords(),
+      getPersonaChoiceReasonRecords(),
     ]);
     const students = new Map(studentRecords.map((student) => [student.studentId, student]));
     const preparation = await prepareProductionExport(students, schedules, studyPhase);
@@ -513,12 +529,14 @@ const streamingBundleHandler: RequestHandler = async (req, res) => {
       exportQuery,
     );
     const questionnaireRows = buildQuestionnaireExportRows(questionnaireRecords, query);
+    const personaReasonRows = buildPersonaChoiceReasonExportRows(personaReasonRecords, query);
     const base = buildResearchExportDataSets([]);
     const personaRows = base.personas;
     const codebookRows = phaseAwareCodebook([
       ...base.codebook,
       ...buildResearchLessonReflectionCodebookRows(),
       ...buildQuestionnaireCodebookRows(),
+      ...buildPersonaChoiceReasonCodebookRows(),
     ]);
     const exportedAt = new Date().toISOString();
     const materialized = await materializeBundleCsvs(students, preparation, schedules, studyPhase, exportQuery);
@@ -534,12 +552,14 @@ const streamingBundleHandler: RequestHandler = async (req, res) => {
     await zip.addFile('personas.csv', oneChunk(serializeResearchCsv(personaRows, 'personas')));
     await zip.addFile('lesson_reflections.csv', oneChunk(serializeResearchLessonReflectionCsv(lessonRows)));
     await zip.addFile('student_questionnaires.csv', oneChunk(serializeQuestionnaireCsv(questionnaireRows)));
+    await zip.addFile('persona_choice_reason_responses.csv', oneChunk(serializePersonaChoiceReasonCsv(personaReasonRows)));
     await zip.addFile('codebook.csv', oneChunk(serializeRows(codebookRows, RESEARCH_EXPORT_HEADERS.codebook)));
 
     const manifest = {
       export_id: `export_${Date.now()}`,
       exported_at: exportedAt,
       schema_version: PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION,
+      persona_choice_reason_export_extension_version: 'persona-choice-reasons-export-v1',
       research_export_schema_version: PHASE_RESEARCH_EXPORT_SCHEMA_VERSION,
       filters: exportQuery,
       study_phase: studyPhase || 'all',
@@ -556,10 +576,13 @@ const streamingBundleHandler: RequestHandler = async (req, res) => {
         personas: personaRows.length,
         lesson_reflections: lessonRows.length,
         student_questionnaires: questionnaireRows.length,
+        persona_choice_reason_responses: personaReasonRows.length,
         codebook: codebookRows.length,
       },
       lesson_reflection_join_key: ['research_id', 'local_date'],
       questionnaire_join_key: ['research_id', 'survey_wave'],
+      persona_choice_reason_join_key: ['research_id'],
+      persona_choice_reason_timepoint: 'single retrospective survey; initial/final are recalled reasons, not separately observed waves',
       questionnaire_phase_filter: 'not_applicable',
       export_transport: 'single-scan-staged-deflate-v2',
     };

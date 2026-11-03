@@ -135,6 +135,17 @@ assert.ok(core.includes('QUESTIONNAIRE_SYNC_STATE_COLLECTION'));
 assert.ok(core.includes('PERSONA_CHOICE_REASONS_COLLECTION'));
 assert.ok(core.includes('sourceFormResponseId'), 'persona-choice responses must be idempotent by the Google Forms response ID');
 assert.ok(personaChoiceScript.includes("everyMinutes(5)"), 'persona-choice sync must retry every five minutes');
+assert.ok(personaChoiceScript.includes('.getResponses()'), 'persona-choice retry must reconcile the complete Google Forms response list');
+assert.ok(personaChoiceScript.includes('unloggedResponseCount'), 'audit must report Form submissions missing from the sync log');
+assert.ok(personaChoiceScript.includes('submitTriggerInstalled'), 'audit must verify Form submit trigger');
+assert.ok(personaChoiceScript.includes('retryTriggerInstalled'), 'audit must verify scheduled retry trigger');
+assert.ok(personaChoiceScript.includes('personaChoiceFormSchemaAudit_'), 'installer must validate the Google Form question schema');
+assert.ok(personaChoiceScript.includes('const connection = testPersonaChoiceReasonsConnectionNoWrite();'), 'installer must verify signed API before installing triggers');
+assert.ok(personaChoiceScript.includes('Utilities.Charset.UTF_8'), 'Apps Script HMAC signing must explicitly use UTF-8 so non-ASCII questionnaire answers match Cloud Run');
+assert.ok(personaChoiceScript.indexOf('newSubmit = ScriptApp.newTrigger') < personaChoiceScript.indexOf('oldTriggers.forEach'), 'installer must create replacement triggers before deleting prior ones');
+assert.ok(personaChoiceScript.includes('sheet.getRange(2, 3, sheet.getLastRow() - 1, 1).clearContent()'), 'legacy log must purge learner codes');
+assert.ok(!personaChoiceScript.includes('JSON.stringify(payload),'), 'sync log must not retain raw learning codes inside payload JSON');
+
 assert.ok(personaChoiceScript.includes("'0000'"));
 assert.ok(personaChoiceScript.includes("expected: 'INVALID_LEARNING_CODE'"), 'connection check must be a signed no-write validation');
 assert.ok(personaChoiceScript.includes('hideSheet()'), 'operational sync log must stay hidden from the ordinary response sheet view');
