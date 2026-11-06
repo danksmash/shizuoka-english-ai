@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   syntax:
@@ -31,6 +32,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/ops/gate3-azure-probe-run')
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: production
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,24 +42,33 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Verify Azure Speech secret is configured
-        env:
-          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
-        run: |
-          if [ -z "$AZURE_SPEECH_KEY" ]; then
-            echo "AZURE_SPEECH_KEY is not configured in GitHub Actions secrets."
-            exit 2
-          fi
-          echo "Azure Speech secret is configured. Region is fixed to japaneast for Gate 3."
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1075707511474/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@shizuoka-english-ai.iam.gserviceaccount.com
+          project_id: shizuoka-english-ai
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: shizuoka-english-ai
+          version: '>= 416.0.0'
 
       - name: Run Azure Speech Gate 3 probe
         env:
-          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
           AZURE_SPEECH_REGION: japaneast
           AZURE_GATE3_TPS_LEVELS: 5,10,20,30,35
           AZURE_GATE3_TIMEOUT_MS: 15000
           AZURE_GATE3_OUTPUT_DIR: azure-gate3-artifacts
-        run: node scripts/gate3-azure-speech-probe.mjs
+        run: |
+          AZURE_SPEECH_KEY="$(gcloud secrets versions access latest \
+            --secret=AZURE_SPEECH_KEY \
+            --project=shizuoka-english-ai)"
+          test -n "$AZURE_SPEECH_KEY"
+          export AZURE_SPEECH_KEY
+          node scripts/gate3-azure-speech-probe.mjs
+          unset AZURE_SPEECH_KEY
 
       - name: Upload Gate 3 report and probe MP3
         if: always()
