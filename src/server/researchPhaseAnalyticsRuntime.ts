@@ -31,6 +31,7 @@ import {
   getAllQuestionnaireRecords,
   serializeQuestionnaireCsv,
 } from './questionnaireResearch';
+import { buildPersonaChoiceReasonCodebookRows } from './personaChoiceReasonExport';
 
 export const PHASE_RESEARCH_EXPORT_SCHEMA_VERSION = 'research-2026-v10';
 export const PHASE_BUNDLE_MANIFEST_SCHEMA_VERSION = 10;
@@ -357,6 +358,18 @@ export const PHASE_CODEBOOK_ROWS = [
     analysis_use: '来校者構成の再現・感度分析',
   },
   {
+    file_name: 'sessions.csv', variable: 'nationality_reveal_date',
+    definition: '学級に来校予定留学生の国籍が告知された日。Study Scheduleから分析時に結合する',
+    data_type: 'string', allowed_values: 'YYYY-MM-DD | blank',
+    analysis_use: 'Phase 1からPhase 2への境界日を再現するための基準',
+  },
+  {
+    file_name: 'sessions.csv', variable: 'video_view_date',
+    definition: '児童が実在する留学生の自己紹介動画を視聴した日。Study Scheduleから分析時に結合する',
+    data_type: 'string', allowed_values: 'YYYY-MM-DD | blank',
+    analysis_use: 'Phase 2からPhase 3への境界日を再現するための基準',
+  },
+  {
     file_name: 'sessions.csv', variable: 'assignment_reveal_date',
     definition: '児童が自分のグループの担当留学生を知った学級共通基準日',
     data_type: 'string', allowed_values: 'YYYY-MM-DD | blank',
@@ -541,7 +554,7 @@ function dashboardWrapper(handler: RequestHandler): RequestHandler {
         if (!body || body.success === false) return originalJson(body);
         const exportFiles = Array.isArray(body.exportFiles)
           ? body.exportFiles.map((file: any) => file.dataset === 'codebook'
-            ? { ...file, rowCount: Number(file.rowCount || 0) + PHASE_CODEBOOK_ROWS.length }
+            ? { ...file, rowCount: Number(file.rowCount || 0) + PHASE_CODEBOOK_ROWS.length + buildPersonaChoiceReasonCodebookRows().length }
             : file)
           : body.exportFiles;
         return originalJson({ ...body, phaseComparison, exportFiles });
