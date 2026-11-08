@@ -81,14 +81,14 @@ const sample = {
   ],
 };
 const lessonCsv = '\uFEFF"research_id","class_id","data_scope","grade_level","class_number","local_date","status","today_goal","goal_rating","communication_rating"\n"R0001","5-1","test","5","1","2026-09-01","submitted","goal","3","4"\n"R0002","5-1","test","5","1","2026-09-01","submitted","goal","4","3"\n"R0003","5-1","test","5","1","2026-09-02","submitted","goal","4","4"\n';
-const zipEocd = new Uint8Array(46*8+22);
+const zipEocd = new Uint8Array(46*9+22);
 const zipView = new DataView(zipEocd.buffer);
-for (let index=0;index<8;index+=1) zipView.setUint32(index*46,0x02014b50,true);
-const eocdOffset=46*8;
+for (let index=0;index<9;index+=1) zipView.setUint32(index*46,0x02014b50,true);
+const eocdOffset=46*9;
 zipView.setUint32(eocdOffset,0x06054b50,true);
-zipView.setUint16(eocdOffset+8,8,true);
-zipView.setUint16(eocdOffset+10,8,true);
-zipView.setUint32(eocdOffset+12,46*8,true);
+zipView.setUint16(eocdOffset+8,9,true);
+zipView.setUint16(eocdOffset+10,9,true);
+zipView.setUint32(eocdOffset+12,46*9,true);
 const urlApi: any = { createObjectURL:() => 'blob:test', revokeObjectURL:() => {} };
 const context: any = {
   console, document:documentStub, window:{}, location, sessionStorage:sessionStorageStub, alert:() => {}, URL:urlApi, URLSearchParams, AbortController, Set, Map, Math, Number, String, Array, Object, Date, Blob,
