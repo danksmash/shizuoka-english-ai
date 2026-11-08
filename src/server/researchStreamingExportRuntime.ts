@@ -510,6 +510,16 @@ const streamingCsvHandler: RequestHandler = async (req, res) => {
 };
 
 const streamingBundleHandler: RequestHandler = async (req, res) => {
+  const bundleStartedAt = Date.now();
+  let exportStage = 'loading-metadata';
+  res.once('close', () => {
+    if (!res.writableEnded) {
+      console.warn('Streaming research bundle connection closed before completion', {
+        stage: exportStage,
+        elapsedMs: Date.now() - bundleStartedAt,
+      });
+    }
+  });
   const query = req.query as Record<string, unknown>;
   let temporaryDirectory = '';
   try {
@@ -522,6 +532,8 @@ const streamingBundleHandler: RequestHandler = async (req, res) => {
       getAllQuestionnaireRecords(),
       getPersonaChoiceReasonRecords(),
     ]);
+    exportStage = 'preparing-sessions';
+    console.info('Streaming research bundle stage', { stage: exportStage, elapsedMs: Date.now() - bundleStartedAt });
     const students = new Map(studentRecords.map((student) => [student.studentId, student]));
     const preparation = await prepareProductionExport(students, schedules, studyPhase);
     const lessonRows = buildResearchLessonReflectionRows(
@@ -539,8 +551,11 @@ const streamingBundleHandler: RequestHandler = async (req, res) => {
       ...buildPersonaChoiceReasonCodebookRows(),
     ]);
     const exportedAt = new Date().toISOString();
+    exportStage = 'materializing-csv';
     const materialized = await materializeBundleCsvs(students, preparation, schedules, studyPhase, exportQuery);
     temporaryDirectory = materialized.directory;
+    exportStage = 'compressing-zip';
+    console.info('Streaming research bundle stage', { stage: exportStage, elapsedMs: Date.now() - bundleStartedAt, rows: materialized.counts });
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="research-bundle-${exportedAt.slice(0, 10).replace(/-/g, '')}.zip"`);
@@ -589,9 +604,10 @@ const streamingBundleHandler: RequestHandler = async (req, res) => {
     await zip.addFile('manifest.json', oneChunk(JSON.stringify(manifest, null, 2)));
     await zip.finalize();
     res.end();
-    console.info('Streaming research bundle complete', { rows: manifest.row_counts });
+    exportStage = 'completed';
+    console.info('Streaming research bundle complete', { rows: manifest.row_counts, elapsedMs: Date.now() - bundleStartedAt });
   } catch (error: any) {
-    console.error('Streaming research bundle failed', { message: error?.message });
+    console.error('Streaming research bundle failed', { message: error?.message, stage: exportStage, elapsedMs: Date.now() - bundleStartedAt });
     if (res.headersSent) {
       res.destroy(error);
       return;
