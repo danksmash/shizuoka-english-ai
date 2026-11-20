@@ -46,7 +46,7 @@ type Draft = {
   communicationRating: number | null;
   reflectionText: string;
 };
-type LocalDraftPayload = { draft: Draft; savedAt: number };
+type LocalDraftPayload = { draft: Draft; savedAt: number; dirty?: boolean };
 
 const emptyDraft: Draft = { todayGoal: '', goalRating: null, communicationRating: null, reflectionText: '' };
 const HINTS = [
@@ -81,15 +81,23 @@ function readLocalDraft(token: string): LocalDraftPayload | null {
   try {
     const raw = window.localStorage.getItem(draftKey(token));
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { draft?: unknown; savedAt?: unknown };
+    const parsed = JSON.parse(raw) as { draft?: unknown; savedAt?: unknown; dirty?: unknown };
     const draft = normalizeDraft(parsed.draft);
     const savedAt = Number(parsed.savedAt || 0);
-    return draft && Number.isFinite(savedAt) ? { draft, savedAt } : null;
+    return draft && Number.isFinite(savedAt) ? { draft, savedAt, dirty: parsed.dirty === true } : null;
   } catch { return null; }
 }
 
 function persistLocalDraft(token: string, draft: Draft) {
-  try { window.localStorage.setItem(draftKey(token), JSON.stringify({ draft, savedAt: Date.now() })); } catch {}
+  try { window.localStorage.setItem(draftKey(token), JSON.stringify({ draft, savedAt: Date.now(), dirty: true })); } catch {}
+}
+
+// Clear the unsynced marker only if no newer edit has replaced this snapshot.
+// An old server response must never make a newer local edit look obsolete.
+function markLocalDraftSynced(token: string, snapshot: Draft) {
+  const local = readLocalDraft(token);
+  if (!local || JSON.stringify(local.draft) !== JSON.stringify(snapshot)) return;
+  try { window.localStorage.setItem(draftKey(token), JSON.stringify({ draft: local.draft, savedAt: local.savedAt, dirty: false })); } catch {}
 }
 
 // Serialize all writes for a learner, including writes started before EntryView unmounts.
@@ -229,7 +237,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
     const serverDraft = recordToDraft(bootstrap.today);
     const local = readLocalDraft(token);
     const serverUpdatedAt = Date.parse(bootstrap.today?.updatedAt || '') || 0;
-    if (local && (!bootstrap.today || local.savedAt > serverUpdatedAt)) return local.draft;
+    if (local && (local.dirty === true || !bootstrap.today || local.savedAt > serverUpdatedAt)) return local.draft;
     return serverDraft;
   });
   const [status, setStatus] = useState<'draft' | 'submitted'>(bootstrap.today?.status === 'submitted' ? 'submitted' : 'draft');
@@ -284,7 +292,8 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
   const flushGoalAutosave = useCallback(async () => {
     const goal = latestGoalRef.current;
     if (goal === lastGoalSavedRef.current) return;
-    if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
+    // Do not cancel the full-draft autosave: it may contain a newer reflection
+    // edit that this goal-only request cannot persist.
     setSaveState('saving');
     try {
       const saved = await enqueueReflectionSave(token, () => saveReflectionGoal(token, goal));
@@ -308,15 +317,16 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
 
   useEffect(() => { onSubmittedChange(status === 'submitted'); }, [status, onSubmittedChange]);
   useEffect(() => {
-    persistLocalDraft(token, draft);
     if (firstRender.current) { firstRender.current = false; return; }
     if (skipAutosaveOnce.current) { skipAutosaveOnce.current = false; return; }
+    persistLocalDraft(token, draft);
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(async () => {
       setSaveState('saving');
       try {
         const saved = await enqueueReflectionSave(token, () => saveReflection(token, { ...draft, status }));
         lastGoalSavedRef.current = saved.todayGoal;
+        if (JSON.stringify(recordToDraft(saved)) === JSON.stringify(draft)) markLocalDraftSynced(token, draft);
         onRecordSaved(saved);
         setSaveState('saved');
       } catch { setSaveState('error'); }
@@ -401,6 +411,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
     try {
       const saved = await enqueueReflectionSave(token, () => saveReflection(token, { ...draft, status: 'submitted' }));
       lastGoalSavedRef.current = saved.todayGoal;
+      if (JSON.stringify(recordToDraft(saved)) === JSON.stringify(draft)) markLocalDraftSynced(token, draft);
       skipAutosaveOnce.current = true;
       setStatus('submitted'); onRecordSaved(saved); setSaveState('saved');
       setMessage('今日の学びを記録しました。あとから書き足すこともできます。');
