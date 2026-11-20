@@ -46,7 +46,7 @@ type Draft = {
   communicationRating: number | null;
   reflectionText: string;
 };
-type LocalDraftPayload = { draft: Draft; savedAt: number };
+type LocalDraftPayload = { draft: Draft; savedAt: number; dirty?: boolean };
 
 const emptyDraft: Draft = { todayGoal: '', goalRating: null, communicationRating: null, reflectionText: '' };
 const HINTS = [
@@ -81,15 +81,37 @@ function readLocalDraft(token: string): LocalDraftPayload | null {
   try {
     const raw = window.localStorage.getItem(draftKey(token));
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { draft?: unknown; savedAt?: unknown };
+    const parsed = JSON.parse(raw) as { draft?: unknown; savedAt?: unknown; dirty?: unknown };
     const draft = normalizeDraft(parsed.draft);
     const savedAt = Number(parsed.savedAt || 0);
-    return draft && Number.isFinite(savedAt) ? { draft, savedAt } : null;
+    return draft && Number.isFinite(savedAt) ? { draft, savedAt, dirty: parsed.dirty === true } : null;
   } catch { return null; }
 }
 
 function persistLocalDraft(token: string, draft: Draft) {
-  try { window.localStorage.setItem(draftKey(token), JSON.stringify({ draft, savedAt: Date.now() })); } catch {}
+  try { window.localStorage.setItem(draftKey(token), JSON.stringify({ draft, savedAt: Date.now(), dirty: true })); } catch {}
+}
+
+// Clear the unsynced marker only if no newer edit has replaced this snapshot.
+// An old server response must never make a newer local edit look obsolete.
+function markLocalDraftSynced(token: string, snapshot: Draft) {
+  const local = readLocalDraft(token);
+  if (!local || JSON.stringify(local.draft) !== JSON.stringify(snapshot)) return;
+  try { window.localStorage.setItem(draftKey(token), JSON.stringify({ draft: local.draft, savedAt: local.savedAt, dirty: false })); } catch {}
+}
+
+// Serialize all writes for a learner, including writes started before EntryView unmounts.
+// A slow older autosave must never overwrite a later keyboard edit or submission.
+const reflectionSaveQueues = new Map<string, Promise<void>>();
+function enqueueReflectionSave(token: string, save: () => Promise<ReflectionRecordDto>): Promise<ReflectionRecordDto> {
+  const previous = reflectionSaveQueues.get(token) || Promise.resolve();
+  const pending = previous.catch(() => undefined).then(save);
+  const settled = pending.then(() => undefined, () => undefined);
+  reflectionSaveQueues.set(token, settled);
+  void settled.then(() => {
+    if (reflectionSaveQueues.get(token) === settled) reflectionSaveQueues.delete(token);
+  });
+  return pending;
 }
 
 function displayReflectionText(record: ReflectionRecordDto | ClassReflectionDto | null): string {
@@ -215,7 +237,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
     const serverDraft = recordToDraft(bootstrap.today);
     const local = readLocalDraft(token);
     const serverUpdatedAt = Date.parse(bootstrap.today?.updatedAt || '') || 0;
-    if (local && (!bootstrap.today || local.savedAt > serverUpdatedAt)) return local.draft;
+    if (local && (local.dirty === true || !bootstrap.today || local.savedAt > serverUpdatedAt)) return local.draft;
     return serverDraft;
   });
   const [status, setStatus] = useState<'draft' | 'submitted'>(bootstrap.today?.status === 'submitted' ? 'submitted' : 'draft');
@@ -223,7 +245,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
   const [message, setMessage] = useState('');
   const [voiceField, setVoiceField] = useState<VoiceField | null>(null);
   const recognitionRef = useRef<any>(null);
-  const voiceBaseTextRef = useRef('');
+  const voiceGenerationRef = useRef(0);
   const firstRender = useRef(true);
   const timerRef = useRef<number | null>(null);
   const skipAutosaveOnce = useRef(false);
@@ -234,18 +256,47 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
 
   useEffect(() => { latestGoalRef.current = draft.todayGoal; }, [draft.todayGoal]);
 
-  useEffect(() => () => {
-    try { recognitionRef.current?.abort?.(); } catch {}
+  const stopVoiceInput = useCallback(() => {
+    // Invalidate queued React updates before asking the browser to stop.
+    voiceGenerationRef.current += 1;
+    const active = recognitionRef.current;
     recognitionRef.current = null;
+    if (active) {
+      active.onresult = null;
+      active.onerror = null;
+      active.onend = null;
+      try { active.abort(); } catch { try { active.stop(); } catch {} }
+    }
+    setVoiceField(null);
+  }, []);
+
+  const handleKeyboardChange = useCallback((field: VoiceField, value: string) => {
+    // A manual edit takes precedence over both late speech events and queued state updates.
+    stopVoiceInput();
+    const maximum = field === 'todayGoal' ? GOAL_MAX_CHARS : REFLECTION_MAX_CHARS;
+    setDraft((current) => ({ ...current, [field]: limitCharacters(value, maximum) }));
+  }, [stopVoiceInput]);
+
+  useEffect(() => () => {
+    voiceGenerationRef.current += 1;
+    const active = recognitionRef.current;
+    recognitionRef.current = null;
+    if (active) {
+      active.onresult = null;
+      active.onerror = null;
+      active.onend = null;
+      try { active.abort(); } catch {}
+    }
   }, []);
 
   const flushGoalAutosave = useCallback(async () => {
     const goal = latestGoalRef.current;
     if (goal === lastGoalSavedRef.current) return;
-    if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
+    // Do not cancel the full-draft autosave: it may contain a newer reflection
+    // edit that this goal-only request cannot persist.
     setSaveState('saving');
     try {
-      const saved = await saveReflectionGoal(token, goal);
+      const saved = await enqueueReflectionSave(token, () => saveReflectionGoal(token, goal));
       lastGoalSavedRef.current = saved.todayGoal;
       onRecordSaved(saved);
       setSaveState('saved');
@@ -256,7 +307,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
     const flushBeforeLeave = () => {
       const goal = latestGoalRef.current;
       if (goal === lastGoalSavedRef.current) return;
-      void saveReflectionGoal(token, goal).then((saved) => {
+      void enqueueReflectionSave(token, () => saveReflectionGoal(token, goal)).then((saved) => {
         lastGoalSavedRef.current = saved.todayGoal;
       }).catch(() => undefined);
     };
@@ -266,14 +317,16 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
 
   useEffect(() => { onSubmittedChange(status === 'submitted'); }, [status, onSubmittedChange]);
   useEffect(() => {
-    persistLocalDraft(token, draft);
     if (firstRender.current) { firstRender.current = false; return; }
     if (skipAutosaveOnce.current) { skipAutosaveOnce.current = false; return; }
+    persistLocalDraft(token, draft);
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(async () => {
       setSaveState('saving');
       try {
-        const saved = await saveReflection(token, { ...draft, status });
+        const saved = await enqueueReflectionSave(token, () => saveReflection(token, { ...draft, status }));
+        lastGoalSavedRef.current = saved.todayGoal;
+        if (JSON.stringify(recordToDraft(saved)) === JSON.stringify(draft)) markLocalDraftSynced(token, draft);
         onRecordSaved(saved);
         setSaveState('saved');
       } catch { setSaveState('error'); }
@@ -283,11 +336,8 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
   }, [draft, status, token, onRecordSaved]);
 
   const toggleVoiceInput = useCallback((field: VoiceField) => {
-    const activeRecognition = recognitionRef.current;
-    if (activeRecognition) {
-      try { activeRecognition.stop(); } catch {}
-      recognitionRef.current = null;
-      setVoiceField(null);
+    if (recognitionRef.current) {
+      stopVoiceInput();
       return;
     }
 
@@ -298,31 +348,38 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
     }
 
     const recognition = new SpeechRecognitionClass();
+    const generation = ++voiceGenerationRef.current;
+    const voiceBaseText = field === 'todayGoal' ? draft.todayGoal : draft.reflectionText;
+    const maxCharacters = field === 'todayGoal' ? GOAL_MAX_CHARS : REFLECTION_MAX_CHARS;
     recognition.lang = 'ja-JP';
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    voiceBaseTextRef.current = field === 'todayGoal' ? draft.todayGoal : draft.reflectionText;
-    const maxCharacters = field === 'todayGoal' ? GOAL_MAX_CHARS : REFLECTION_MAX_CHARS;
 
     recognition.onresult = (event: any) => {
+      if (recognitionRef.current !== recognition || voiceGenerationRef.current !== generation) return;
       let spokenText = '';
       for (let index = 0; index < Number(event?.results?.length || 0); index += 1) {
         spokenText += String(event.results[index]?.[0]?.transcript || '');
       }
-      const value = limitCharacters(`${voiceBaseTextRef.current}${spokenText}`, maxCharacters);
-      setDraft((current) => ({ ...current, [field]: value }));
+      const value = limitCharacters(`${voiceBaseText}${spokenText}`, maxCharacters);
+      // Check again when React applies the queued update: keyboard input may
+      // have invalidated this recognition session in the meantime.
+      setDraft((current) => voiceGenerationRef.current === generation ? { ...current, [field]: value } : current);
     };
 
     recognition.onerror = (event: any) => {
+      if (recognitionRef.current !== recognition || voiceGenerationRef.current !== generation) return;
+      voiceGenerationRef.current += 1;
+      recognitionRef.current = null;
+      setVoiceField(null);
       if (String(event?.error || '') !== 'aborted') {
         setMessage('音声入力を使えませんでした。キーボードで入力してください。');
       }
-      recognitionRef.current = null;
-      setVoiceField(null);
     };
 
     recognition.onend = () => {
+      if (recognitionRef.current !== recognition || voiceGenerationRef.current !== generation) return;
       recognitionRef.current = null;
       setVoiceField(null);
     };
@@ -333,13 +390,18 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
     try {
       recognition.start();
     } catch {
+      voiceGenerationRef.current += 1;
       recognitionRef.current = null;
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
       setVoiceField(null);
       setMessage('音声入力を開始できませんでした。キーボードで入力してください。');
     }
-  }, [draft.todayGoal, draft.reflectionText]);
+  }, [draft.todayGoal, draft.reflectionText, stopVoiceInput]);
 
   const submit = async () => {
+    stopVoiceInput();
     if (!draft.todayGoal.trim()) { setMessage('今日のめあてを書いてください。'); return; }
     if (draft.goalRating === null) { setMessage('「めあてに向かって取り組めた」を選んでください。'); return; }
     if (draft.communicationRating === null) { setMessage('「相手の話を聞いて分かろうとしたり，自分の気持ちを伝えようとしたりした」を選んでください。'); return; }
@@ -347,7 +409,9 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
     if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
     setSaveState('saving'); setMessage('');
     try {
-      const saved = await saveReflection(token, { ...draft, status: 'submitted' });
+      const saved = await enqueueReflectionSave(token, () => saveReflection(token, { ...draft, status: 'submitted' }));
+      lastGoalSavedRef.current = saved.todayGoal;
+      if (JSON.stringify(recordToDraft(saved)) === JSON.stringify(draft)) markLocalDraftSynced(token, draft);
       skipAutosaveOnce.current = true;
       setStatus('submitted'); onRecordSaved(saved); setSaveState('saved');
       setMessage('今日の学びを記録しました。あとから書き足すこともできます。');
@@ -389,7 +453,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
         <div className="meg-card meg-goal-card meg-entry-goal">
           <div className="meg-section-title"><Pencil /><h2>今日のめあて</h2><button type="button" className={`meg-voice-button${voiceField === 'todayGoal' ? ' active' : ''}`} aria-pressed={voiceField === 'todayGoal'} aria-label={voiceField === 'todayGoal' ? '今日のめあての音声入力を終了' : '今日のめあてを音声入力'} title={voiceField === 'todayGoal' ? '音声入力を終了' : '音声入力'} disabled={voiceField !== null && voiceField !== 'todayGoal'} onClick={() => toggleVoiceInput('todayGoal')}><Mic /></button></div>
           <div className="meg-goal-input">
-            <textarea rows={3} maxLength={GOAL_MAX_CHARS} value={draft.todayGoal} onChange={(e) => setDraft((current) => ({ ...current, todayGoal: limitCharacters(e.target.value, GOAL_MAX_CHARS) }))} onBlur={() => void flushGoalAutosave()} placeholder="前回の振り返りも思い出して、今日のめあてを自分の言葉で書きましょう。" />
+            <textarea rows={3} maxLength={GOAL_MAX_CHARS} value={draft.todayGoal} onChange={(e) => handleKeyboardChange('todayGoal', e.target.value)} onBlur={() => void flushGoalAutosave()} placeholder="前回の振り返りも思い出して、今日のめあてを自分の言葉で書きましょう。" />
             <div className="meg-field-count">{goalChars} / {GOAL_MAX_CHARS}</div>
           </div>
         </div>
@@ -410,7 +474,7 @@ function EntryView({ bootstrap, token, onSubmittedChange, onRecordSaved }: { boo
         <div className="meg-card meg-reflection-card meg-entry-reflection">
           <div className="meg-section-title"><Pencil /><h2>今日のふりかえり</h2><button type="button" className={`meg-voice-button${voiceField === 'reflectionText' ? ' active' : ''}`} aria-pressed={voiceField === 'reflectionText'} aria-label={voiceField === 'reflectionText' ? '今日のふりかえりの音声入力を終了' : '今日のふりかえりを音声入力'} title={voiceField === 'reflectionText' ? '音声入力を終了' : '音声入力'} disabled={voiceField !== null && voiceField !== 'reflectionText'} onClick={() => toggleVoiceInput('reflectionText')}><Mic /></button></div>
           <div className="meg-main-reflection">
-            <textarea maxLength={REFLECTION_MAX_CHARS} value={draft.reflectionText} onChange={(e) => setDraft((current) => ({ ...current, reflectionText: limitCharacters(e.target.value, REFLECTION_MAX_CHARS) }))} placeholder="今日の学習を振り返って、できたこと、わかったこと、つたえられたこと、聞けたこと、学び方を工夫したこと、考えていたこと、くふうしたこと、気づいたこと、次にがんばりたいことなどから、自分が大切だと思うことを書きましょう。" />
+            <textarea maxLength={REFLECTION_MAX_CHARS} value={draft.reflectionText} onChange={(e) => handleKeyboardChange('reflectionText', e.target.value)} placeholder="今日の学習を振り返って、できたこと、わかったこと、つたえられたこと、聞けたこと、学び方を工夫したこと、考えていたこと、くふうしたこと、気づいたこと、次にがんばりたいことなどから、自分が大切だと思うことを書きましょう。" />
             <div className="meg-field-count">{reflectionChars} / {REFLECTION_MAX_CHARS}</div>
           </div>
           <div className="meg-save-meta"><span>文字数は振り返りのよさを表す点数ではありません。</span></div>
