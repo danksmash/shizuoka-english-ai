@@ -21,6 +21,18 @@ const record = (overrides = {}) => ({
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
 await page.addInitScript(() => localStorage.setItem('my-english-growth-device-token', 'visual-test-device-token'));
+// Deterministic speech mock: capture old callbacks so QA can deliver them
+// even after the browser object has been aborted and its handlers detached.
+await page.addInitScript(() => {
+  window.__qaSpeechInstances = [];
+  class FakeSpeechRecognition {
+    start() { window.__qaSpeechInstances.push(this); }
+    abort() { this.aborted = true; this.onend?.(); }
+    stop() { this.stopped = true; this.onend?.(); }
+  }
+  window.SpeechRecognition = FakeSpeechRecognition;
+  window.webkitSpeechRecognition = FakeSpeechRecognition;
+});
 await page.route('**/api/reflection/bootstrap', async (route) => {
   await route.fulfill({
     status: 200,
@@ -164,5 +176,58 @@ await inspect(1366, 768, 'artifacts/reflection-1366x768.png');
 await inspect(1366, 680, 'artifacts/reflection-1366x680.png');
 await inspect(1366, 600, 'artifacts/reflection-1366x600.png');
 await inspect(1280, 600, 'artifacts/reflection-1280x600.png');
+
+// Regression: a stopped recognition's delayed result must not overwrite
+// handwriting/keyboard corrections in either reflection input field.
+async function inspectSpeechLifecycle() {
+  const goal = page.locator('.meg-entry-goal textarea');
+  const reflection = page.locator('.meg-main-reflection textarea');
+  const goalStart = page.getByRole('button', { name: '今日のめあてを音声入力' });
+  const goalStop = page.getByRole('button', { name: '今日のめあての音声入力を終了' });
+  const reflectionStart = page.getByRole('button', { name: '今日のふりかえりを音声入力' });
+
+  await goal.fill('');
+  await goalStart.click();
+  await page.evaluate(() => {
+    const instance = window.__qaSpeechInstances.at(-1);
+    window.__qaOldGoalResult = instance.onresult;
+    window.__qaOldGoalEnd = instance.onend;
+    instance.onresult({ results: [[{ transcript: '古いめあて音声' }]] });
+  });
+  await page.waitForFunction(() => document.querySelector('.meg-entry-goal textarea')?.value === '古いめあて音声');
+  await goalStop.click();
+  await goal.fill('新しくキーボードで書いためあて');
+  await page.evaluate(() => {
+    window.__qaOldGoalResult({ results: [[{ transcript: 'あとから届いた音声' }]] });
+  });
+  await page.waitForTimeout(80);
+  assert(await goal.inputValue() === '新しくキーボードで書いためあて', 'stopped goal ASR overwrote keyboard text');
+
+  // A previous session's onend must not clear a newer active microphone.
+  await goalStart.click();
+  await page.evaluate(() => window.__qaOldGoalEnd());
+  assert(await goalStop.count() === 1, 'old ASR onend cleared a new recording');
+  await goal.fill('次の文字入力を優先する');
+  assert(await goal.inputValue() === '次の文字入力を優先する', 'typing while recording failed to take precedence');
+
+  await reflection.fill('');
+  await reflectionStart.click();
+  await page.evaluate(() => {
+    const instance = window.__qaSpeechInstances.at(-1);
+    window.__qaOldReflectionResult = instance.onresult;
+    instance.onresult({ results: [[{ transcript: '古いふりかえり音声' }]] });
+  });
+  await page.waitForFunction(() => document.querySelector('.meg-main-reflection textarea')?.value === '古いふりかえり音声');
+  // Typing without pressing stop must automatically invalidate speech.
+  await reflection.fill('自分で書き直したふりかえり');
+  await page.evaluate(() => {
+    window.__qaOldReflectionResult({ results: [[{ transcript: '遅れて戻る音声' }]] });
+  });
+  await page.waitForTimeout(80);
+  assert(await reflection.inputValue() === '自分で書き直したふりかえり', 'active reflection ASR overwrote manual correction');
+  assert(await page.getByRole('button', { name: '今日のふりかえりを音声入力' }).count() === 1, 'mic stayed active after typing');
+  console.log('[qa:reflection-visual] PASS: stopped/old speech events cannot overwrite typing in goal or reflection');
+}
+await inspectSpeechLifecycle();
 await browser.close();
 console.log('[qa:reflection-visual] PASS: goal shows three lines at the approved writing size, reflection absorbs the two-line transfer, and the full 600-character previous reflection auto-fits with no scroll.');
